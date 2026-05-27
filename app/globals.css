@@ -1,26 +1,249 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@theme {
+  --color-bg: #070707;
+  --color-panel: rgba(255, 255, 255, 0.025);
+  --color-panel-strong: rgba(255, 255, 255, 0.05);
+  --color-edge: rgba(255, 255, 255, 0.08);
+  --color-edge-strong: rgba(255, 255, 255, 0.14);
+  --color-ink: #ffffff;
+  --color-ink-dim: rgba(255, 255, 255, 0.58);
+  --color-ink-dimmer: rgba(255, 255, 255, 0.38);
+  --color-orange: #fe5100;
+  --color-orange-soft: rgba(254, 81, 0, 0.12);
+  --color-orange-wash: rgba(254, 81, 0, 0.06);
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  --font-sans: var(--font-geist-sans), "Geist", system-ui, -apple-system, sans-serif;
+  --font-mono: var(--font-geist-mono), "Geist Mono", ui-monospace, monospace;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  --tracking-display-tight: -0.045em;
+  --tracking-h2-tight: -0.03em;
+  --tracking-h3-tight: -0.02em;
+  --tracking-body-tight: -0.005em;
+  --tracking-mono-wide: 0.1em;
+
+  --animate-twinkle: urso-twinkle 1.6s ease-in-out infinite;
+  --animate-pulse-out: urso-pulse 1.4s ease-out infinite;
+  --animate-fade-blink: urso-fade 1.4s ease-in-out infinite;
+  --animate-spin-slow: urso-spin 4s linear infinite;
+  --animate-blink: urso-blink 1s steps(2) infinite;
+
+  @keyframes urso-twinkle {
+    0%, 100% { opacity: 0.3; transform: scale(0.9); }
+    50%      { opacity: 1;   transform: scale(1.15); }
+  }
+  @keyframes urso-pulse {
+    0%   { transform: scale(1);   opacity: 0.8; }
+    100% { transform: scale(1.6); opacity: 0; }
+  }
+  @keyframes urso-fade {
+    0%, 100% { opacity: 0.2; }
+    50%      { opacity: 1; }
+  }
+  @keyframes urso-spin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+  }
+  @keyframes urso-blink {
+    50% { opacity: 0; }
+  }
+  @keyframes urso-marquee {
+    from { transform: translateX(0); }
+    to   { transform: translateX(-33.3333%); }
+  }
+  @keyframes slide-sheen {
+    0%   { background-position: 220% 0; }
+    100% { background-position: -120% 0; }
+  }
+  @keyframes slide-chev {
+    0%, 100% { opacity: 0.25; transform: translateX(-2px); }
+    50%      { opacity: 1;    transform: translateX(2px); }
   }
 }
 
+.slide-sheen {
+  background: linear-gradient(
+    100deg,
+    transparent 42%,
+    rgba(255, 255, 255, 0.07) 50%,
+    transparent 58%
+  );
+  background-size: 220% 100%;
+  animation: slide-sheen 3.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.slide-chev {
+  display: inline-block;
+  animation: slide-chev 1.5s ease-in-out infinite;
+}
+.slide-chev-2 { animation-delay: 0.15s; }
+.slide-chev-3 { animation-delay: 0.3s; }
+
+@keyframes bar-rise {
+  from { transform: scaleY(0); opacity: 0; }
+  to   { transform: scaleY(1); opacity: 1; }
+}
+.bar-rise {
+  animation: bar-rise 0.55s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+@keyframes panel-fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.panel-fade-in {
+  animation: panel-fade-in 0.45s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .slide-sheen { animation: none; }
+  .slide-chev { animation: none; opacity: 0.6; }
+  .bar-rise, .panel-fade-in { animation: none; }
+}
+
+:root {
+  --brand-flash: #fe5100;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* Research/reports palette (light-card editorial surface on the dark page) */
+  --urso-blue: #1a4ed8;
+  --urso-blue-bright: #2563ff;
+  --urso-blue-deep: #0b2dba;
+  --urso-navy: #060b1f;
+  --urso-navy-soft: #0a1428;
+  --bone: #f6f5f1;
+  --shell: #ecebe6;
+  --ink: #0a0e1a;
+  --ink-2: #1a2238;
+  --ink-3: #4a5470;
+  --line: rgba(10, 14, 26, 0.08);
+}
+
+.tone-blue   { background: linear-gradient(160deg, var(--urso-blue) 0%, var(--urso-blue-deep) 100%); }
+.tone-bright { background: linear-gradient(150deg, var(--urso-blue-bright) 0%, var(--urso-blue) 60%, var(--urso-navy) 100%); }
+.tone-bone   { background: var(--shell); }
+.tone-navy   { background: linear-gradient(170deg, var(--urso-navy) 0%, #0a1428 60%, var(--urso-blue-deep) 100%); }
+
+html, body {
+  background: #070707;
+  color: #fff;
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.marquee {
+  animation: urso-marquee 40s linear infinite;
+}
+
+.wipe-page-wrap {
+  will-change: transform, opacity;
+}
+
+:root[data-wipe-reveal="true"] .wipe-page-wrap {
+  animation: wipe-page-reveal 620ms cubic-bezier(0.22, 1, 0.32, 1) both;
+}
+
+@keyframes wipe-page-reveal {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-wipe-reveal="true"] .wipe-page-wrap {
+    animation: none;
+  }
+}
+
+/* ===== Brand lockup ===== */
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #ffffff;
+  font-family: inherit;
+  font-weight: 500;
+  font-size: 32px;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  text-decoration: none;
+}
+
+.brand--nav {
+  overflow: visible;
+}
+
+.brand-bear-wrap {
+  height: 56px;
+  aspect-ratio: 1 / 1;
+  display: grid;
+  place-items: center;
+  overflow: visible;
+  transform: translateY(0);
+}
+
+.brand-bear {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  transform-origin: 50% 100%;
+  will-change: transform;
+}
+
+.brand--nav .brand-word {
+  display: inline-flex;
+  white-space: nowrap;
+}
+
+.brand--nav .bw-letter {
+  display: inline-block;
+  opacity: 0;
+  transition: opacity 0.2s var(--ease-out)
+    calc(0.2s + var(--bi) * 0.06s);
+  will-change: transform, opacity;
+}
+
+/* Once the user has triggered the pounce, the wordmark stays visible. */
+.brand--pounced .bw-letter {
+  opacity: 1;
+}
+
+/* ===== The pounce ===== */
+.brand--nav:hover .brand-bear {
+  animation: bear-pounce 0.9s var(--ease-out);
+}
+
+@keyframes bear-pounce {
+  0%   { transform: translateX(0)    translateY(0)   scale(1)         rotate(0deg); }
+  22%  { transform: translateX(-3px)                 scale(1.05, 0.88) rotate(0deg); }
+  52%  { transform: translateX(12px) translateY(-7px) scale(1.14)     rotate(-8deg); }
+  74%  { transform: translateX(6px)  translateY(0)   scale(1.05)      rotate(-2deg); }
+  100% { transform: translateX(0)    translateY(0)   scale(1)         rotate(0deg); }
+}
+
+/* ===== Letters knocked over in sequence ===== */
+.brand--nav:hover .bw-letter {
+  animation: bw-knock 0.5s var(--ease-out) both;
+  animation-delay: calc(0.2s + var(--bi) * 0.06s);
+}
+
+@keyframes bw-knock {
+  0%   { transform: translateY(0)    rotate(0deg); }
+  40%  { transform: translateY(-8px) rotate(-9deg); color: var(--brand-flash); }
+  70%  { transform: translateY(2px)  rotate(3deg); }
+  100% { transform: translateY(0)    rotate(0deg); }
+}
+
+/* ===== Reduced motion ===== */
+@media (prefers-reduced-motion: reduce) {
+  .brand--nav:hover .brand-bear,
+  .brand--nav:hover .bw-letter { animation: none; }
+  .brand--nav:hover .brand-bear { transform: scale(1.06); }
 }

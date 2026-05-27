@@ -1,0 +1,66 @@
+/* Urso design tokens used by the reports section.
+   Drop these into the :root of any stylesheet to recreate the look. */
+
+:root {
+  /* Brand color */
+  --urso-blue:        #1a4ed8;
+  --urso-blue-bright: #2563ff;
+  --urso-blue-deep:   #0b2dba;
+  --urso-navy:        #060b1f;
+  --urso-navy-soft:   #0a1428;
+
+  /* Text + lines (light surfaces) */
+  --ink:    #0a0e1a;
+  --ink-2:  #1a2238;
+  --ink-3:  #4a5470;
+  --line:   rgba(10, 14, 26, 0.08);
+
+  /* Text + lines (dark surfaces) */
+  --line-dark: rgba(255, 255, 255, 0.10);
+
+  /* Surfaces */
+  --bone:  #f6f5f1;
+  --paper: #ffffff;
+  --shell: #ecebe6;
+  --accent: #2563ff;
+
+  /* Typography */
+  --display: "Manrope", "Circular Std", ui-sans-serif, system-ui, sans-serif;
+  --mono:    "JetBrains Mono", ui-monospace, monospace;
+
+  /* Layout */
+  --max-w:  1480px;
+  --gutter: clamp(20px, 4vw, 56px);
+
+  /* Radii */
+  --r-sm: 4px;
+  --r-md: 10px;
+  --r-lg: 18px;
+
+  /* Motion */
+  --ease-out:  cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-soft: cubic-bezier(0.45, 0, 0.15, 1);
+  --t-fast: 220ms;
+  --t-mid:  360ms;
+}
+
+/* The four cover-art tone treatments used on report cards + headers. */
+.tone-blue   { background: linear-gradient(160deg, var(--urso-blue)        0%, var(--urso-blue-deep) 100%); }
+.tone-bright { background: linear-gradient(150deg, var(--urso-blue-bright) 0%, var(--urso-blue) 60%, var(--urso-navy) 100%); }
+.tone-bone   { background: var(--shell); }
+.tone-navy   { background: linear-gradient(170deg, var(--urso-navy) 0%, #0a1428 60%, var(--urso-blue-deep) 100%); }
+
+/* Spectrum bar that sits under each article H1.
+   Use as: <div class="report-spectrum" aria-hidden="true"></div> */
+.report-spectrum {
+  height: 6px;
+  width: 100%;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    var(--urso-blue-bright) 0%,
+    #5b8cff  28%,
+    #a7c0ff  60%,
+    var(--bone) 100%
+  );
+}
