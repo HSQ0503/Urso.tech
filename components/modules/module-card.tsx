@@ -4,7 +4,17 @@ import { useState, useRef, type ReactNode } from "react";
 import { Icon } from "../ui/icon";
 
 type ModuleCardProps = {
-  tag: "star" | "calendar" | "phone" | "pin" | "repeat" | "bot" | "layers";
+  tag:
+    | "star"
+    | "calendar"
+    | "phone"
+    | "pin"
+    | "repeat"
+    | "bot"
+    | "layers"
+    | "chart"
+    | "dollar"
+    | "check";
   title: string;
   body: string;
   bullets?: string[];

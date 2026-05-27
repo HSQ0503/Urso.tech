@@ -1,0 +1,646 @@
+- generic [active] [ref=e1]:
+  - main [ref=e3]:
+    - generic [ref=e4]:
+      - text: Urso announces its first pilot cohort — four operators, eight stores.
+      - link "Read the brief →" [ref=e5] [cursor=pointer]:
+        - /url: "#"
+    - generic [ref=e6]:
+      - link "Urso home" [ref=e7] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e9]:
+          - generic [ref=e10]: U
+          - generic [ref=e11]: r
+          - generic [ref=e12]: s
+          - generic [ref=e13]: o
+      - navigation:
+        - list [ref=e14]:
+          - listitem [ref=e15]:
+            - link "Operating System" [ref=e16] [cursor=pointer]:
+              - /url: "#"
+              - generic [ref=e17]: Operating System
+          - listitem [ref=e18]:
+            - link "Modules" [ref=e19] [cursor=pointer]:
+              - /url: "#"
+              - generic [ref=e20]: Modules
+          - listitem [ref=e21]:
+            - link "How we work" [ref=e22] [cursor=pointer]:
+              - /url: "#"
+              - generic [ref=e23]: How we work
+          - listitem [ref=e24]:
+            - link "Case studies" [ref=e25] [cursor=pointer]:
+              - /url: "#"
+              - generic [ref=e26]: Case studies
+          - listitem [ref=e27]:
+            - link "Pricing" [ref=e28] [cursor=pointer]:
+              - /url: "#"
+              - generic [ref=e29]: Pricing
+      - generic [ref=e30]:
+        - link "Client login" [ref=e31] [cursor=pointer]:
+          - /url: "#"
+        - button "Book an audit" [ref=e32] [cursor=pointer]:
+          - text: Book an audit
+          - img [ref=e33]
+    - generic [ref=e35]:
+      - generic [ref=e36]:
+        - generic [ref=e37]:
+          - generic [ref=e38]: Now booking founding operators
+          - generic [ref=e39]: OPEN
+        - heading "First click to final sale." [level=1] [ref=e41]:
+          - text: First click to
+          - text: final sale.
+        - paragraph [ref=e42]: Urso is an operational intelligence agency that combines advisory, automation, and custom software to help businesses connect data, streamline operations, and make smarter decisions.
+        - generic [ref=e44]:
+          - generic:
+            - generic: Slide to book an audit
+            - generic:
+              - generic: ›
+              - generic: ›
+              - generic: ›
+          - generic: Opening audit booking…
+          - button "Slide to book an audit" [ref=e46]:
+            - img [ref=e47]
+      - generic [ref=e50]:
+        - generic [ref=e51]:
+          - generic [ref=e52]:
+            - generic [ref=e53]: Capability modules
+            - heading "Custom Built for your Business. No two systems are the same." [level=2] [ref=e54]:
+              - text: Custom Built for your Business.
+              - text: No two systems are the same.
+          - paragraph [ref=e55]: The modules below are examples of what our system can do — not a fixed menu. We build the pieces your business actually needs, all on one data layer, with AI-driven analytics that turn the numbers into decisions.
+        - generic [ref=e57]:
+          - generic [ref=e58] [cursor=pointer]:
+            - generic [ref=e59]:
+              - generic [ref=e60]:
+                - img [ref=e61]
+                - heading "The Data Layer" [level=3] [ref=e66]
+              - paragraph [ref=e67]: Every system, one schema — the diagnostic behind every fix.
+              - list [ref=e68]:
+                - listitem [ref=e69]:
+                  - img [ref=e70]
+                  - generic [ref=e72]: POS, finance, Google, and call data unified
+                - listitem [ref=e73]:
+                  - img [ref=e74]
+                  - generic [ref=e76]: Per-store views with cross-store comparison
+                - listitem [ref=e77]:
+                  - img [ref=e78]
+                  - generic [ref=e80]: The source of truth for every module
+            - img [ref=e82]:
+              - generic [ref=e90]: POS
+              - generic [ref=e95]: CALENDAR
+              - generic [ref=e101]: GOOGLE
+              - generic [ref=e106]: FINANCE
+              - generic [ref=e109]: ONE DATA LAYER · ALL STORES
+          - generic [ref=e110] [cursor=pointer]:
+            - generic [ref=e111]:
+              - generic [ref=e112]:
+                - img [ref=e113]
+                - heading "Bookings" [level=3] [ref=e117]
+              - paragraph [ref=e118]: Three-tap booking. Writes back to your POS.
+            - img [ref=e120]:
+              - generic [ref=e122]: APR · WEEK 14
+              - generic [ref=e123]: M
+              - generic [ref=e124]: T
+              - generic [ref=e125]: W
+              - generic [ref=e126]: T
+              - generic [ref=e127]: F
+              - generic [ref=e128]: S
+              - generic [ref=e129]: S
+              - generic [ref=e132]: "1"
+              - generic [ref=e135]: "2"
+              - generic [ref=e138]: "3"
+              - generic [ref=e141]: "4"
+              - generic [ref=e144]: "5"
+              - generic [ref=e147]: "6"
+              - generic [ref=e150]: "7"
+              - generic [ref=e153]: "8"
+              - generic [ref=e156]: "9"
+              - generic [ref=e159]: "10"
+              - generic [ref=e162]: "11"
+              - generic [ref=e165]: "12"
+              - generic [ref=e168]: "13"
+              - generic [ref=e171]: "14"
+              - generic [ref=e174]: "15"
+              - generic [ref=e177]: "16"
+              - generic [ref=e180]: "17"
+              - generic [ref=e183]: "18"
+              - generic [ref=e186]: "19"
+              - generic [ref=e189]: "20"
+              - generic [ref=e192]: "21"
+              - generic [ref=e195]: "22"
+              - generic [ref=e198]: "23"
+              - generic [ref=e201]: "24"
+              - generic [ref=e204]: "25"
+              - generic [ref=e207]: "26"
+              - generic [ref=e210]: "27"
+              - generic [ref=e213]: "28"
+              - generic [ref=e215]: TODAY
+              - generic [ref=e216]:
+                - generic [ref=e218]: 09:30
+                - generic [ref=e219]: M. Chen
+              - generic [ref=e221]:
+                - generic [ref=e223]: 11:00
+                - generic [ref=e224]: A. Patel
+              - generic [ref=e226]:
+                - generic [ref=e228]: 13:15
+                - generic [ref=e229]: J. Rivera
+              - generic [ref=e231]:
+                - generic [ref=e233]: 15:45
+                - generic [ref=e234]: S. Kim
+          - generic [ref=e236] [cursor=pointer]:
+            - generic [ref=e237]:
+              - generic [ref=e238]:
+                - img [ref=e239]
+                - heading "Missed Communications" [level=3] [ref=e241]
+              - paragraph [ref=e242]: Every missed call answered by SMS — instantly.
+            - img [ref=e244]:
+              - generic [ref=e245]:
+                - generic [ref=e250]: 9:42 PM
+                - generic [ref=e256]: 100%
+                - generic [ref=e260]: MISSED CALL
+                - generic [ref=e261]: +1 (407) 555-0148
+                - generic [ref=e262]: AUTO-SMS · NOW
+                - generic [ref=e264]: Sorry we missed you…
+              - generic [ref=e265]:
+                - generic [ref=e267]: URSO · OUTBOUND
+                - generic [ref=e268]: Hi — we missed your call.
+                - generic [ref=e269]: Want us to book you in?
+              - generic [ref=e274]:
+                - generic [ref=e276]: CUSTOMER · INBOUND
+                - generic [ref=e277]: Yes — Thursday 2pm?
+          - generic [ref=e282] [cursor=pointer]:
+            - generic [ref=e283]:
+              - generic [ref=e284]:
+                - img [ref=e285]
+                - heading "SEO / GEO" [level=3] [ref=e289]
+              - paragraph [ref=e290]: Rank in Maps, directions, and LLMs.
+            - img [ref=e292]:
+              - generic [ref=e296]: dog grooming near me
+              - generic [ref=e299]: LOCAL · GBP
+              - generic [ref=e302]: MAP
+              - generic [ref=e315]:
+                - generic [ref=e316]:
+                  - generic [ref=e318]: "#3"
+                  - generic [ref=e320]: Woof Gang — Winter Park
+                - generic [ref=e321]:
+                  - generic [ref=e323]: "#1"
+                  - generic [ref=e325]: Petsmart Grooming
+                - generic [ref=e326]:
+                  - generic [ref=e328]: "#2"
+                  - generic [ref=e330]: Pampered Pups
+              - generic [ref=e331]:
+                - generic [ref=e333]: AI SEARCH · CITATIONS
+                - generic [ref=e337]: ChatGPT
+                - generic [ref=e341]: Perplexity
+                - generic [ref=e345]: Gemini
+                - generic [ref=e349]: Copilot
+                - generic [ref=e350]: → MONITORED WEEKLY
+          - generic [ref=e351] [cursor=pointer]:
+            - generic [ref=e352]:
+              - generic [ref=e353]:
+                - img [ref=e354]
+                - heading "Retention" [level=3] [ref=e358]
+              - paragraph [ref=e359]: Win-backs that fire on real data.
+            - img [ref=e361]:
+              - generic [ref=e397]: 60-DAY REPEAT
+              - generic [ref=e398]: —
+              - generic [ref=e400]: ↑ 4 PP VS Q1
+              - generic [ref=e401]:
+                - generic [ref=e403]: REPEAT
+                - generic [ref=e405]: LAPSED
+              - generic [ref=e408]: 1.4× LTV · TOP 25%
+          - generic [ref=e409] [cursor=pointer]:
+            - generic [ref=e410]:
+              - generic [ref=e411]:
+                - img [ref=e412]
+                - heading "Growth Engine" [level=3] [ref=e417]
+              - paragraph [ref=e418]: Launch, track, and improve campaigns from one place.
+              - list [ref=e419]:
+                - listitem [ref=e420]:
+                  - img [ref=e421]
+                  - generic [ref=e423]: Meta + Google Ads in one view
+                - listitem [ref=e424]:
+                  - img [ref=e425]
+                  - generic [ref=e427]: Landing page + lead source tracking
+                - listitem [ref=e428]:
+                  - img [ref=e429]
+                  - generic [ref=e431]: Creative tests & weekly reports
+            - img [ref=e433]:
+              - generic [ref=e434]:
+                - generic [ref=e438]: META · ADS
+                - generic [ref=e442]: GOOGLE · ADS
+                - generic [ref=e446]: LANDING · TRK
+              - generic [ref=e447]:
+                - generic [ref=e449]: LEADS · 30D
+                - generic [ref=e450]: MONITORING
+                - generic [ref=e451]:
+                  - generic [ref=e454]: "86"
+                  - generic [ref=e455]: "0"
+                - generic [ref=e456]:
+                  - generic [ref=e457]: W1
+                  - generic [ref=e458]: W2
+                  - generic [ref=e459]: W3
+                  - generic [ref=e460]: W4
+              - generic [ref=e461]:
+                - generic [ref=e462]:
+                  - generic [ref=e464]: CTR
+                  - generic [ref=e465]: 3.2%
+                - generic [ref=e466]:
+                  - generic [ref=e468]: CPL
+                  - generic [ref=e469]: $11
+                - generic [ref=e470]:
+                  - generic [ref=e472]: ROAS
+                  - generic [ref=e473]: 3.9×
+          - generic [ref=e474] [cursor=pointer]:
+            - generic [ref=e475]:
+              - generic [ref=e476]:
+                - img [ref=e477]
+                - heading "Reviews & Reputation" [level=3] [ref=e479]
+              - paragraph [ref=e480]: Get more reviews without chasing customers.
+              - list [ref=e481]:
+                - listitem [ref=e482]:
+                  - img [ref=e483]
+                  - generic [ref=e485]: Automated review requests
+                - listitem [ref=e486]:
+                  - img [ref=e487]
+                  - generic [ref=e489]: Bad-review alerts + AI replies
+                - listitem [ref=e490]:
+                  - img [ref=e491]
+                  - generic [ref=e493]: Per-location reputation dashboard
+            - img [ref=e495]:
+              - generic [ref=e513]:
+                - generic [ref=e514]: GOOGLE · RATING
+                - generic [ref=e515]: "4.8"
+                - generic [ref=e522]:
+                  - generic [ref=e523]: Orlando
+                  - generic [ref=e526]: "4.9"
+                - generic [ref=e527]:
+                  - generic [ref=e528]: Winter Park
+                  - generic [ref=e531]: "4.8"
+                - generic [ref=e532]:
+                  - generic [ref=e533]: Maitland
+                  - generic [ref=e536]: "4.5"
+                - generic [ref=e537]:
+                  - generic [ref=e538]: Altamonte
+                  - generic [ref=e541]: "4.1"
+          - generic [ref=e542] [cursor=pointer]:
+            - generic [ref=e543]:
+              - generic [ref=e544]:
+                - img [ref=e545]
+                - heading "Finance Pulse" [level=3] [ref=e548]
+              - paragraph [ref=e549]: Know what is making money — and what is not.
+              - list [ref=e550]:
+                - listitem [ref=e551]:
+                  - img [ref=e552]
+                  - generic [ref=e554]: QuickBooks integration, by location
+                - listitem [ref=e555]:
+                  - img [ref=e556]
+                  - generic [ref=e558]: Margin & cash-flow visibility
+                - listitem [ref=e559]:
+                  - img [ref=e560]
+                  - generic [ref=e562]: Monthly owner reports
+            - img [ref=e564]:
+              - generic [ref=e565]:
+                - generic [ref=e566]: MRR · LIVE
+                - generic [ref=e567]: $184k
+                - generic [ref=e568]: ↑ 9% MoM
+              - generic [ref=e571]: CASH PULSE · 14D
+              - generic [ref=e574]:
+                - generic [ref=e575]: REVENUE · PER LOCATION
+                - generic [ref=e576]:
+                  - generic [ref=e577]: Orlando
+                  - generic [ref=e581]: $85k
+                - generic [ref=e582]:
+                  - generic [ref=e583]: Winter Park
+                  - generic [ref=e587]: $68k
+                - generic [ref=e588]:
+                  - generic [ref=e589]: Maitland
+                  - generic [ref=e593]: $53k
+                - generic [ref=e594]:
+                  - generic [ref=e595]: Altamonte
+                  - generic [ref=e599]: $38k
+          - generic [ref=e600] [cursor=pointer]:
+            - generic [ref=e601]:
+              - generic [ref=e602]:
+                - img [ref=e603]
+                - heading "Operations" [level=3] [ref=e607]
+              - paragraph [ref=e608]: Make the business easier to run every day.
+              - list [ref=e609]:
+                - listitem [ref=e610]:
+                  - img [ref=e611]
+                  - generic [ref=e613]: Staff tasks, SOP library, checklists
+                - listitem [ref=e614]:
+                  - img [ref=e615]
+                  - generic [ref=e617]: Inventory alerts + request forms
+                - listitem [ref=e618]:
+                  - img [ref=e619]
+                  - generic [ref=e621]: Daily per-location reports
+            - img [ref=e623]:
+              - generic [ref=e624]:
+                - generic [ref=e626]: DAILY · WINTER PARK
+                - generic [ref=e627]: —
+                - generic [ref=e630]: Open + prep stations
+                - generic [ref=e633]: Stock count + reorder
+                - generic [ref=e636]: Cash drop + safe log
+                - generic [ref=e639]: End-of-day reconciliation
+                - generic [ref=e642]: Manager sign-off
+              - generic [ref=e643]:
+                - generic [ref=e645]: LOCATIONS
+                - generic [ref=e648]: Orlando
+                - generic [ref=e651]: Winter Park
+                - generic [ref=e654]: Maitland
+                - generic [ref=e657]: Altamonte
+                - generic [ref=e660]: Doctor Phillips
+          - generic [ref=e661] [cursor=pointer]:
+            - generic [ref=e662]:
+              - generic [ref=e663]:
+                - img [ref=e664]
+                - heading "Custom Software" [level=3] [ref=e670]
+              - paragraph [ref=e671]: When the leak is unique, we build the software that fixes it.
+              - list [ref=e672]:
+                - listitem [ref=e673]:
+                  - img [ref=e674]
+                  - generic [ref=e676]: Custom workflows on your stack
+                - listitem [ref=e677]:
+                  - img [ref=e678]
+                  - generic [ref=e680]: Trained on your SOPs
+                - listitem [ref=e681]:
+                  - img [ref=e682]
+                  - generic [ref=e684]: Deployed across every store
+            - generic [ref=e686]:
+              - generic [ref=e687]:
+                - generic [ref=e692]: URSO · AGENT BUILD
+                - generic [ref=e693]: READY
+              - generic [ref=e694]:
+                - generic [ref=e695]:
+                  - generic [ref=e696]: $
+                  - generic [ref=e697]: urso build winter-park-callback
+                - generic [ref=e698]:
+                  - generic [ref=e699]: →
+                  - generic [ref=e700]: parsing ops manual (47 pages)
+                - generic [ref=e701]:
+                  - generic [ref=e702]: →
+                  - generic [ref=e703]: wiring missed-call → sms → booking
+                - generic [ref=e704]:
+                  - generic [ref=e705]: ✓
+                  - generic [ref=e706]: deployed across 4 stores
+              - generic [ref=e708]:
+                - generic [ref=e709]: DEPLOY · 4 / 4
+                - generic [ref=e710]: —
+              - generic [ref=e712]:
+                - generic [ref=e715]: Winter Park
+                - generic [ref=e718]: Orlando
+                - generic [ref=e721]: Maitland
+                - generic [ref=e724]: Altamonte
+      - generic [ref=e726]:
+        - generic [ref=e727]:
+          - generic [ref=e728]: Use Urso Systems with
+          - generic [ref=e730]:
+            - generic [ref=e731]: your stack
+            - generic [ref=e732]: Shopify
+            - generic [ref=e733]: Stripe
+            - generic [ref=e734]: Square
+            - generic [ref=e735]: QuickBooks
+            - generic [ref=e736]: HubSpot
+            - generic [ref=e737]: Mailchimp
+            - generic [ref=e738]: Google Analytics
+            - generic [ref=e739]: Meta Ads
+            - generic [ref=e740]: Calendly
+            - generic [ref=e741]: Google Calendar
+            - generic [ref=e742]: Slack
+        - generic [ref=e743]:
+          - button "Shopify" [ref=e744]:
+            - img "Shopify" [ref=e745]
+          - button "Stripe" [ref=e746]:
+            - img "Stripe" [ref=e747]
+          - button "Square" [ref=e748]:
+            - img "Square" [ref=e749]
+          - button "QuickBooks" [ref=e750]:
+            - img "QuickBooks" [ref=e751]
+          - button "HubSpot" [ref=e752]:
+            - img "HubSpot" [ref=e753]
+          - button "Mailchimp" [ref=e754]:
+            - img "Mailchimp" [ref=e755]
+          - button "Google Analytics" [ref=e756]:
+            - img "Google Analytics" [ref=e757]
+          - button "Meta Ads" [ref=e758]:
+            - img "Meta Ads" [ref=e759]
+          - button "Calendly" [ref=e760]:
+            - img "Calendly" [ref=e761]
+          - button "Google Calendar" [ref=e762]:
+            - img "Google Calendar" [ref=e763]
+          - button "Slack" [ref=e764]:
+            - img "Slack" [ref=e765]
+    - generic [ref=e766]:
+      - generic [ref=e767]:
+        - generic [ref=e768]:
+          - generic [ref=e769]: The Operating System
+          - heading "Six core panels. One schema across every store." [level=2] [ref=e770]:
+            - text: Six core panels.
+            - text: One schema across every store.
+        - paragraph [ref=e771]: The dashboard's spine is the customer journey. Each stage is a panel, backed by a real source, filterable per store. The six below are the default — we build custom panels around whatever your business actually measures.
+      - generic [ref=e772]:
+        - button "Findability" [ref=e774] [cursor=pointer]: 01Findability
+        - button "Capture" [ref=e775] [cursor=pointer]: 02Capture
+        - button "Convert" [ref=e776] [cursor=pointer]: 03Convert
+        - button "Retain" [ref=e777] [cursor=pointer]: 04Retain
+        - button "Reputation" [ref=e778] [cursor=pointer]: 05Reputation
+        - button "Money" [ref=e779] [cursor=pointer]: 06Money
+      - generic [ref=e780]:
+        - generic [ref=e781]:
+          - generic [ref=e782]: Panel 02 / 06
+          - heading "Capture." [level=3] [ref=e784]
+          - paragraph [ref=e785]: Stop bleeding leads to a missed phone.
+          - paragraph [ref=e786]: Track what the phone, the form and the after-hours line never logged. Instrumented data, not after-the-fact guesses.
+          - generic [ref=e787]:
+            - generic [ref=e788]:
+              - img [ref=e789]
+              - text: Missed-call capture per store
+            - generic [ref=e791]:
+              - img [ref=e792]
+              - text: After-hours SMS callback
+            - generic [ref=e794]:
+              - img [ref=e795]
+              - text: Form abandons & dead links
+            - generic [ref=e797]:
+              - img [ref=e798]
+              - text: Per-store, per-hour breakdown
+          - button "See the Capture spec" [ref=e801] [cursor=pointer]:
+            - text: See the Capture spec
+            - img [ref=e802]
+        - generic [ref=e805]:
+          - generic [ref=e806]:
+            - generic [ref=e807]:
+              - generic [ref=e808]: Capture
+              - generic [ref=e809]: · last 30 days
+            - generic [ref=e810]: 4 stores ▾
+          - generic [ref=e811]:
+            - generic [ref=e812]: Calls / day (rolling)
+            - generic [ref=e813]:
+              - generic [ref=e814]: "142"
+              - generic [ref=e815]: ↓ 38 missed
+          - generic [ref=e849]:
+            - generic [ref=e850]: 12am
+            - generic [ref=e851]: 6am
+            - generic [ref=e852]: 12pm
+            - generic [ref=e853]: 6pm
+            - generic [ref=e854]: 12am
+          - generic [ref=e855]:
+            - generic [ref=e856]: ● Orange = after-hours misses
+            - generic [ref=e857]: ~$4,180 / mo lost
+      - generic [ref=e858]:
+        - generic [ref=e859]:
+          - generic [ref=e860]: Plus · custom
+          - heading "Whatever your business actually measures." [level=3] [ref=e862]
+          - paragraph [ref=e863]: The six panels above are the default. Every operator runs differently — we build the panels for the metrics that move your needle, on the same per-store schema.
+        - generic [ref=e864]:
+          - generic [ref=e865]: Inventory turnover
+          - generic [ref=e866]: Supplier scorecards
+          - generic [ref=e867]: Field-team SLAs
+          - generic [ref=e868]: Labor cost / shift
+          - generic [ref=e869]: Ticket flow
+          - generic [ref=e870]: + Your KPI here
+    - generic [ref=e871]:
+      - generic [ref=e872]:
+        - generic [ref=e873]: 02 — Research
+        - heading "Notes from inside the work." [level=2] [ref=e874]:
+          - text: Notes from inside the
+          - emphasis [ref=e875]: work
+          - text: .
+        - paragraph [ref=e876]: Short, honest pieces about what actually moves the needle for founder-led service businesses — written while we build, not after. No gated PDFs, no fake stats.
+      - generic [ref=e877]:
+        - link "Research report The hour your business loses the most money, and nobody is watching it. 6 min read Read" [ref=e878] [cursor=pointer]:
+          - /url: /reports/after-hours-leak
+          - img [ref=e881]
+          - generic [ref=e888]:
+            - generic [ref=e889]: Research report
+            - heading "The hour your business loses the most money, and nobody is watching it." [level=3] [ref=e890]
+            - generic [ref=e891]:
+              - generic [ref=e892]: 6 min read
+              - generic [ref=e893]:
+                - text: Read
+                - generic [ref=e894]: →
+        - link "Perspective Why “someone should reply to that review” quietly becomes nobody’s job. 5 min read Read" [ref=e895] [cursor=pointer]:
+          - /url: /reports/review-response-gap
+          - img [ref=e898]
+          - generic [ref=e905]:
+            - generic [ref=e906]: Perspective
+            - heading "Why “someone should reply to that review” quietly becomes nobody’s job." [level=3] [ref=e907]
+            - generic [ref=e908]:
+              - generic [ref=e909]: 5 min read
+              - generic [ref=e910]:
+                - text: Read
+                - generic [ref=e911]: →
+        - 'link "Field note Three seconds: the unglamorous reason your location pages lose customers. 7 min read Read" [ref=e912] [cursor=pointer]':
+          - /url: /reports/three-seconds
+          - img [ref=e915]
+          - generic [ref=e922]:
+            - generic [ref=e923]: Field note
+            - 'heading "Three seconds: the unglamorous reason your location pages lose customers." [level=3] [ref=e924]'
+            - generic [ref=e925]:
+              - generic [ref=e926]: 7 min read
+              - generic [ref=e927]:
+                - text: Read
+                - generic [ref=e928]: →
+        - link "Research report The honest math on automating a service business, and what the first 90 days actually return. 8 min read Read" [ref=e929] [cursor=pointer]:
+          - /url: /reports/first-90-days
+          - img [ref=e932]
+          - generic [ref=e940]:
+            - generic [ref=e941]: Research report
+            - heading "The honest math on automating a service business, and what the first 90 days actually return." [level=3] [ref=e942]
+            - generic [ref=e943]:
+              - generic [ref=e944]: 8 min read
+              - generic [ref=e945]:
+                - text: Read
+                - generic [ref=e946]: →
+    - generic [ref=e948]:
+      - generic [ref=e949]: Book the audit
+      - heading "Find your leak." [level=2] [ref=e950]
+      - paragraph [ref=e951]: 45 minutes. We walk in with external recon already done. You leave with a dollar-priced list of leaks across every store.
+      - generic [ref=e952]:
+        - generic [ref=e953]:
+          - generic [ref=e954]: "01"
+          - generic [ref=e955]: Email
+        - generic [ref=e956]:
+          - generic [ref=e957]: "02"
+          - generic [ref=e958]: Confirm
+        - generic [ref=e959]:
+          - generic [ref=e960]: "03"
+          - generic [ref=e961]: About your stores
+      - generic [ref=e963]:
+        - textbox "you@yourstores.com" [ref=e964]
+        - button "Book an audit" [ref=e965] [cursor=pointer]:
+          - text: Book an audit
+          - img [ref=e966]
+      - generic [ref=e968]:
+        - generic [ref=e969]:
+          - generic [ref=e970]: WEEK 1
+          - heading "External recon" [level=4] [ref=e971]
+          - paragraph [ref=e972]: Rankings, review state, booking-flow walk-throughs, after-hours call tests. Written findings per store.
+        - generic [ref=e973]:
+          - generic [ref=e974]: WEEK 2–3
+          - heading "Baseline & Leak Report" [level=4] [ref=e975]
+          - paragraph [ref=e976]: "Internal data pulled clean, measured identically across stores. Each leak: what it costs, the proposed fix."
+        - generic [ref=e977]:
+          - generic [ref=e978]: WEEK 4–8
+          - heading "Fix one leak, measure the after" [level=4] [ref=e979]
+          - paragraph [ref=e980]: Depth over breadth. The biggest provable leak — fixed well across every store. The delta becomes your case study.
+    - generic [ref=e981]:
+      - generic [ref=e982]:
+        - generic [ref=e983]:
+          - link "Urso home" [ref=e984] [cursor=pointer]:
+            - /url: /
+            - generic [ref=e986]:
+              - generic [ref=e987]: U
+              - generic [ref=e988]: r
+              - generic [ref=e989]: s
+              - generic [ref=e990]: o
+          - paragraph [ref=e991]:
+            - text: A data agency for founder-led service businesses.
+            - text: Run on data, not gut feel.
+        - generic [ref=e992]:
+          - generic [ref=e993]: Product
+          - generic [ref=e994]:
+            - link "Operating System" [ref=e995] [cursor=pointer]:
+              - /url: "#"
+            - link "Modules" [ref=e996] [cursor=pointer]:
+              - /url: "#"
+            - link "Pricing" [ref=e997] [cursor=pointer]:
+              - /url: "#"
+            - link "Roadmap" [ref=e998] [cursor=pointer]:
+              - /url: "#"
+        - generic [ref=e999]:
+          - generic [ref=e1000]: Solutions
+          - generic [ref=e1001]:
+            - link "Pet franchises" [ref=e1002] [cursor=pointer]:
+              - /url: "#"
+            - link "Wellness multi-unit" [ref=e1003] [cursor=pointer]:
+              - /url: "#"
+            - link "Service brands" [ref=e1004] [cursor=pointer]:
+              - /url: "#"
+        - generic [ref=e1005]:
+          - generic [ref=e1006]: Company
+          - generic [ref=e1007]:
+            - link "About" [ref=e1008] [cursor=pointer]:
+              - /url: "#"
+            - link "Founders" [ref=e1009] [cursor=pointer]:
+              - /url: "#"
+            - link "Master context" [ref=e1010] [cursor=pointer]:
+              - /url: "#"
+            - link "Careers" [ref=e1011] [cursor=pointer]:
+              - /url: "#"
+        - generic [ref=e1012]:
+          - generic [ref=e1013]: Contact
+          - generic [ref=e1014]:
+            - link "Book an audit" [ref=e1015] [cursor=pointer]:
+              - /url: "#"
+            - link "hello@urso.co" [ref=e1016] [cursor=pointer]:
+              - /url: "#"
+            - link "X / Twitter" [ref=e1017] [cursor=pointer]:
+              - /url: "#"
+            - link "LinkedIn" [ref=e1018] [cursor=pointer]:
+              - /url: "#"
+      - generic [ref=e1019]:
+        - generic [ref=e1020]: © 2026 Urso. All rights reserved.
+        - generic [ref=e1021]: “Urso” — Portuguese for bear.
+  - button "Open Next.js Dev Tools" [ref=e1027] [cursor=pointer]:
+    - img [ref=e1028]

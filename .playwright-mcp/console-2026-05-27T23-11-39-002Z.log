@@ -1,0 +1,73 @@
+[     522ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:3001/_next/static/chunks/node_modules_next_dist_115brz8._.js:2477
+[     592ms] [LOG] [HMR] connected @ http://localhost:3001/_next/static/chunks/node_modules_next_dist_115brz8._.js:2477
+[     774ms] [ERROR] A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+%s%s https://react.dev/link/hydration-mismatch 
+
+  ...
+    <SegmentViewNode type="page" pagePath="page.tsx">
+      <SegmentTrieNode>
+      <Home>
+        <main className="bg-bg text...">
+          <div>
+          <Nav>
+          <Hero>
+            <section className="relative o...">
+              <div>
+              <div>
+              ...
+                <section className="border-t b...">
+                  <div>
+                  <div className="overflow-h...">
+                    <div className="grid grid-...">
+                      <ModuleCard>
+                      <ModuleCard>
+                      <ModuleCard>
+                      <ModuleCard>
+                      <ModuleCard tag="repeat" title="Retention" body="Win-backs ..." ...>
+                        <div ref={{current:null}} onPointerEnter={function onPointerEnter} ...>
+                          <div>
+                          <div>
+                          <div className="relative z...">
+                            <svg viewBox="0 0 320 240" className="w-full max..." style={{filter:"none"}}>
+                              <defs>
+                              <circle>
+                              <circle>
+                              <circle>
+                              <g>
+                              <g>
+                              <g>
+                              <g>
+                              <g>
+                              <g>
+                              <g>
+                              <g>
+                              <g>
+                              <g>
+                              <g>
+                              <g>
+                                <line
+                                  x1={125.99999999999997}
++                                 y1={41.110272542658194}
+-                                 y1="41.11027254265818"
+                                  x2={122.99999999999997}
++                                 y2={35.91412011995156}
+-                                 y2="35.91412011995155"
+                                  stroke="rgba(255,255,255,0.18)"
+                                  strokeWidth="1"
+                                >
+                                ...
+                              ...
+                      ...
+              ...
+          ...
+    ...
+ @ http://localhost:3001/_next/static/chunks/node_modules_next_dist_115brz8._.js:3318

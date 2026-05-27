@@ -26,12 +26,6 @@ const tabs: TabData[] = [
     },
     legend: "Orange = top-3 days",
     footer: "+12 keywords / mo",
-    chartData: [
-      40, 45, 48, 52, 50, 56, 60, 64, 60, 68, 72, 74, 78, 72, 70, 74, 78, 72,
-      68, 66, 62, 58, 54, 52,
-    ],
-    highlight: (i) => i >= 9 && i <= 18,
-    xAxis: ["Apr 1", "Apr 8", "Apr 15", "Apr 22", "Apr 29"],
   },
   {
     key: "Capture",
@@ -52,12 +46,6 @@ const tabs: TabData[] = [
     },
     legend: "Orange = after-hours misses",
     footer: "~$4,180 / mo lost",
-    chartData: [
-      20, 28, 35, 40, 38, 42, 50, 55, 48, 42, 38, 30, 25, 32, 40, 55, 72, 68,
-      55, 40, 28, 22, 18, 14,
-    ],
-    highlight: (i) => i >= 17 || i < 8,
-    xAxis: ["12am", "6am", "12pm", "6pm", "12am"],
   },
   {
     key: "Convert",
@@ -78,12 +66,6 @@ const tabs: TabData[] = [
     },
     legend: "Orange = confirmed bookings",
     footer: "+186 bookings / mo",
-    chartData: [
-      30, 34, 38, 36, 44, 50, 54, 58, 56, 62, 66, 60, 68, 72, 70, 76, 78, 74,
-      70, 64, 60, 56, 50, 46,
-    ],
-    highlight: (i) => i >= 12 && i <= 17,
-    xAxis: ["W1", "W2", "W3", "W4", "W5"],
   },
   {
     key: "Retain",
@@ -104,12 +86,6 @@ const tabs: TabData[] = [
     },
     legend: "Orange = returning customers",
     footer: "1.4× LTV at top 25%",
-    chartData: [
-      24, 28, 32, 34, 38, 40, 42, 46, 48, 50, 52, 56, 58, 60, 58, 62, 65, 62,
-      60, 58, 55, 52, 48, 44,
-    ],
-    highlight: (i) => i >= 8 && i <= 17,
-    xAxis: ["M1", "M2", "M3", "M4", "M5"],
   },
   {
     key: "Reputation",
@@ -130,12 +106,6 @@ const tabs: TabData[] = [
     },
     legend: "Orange = ★4+ reviews",
     footer: "82% response rate",
-    chartData: [
-      34, 38, 42, 44, 48, 50, 52, 54, 50, 58, 60, 62, 65, 68, 64, 70, 72, 68,
-      65, 62, 58, 54, 50, 48,
-    ],
-    highlight: (i) => i >= 7 && i <= 17,
-    xAxis: ["W1", "W2", "W3", "W4", "W5"],
   },
   {
     key: "Money",
@@ -156,12 +126,6 @@ const tabs: TabData[] = [
     },
     legend: "Orange = high-margin channel",
     footer: "+$22k / mo top 25%",
-    chartData: [
-      44, 48, 54, 50, 58, 60, 64, 68, 70, 72, 74, 70, 78, 80, 74, 82, 84, 80,
-      76, 72, 70, 66, 62, 60,
-    ],
-    highlight: (i) => i >= 10 && i <= 16,
-    xAxis: ["Jan", "Feb", "Mar", "Apr", "May"],
   },
 ];
 
@@ -175,18 +139,18 @@ export function OperatingSystem() {
         <div className="max-w-[720px]">
           <Pill>The Operating System</Pill>
           <h2 className="mt-5 text-[64px] font-medium leading-none tracking-[-0.03em]">
-            Six core panels.
+            Know what is working.
             <br />
             <span className="text-ink-dim">
-              One schema across every store.
+              And what is not.
             </span>
           </h2>
         </div>
         <p className="max-w-[360px] text-[15px] leading-[1.5] text-ink-dim">
-          The dashboard&apos;s spine is the customer journey. Each stage is a
-          panel, backed by a real source, filterable per store. The six below
-          are the default — we build custom panels around whatever your
-          business actually measures.
+          One screen that follows your customer — from finding you, to
+          booking, to coming back. Each stage is its own view, with every
+          location side by side. The six below are where we start; we add
+          views for whatever your business actually measures.
         </p>
       </div>
 

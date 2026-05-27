@@ -1,6 +1,16 @@
 import type { ReactElement } from "react";
 
-type IconName = "star" | "calendar" | "phone" | "pin" | "repeat" | "bot" | "layers";
+type IconName =
+  | "star"
+  | "calendar"
+  | "phone"
+  | "pin"
+  | "repeat"
+  | "bot"
+  | "layers"
+  | "chart"
+  | "dollar"
+  | "check";
 
 const paths: Record<IconName, ReactElement> = {
   star: (
@@ -52,6 +62,27 @@ const paths: Record<IconName, ReactElement> = {
       <path d="M8 2L14.5 5L8 8L1.5 5z" />
       <path d="M1.5 8L8 11L14.5 8" />
       <path d="M1.5 11L8 14L14.5 11" />
+    </g>
+  ),
+  chart: (
+    <g stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2 14V2M2 14h12" />
+      <path d="M4.5 11l2.5-2.5 2 2 4-5" />
+      <path d="M11.5 5.5h1.5V7" />
+    </g>
+  ),
+  dollar: (
+    <g stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round">
+      <path d="M11 4.6c-1-.9-3.5-1.1-4.8 0-1.3 1.1 0 2.5 1.7 2.9 1.8.4 3.6 1 3.6 2.5 0 1.5-2 2.1-3.8 1.9-1.2-.1-2.2-.7-2.7-1.6" />
+      <path d="M8 1.5v13" />
+    </g>
+  ),
+  check: (
+    <g stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M1.5 5L3 6.5 5.5 4" />
+      <path d="M7.5 5h7" />
+      <path d="M1.5 11L3 12.5 5.5 10" />
+      <path d="M7.5 11h7" />
     </g>
   ),
 };

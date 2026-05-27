@@ -1011,6 +1011,839 @@ export function RetentionIllo({ hover }: IlloProps) {
   );
 }
 
+export function GrowthEngineIllo({ hover }: IlloProps) {
+  const c = lineColor(hover);
+  const series = [22, 28, 26, 34, 32, 40, 38, 46, 44, 52, 58, 64, 70, 78, 86];
+  const max = 90;
+  const w = 200;
+  const h = 86;
+  const step = w / (series.length - 1);
+  const points = series
+    .map((v, i) => `${i * step},${h - (v / max) * h}`)
+    .join(" ");
+  const lastIdx = series.length - 1;
+  const lastX = lastIdx * step;
+  const lastY = h - (series[lastIdx] / max) * h;
+  return (
+    <svg
+      viewBox="0 0 360 220"
+      className="w-full max-w-[360px] transition-[filter] duration-300"
+      style={{ filter: lineGlow(hover) }}
+    >
+      <defs>
+        <linearGradient id="growth-fill" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="rgba(254,81,0,0.32)" />
+          <stop offset="100%" stopColor="rgba(254,81,0,0)" />
+        </linearGradient>
+      </defs>
+
+      <g transform="translate(14, 12)">
+        {[
+          { label: "META · ADS", live: true, x: 0 },
+          { label: "GOOGLE · ADS", live: true, x: 96 },
+          { label: "LANDING · TRK", live: false, x: 192 },
+        ].map((p, i) => (
+          <g key={p.label} transform={`translate(${p.x}, 0)`}>
+            <rect
+              width="88"
+              height="22"
+              rx="11"
+              stroke={hover && p.live ? "#FE5100" : "rgba(255,255,255,0.14)"}
+              strokeWidth="1"
+              fill={hover && p.live ? "rgba(254,81,0,0.10)" : "rgba(255,255,255,0.02)"}
+              style={{
+                transition: `stroke .3s ${i * 0.06}s, fill .3s ${i * 0.06}s`,
+              }}
+            />
+            <circle
+              cx="10"
+              cy="11"
+              r="2.5"
+              fill={hover && p.live ? "#FE5100" : "rgba(255,255,255,0.35)"}
+              style={{ transition: `fill .3s ${i * 0.06}s` }}
+            >
+              {hover && p.live && (
+                <animate
+                  attributeName="opacity"
+                  values="0.4;1;0.4"
+                  dur="1.4s"
+                  repeatCount="indefinite"
+                  begin={`${i * 0.2}s`}
+                />
+              )}
+            </circle>
+            <text
+              x="18"
+              y="14"
+              fontSize="7.5"
+              fontFamily="monospace"
+              fill={hover && p.live ? "#fff" : "rgba(255,255,255,0.65)"}
+              style={{ transition: "fill .3s", letterSpacing: "0.08em" }}
+            >
+              {p.label}
+            </text>
+          </g>
+        ))}
+      </g>
+
+      <g transform="translate(14, 46)">
+        <rect
+          width="288"
+          height={h + 22}
+          rx="6"
+          stroke={c}
+          strokeWidth="1"
+          fill="rgba(255,255,255,0.015)"
+          style={{ transition: "stroke .3s" }}
+        />
+        <text
+          x="10"
+          y="14"
+          fontSize="7"
+          fontFamily="monospace"
+          fill={c}
+          opacity="0.65"
+          style={{ transition: "fill .3s", letterSpacing: "0.08em" }}
+        >
+          LEADS · 30D
+        </text>
+        <text
+          x="278"
+          y="14"
+          fontSize="7"
+          fontFamily="monospace"
+          fill={hover ? "#FE5100" : "rgba(255,255,255,0.55)"}
+          textAnchor="end"
+          style={{ transition: "fill .3s", letterSpacing: "0.08em" }}
+        >
+          {hover ? "↑ 3.9× ROAS" : "MONITORING"}
+        </text>
+
+        <g transform="translate(40, 18)">
+          {[0, 0.25, 0.5, 0.75, 1].map((p) => (
+            <line
+              key={p}
+              x1="0"
+              y1={p * h}
+              x2={w}
+              y2={p * h}
+              stroke="rgba(255,255,255,0.05)"
+              strokeWidth="1"
+              strokeDasharray={p === 0 || p === 1 ? "" : "2 4"}
+            />
+          ))}
+
+          <polyline
+            points={`0,${h} ${points} ${w},${h}`}
+            fill="url(#growth-fill)"
+            opacity={hover ? 1 : 0}
+            style={{ transition: "opacity .5s" }}
+          />
+
+          <polyline
+            points={points}
+            fill="none"
+            stroke={hover ? "#FE5100" : "rgba(255,255,255,0.5)"}
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            style={{
+              transition: "stroke .3s",
+              strokeDasharray: 600,
+              strokeDashoffset: hover ? 0 : 0,
+            }}
+          />
+
+          {hover && (
+            <g>
+              <circle cx={lastX} cy={lastY} r="8" fill="rgba(254,81,0,0.18)">
+                <animate
+                  attributeName="r"
+                  values="4;12;4"
+                  dur="1.6s"
+                  repeatCount="indefinite"
+                />
+                <animate
+                  attributeName="opacity"
+                  values="0.6;0;0.6"
+                  dur="1.6s"
+                  repeatCount="indefinite"
+                />
+              </circle>
+              <circle cx={lastX} cy={lastY} r="3" fill="#FE5100" />
+            </g>
+          )}
+
+          <text
+            x="-6"
+            y="4"
+            fontSize="6.5"
+            fontFamily="monospace"
+            fill="rgba(255,255,255,0.35)"
+            textAnchor="end"
+          >
+            86
+          </text>
+          <text
+            x="-6"
+            y={h}
+            fontSize="6.5"
+            fontFamily="monospace"
+            fill="rgba(255,255,255,0.35)"
+            textAnchor="end"
+          >
+            0
+          </text>
+        </g>
+
+        <g transform={`translate(40, ${h + 24})`}>
+          {["W1", "W2", "W3", "W4"].map((w, i) => (
+            <text
+              key={w}
+              x={(i / 3) * 200}
+              y="0"
+              fontSize="6.5"
+              fontFamily="monospace"
+              fill="rgba(255,255,255,0.35)"
+              textAnchor="middle"
+            >
+              {w}
+            </text>
+          ))}
+        </g>
+      </g>
+
+      <g transform="translate(312, 46)">
+        {[
+          { label: "CTR", value: "3.2%", on: true },
+          { label: "CPL", value: "$11", on: true },
+          { label: "ROAS", value: "3.9×", on: true },
+        ].map((m, i) => (
+          <g
+            key={m.label}
+            transform={`translate(0, ${i * 34})`}
+            style={{
+              opacity: hover ? 1 : 0.45,
+              transform: hover
+                ? `translate(0, ${i * 34}px)`
+                : `translate(8px, ${i * 34}px)`,
+              transition: `opacity .4s ease ${i * 0.1}s, transform .4s ease ${
+                i * 0.1
+              }s`,
+            }}
+          >
+            <rect
+              width="36"
+              height="28"
+              rx="4"
+              stroke={hover && m.on ? "#FE5100" : "rgba(255,255,255,0.12)"}
+              strokeWidth="0.8"
+              fill={hover && m.on ? "rgba(254,81,0,0.08)" : "rgba(255,255,255,0.02)"}
+              style={{ transition: "stroke .3s, fill .3s" }}
+            />
+            <text
+              x="18"
+              y="11"
+              fontSize="6"
+              fontFamily="monospace"
+              fill={hover && m.on ? "#FE5100" : "rgba(255,255,255,0.45)"}
+              textAnchor="middle"
+              style={{ transition: "fill .3s", letterSpacing: "0.08em" }}
+            >
+              {m.label}
+            </text>
+            <text
+              x="18"
+              y="23"
+              fontSize="9"
+              fontFamily="monospace"
+              fontWeight="500"
+              fill={hover && m.on ? "#fff" : "rgba(255,255,255,0.8)"}
+              textAnchor="middle"
+              style={{ transition: "fill .3s" }}
+            >
+              {m.value}
+            </text>
+          </g>
+        ))}
+      </g>
+    </svg>
+  );
+}
+
+export function ReviewsReputationIllo({ hover }: IlloProps) {
+  const c = lineColor(hover);
+  return (
+    <svg
+      viewBox="0 0 360 220"
+      className="w-full max-w-[360px] transition-[filter] duration-300"
+      style={{ filter: lineGlow(hover) }}
+    >
+      <g
+        style={{
+          transformOrigin: "92px 110px",
+          transition: "transform .5s cubic-bezier(.22,1,.36,1)",
+          transform: hover ? "scale(1.04)" : "scale(1)",
+        }}
+      >
+        <circle
+          cx="92"
+          cy="110"
+          r="58"
+          stroke={c}
+          strokeWidth="1"
+          fill="none"
+          strokeDasharray="2 4"
+          opacity="0.5"
+        />
+        <circle cx="92" cy="110" r="40" stroke={c} strokeWidth="1" fill="none" opacity="0.4" />
+        <g style={{ transformOrigin: "92px 110px", transform: hover ? "rotate(8deg)" : "rotate(0deg)", transition: "transform .5s cubic-bezier(.22,1,.36,1)" }}>
+          <path
+            d="M92 78 l10 22 24 2 -19 17 6 24 -21 -13 -21 13 6 -24 -19 -17 24 -2z"
+            stroke={hover ? "#FE5100" : "rgba(255,255,255,0.5)"}
+            strokeWidth="1.5"
+            fill={hover ? "rgba(254,81,0,0.12)" : "none"}
+            strokeLinejoin="round"
+            style={{ transition: "stroke .3s, fill .3s" }}
+          />
+        </g>
+        {[
+          { x: 40, y: 60, d: "0s" },
+          { x: 150, y: 70, d: ".25s" },
+          { x: 38, y: 158, d: ".5s" },
+          { x: 150, y: 156, d: ".1s" },
+          { x: 92, y: 38, d: ".4s" },
+          { x: 92, y: 178, d: ".55s" },
+        ].map((s, i) => (
+          <g
+            key={i}
+            style={{
+              transformOrigin: `${s.x}px ${s.y}px`,
+              animation: hover ? `urso-twinkle 1.8s ease-in-out infinite ${s.d}` : "none",
+            }}
+          >
+            <path
+              d={`M${s.x} ${s.y - 5} l1.8 4 4.2 .4 -3.2 2.8 1 4.2 -3.8 -2.3 -3.8 2.3 1 -4.2 -3.2 -2.8 4.2 -.4z`}
+              fill={hover ? "#FE5100" : "rgba(255,255,255,0.45)"}
+              opacity={hover ? 0.85 : 0.4}
+              style={{ transition: "fill .3s" }}
+            />
+          </g>
+        ))}
+      </g>
+
+      <g transform="translate(192, 18)">
+        <text
+          x="0"
+          y="8"
+          fontSize="7"
+          fontFamily="monospace"
+          fill={c}
+          opacity="0.7"
+          style={{ transition: "fill .3s", letterSpacing: "0.1em" }}
+        >
+          GOOGLE · RATING
+        </text>
+        <text
+          x="0"
+          y="36"
+          fontSize="28"
+          fontFamily="sans-serif"
+          fontWeight="500"
+          fill={hover ? "#FE5100" : "#fff"}
+          style={{ transition: "fill .4s", letterSpacing: "-0.03em" }}
+        >
+          4.8
+        </text>
+        <g transform="translate(58, 18)">
+          {[0, 1, 2, 3, 4].map((i) => (
+            <path
+              key={i}
+              d={`M${i * 12} 0 l2 4.5 5 .4 -3.8 3.3 1.2 5 -4.4 -2.7 -4.4 2.7 1.2 -5 -3.8 -3.3 5 -.4z`}
+              fill={hover ? "#FE5100" : "rgba(255,255,255,0.55)"}
+              transform={`translate(0, -10)`}
+              style={{
+                transition: `fill .3s ${i * 0.05}s, transform .3s ${i * 0.05}s`,
+              }}
+            />
+          ))}
+        </g>
+
+        {[
+          { label: "Orlando", value: 4.9, pct: 0.98 },
+          { label: "Winter Park", value: 4.8, pct: 0.96 },
+          { label: "Maitland", value: 4.5, pct: 0.9 },
+          { label: "Altamonte", value: 4.1, pct: 0.82, low: true },
+        ].map((loc, i) => {
+          const y = 56 + i * 24;
+          return (
+            <g key={loc.label} transform={`translate(0, ${y})`}>
+              <text
+                x="0"
+                y="0"
+                fontSize="7"
+                fontFamily="monospace"
+                fill={loc.low && hover ? "#FE5100" : "rgba(255,255,255,0.75)"}
+                style={{ transition: "fill .3s" }}
+              >
+                {loc.label}
+              </text>
+              <rect
+                x="0"
+                y="6"
+                width="100"
+                height="3"
+                rx="1.5"
+                fill="rgba(255,255,255,0.05)"
+              />
+              <rect
+                x="0"
+                y="6"
+                width={hover ? 100 * loc.pct : 100 * loc.pct * 0.4}
+                height="3"
+                rx="1.5"
+                fill={loc.low ? (hover ? "#FE5100" : "rgba(255,255,255,0.4)") : (hover ? "rgba(254,81,0,0.6)" : "rgba(255,255,255,0.4)")}
+                style={{
+                  transition: `width .7s cubic-bezier(.22,1,.36,1) ${i * 0.08}s, fill .3s`,
+                }}
+              />
+              <text
+                x="148"
+                y="3"
+                fontSize="7"
+                fontFamily="monospace"
+                fill={loc.low && hover ? "#FE5100" : "rgba(255,255,255,0.55)"}
+                textAnchor="end"
+                style={{ transition: "fill .3s" }}
+              >
+                {loc.value.toFixed(1)}
+              </text>
+              {loc.low && hover && (
+                <text
+                  x="154"
+                  y="3"
+                  fontSize="6.5"
+                  fontFamily="monospace"
+                  fill="#FE5100"
+                  style={{ letterSpacing: "0.08em" }}
+                >
+                  ALERT
+                </text>
+              )}
+            </g>
+          );
+        })}
+      </g>
+    </svg>
+  );
+}
+
+export function FinancePulseIllo({ hover }: IlloProps) {
+  const c = lineColor(hover);
+  return (
+    <svg
+      viewBox="0 0 360 220"
+      className="w-full max-w-[360px] transition-[filter] duration-300"
+      style={{ filter: lineGlow(hover) }}
+    >
+      <defs>
+        <linearGradient id="finance-fill" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="rgba(254,81,0,0.28)" />
+          <stop offset="100%" stopColor="rgba(254,81,0,0)" />
+        </linearGradient>
+      </defs>
+
+      <g transform="translate(14, 14)">
+        <text
+          x="0"
+          y="10"
+          fontSize="7"
+          fontFamily="monospace"
+          fill={c}
+          opacity="0.7"
+          style={{ transition: "fill .3s", letterSpacing: "0.1em" }}
+        >
+          MRR · LIVE
+        </text>
+        <text
+          x="0"
+          y="42"
+          fontSize="28"
+          fontFamily="sans-serif"
+          fontWeight="500"
+          fill={hover ? "#fff" : "rgba(255,255,255,0.92)"}
+          style={{ transition: "fill .3s", letterSpacing: "-0.03em" }}
+        >
+          $184<tspan fontSize="18" fill="rgba(255,255,255,0.5)">k</tspan>
+        </text>
+        <text
+          x="0"
+          y="58"
+          fontSize="7.5"
+          fontFamily="monospace"
+          fill={hover ? "#FE5100" : "rgba(255,255,255,0.55)"}
+          style={{ transition: "fill .3s", letterSpacing: "0.08em" }}
+        >
+          ↑ 9% MoM
+        </text>
+      </g>
+
+      <g transform="translate(120, 14)">
+        <rect
+          width="226"
+          height="80"
+          rx="6"
+          stroke={c}
+          strokeWidth="1"
+          fill="rgba(255,255,255,0.015)"
+          style={{ transition: "stroke .3s" }}
+        />
+        <text
+          x="10"
+          y="12"
+          fontSize="6.5"
+          fontFamily="monospace"
+          fill={c}
+          opacity="0.6"
+          style={{ transition: "fill .3s", letterSpacing: "0.08em" }}
+        >
+          CASH PULSE · 14D
+        </text>
+        {(() => {
+          const pts: Array<[number, number]> = [];
+          const w = 206;
+          const cx = 10;
+          const cy = 44;
+          const amp = 16;
+          const steps = 60;
+          for (let i = 0; i <= steps; i++) {
+            const t = i / steps;
+            const x = cx + t * w;
+            let y = cy;
+            if (t > 0.18 && t < 0.32) {
+              const lt = (t - 0.18) / 0.14;
+              const phase = lt * Math.PI * 2;
+              y = cy - Math.sin(phase) * amp * (1 - Math.abs(lt - 0.5) * 1.2);
+              if (lt > 0.55) y = cy + Math.sin((lt - 0.55) * Math.PI * 2) * amp * 0.6;
+            }
+            if (t > 0.55 && t < 0.72) {
+              const lt = (t - 0.55) / 0.17;
+              y = cy - Math.sin(lt * Math.PI * 2) * amp * 1.1 * (1 - Math.abs(lt - 0.5) * 0.8);
+              if (lt > 0.5) y = cy + Math.sin((lt - 0.5) * Math.PI * 2) * amp * 0.7;
+            }
+            pts.push([x, y]);
+          }
+          const d = pts
+            .map(([x, y], i) => `${i === 0 ? "M" : "L"}${x},${y}`)
+            .join(" ");
+          const fillD = `${d} L${pts[pts.length - 1][0]},78 L10,78 Z`;
+          return (
+            <>
+              <line
+                x1="10"
+                y1="44"
+                x2="216"
+                y2="44"
+                stroke="rgba(255,255,255,0.06)"
+                strokeDasharray="2 3"
+              />
+              <path d={fillD} fill="url(#finance-fill)" opacity={hover ? 1 : 0} style={{ transition: "opacity .4s" }} />
+              <path
+                d={d}
+                fill="none"
+                stroke={hover ? "#FE5100" : "rgba(255,255,255,0.55)"}
+                strokeWidth="1.4"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                style={{ transition: "stroke .3s" }}
+              />
+              {hover && (
+                <circle r="2.2" fill="#FE5100">
+                  <animate
+                    attributeName="cx"
+                    values="10;216;10"
+                    dur="3.6s"
+                    repeatCount="indefinite"
+                  />
+                  <animateMotion dur="3.6s" repeatCount="indefinite" path={d} />
+                </circle>
+              )}
+            </>
+          );
+        })()}
+      </g>
+
+      <g transform="translate(14, 110)">
+        <text
+          x="0"
+          y="8"
+          fontSize="6.5"
+          fontFamily="monospace"
+          fill={c}
+          opacity="0.6"
+          style={{ transition: "fill .3s", letterSpacing: "0.1em" }}
+        >
+          REVENUE · PER LOCATION
+        </text>
+        {[
+          { label: "Orlando", v: 0.92 },
+          { label: "Winter Park", v: 0.74 },
+          { label: "Maitland", v: 0.58 },
+          { label: "Altamonte", v: 0.41 },
+        ].map((loc, i) => {
+          const barW = 332;
+          return (
+            <g key={loc.label} transform={`translate(0, ${18 + i * 22})`}>
+              <text
+                x="0"
+                y="8"
+                fontSize="7"
+                fontFamily="monospace"
+                fill="rgba(255,255,255,0.7)"
+              >
+                {loc.label}
+              </text>
+              <rect x="76" y="2" width={barW - 86} height="10" rx="2" fill="rgba(255,255,255,0.04)" />
+              <rect
+                x="76"
+                y="2"
+                width={hover ? (barW - 86) * loc.v : (barW - 86) * loc.v * 0.4}
+                height="10"
+                rx="2"
+                fill={hover ? "url(#finance-fill)" : "rgba(255,255,255,0.18)"}
+                style={{
+                  transition: `width .8s cubic-bezier(.22,1,.36,1) ${i * 0.08}s, fill .3s`,
+                }}
+              />
+              <rect
+                x="76"
+                y="2"
+                width={hover ? (barW - 86) * loc.v : (barW - 86) * loc.v * 0.4}
+                height="10"
+                rx="2"
+                fill="none"
+                stroke={hover ? "#FE5100" : "rgba(255,255,255,0.25)"}
+                strokeWidth="0.8"
+                style={{
+                  transition: `width .8s cubic-bezier(.22,1,.36,1) ${i * 0.08}s, stroke .3s`,
+                }}
+              />
+              <text
+                x={barW}
+                y="10"
+                fontSize="6.5"
+                fontFamily="monospace"
+                fill={hover ? "#fff" : "rgba(255,255,255,0.55)"}
+                textAnchor="end"
+                style={{ transition: "fill .3s" }}
+              >
+                ${Math.round(loc.v * 92)}k
+              </text>
+            </g>
+          );
+        })}
+      </g>
+    </svg>
+  );
+}
+
+export function OperationsIllo({ hover }: IlloProps) {
+  const c = lineColor(hover);
+  const tasks = [
+    { label: "Open + prep stations", done: true, delay: 0 },
+    { label: "Stock count + reorder", done: true, delay: 0.1 },
+    { label: "Cash drop + safe log", done: true, delay: 0.2 },
+    { label: "End-of-day reconciliation", done: false, delay: 0.3 },
+    { label: "Manager sign-off", done: false, delay: 0.4 },
+  ];
+  return (
+    <svg
+      viewBox="0 0 360 220"
+      className="w-full max-w-[360px] transition-[filter] duration-300"
+      style={{ filter: lineGlow(hover) }}
+    >
+      <g transform="translate(14, 12)">
+        <rect
+          width="218"
+          height="196"
+          rx="8"
+          stroke={c}
+          strokeWidth="1"
+          fill="rgba(255,255,255,0.015)"
+          style={{ transition: "stroke .3s" }}
+        />
+        <text
+          x="12"
+          y="18"
+          fontSize="7"
+          fontFamily="monospace"
+          fill={c}
+          opacity="0.7"
+          style={{ transition: "fill .3s", letterSpacing: "0.1em" }}
+        >
+          DAILY · WINTER PARK
+        </text>
+        <text
+          x="206"
+          y="18"
+          fontSize="6.5"
+          fontFamily="monospace"
+          fill={hover ? "#FE5100" : "rgba(255,255,255,0.45)"}
+          textAnchor="end"
+          style={{ transition: "fill .3s", letterSpacing: "0.08em" }}
+        >
+          {hover ? "3 / 5" : "—"}
+        </text>
+        <line x1="12" y1="26" x2="206" y2="26" stroke="rgba(255,255,255,0.06)" />
+
+        {tasks.map((t, i) => {
+          const y = 38 + i * 30;
+          const checked = hover && t.done;
+          return (
+            <g
+              key={t.label}
+              transform={`translate(12, ${y})`}
+              style={{
+                opacity: hover ? 1 : 0.5,
+                transform: hover ? `translate(12px, ${y}px)` : `translate(4px, ${y}px)`,
+                transition: `opacity .4s ease ${t.delay}s, transform .4s ease ${t.delay}s`,
+              }}
+            >
+              <rect
+                width="14"
+                height="14"
+                rx="3"
+                stroke={checked ? "#FE5100" : "rgba(255,255,255,0.25)"}
+                strokeWidth="1"
+                fill={checked ? "#FE5100" : "transparent"}
+                style={{ transition: `stroke .3s ${t.delay}s, fill .3s ${t.delay}s` }}
+              />
+              {checked && (
+                <path
+                  d="M3.5 7 l2.5 2.5 5-5"
+                  stroke="#fff"
+                  strokeWidth="1.4"
+                  fill="none"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  style={{
+                    strokeDasharray: 12,
+                    strokeDashoffset: 0,
+                    animation: `panel-fade-in .35s ease ${t.delay + 0.15}s backwards`,
+                  }}
+                />
+              )}
+              <text
+                x="24"
+                y="11"
+                fontSize="8.5"
+                fontFamily="monospace"
+                fill={checked ? "rgba(255,255,255,0.55)" : "rgba(255,255,255,0.85)"}
+                style={{
+                  transition: "fill .3s",
+                  textDecoration: checked ? "line-through" : "none",
+                }}
+              >
+                {t.label}
+              </text>
+            </g>
+          );
+        })}
+      </g>
+
+      <g transform="translate(248, 12)">
+        <rect
+          width="98"
+          height="196"
+          rx="8"
+          stroke={c}
+          strokeWidth="1"
+          fill="rgba(255,255,255,0.015)"
+          style={{ transition: "stroke .3s" }}
+        />
+        <text
+          x="10"
+          y="18"
+          fontSize="7"
+          fontFamily="monospace"
+          fill={c}
+          opacity="0.7"
+          style={{ transition: "fill .3s", letterSpacing: "0.1em" }}
+        >
+          LOCATIONS
+        </text>
+        <line x1="10" y1="26" x2="88" y2="26" stroke="rgba(255,255,255,0.06)" />
+        {[
+          { name: "Orlando", state: "ok" },
+          { name: "Winter Park", state: "ok" },
+          { name: "Maitland", state: "warn" },
+          { name: "Altamonte", state: "ok" },
+          { name: "Doctor Phillips", state: "warn" },
+        ].map((loc, i) => {
+          const y = 36 + i * 28;
+          const warn = loc.state === "warn";
+          return (
+            <g
+              key={loc.name}
+              transform={`translate(10, ${y})`}
+              style={{
+                opacity: hover ? 1 : 0.5,
+                transition: `opacity .35s ease ${i * 0.08}s`,
+              }}
+            >
+              <circle
+                cx="4"
+                cy="6"
+                r="3"
+                fill={
+                  warn && hover
+                    ? "#FE5100"
+                    : !warn
+                    ? "rgba(255,255,255,0.55)"
+                    : "rgba(255,255,255,0.25)"
+                }
+                style={{ transition: `fill .3s ${i * 0.08}s` }}
+              >
+                {warn && hover && (
+                  <animate
+                    attributeName="opacity"
+                    values="0.4;1;0.4"
+                    dur="1.4s"
+                    repeatCount="indefinite"
+                  />
+                )}
+              </circle>
+              <text
+                x="12"
+                y="9"
+                fontSize="7.5"
+                fontFamily="monospace"
+                fill={warn && hover ? "#FE5100" : "rgba(255,255,255,0.7)"}
+                style={{ transition: `fill .3s ${i * 0.08}s` }}
+              >
+                {loc.name}
+              </text>
+              {warn && hover && (
+                <text
+                  x="86"
+                  y="9"
+                  fontSize="6.5"
+                  fontFamily="monospace"
+                  fill="#FE5100"
+                  textAnchor="end"
+                  style={{ letterSpacing: "0.08em" }}
+                >
+                  !
+                </text>
+              )}
+            </g>
+          );
+        })}
+      </g>
+    </svg>
+  );
+}
+
 export function AgentsIllo({ hover }: IlloProps) {
   const c = lineColor(hover);
   const lines = [
