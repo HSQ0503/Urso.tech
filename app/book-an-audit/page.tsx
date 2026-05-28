@@ -3,6 +3,7 @@ import { AuditProblem } from "@/components/audit-page/problem";
 import { AuditProcess } from "@/components/audit-page/process";
 import { AuditDeliverables } from "@/components/audit-page/deliverables";
 import { AuditWhoItsFor } from "@/components/audit-page/who-its-for";
+import { AuditForm } from "@/components/audit-page/form";
 
 export default function BookAnAuditPage() {
   return (
@@ -12,6 +13,7 @@ export default function BookAnAuditPage() {
       <AuditProcess />
       <AuditDeliverables />
       <AuditWhoItsFor />
+      <AuditForm />
     </main>
   );
 }
