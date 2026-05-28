@@ -304,3 +304,72 @@
   letter-spacing: 0.04em;
   color: #fe5100;
 }
+
+.leak-card {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(440px, 90vw);
+  border: 1px solid rgba(254, 81, 0, 0.5);
+  border-radius: 10px;
+  background: rgba(254, 81, 0, 0.04);
+  padding: 22px 24px;
+  animation: cinematic-card-enter 500ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.leak-card .label {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #fe5100;
+}
+
+.leak-card .price {
+  font-family: var(--font-sans, ui-sans-serif, system-ui, sans-serif);
+  font-size: clamp(36px, 6vw, 56px);
+  font-weight: 500;
+  letter-spacing: -0.035em;
+  color: #fff;
+  line-height: 1;
+  margin-top: 10px;
+}
+
+.leak-card .price .unit {
+  font-size: clamp(13px, 2vw, 16px);
+  color: rgba(255, 255, 255, 0.45);
+  letter-spacing: 0.04em;
+  font-weight: 400;
+  margin-left: 4px;
+  vertical-align: baseline;
+}
+
+.leak-card hr {
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  margin: 16px 0;
+}
+
+.leak-card .row {
+  display: grid;
+  grid-template-columns: 72px 1fr;
+  gap: 12px;
+  font-size: 13px;
+  line-height: 1.45;
+  margin-bottom: 6px;
+}
+
+.leak-card .row .k {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.4);
+  padding-top: 2px;
+}
+
+.leak-card .row .v {
+  color: #fff;
+  letter-spacing: -0.005em;
+}

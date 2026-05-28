@@ -13,6 +13,7 @@ import { GridOverlayScene } from "./scenes/grid-overlay-scene";
 import { GridScene } from "./scenes/grid-scene";
 import { TaglineScene } from "./scenes/tagline-scene";
 import { ProcessStepScene } from "./scenes/process-step-scene";
+import { LeakCardScene } from "./scenes/leak-card-scene";
 import "./cinematic.css";
 
 type Props = { onComplete: () => void };
@@ -88,6 +89,7 @@ export function AuditCinematic({ onComplete }: Props) {
         if (beat.scene === "process-step") {
           return <ProcessStepScene key={key} step={beat.step} title={beat.title} />;
         }
+        if (beat.scene === "leak-card") return <LeakCardScene key={key} />;
         return (
           <div
             key={key}
