@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { triggerWipe } from "@/components/wipe-transition";
+import { armIntro } from "@/lib/intro-state";
 
 const HANDLE = 52;
 const PAD = 4;
@@ -47,6 +48,7 @@ export function SlideToBook() {
   };
 
   const fireWipe = () => {
+    armIntro();
     const isMobile = window.matchMedia("(max-width: 767px)").matches;
     if (!isMobile) {
       triggerWipe("/book-an-audit");
