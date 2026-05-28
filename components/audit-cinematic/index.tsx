@@ -12,6 +12,7 @@ import { EstablishScene } from "./scenes/establish-scene";
 import { GridOverlayScene } from "./scenes/grid-overlay-scene";
 import { GridScene } from "./scenes/grid-scene";
 import { TaglineScene } from "./scenes/tagline-scene";
+import { ProcessStepScene } from "./scenes/process-step-scene";
 import "./cinematic.css";
 
 type Props = { onComplete: () => void };
@@ -84,6 +85,9 @@ export function AuditCinematic({ onComplete }: Props) {
         if (beat.scene === "tagline") return <TaglineScene key={key} text={beat.text} />;
         if (beat.scene === "grid") return <GridScene key={key} />;
         if (beat.scene === "grid-overlay") return <GridOverlayScene key={key} text={beat.text} />;
+        if (beat.scene === "process-step") {
+          return <ProcessStepScene key={key} step={beat.step} title={beat.title} />;
+        }
         return (
           <div
             key={key}
