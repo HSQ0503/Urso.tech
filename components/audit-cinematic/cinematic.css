@@ -1,0 +1,52 @@
+/* Cinematic-specific keyframes. Imported only by AuditCinematic — kept out
+   of globals.css to avoid bloating the marketing CSS. */
+
+@keyframes cinematic-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes cinematic-card-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes cinematic-card-exit {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
+@keyframes cinematic-cursor-blink {
+  50% { opacity: 0; }
+}
+
+.cinematic-root {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: #070707;
+  font-family: var(--font-sans, ui-sans-serif, system-ui, sans-serif);
+  color: #fff;
+  overflow: hidden;
+  will-change: transform, opacity;
+}
+
+/* All animations within the cinematic pause when the parent has data-paused. */
+.cinematic-root[data-paused="true"] *,
+.cinematic-root[data-paused="true"] {
+  animation-play-state: paused !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cinematic-root,
+  .cinematic-root * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
