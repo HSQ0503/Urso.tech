@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useMasterClock } from "./use-master-clock";
-import { TIMELINE, TOTAL_MS, isBeatActive } from "./timeline";
+import { TIMELINE, TOTAL_MS, MOBILE_SCALAR, isBeatActive } from "./timeline";
 import { ActTag } from "./ui/act-tag";
 import { Timer } from "./ui/timer";
 import { SkipControl } from "./ui/skip-control";
@@ -24,6 +24,13 @@ export function AuditCinematic({ onComplete }: Props) {
   const [playing, setPlaying] = useState(true);
   const rootRef = useRef<HTMLDivElement>(null);
 
+  const [totalMs] = useState<number>(() => {
+    if (typeof window === "undefined") return TOTAL_MS;
+    return window.matchMedia("(max-width: 767px)").matches
+      ? TOTAL_MS * MOBILE_SCALAR
+      : TOTAL_MS;
+  });
+
   const handleComplete = useCallback(() => {
     const target = document.querySelector<HTMLElement>("[data-audit-hero-cta]");
     target?.focus();
@@ -31,12 +38,12 @@ export function AuditCinematic({ onComplete }: Props) {
   }, [onComplete]);
 
   const { progress, jumpToEnd } = useMasterClock({
-    totalMs: TOTAL_MS,
+    totalMs,
     playing,
     onComplete: handleComplete,
   });
 
-  const elapsedMs = progress * TOTAL_MS;
+  const elapsedMs = progress * totalMs;
 
   // Pause when the tab is hidden.
   useEffect(() => {

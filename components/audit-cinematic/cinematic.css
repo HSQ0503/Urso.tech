@@ -437,3 +437,54 @@
     transform 1500ms cubic-bezier(0.22, 1, 0.32, 1),
     opacity 1500ms cubic-bezier(0.22, 1, 0.32, 1);
 }
+
+@media (max-width: 767px) {
+  /* Cards stack vertically full-bleed on mobile — max 3 visible. */
+  .intro-card {
+    left: 50% !important;
+    right: auto !important;
+    transform: translateX(-50%) !important;
+    width: min(86vw, 320px);
+    max-width: none;
+  }
+
+  /* Distribute by source position so cards don't pile up at the same spot. */
+  .intro-card.pos-center      { top: 20%; }
+  .intro-card.pos-top-left,
+  .intro-card.pos-top-right   { top: 36%; }
+  .intro-card.pos-mid-left,
+  .intro-card.pos-mid-right   { top: 50%; }
+  .intro-card.pos-bottom-left,
+  .intro-card.pos-bottom-mid,
+  .intro-card.pos-bottom-right{ top: 66%; }
+
+  /* Grid: 4 cols × 6 rows on mobile. */
+  .cinematic-grid {
+    grid-template-columns: repeat(4, 28px);
+    grid-template-rows: repeat(6, 20px);
+    gap: 4px;
+  }
+
+  .cinematic-grid-labels {
+    grid-template-columns: repeat(4, 28px);
+    gap: 4px;
+    top: calc(50% + 78px);
+  }
+
+  /* Hide cells/labels beyond the first 4 cols when we only show 4 stores
+     — the underlying TONE array is 8 cols wide. Use nth-child to drop the
+     unused half-rows. */
+  .cinematic-grid > div:nth-child(8n + 5),
+  .cinematic-grid > div:nth-child(8n + 6),
+  .cinematic-grid > div:nth-child(8n + 7),
+  .cinematic-grid > div:nth-child(8n + 8) {
+    display: none;
+  }
+  .cinematic-grid-labels > span:nth-child(n + 5) {
+    display: none;
+  }
+
+  /* Tagline + overlay smaller. */
+  .cinematic-tagline { font-size: 11px; padding: 0 18px; }
+  .cinematic-grid-overlay { font-size: 14px; bottom: 18%; }
+}
