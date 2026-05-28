@@ -9,6 +9,8 @@ import { SkipControl } from "./ui/skip-control";
 import { CardScene } from "./scenes/card-scene";
 import { CollapseScene } from "./scenes/collapse-scene";
 import { EstablishScene } from "./scenes/establish-scene";
+import { GridOverlayScene } from "./scenes/grid-overlay-scene";
+import { GridScene } from "./scenes/grid-scene";
 import { TaglineScene } from "./scenes/tagline-scene";
 import "./cinematic.css";
 
@@ -80,6 +82,8 @@ export function AuditCinematic({ onComplete }: Props) {
         if (beat.scene === "establish") return <EstablishScene key={key} />;
         if (beat.scene === "card") return <CardScene key={key} data={beat.data} />;
         if (beat.scene === "tagline") return <TaglineScene key={key} text={beat.text} />;
+        if (beat.scene === "grid") return <GridScene key={key} />;
+        if (beat.scene === "grid-overlay") return <GridOverlayScene key={key} text={beat.text} />;
         return (
           <div
             key={key}
