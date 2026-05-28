@@ -35,9 +35,6 @@ export function DashboardPlaceholder() {
           <span className="text-[13px] font-medium text-ink">
             Operating System
           </span>
-          <span className="font-mono text-[11px] text-ink-dimmer">
-            · Woof Gang Bakery · 4 stores
-          </span>
         </div>
         <div className="hidden gap-2 md:flex">
           {tabs.map((t, i) => (

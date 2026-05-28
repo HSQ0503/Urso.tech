@@ -1,7 +1,6 @@
 import { LiveTicker } from "./hero/live-ticker";
 import { IntegrationStrip } from "./hero/integration-strip";
 import { SlideToBook } from "./hero/slide-to-book";
-import { Modules } from "./modules";
 import DarkVeil from "./ui/dark-veil";
 
 export function Hero() {
@@ -43,11 +42,8 @@ export function Hero() {
         </div>
       </div>
 
-      <div className="relative px-5 pb-10 pt-8 sm:px-8 sm:pb-14 sm:pt-10 md:px-14">
-        <Modules />
-      </div>
-
-      <div className="relative px-5 pb-14 pt-8 sm:px-8 sm:pb-[72px] sm:pt-10 md:px-14">
+      <div className="relative px-5 pb-14 pt-10 sm:px-8 sm:pb-[72px] sm:pt-14 md:px-14">
+        <div id="audit-cta-trigger" aria-hidden="true" className="h-px w-full" />
         <IntegrationStrip />
       </div>
     </section>

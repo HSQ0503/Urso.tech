@@ -673,7 +673,7 @@ export function MissedCallIllo({ hover }: IlloProps) {
 export function SEOIllo({ hover }: IlloProps) {
   const c = lineColor(hover);
   const rows = [
-    { rank: 1, name: "Woof Gang — Winter Park", restingPos: 2, delta: "↑ 2" },
+    { rank: 1, name: "Your Brand — Winter Park", restingPos: 2, delta: "↑ 2" },
     { rank: 2, name: "Petsmart Grooming", restingPos: 0, delta: "↓ 1" },
     { rank: 3, name: "Pampered Pups", restingPos: 1, delta: "↓ 1" },
   ];
@@ -879,7 +879,7 @@ export function SEOIllo({ hover }: IlloProps) {
           opacity="0.75"
           style={{ transition: "fill .3s", letterSpacing: "0.08em" }}
         >
-          {hover ? "→ 3 / 4 ENGINES CITING WOOF GANG" : "→ MONITORED WEEKLY"}
+          {hover ? "→ 3 / 4 ENGINES CITING YOUR BRAND" : "→ MONITORED WEEKLY"}
         </text>
       </g>
     </svg>

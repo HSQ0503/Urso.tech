@@ -137,6 +137,10 @@ export function OperatingSystem() {
     <section className="bg-bg px-5 py-16 text-ink sm:px-8 sm:py-20 md:px-14 md:py-24">
       <div className="mb-10 flex flex-col items-start justify-between gap-6 sm:mb-14 sm:gap-8 md:flex-row md:items-end">
         <div className="max-w-[720px]">
+          <div className="mb-4 font-mono text-[11px] uppercase tracking-[0.18em]">
+            <span className="text-orange">Step 01</span>
+            <span className="ml-2 text-ink-dimmer">— See</span>
+          </div>
           <Pill>The AI Operating System</Pill>
           <h2 className="mt-4 text-[clamp(34px,7.5vw,64px)] font-medium leading-[1.02] tracking-[-0.03em] sm:mt-5 sm:leading-none">
             An operating system<span className="text-orange">.</span>
