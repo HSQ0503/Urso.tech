@@ -15,6 +15,7 @@ import { TaglineScene } from "./scenes/tagline-scene";
 import { ProcessStepScene } from "./scenes/process-step-scene";
 import { LeakCardScene } from "./scenes/leak-card-scene";
 import { SilenceScene } from "./scenes/silence-scene";
+import { HandoffScene } from "./scenes/handoff-scene";
 import "./cinematic.css";
 
 type Props = { onComplete: () => void };
@@ -24,6 +25,8 @@ export function AuditCinematic({ onComplete }: Props) {
   const rootRef = useRef<HTMLDivElement>(null);
 
   const handleComplete = useCallback(() => {
+    const target = document.querySelector<HTMLElement>("[data-audit-hero-cta]");
+    target?.focus();
     onComplete();
   }, [onComplete]);
 
@@ -94,15 +97,7 @@ export function AuditCinematic({ onComplete }: Props) {
         if (beat.scene === "silence") {
           return <SilenceScene key={key} phase={beat.phase} text={beat.text} />;
         }
-        return (
-          <div
-            key={key}
-            className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 font-mono text-[12px] text-ink-dim"
-            style={{ animation: "cinematic-fade-in 200ms ease both" }}
-          >
-            [{beat.scene}] · {(elapsedMs / 1000).toFixed(1)}s
-          </div>
-        );
+        if (beat.scene === "handoff") return <HandoffScene key={key} />;
       })}
     </div>
   );
