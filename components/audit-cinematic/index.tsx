@@ -7,6 +7,7 @@ import { ActTag } from "./ui/act-tag";
 import { Timer } from "./ui/timer";
 import { SkipControl } from "./ui/skip-control";
 import { CardScene } from "./scenes/card-scene";
+import { CollapseScene } from "./scenes/collapse-scene";
 import { EstablishScene } from "./scenes/establish-scene";
 import { TaglineScene } from "./scenes/tagline-scene";
 import "./cinematic.css";
@@ -75,6 +76,7 @@ export function AuditCinematic({ onComplete }: Props) {
 
       {activeBeats.map((beat) => {
         const key = `${beat.at}-${beat.scene}`;
+        if (beat.scene === "collapse") return <CollapseScene key={key} />;
         if (beat.scene === "establish") return <EstablishScene key={key} />;
         if (beat.scene === "card") return <CardScene key={key} data={beat.data} />;
         if (beat.scene === "tagline") return <TaglineScene key={key} text={beat.text} />;

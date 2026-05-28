@@ -134,3 +134,56 @@
 @media (min-width: 640px) {
   .cinematic-tagline { font-size: 15px; }
 }
+
+.collapse-stage {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* Background grid pattern fades in during the collapse. */
+.collapse-stage::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px);
+  background-size: 32px 32px;
+  background-position: center;
+  opacity: 0;
+  animation: cinematic-fade-in 1500ms ease-out 200ms both;
+}
+
+.collapse-cell {
+  position: absolute;
+  width: 22px;
+  height: 16px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  /* Each cell flies in from a different off-center origin, ending in grid. */
+  animation: cinematic-cell-fly 1400ms cubic-bezier(0.22, 1, 0.32, 1) both;
+}
+
+.collapse-cell[data-tone="hot"] {
+  background: #fe5100;
+  border-color: #fe5100;
+  box-shadow: 0 0 8px rgba(254, 81, 0, 0.5);
+}
+
+.collapse-cell[data-tone="warm"] {
+  background: rgba(254, 81, 0, 0.4);
+  border-color: rgba(254, 81, 0, 0.5);
+}
+
+@keyframes cinematic-cell-fly {
+  from {
+    opacity: 0;
+    transform: translate(var(--from-x, 0), var(--from-y, 0)) scale(2.5);
+  }
+  to {
+    opacity: 1;
+    transform: translate(0, 0) scale(1);
+  }
+}
