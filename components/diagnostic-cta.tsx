@@ -4,24 +4,6 @@ import { useState } from "react";
 import { Pill } from "./ui/pill";
 import { SlideToConfirm } from "./ui/slide-to-confirm";
 
-const cadence: Array<{ tag: string; title: string; body: string }> = [
-  {
-    tag: "WEEK 1",
-    title: "External recon",
-    body: "Rankings, review state, booking-flow walk-throughs, after-hours call tests. AI runs the scan; we write the findings per store.",
-  },
-  {
-    tag: "WEEK 2–3",
-    title: "Baseline & Leak Report",
-    body: "Internal data pulled clean, measured identically across stores. Each leak: what it costs, the proposed fix.",
-  },
-  {
-    tag: "WEEK 4–8",
-    title: "Fix one leak, measure the after",
-    body: "Depth over breadth. The biggest provable leak fixed well across every store. The delta becomes your case study.",
-  },
-];
-
 type Stage = "email" | "details" | "confirm" | "success";
 
 const RESPONSE_TIMEFRAME = "two business days";
@@ -139,27 +121,6 @@ export function DiagnosticCta() {
               current={stage === "email" ? 0 : stage === "details" ? 1 : 2}
             />
           )}
-        </div>
-
-        <div className="mt-16 grid grid-cols-1 gap-y-8 border-t border-edge pt-8 text-left sm:mt-20 md:grid-cols-3 md:gap-0">
-          {cadence.map((s, i) => (
-            <div
-              key={s.tag}
-              className={`px-1 sm:px-5 md:px-7 ${
-                i > 0 ? "md:border-l md:border-edge" : ""
-              }`}
-            >
-              <div className="font-mono text-[10px] tracking-[0.1em] text-orange">
-                {s.tag}
-              </div>
-              <h4 className="mt-3 text-[16px] font-medium tracking-[-0.015em]">
-                {s.title}
-              </h4>
-              <p className="mt-2 text-[13px] leading-[1.5] text-ink-dim">
-                {s.body}
-              </p>
-            </div>
-          ))}
         </div>
       </div>
     </section>

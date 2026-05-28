@@ -11,12 +11,12 @@ const tabs: TabData[] = [
     key: "Findability",
     headline: "Show up when nearby customers search.",
     description:
-      "Local pack rank, map citations, schema parity measured per store, compared across the portfolio.",
+      "Local pack rank, map citations, listing consistency measured per location, compared across the portfolio.",
     bullets: [
       "Local pack rank tracking",
-      "Citation diagnostic per store",
-      "Schema / citation parity",
-      "Per-store keyword file",
+      "Citation diagnostic per location",
+      "Listing & citation consistency",
+      "Per-location keyword file",
     ],
     metric: {
       label: "Local pack rank (avg)",
@@ -33,10 +33,10 @@ const tabs: TabData[] = [
     description:
       "Track what the phone, the form and the after-hours line never logged. Instrumented data, not after-the-fact guesses.",
     bullets: [
-      "Missed-call capture per store",
+      "Missed-call capture per location",
       "After-hours SMS callback",
       "Form abandons & dead links",
-      "Per-store, per-hour breakdown",
+      "Per-location, per-hour breakdown",
     ],
     metric: {
       label: "Calls / day (rolling)",
@@ -51,10 +51,10 @@ const tabs: TabData[] = [
     key: "Convert",
     headline: "Turn lookers into bookings.",
     description:
-      "Where the funnel narrows: form starts, drop-offs, time-to-confirm. Measured on every store's booking flow.",
+      "Where the funnel narrows: form starts, drop-offs, time-to-confirm. Measured on every location's booking flow.",
     bullets: [
       "Funnel step instrumentation",
-      "Time-to-confirm per store",
+      "Time-to-confirm per location",
       "Field-level drop-off",
       "Booking conversion deltas",
     ],
@@ -69,11 +69,11 @@ const tabs: TabData[] = [
   },
   {
     key: "Retain",
-    headline: "Measure repeat per store, not in aggregate.",
+    headline: "Measure repeat per location, not in aggregate.",
     description:
-      "Cohorted by first visit, measured per location. Which stores keep customers and which don't and why.",
+      "Cohorted by first visit, measured per location. Which locations keep customers and which don't and why.",
     bullets: [
-      "Per-store cohort retention",
+      "Per-location cohort retention",
       "Repeat-rate by source",
       "Days-to-second-visit",
       "Churn early-warning signals",
@@ -89,11 +89,11 @@ const tabs: TabData[] = [
   },
   {
     key: "Reputation",
-    headline: "Reviews you respond to, by store.",
+    headline: "Reviews you respond to, by location.",
     description:
-      "Star averages, response rate, time-to-respond. Where the bad ones cluster and which stores ignore them.",
+      "Star averages, response rate, time-to-respond. Where the bad ones cluster and which locations ignore them.",
     bullets: [
-      "Per-store star average",
+      "Per-location star average",
       "Response rate / SLA",
       "Sentiment clustering",
       "Review-to-revenue link",
@@ -109,11 +109,11 @@ const tabs: TabData[] = [
   },
   {
     key: "Money",
-    headline: "Revenue tied back to channel and store.",
+    headline: "Revenue tied back to channel and location.",
     description:
-      "What every channel actually made you, broken out per store. Attribution that survives diagnostic.",
+      "What every channel actually made you, broken out per location. Attribution that survives diagnostic.",
     bullets: [
-      "Per-store channel revenue",
+      "Per-location channel revenue",
       "CAC by acquisition source",
       "Multi-touch attribution",
       "Margin per booking",
@@ -146,12 +146,12 @@ export function OperatingSystem() {
             An operating system<span className="text-orange">.</span>
             <br />
             <span className="text-ink-dim">
-              For every store you run.
+              For the whole business you run.
             </span>
           </h2>
         </div>
         <p className="max-w-[360px] text-[14px] leading-[1.5] text-ink-dim sm:text-[15px]">
-          One dashboard, every store. The six panels below are where we
+          One dashboard, your whole business. The six panels below are where we
           start we add views for whatever your business measures.
         </p>
       </div>
@@ -260,7 +260,7 @@ export function OperatingSystem() {
           <p className="mt-3 max-w-[560px] text-[13.5px] leading-[1.55] text-ink-dim sm:text-[14px]">
             The six panels above are the default. Every operator runs differently
             we build the panels for the metrics that move your needle, on the
-            same per-store schema.
+            same per-location structure.
           </p>
         </div>
         <div className="grid grid-cols-2 gap-2.5 md:max-w-[420px]">

@@ -59,8 +59,8 @@ export function DashboardPlaceholder() {
             Dashboard placeholder
           </div>
           <div className="mx-auto mt-3.5 max-w-[360px] text-[13px] leading-[1.5] text-ink-dimmer">
-            Real dashboard renders here. Six panels, one schema, cross-store
-            comparison built in.
+            Real dashboard renders here. Six panels, one source of truth,
+            cross-store comparison built in.
           </div>
         </div>
       </div>

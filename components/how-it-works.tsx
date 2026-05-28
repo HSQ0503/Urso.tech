@@ -700,10 +700,6 @@ export function HowItWorks() {
             <span className="text-ink-dim">Built with you.</span>
           </h2>
         </div>
-        <p className="max-w-[360px] text-[14px] leading-[1.5] text-ink-dim sm:text-[15px]">
-          More agency than software. We unify your data, AI surfaces the
-          leaks, then our team builds the fixes with you.
-        </p>
       </div>
 
       <div className="overflow-hidden rounded-2xl border border-edge bg-[#0b0b0b]">

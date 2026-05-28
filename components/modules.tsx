@@ -35,7 +35,7 @@ const modules: ModuleEntry[] = [
     title: "The Data Layer",
     span: 2,
     large: true,
-    body: "Every system, one schema the diagnostic behind every fix.",
+    body: "Every system, one source of truth the diagnostic behind every fix.",
     bullets: [
       "POS, finance, Google, and call data unified",
       "Per-store views with cross-store comparison",
@@ -45,10 +45,10 @@ const modules: ModuleEntry[] = [
     className: "border-b border-edge md:border-r",
     detail: {
       overview:
-        "Most operators run on a stack of dashboards that don't talk to each other. The Data Layer pulls every signal POS sales, calendar bookings, Google profile activity, finance into one unified schema, normalized per location. Every module reads from it, so the numbers always match and you stop arguing about whose dashboard is right.",
+        "Most operators run on a stack of dashboards that don't talk to each other. The Data Layer pulls every signal POS sales, calendar bookings, Google profile activity, finance into one unified data layer, normalized per location. Every module reads from it, so the numbers always match and you stop arguing about whose dashboard is right.",
       included: [
         "Daily ingest from POS, QuickBooks, Google Business, and call logs",
-        "Per-store and cross-store schemas with historical backfill",
+        "Per-store and cross-store views with historical backfill",
         "Anomaly detection on revenue, traffic, and bookings",
         "Source of truth for every downstream module",
         "Custom connectors when the off-the-shelf one doesn't exist",
@@ -102,11 +102,11 @@ const modules: ModuleEntry[] = [
     className: "border-b border-edge md:border-r",
     detail: {
       overview:
-        "Local search is fragmented across Google Maps, Apple Maps, and now LLM answer engines. We optimize every surface Google Business Profiles, citations, schema markup, and the structured data that LLMs cite when customers ask where to go.",
+        "Local search is fragmented across Google Maps, Apple Maps, and now LLM answer engines. We optimize every surface Google Business Profiles, citations, and the structured data that LLMs cite when customers ask where to go.",
       included: [
         "Google Business Profile diagnostic + optimization per location",
         "Citation cleanup across 50+ directories",
-        "Schema.org markup for menu, services, and hours",
+        "Structured listings for menu, services, and hours",
         "LLM answer-engine monitoring (ChatGPT, Perplexity, Gemini)",
         "Monthly rank tracking by keyword and location",
       ],
