@@ -12,11 +12,8 @@ const AuditCinematic = dynamic(
 
 export function AuditPageGate({ children }: { children: ReactNode }) {
   const [showCinematic, setShowCinematic] = useState(false);
-  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    setMounted(true);
-
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (reduced) {
       // Always discard a pending flag so it doesn't leak to the next page.
@@ -30,6 +27,12 @@ export function AuditPageGate({ children }: { children: ReactNode }) {
     const debug = new URLSearchParams(window.location.search).get("intro") === "1";
 
     if (consumeIntro() || debug) {
+      // Legitimate setState-in-effect: we're reading client-only globals
+      // (window.matchMedia, location.search, module-level intro flag) that
+      // can't run during SSR, and the result decides whether to mount the
+      // cinematic. Not derived from props/state, so the rule's concern
+      // doesn't apply here.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setShowCinematic(true);
     }
   }, []);
@@ -37,7 +40,7 @@ export function AuditPageGate({ children }: { children: ReactNode }) {
   return (
     <>
       {children}
-      {mounted && showCinematic && (
+      {showCinematic && (
         <AuditCinematic onComplete={() => setShowCinematic(false)} />
       )}
     </>
