@@ -17,21 +17,21 @@ import {
 
 export function Modules() {
   return (
-    <section className="border-t border-edge bg-bg px-14 py-24 text-ink">
-      <div className="mb-14 flex flex-col items-start justify-between gap-8 md:flex-row md:items-end">
+    <section className="border-t border-edge bg-bg px-5 py-16 text-ink sm:px-8 sm:py-20 md:px-14 md:py-24">
+      <div className="mb-10 flex flex-col items-start justify-between gap-6 sm:mb-14 sm:gap-8 md:flex-row md:items-end">
         <div>
           <Pill>Capability modules</Pill>
-          <h2 className="mt-5 text-[64px] font-medium leading-none tracking-[-0.03em]">
+          <h2 className="mt-4 text-[clamp(34px,7.5vw,64px)] font-medium leading-[1.02] tracking-[-0.03em] sm:mt-5 sm:leading-none">
             Custom Built for your Business.
             <br />
             <span className="text-ink-dim">No two systems are the same.</span>
           </h2>
         </div>
-        <p className="max-w-[360px] text-[15px] leading-[1.5] text-ink-dim">
+        <p className="max-w-[360px] text-[14px] leading-[1.5] text-ink-dim sm:text-[15px]">
           The modules below are <span className="text-ink">examples</span> of
           what our system can do — not a fixed menu. We build the pieces your
-          business actually needs, all on one data layer, with AI-driven
-          analytics that turn the numbers into decisions.
+          business actually needs, all on one data layer, with custom AI models
+          trained on your business that turn the numbers into decisions.
         </p>
       </div>
 

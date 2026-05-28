@@ -53,7 +53,7 @@ export function ModuleCard({
       onPointerMove={onMove}
       className={`group relative flex h-full cursor-pointer flex-col overflow-hidden ${
         span === 2 ? "md:col-span-2" : ""
-      } ${large ? "px-9 py-9" : "px-8 py-7"} ${className}`}
+      } ${large ? "px-6 py-7 md:px-9 md:py-9" : "px-5 py-6 md:px-8 md:py-7"} ${className}`}
       style={
         {
           "--mx": "50%",

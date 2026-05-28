@@ -46,6 +46,23 @@ export function SlideToBook() {
     setDragging(true);
   };
 
+  const fireWipe = () => {
+    const rect = trackRef.current?.getBoundingClientRect();
+    if (!rect) {
+      triggerWipe("/book-an-audit", {
+        x: window.innerWidth / 2,
+        y: window.innerHeight / 2,
+        r0: HANDLE / 2,
+      });
+      return;
+    }
+    triggerWipe("/book-an-audit", {
+      x: rect.right - PAD - HANDLE / 2,
+      y: rect.top + rect.height / 2,
+      r0: HANDLE / 2 + 6,
+    });
+  };
+
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!dragging || confirmed) return;
     const s = dragRef.current;
@@ -56,7 +73,7 @@ export function SlideToBook() {
       setConfirmed(true);
       setDragging(false);
       setDrag(s.max);
-      window.setTimeout(() => triggerWipe("/book-an-audit"), 220);
+      fireWipe();
     }
   };
 
@@ -146,7 +163,7 @@ export function SlideToBook() {
             e.preventDefault();
             setConfirmed(true);
             setDrag(max);
-            window.setTimeout(() => triggerWipe("/book-an-audit"), 220);
+            fireWipe();
           }
         }}
         className="absolute grid place-items-center rounded-full bg-orange text-white outline-none focus-visible:ring-2 focus-visible:ring-white/40"

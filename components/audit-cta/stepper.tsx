@@ -6,7 +6,7 @@ const steps: Array<readonly [string, string]> = [
 
 export function Stepper({ stepIdx }: { stepIdx: number }) {
   return (
-    <div className="mt-14 flex flex-wrap justify-center gap-8 font-mono text-[11px] uppercase tracking-[0.1em]">
+    <div className="mt-10 flex flex-wrap justify-center gap-x-5 gap-y-3 font-mono text-[10.5px] uppercase tracking-[0.08em] sm:mt-14 sm:gap-8 sm:text-[11px] sm:tracking-[0.1em]">
       {steps.map(([n, l], i) => {
         const active = i <= stepIdx;
         const current = i === stepIdx;

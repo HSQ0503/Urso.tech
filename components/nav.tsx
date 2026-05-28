@@ -17,7 +17,7 @@ export function Nav() {
   const [activeIdx, setActiveIdx] = useState(0);
 
   return (
-    <div className="relative flex items-center justify-between border-b border-edge bg-bg/70 px-14 py-3 backdrop-blur-md">
+    <div className="relative flex items-center justify-between border-b border-edge bg-bg/70 px-5 py-3 backdrop-blur-md sm:px-8 md:px-14">
       <Logo />
 
       <nav

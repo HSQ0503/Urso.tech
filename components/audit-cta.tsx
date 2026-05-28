@@ -33,7 +33,7 @@ const cadence: Array<{ tag: string; title: string; body: string }> = [
   {
     tag: "WEEK 1",
     title: "External recon",
-    body: "Rankings, review state, booking-flow walk-throughs, after-hours call tests. Written findings per store.",
+    body: "Rankings, review state, booking-flow walk-throughs, after-hours call tests. AI runs the scan; we write the findings per store.",
   },
   {
     tag: "WEEK 2–3",
@@ -54,7 +54,7 @@ export function AuditCta() {
   const stepIdx = Math.min(stepOrder.indexOf(step), 2);
 
   return (
-    <section className="relative overflow-hidden border-t border-edge bg-bg px-14 py-[120px] text-ink">
+    <section className="relative overflow-hidden border-t border-edge bg-bg px-5 py-20 text-ink sm:px-8 sm:py-24 md:px-14 md:py-[120px]">
       <div
         aria-hidden="true"
         className="pointer-events-none absolute left-1/2 top-1/2 h-[500px] w-[900px] -translate-x-1/2 -translate-y-1/2"
@@ -66,24 +66,25 @@ export function AuditCta() {
 
       <div className="relative mx-auto max-w-[880px] text-center">
         <Pill>Book the audit</Pill>
-        <h2 className="mt-6 text-[88px] font-medium leading-[0.95] tracking-[-0.035em]">
+        <h2 className="mt-5 text-[clamp(44px,11vw,88px)] font-medium leading-[0.95] tracking-[-0.035em] sm:mt-6">
           Find your leak<span className="text-orange">.</span>
         </h2>
-        <p className="mx-auto mt-6 max-w-[560px] text-[17px] leading-[1.5] text-ink-dim">
-          45 minutes. We walk in with external recon already done. You leave
-          with a dollar-priced list of leaks across every store.
+        <p className="mx-auto mt-5 max-w-[560px] text-[15px] leading-[1.5] text-ink-dim sm:mt-6 sm:text-[17px]">
+          45 minutes. We walk in with AI-driven recon already done — every
+          store profiled before we sit down. You leave with a dollar-priced
+          list of leaks across every store.
         </p>
 
         <Stepper stepIdx={stepIdx} />
 
-        <div className="mt-12 flex min-h-[220px] items-start justify-center">
+        <div className="mt-10 flex min-h-[220px] items-start justify-center sm:mt-12">
           {step === "email" && (
             <form
               onSubmit={(e) => {
                 e.preventDefault();
                 if (email) setStep("slider");
               }}
-              className="flex w-full max-w-[560px] items-center rounded-full border border-edge bg-[#0d0d0d] p-1.5"
+              className="flex w-full max-w-[560px] flex-col items-stretch gap-2 rounded-3xl border border-edge bg-[#0d0d0d] p-2 sm:flex-row sm:items-center sm:rounded-full sm:p-1.5"
             >
               <input
                 type="email"
@@ -91,11 +92,11 @@ export function AuditCta() {
                 placeholder="you@yourstores.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="h-[52px] flex-1 border-none bg-transparent px-[22px] font-sans text-[15px] tracking-[-0.005em] text-ink outline-none placeholder:text-ink-dimmer"
+                className="h-[48px] flex-1 rounded-full border-none bg-transparent px-5 font-sans text-[15px] tracking-[-0.005em] text-ink outline-none placeholder:text-ink-dimmer sm:h-[52px] sm:px-[22px]"
               />
               <button
                 type="submit"
-                className="inline-flex h-[52px] cursor-pointer items-center gap-2 rounded-full border-none bg-orange px-6 font-sans text-[15px] font-medium tracking-[-0.005em] text-white"
+                className="inline-flex h-[48px] cursor-pointer items-center justify-center gap-2 rounded-full border-none bg-orange px-5 font-sans text-[14px] font-medium tracking-[-0.005em] text-white sm:h-[52px] sm:px-6 sm:text-[15px]"
               >
                 Book an audit <ArrowRight />
               </button>
@@ -185,11 +186,13 @@ export function AuditCta() {
           )}
         </div>
 
-        <div className="mt-16 grid grid-cols-1 gap-y-8 border-t border-edge pt-8 text-left md:grid-cols-3 md:gap-0">
+        <div className="mt-12 grid grid-cols-1 gap-y-8 border-t border-edge pt-8 text-left sm:mt-16 md:grid-cols-3 md:gap-0">
           {cadence.map((s, i) => (
             <div
               key={s.tag}
-              className={`px-7 ${i > 0 ? "md:border-l md:border-edge" : ""}`}
+              className={`px-1 sm:px-5 md:px-7 ${
+                i > 0 ? "md:border-l md:border-edge" : ""
+              }`}
             >
               <div className="font-mono text-[10px] tracking-[0.1em] text-orange">
                 {s.tag}

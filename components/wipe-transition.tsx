@@ -1,35 +1,40 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 
+type Origin = { x: number; y: number; r0?: number };
 type Phase = "idle" | "covering" | "covered" | "uncovering";
 
-let triggerFn: ((href: string) => void) | null = null;
+let triggerFn: ((href: string, origin: Origin) => void) | null = null;
 
-export function triggerWipe(href: string) {
+export function triggerWipe(href: string, origin: Origin) {
   if (triggerFn) {
-    triggerFn(href);
+    triggerFn(href, origin);
   } else {
     window.location.href = href;
   }
 }
 
-const COVER_MS = 420;
-const UNCOVER_MS = 620;
-const SETTLE_MS = 40;
+const COVER_MS = 3000;
+const UNCOVER_MS = 3000;
+const COVER_HOLD_MIN_MS = 60;
 
 export function WipeTransition() {
   const router = useRouter();
   const pathname = usePathname();
   const [phase, setPhase] = useState<Phase>("idle");
   const [pendingHref, setPendingHref] = useState<string | null>(null);
+  const [origin, setOrigin] = useState<Origin | null>(null);
+  const coveredAt = useRef(0);
 
   useEffect(() => {
-    triggerFn = (href) => {
+    triggerFn = (href, o) => {
       router.prefetch(href);
+      setOrigin(o);
       setPendingHref(href);
       setPhase("covering");
+      router.push(href);
     };
     return () => {
       triggerFn = null;
@@ -37,18 +42,20 @@ export function WipeTransition() {
   }, [router]);
 
   useEffect(() => {
-    if (phase !== "covering" || !pendingHref) return;
+    if (phase !== "covering") return;
     const t = window.setTimeout(() => {
       setPhase("covered");
-      router.push(pendingHref);
+      coveredAt.current = performance.now();
     }, COVER_MS);
     return () => window.clearTimeout(t);
-  }, [phase, pendingHref, router]);
+  }, [phase]);
 
   useEffect(() => {
     if (phase !== "covered" || !pendingHref) return;
     if (pathname !== pendingHref) return;
-    const t = window.setTimeout(() => setPhase("uncovering"), SETTLE_MS);
+    const elapsed = performance.now() - coveredAt.current;
+    const wait = Math.max(0, COVER_HOLD_MIN_MS - elapsed);
+    const t = window.setTimeout(() => setPhase("uncovering"), wait);
     return () => window.clearTimeout(t);
   }, [pathname, phase, pendingHref]);
 
@@ -57,6 +64,7 @@ export function WipeTransition() {
     const t = window.setTimeout(() => {
       setPhase("idle");
       setPendingHref(null);
+      setOrigin(null);
     }, UNCOVER_MS);
     return () => window.clearTimeout(t);
   }, [phase]);
@@ -64,73 +72,38 @@ export function WipeTransition() {
   useEffect(() => {
     if (typeof document === "undefined") return;
     const root = document.documentElement;
-    if (phase === "uncovering") {
+    if (phase === "uncovering" && origin) {
+      root.style.setProperty("--wipe-x", `${origin.x}px`);
+      root.style.setProperty("--wipe-y", `${origin.y}px`);
       root.dataset.wipeReveal = "true";
     } else {
       delete root.dataset.wipeReveal;
     }
-  }, [phase]);
+  }, [phase, origin]);
 
-  const translate = (
-    {
-      idle: "-102%",
-      covering: "0%",
-      covered: "0%",
-      uncovering: "102%",
-    } as const
-  )[phase];
+  if (phase === "idle" || !origin) return null;
 
-  const transition = (
-    {
-      idle: "transform 0s linear",
-      covering: `transform ${COVER_MS}ms cubic-bezier(0.65, 0, 0.2, 1)`,
-      covered: "transform 0s linear",
-      uncovering: `transform ${UNCOVER_MS}ms cubic-bezier(0.22, 1, 0.32, 1)`,
-    } as const
-  )[phase];
+  const r0 = origin.r0 ?? 28;
+  const cx = `${origin.x}px`;
+  const cy = `${origin.y}px`;
+
+  const animation =
+    phase === "uncovering"
+      ? `wipe-implode ${UNCOVER_MS}ms cubic-bezier(0.6, 0, 0.35, 1) forwards`
+      : `wipe-bloom ${COVER_MS}ms cubic-bezier(0.22, 1, 0.32, 1) forwards`;
 
   return (
     <div
       aria-hidden
-      className="pointer-events-none fixed inset-0 z-[100] overflow-hidden"
-      style={{ visibility: phase === "idle" ? "hidden" : "visible" }}
-    >
-      <div
-        className="absolute inset-0"
-        style={{
-          transform: `translateX(${translate})`,
-          transition,
-          willChange: "transform",
-        }}
-      >
-        <div
-          className="absolute inset-0"
-          style={{
-            background:
-              "linear-gradient(90deg," +
-              " rgba(7,7,7,0) 0%," +
-              " rgba(7,7,7,0.55) 3%," +
-              " #070707 11%," +
-              " #070707 55%," +
-              " #1a0a04 72%," +
-              " #6a230a 86%," +
-              " #d24508 95%," +
-              " #fe5100 100%)",
-          }}
-        />
-        <div
-          className="absolute top-0 bottom-0 left-full"
-          style={{
-            width: "140px",
-            background:
-              "linear-gradient(90deg," +
-              " rgba(254,81,0,0.75) 0%," +
-              " rgba(254,81,0,0.45) 22%," +
-              " rgba(254,81,0,0.18) 55%," +
-              " rgba(254,81,0,0) 100%)",
-          }}
-        />
-      </div>
-    </div>
+      className="pointer-events-none fixed inset-0 z-[100]"
+      style={{
+        ["--wipe-x" as string]: cx,
+        ["--wipe-y" as string]: cy,
+        ["--wipe-r0" as string]: `${r0}px`,
+        background: `radial-gradient(circle at ${cx} ${cy}, #ff7a3d 0%, #fe5100 24%, #c84408 65%, #2a0b03 100%)`,
+        animation,
+        willChange: "clip-path",
+      }}
+    />
   );
 }

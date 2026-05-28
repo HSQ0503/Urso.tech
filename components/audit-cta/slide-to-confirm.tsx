@@ -65,7 +65,7 @@ export function SlideToConfirm({ onComplete }: Props) {
           transition: confirmed ? "width .35s ease" : "none",
         }}
       />
-      <div className="pointer-events-none absolute inset-0 flex items-center justify-center font-sans text-[15px] tracking-[0.04em] text-ink-dim">
+      <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-3 text-center font-sans text-[13px] tracking-[0.04em] text-ink-dim sm:text-[15px]">
         {confirmed ? (
           <span className="font-medium text-orange">
             Confirmed — let&apos;s get your details
