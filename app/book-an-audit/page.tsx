@@ -1,3 +1,4 @@
+import { AuditPageGate } from "@/components/audit-cinematic/audit-page-gate";
 import { AuditHero } from "@/components/audit-page/hero";
 import { AuditProblem } from "@/components/audit-page/problem";
 import { AuditProcess } from "@/components/audit-page/process";
@@ -8,12 +9,14 @@ import { AuditForm } from "@/components/audit-page/form";
 export default function BookAnAuditPage() {
   return (
     <main className="relative min-h-screen bg-bg text-ink">
-      <AuditHero />
-      <AuditProblem />
-      <AuditProcess />
-      <AuditDeliverables />
-      <AuditWhoItsFor />
-      <AuditForm />
+      <AuditPageGate>
+        <AuditHero />
+        <AuditProblem />
+        <AuditProcess />
+        <AuditDeliverables />
+        <AuditWhoItsFor />
+        <AuditForm />
+      </AuditPageGate>
     </main>
   );
 }
