@@ -6,6 +6,7 @@ import { TIMELINE, TOTAL_MS, isBeatActive } from "./timeline";
 import { ActTag } from "./ui/act-tag";
 import { Timer } from "./ui/timer";
 import { SkipControl } from "./ui/skip-control";
+import { CardScene } from "./scenes/card-scene";
 import "./cinematic.css";
 
 type Props = { onComplete: () => void };
@@ -70,23 +71,21 @@ export function AuditCinematic({ onComplete }: Props) {
       <Timer elapsedMs={elapsedMs} />
       <SkipControl onSkip={jumpToEnd} />
 
-      {/* Scene dispatch goes here — Tasks 12+. For now we just see the chrome. */}
-      {activeBeats.map((beat) => (
-        <SceneStub key={`${beat.at}-${beat.scene}`} beat={beat} elapsedMs={elapsedMs} />
-      ))}
-    </div>
-  );
-}
-
-// Temporary visualizer — replaced by real scenes in subsequent tasks.
-function SceneStub({ beat, elapsedMs }: { beat: (typeof TIMELINE)[number]; elapsedMs: number }) {
-  if (beat.scene === "establish") return null;
-  return (
-    <div
-      className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 font-mono text-[12px] text-ink-dim"
-      style={{ animation: "cinematic-fade-in 200ms ease both" }}
-    >
-      [{beat.scene}] · {(elapsedMs / 1000).toFixed(1)}s
+      {activeBeats.map((beat) => {
+        const key = `${beat.at}-${beat.scene}`;
+        if (beat.scene === "establish") return null;
+        if (beat.scene === "card") return <CardScene key={key} data={beat.data} />;
+        // Remaining scenes are stubbed for now.
+        return (
+          <div
+            key={key}
+            className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 font-mono text-[12px] text-ink-dim"
+            style={{ animation: "cinematic-fade-in 200ms ease both" }}
+          >
+            [{beat.scene}] · {(elapsedMs / 1000).toFixed(1)}s
+          </div>
+        );
+      })}
     </div>
   );
 }
