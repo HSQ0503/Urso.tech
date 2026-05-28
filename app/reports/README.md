@@ -17,23 +17,23 @@ exports/reports/
 ```
 
 Each report file has:
-1. **YAML frontmatter** — slug, eyebrow, title, deck, read time, publish date, status, tone, authors, cover-art notes.
-2. **Body** — clean markdown (`##` for section headings, `**bold**`, `-` bullets). Smart quotes restored, HTML entities unescaped.
-3. **Sources** — numbered list of every citation used.
+1. **YAML frontmatter** slug, eyebrow, title, deck, read time, publish date, status, tone, authors, cover-art notes.
+2. **Body** clean markdown (`##` for section headings, `**bold**`, `-` bullets). Smart quotes restored, HTML entities unescaped.
+3. **Sources** numbered list of every citation used.
 
 ## Editorial rules (don't break these on porting)
 
 - Voice: sharp modern studio. Confident, tight, concrete. No big-consultancy jargon.
 - Never state firm size. No "$1.2B / 41 markets" puffery, no "we're just two guys" smallness either.
-- No bear/pack metaphors beyond the name + mark. ("the pack", "how we hunt", "follow the tracks" — all banned.)
+- No bear/pack metaphors beyond the name + mark. ("the pack", "how we hunt", "follow the tracks" all banned.)
 - Don't fabricate stats. Every percentage in these files traces to a source listed at the bottom.
 - Hook line if you need one: *"If you left your business today, could it still run?"*
-- Primary CTA: **Request an audit** → `mailto:hsq0503@gmail.com` (or `/audit` route on the live site).
+- Primary CTA: **Request a diagnostic** → `mailto:hsq0503@gmail.com` (or `/book-a-diagnostic` route on the live site).
 
 ## Authors
 
-- Shouqi Han — Co-founder, Urso
-- Gustavo Campos — Co-founder, Urso
+- Shouqi Han Co-founder, Urso
+- Gustavo Campos Co-founder, Urso
 
 Orlando, FL. Studio founded May 2026.
 

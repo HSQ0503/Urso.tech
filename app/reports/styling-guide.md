@@ -1,6 +1,6 @@
-# Styling guide — Urso reports
+# Styling guide Urso reports
 
-Two surfaces to recreate: the **card** (homepage grid, see `listing.md`) and the **article page** (one per report). Article page is the meatier one — covered here.
+Two surfaces to recreate: the **card** (homepage grid, see `listing.md`) and the **article page** (one per report). Article page is the meatier one covered here.
 
 Built with **Tailwind CSS v4 utilities** + the design tokens in `design-tokens.css`. No external CSS framework, no shadcn/ui in this section.
 
@@ -17,7 +17,7 @@ Built with **Tailwind CSS v4 utilities** + the design tokens in `design-tokens.c
 </main>
 ```
 
-Background is **`--urso-navy` (#060b1f)** throughout. White text. The card-tone gradient does NOT carry into the article page — the tone is a card-only signal.
+Background is **`--urso-navy` (#060b1f)** throughout. White text. The card-tone gradient does NOT carry into the article page the tone is a card-only signal.
 
 ## Top nav
 
@@ -31,7 +31,7 @@ Inner container: `mx-auto flex max-w-[var(--max-w)] items-center gap-9 px-[var(-
 
 - Brand: 28px Manrope wordmark `urso` with `tracking-[-0.04em]`, paired with a 63×34 white `urso-mark-white-tight.png` to its left.
 - Three center nav links (Research, What we do, Process) → mono, 12px, uppercase, `tracking-[0.18em]`, `text-white/70` → `hover:text-white`.
-- Right CTA "Request an audit →" → pill: `rounded-full border border-white/20 bg-white/5 px-5 py-2.5`, mono 11px, hover lifts both border and bg to `/40` / `/10`.
+- Right CTA "Request a diagnostic →" → pill: `rounded-full border border-white/20 bg-white/5 px-5 py-2.5`, mono 11px, hover lifts both border and bg to `/40` / `/10`.
 
 ## Header section
 
@@ -40,8 +40,8 @@ relative px-[var(--gutter)] pb-16 pt-[140px] md:pb-24 md:pt-[180px]
 ```
 
 12-col grid inside `max-w-[var(--max-w)]`:
-- **Left 8 cols** — back-link, eyebrow, title, deck, meta row, spectrum bar.
-- **Right 4 cols** — author panel, left-bordered on lg.
+- **Left 8 cols** back-link, eyebrow, title, deck, meta row, spectrum bar.
+- **Right 4 cols** author panel, left-bordered on lg.
 
 ### Type scale (header)
 
@@ -71,7 +71,7 @@ px-[var(--gutter)] pb-24 md:pb-32
 
 12-col grid, body sits in `col-span-12 lg:col-span-8`, max prose width **`max-w-[68ch]`**, base color `text-white/80`.
 
-The body is rendered via descendant-selector Tailwind on a wrapper div — the report content itself is just `<p>`, `<h2>`, `<strong>`, `<ul>`, `<li>`. Wrapper:
+The body is rendered via descendant-selector Tailwind on a wrapper div the report content itself is just `<p>`, `<h2>`, `<strong>`, `<ul>`, `<li>`. Wrapper:
 
 ```
 [&>p]:mb-6 [&>p]:text-[17px] [&>p]:leading-[1.65] md:[&>p]:text-[19px]
@@ -140,7 +140,7 @@ Inside each:
 - **Display:** Manrope (variable, weights 400–600 used).
 - **Mono:** JetBrains Mono (eyebrows, meta, list markers, sources).
 
-Font weights are quirky: titles use `font-[500]`, sub-headlines use `font-[450]`. Stick with those rather than the conventional 400/500/600 — the half-step gives the editorial look.
+Font weights are quirky: titles use `font-[500]`, sub-headlines use `font-[450]`. Stick with those rather than the conventional 400/500/600 the half-step gives the editorial look.
 
 ## Spacing rules of thumb
 

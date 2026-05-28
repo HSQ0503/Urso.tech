@@ -18,7 +18,7 @@ export function SlideToBook() {
   const [confirmed, setConfirmed] = useState(false);
 
   useEffect(() => {
-    router.prefetch("/book-an-audit");
+    router.prefetch("/book-a-diagnostic");
   }, [router]);
 
   useEffect(() => {
@@ -49,19 +49,19 @@ export function SlideToBook() {
   const fireWipe = () => {
     const isMobile = window.matchMedia("(max-width: 767px)").matches;
     if (!isMobile) {
-      triggerWipe("/book-an-audit");
+      triggerWipe("/book-a-diagnostic");
       return;
     }
     const rect = trackRef.current?.getBoundingClientRect();
     if (!rect) {
-      triggerWipe("/book-an-audit", {
+      triggerWipe("/book-a-diagnostic", {
         x: window.innerWidth / 2,
         y: window.innerHeight / 2,
         r0: HANDLE / 2,
       });
       return;
     }
-    triggerWipe("/book-an-audit", {
+    triggerWipe("/book-a-diagnostic", {
       x: rect.right - PAD - HANDLE / 2,
       y: rect.top + rect.height / 2,
       r0: HANDLE / 2 + 6,
@@ -134,7 +134,7 @@ export function SlideToBook() {
             : "opacity .35s cubic-bezier(0.16,1,0.3,1)",
         }}
       >
-        <span>Slide to book an audit</span>
+        <span>Slide to book a diagnostic</span>
         <span className="ml-2 inline-flex items-center text-white/60">
           <span className="slide-chev slide-chev-1">›</span>
           <span className="slide-chev slide-chev-2">›</span>
@@ -150,7 +150,7 @@ export function SlideToBook() {
           transition: "opacity .3s cubic-bezier(0.16,1,0.3,1) .08s",
         }}
       >
-        Opening audit booking…
+        Opening diagnostic booking…
       </div>
 
       <div
@@ -160,7 +160,7 @@ export function SlideToBook() {
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
         role="button"
-        aria-label="Slide to book an audit"
+        aria-label="Slide to book a diagnostic"
         tabIndex={0}
         onKeyDown={(e) => {
           if (confirmed) return;

@@ -35,7 +35,7 @@ const BEATS: Beat[] = [
         No more missed calls<span className="text-orange">.</span>
       </>
     ),
-    sub: "Every after-hours ring answered — by SMS, instantly.",
+    sub: "Every after-hours ring answered by SMS, instantly.",
   },
   {
     key: "search",
@@ -68,7 +68,7 @@ const BEATS: Beat[] = [
         Ad spend, run by the numbers<span className="text-orange">.</span>
       </>
     ),
-    sub: "Every campaign measured against real revenue — scaled, paused, or rewritten before money is wasted.",
+    sub: "Every campaign measured against real revenue scaled, paused, or rewritten before money is wasted.",
   },
   {
     key: "ops",
@@ -79,7 +79,7 @@ const BEATS: Beat[] = [
         Operations on autopilot<span className="text-orange">.</span>
       </>
     ),
-    sub: "Schedules, inventory, vendors, comms — handled by AI agents, audited by you.",
+    sub: "Schedules, inventory, vendors, comms handled by AI agents, reviewed by you.",
   },
   {
     key: "money",
@@ -90,12 +90,12 @@ const BEATS: Beat[] = [
         Every dollar, traced<span className="text-orange">.</span>
       </>
     ),
-    sub: "Channel-by-channel attribution. Audit-grade numbers.",
+    sub: "Channel-by-channel attribution. Diagnostic-grade numbers.",
   },
   {
     key: "final",
     at: 19900,
-    tag: "The audit",
+    tag: "The diagnostic",
     headline: (
       <>
         Fortune-500 analytics<span className="text-orange">.</span>
@@ -103,7 +103,7 @@ const BEATS: Beat[] = [
         For your business.
       </>
     ),
-    sub: "Every system aggregated, every signal surfaced — so every decision you make is backed by data.",
+    sub: "Every system aggregated, every signal surfaced so every decision you make is backed by data.",
   },
 ];
 
@@ -111,14 +111,14 @@ const TOTAL_MS = BEATS[BEATS.length - 1].at;
 
 // ---- Hero --------------------------------------------------------------
 
-export function AuditHero() {
+export function DiagnosticHero() {
   const [elapsed, setElapsed] = useState(0);
 
   useEffect(() => {
     const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
     if (mq.matches) {
       // Reduced-motion path: snap to final beat. setState-in-effect is the
-      // right shape here — we're reading a client-only media query.
+      // right shape here we're reading a client-only media query.
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setElapsed(TOTAL_MS);
       return;
@@ -163,7 +163,7 @@ export function AuditHero() {
             {active && (
               <div
                 key={`tag-${active.key}`}
-                className="audit-fade-up-sm inline-block"
+                className="diagnostic-fade-up-sm inline-block"
               >
                 <Pill dot dotColor="#FE5100">
                   {active.tag}
@@ -176,7 +176,7 @@ export function AuditHero() {
             {active && (
               <h1
                 key={`h-${active.key}`}
-                className="audit-fade-up text-[clamp(36px,7.5vw,68px)] font-medium leading-[0.98] tracking-[-0.04em]"
+                className="diagnostic-fade-up text-[clamp(36px,7.5vw,68px)] font-medium leading-[0.98] tracking-[-0.04em]"
               >
                 {active.headline}
               </h1>
@@ -187,7 +187,7 @@ export function AuditHero() {
             {active?.sub && (
               <p
                 key={`s-${active.key}`}
-                className="audit-fade-up text-[15px] leading-[1.55] tracking-[-0.005em] text-ink-dim sm:text-[17px]"
+                className="diagnostic-fade-up text-[15px] leading-[1.55] tracking-[-0.005em] text-ink-dim sm:text-[17px]"
               >
                 {active.sub}
               </p>
@@ -197,17 +197,17 @@ export function AuditHero() {
           <div className="mt-8 flex justify-center md:justify-start">
             {isFinal && (
               <a
-                href="#request-an-audit"
-                data-audit-hero-cta
-                className="audit-fade-up group inline-flex items-center gap-2 rounded-lg border border-transparent bg-orange px-[22px] py-[14px] font-sans text-[15px] font-medium tracking-[-0.005em] text-white shadow-[0_8px_28px_rgba(254,81,0,0.35)] transition-[filter,box-shadow] hover:brightness-110"
+                href="#request-a-diagnostic"
+                data-diagnostic-hero-cta
+                className="diagnostic-fade-up group inline-flex items-center gap-2 rounded-lg border border-transparent bg-orange px-[22px] py-[14px] font-sans text-[15px] font-medium tracking-[-0.005em] text-white shadow-[0_8px_28px_rgba(254,81,0,0.35)] transition-[filter,box-shadow] hover:brightness-110"
               >
-                Request an audit
+                Request a diagnostic
                 <ArrowRight />
               </a>
             )}
           </div>
 
-          {/* Beat dots — show progress through the reel */}
+          {/* Beat dots show progress through the reel */}
           <div className="mt-10 flex items-center justify-center gap-1.5 md:justify-start">
             {BEATS.map((b, i) => {
               const seen = activeIndex >= i;
@@ -229,7 +229,7 @@ export function AuditHero() {
         </div>
 
         {/* Right column: phone */}
-        <div className="audit-phone-in flex justify-center md:justify-end">
+        <div className="diagnostic-phone-in flex justify-center md:justify-end">
           <Phone beat={active?.key ?? null} />
         </div>
       </div>
@@ -261,7 +261,7 @@ function Phone({ beat }: { beat: BeatKey | null }) {
   return (
     <div
       className={`relative h-[460px] w-[230px] overflow-hidden rounded-[42px] border border-edge bg-[#0a0a0a] shadow-[0_30px_80px_-20px_rgba(0,0,0,0.85),inset_0_0_0_1px_rgba(255,255,255,0.04)] sm:h-[520px] sm:w-[260px] ${
-        jitter ? "audit-phone-jitter" : ""
+        jitter ? "diagnostic-phone-jitter" : ""
       }`}
     >
       {/* Notch */}
@@ -304,13 +304,13 @@ function MissedScene() {
   }, []);
 
   return (
-    <div className="audit-screen-in absolute inset-0 flex flex-col">
+    <div className="diagnostic-screen-in absolute inset-0 flex flex-col">
       {!resolved && (
         <div className="flex flex-1 flex-col items-center justify-center px-4">
           <div className="font-mono text-[9px] uppercase tracking-[0.2em] text-white/45">
             incoming call
           </div>
-          <div className="audit-ring-pulse mt-6 flex h-[68px] w-[68px] items-center justify-center rounded-full bg-emerald-500/15 text-emerald-400">
+          <div className="diagnostic-ring-pulse mt-6 flex h-[68px] w-[68px] items-center justify-center rounded-full bg-emerald-500/15 text-emerald-400">
             <PhoneIcon />
           </div>
           <div className="mt-5 font-sans text-[15px] font-medium text-white">
@@ -323,15 +323,15 @@ function MissedScene() {
       )}
 
       {resolved && (
-        <div className="audit-screen-in flex flex-1 flex-col px-3 pt-4 pb-4">
+        <div className="diagnostic-screen-in flex flex-1 flex-col px-3 pt-4 pb-4">
           <div className="text-center font-mono text-[9px] uppercase tracking-[0.2em] text-white/45">
             messages · 11:43 PM
           </div>
 
           {/* Outbound SMS bubble */}
           <div className="mt-4 flex justify-end">
-            <div className="audit-fade-up-sm max-w-[180px] rounded-[14px] rounded-br-[4px] bg-orange px-3 py-2 text-left font-sans text-[12px] leading-[1.35] text-white">
-              Sorry we missed you! Tap to grab a time —
+            <div className="diagnostic-fade-up-sm max-w-[180px] rounded-[14px] rounded-br-[4px] bg-orange px-3 py-2 text-left font-sans text-[12px] leading-[1.35] text-white">
+              Sorry we missed you! Tap to grab a time
               <br />
               <span className="underline">urso.co/b/9k2</span>
             </div>
@@ -339,7 +339,7 @@ function MissedScene() {
 
           {/* Read + status row */}
           <div
-            className="audit-fade-up-sm mt-2 flex items-center justify-end gap-1.5 font-mono text-[9px] uppercase tracking-[0.15em] text-emerald-400"
+            className="diagnostic-fade-up-sm mt-2 flex items-center justify-end gap-1.5 font-mono text-[9px] uppercase tracking-[0.15em] text-emerald-400"
             style={{ animationDelay: "180ms" }}
           >
             <CheckIcon />
@@ -348,7 +348,7 @@ function MissedScene() {
 
           {/* Inbound reply preview */}
           <div
-            className="audit-fade-up-sm mt-3 flex justify-start"
+            className="diagnostic-fade-up-sm mt-3 flex justify-start"
             style={{ animationDelay: "320ms" }}
           >
             <div className="max-w-[160px] rounded-[14px] rounded-bl-[4px] bg-white/[0.08] px-3 py-2 text-left font-sans text-[12px] leading-[1.35] text-white/90">
@@ -378,19 +378,19 @@ function SearchScene() {
   }, []);
 
   return (
-    <div className="audit-screen-in absolute inset-0 flex flex-col px-3 pt-3">
+    <div className="diagnostic-screen-in absolute inset-0 flex flex-col px-3 pt-3">
       {/* Search bar */}
       <div className="flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2">
         <SearchIcon />
         <div className="flex-1 text-left font-sans text-[12px] text-white/85">
           {query.slice(0, typed)}
-          {typed < query.length && <span className="audit-caret" />}
+          {typed < query.length && <span className="diagnostic-caret" />}
         </div>
       </div>
 
       {/* AI answer card */}
       <div
-        className="audit-fade-up-sm mt-3 rounded-xl border border-orange/40 bg-orange/[0.06] p-3 text-left"
+        className="diagnostic-fade-up-sm mt-3 rounded-xl border border-orange/40 bg-orange/[0.06] p-3 text-left"
         style={{ animationDelay: "750ms" }}
       >
         <div className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.15em] text-orange">
@@ -398,7 +398,7 @@ function SearchScene() {
           ai recommended
         </div>
         <div className="mt-1.5 font-sans text-[13px] font-medium text-white">
-          Stonefire & Co. — Orlando
+          Stonefire & Co. Orlando
         </div>
         <p className="mt-1 font-sans text-[10.5px] leading-[1.4] text-white/70">
           Highest-rated in the area for craft service. Open until 10pm.
@@ -407,7 +407,7 @@ function SearchScene() {
 
       {/* Map result */}
       <div
-        className="audit-fade-up-sm mt-2 flex items-center gap-2.5 rounded-xl border border-white/10 bg-white/[0.03] p-2.5 text-left"
+        className="diagnostic-fade-up-sm mt-2 flex items-center gap-2.5 rounded-xl border border-white/10 bg-white/[0.03] p-2.5 text-left"
         style={{ animationDelay: "1050ms" }}
       >
         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-emerald-500/15 text-emerald-400">
@@ -430,13 +430,13 @@ function SearchScene() {
       </div>
 
       <div
-        className="audit-fade-up-sm mt-2 flex items-center gap-2.5 rounded-xl bg-white/[0.02] p-2.5 text-left opacity-60"
+        className="diagnostic-fade-up-sm mt-2 flex items-center gap-2.5 rounded-xl bg-white/[0.02] p-2.5 text-left opacity-60"
         style={{ animationDelay: "1300ms" }}
       >
         <div className="h-8 w-8 shrink-0 rounded-md bg-white/[0.06]" />
         <div className="flex-1">
           <div className="font-sans text-[12px] text-white/65">
-            Competitor — 1.2 mi
+            Competitor 1.2 mi
           </div>
           <div className="mt-0.5 font-sans text-[10px] text-white/40">
             ★ 4.1 · Closed
@@ -451,7 +451,7 @@ function SearchScene() {
 
 function ReviewsScene() {
   return (
-    <div className="audit-screen-in absolute inset-0 flex flex-col gap-2 px-3 pt-3">
+    <div className="diagnostic-screen-in absolute inset-0 flex flex-col gap-2 px-3 pt-3">
       <div className="flex items-center justify-between">
         <div className="font-mono text-[9px] uppercase tracking-[0.18em] text-white/45">
           reviews · today
@@ -494,7 +494,7 @@ function ReviewCard({
 }) {
   return (
     <div
-      className="audit-fade-up-sm rounded-xl border border-white/8 bg-white/[0.03] p-2.5 text-left"
+      className="diagnostic-fade-up-sm rounded-xl border border-white/8 bg-white/[0.03] p-2.5 text-left"
       style={{ animationDelay: `${delay}ms` }}
     >
       <div className="flex items-center justify-between">
@@ -553,7 +553,7 @@ function AdsScene() {
   const segments = allocated ? ADS_REBALANCED : ADS_INITIAL;
 
   return (
-    <div className="audit-screen-in absolute inset-0 flex flex-col px-3 pt-3">
+    <div className="diagnostic-screen-in absolute inset-0 flex flex-col px-3 pt-3">
       <div className="flex items-center justify-between">
         <div className="font-mono text-[9px] uppercase tracking-[0.18em] text-white/45">
           ad spend · live
@@ -576,7 +576,7 @@ function AdsScene() {
         $4,000 / day across 4 channels
       </div>
 
-      {/* Allocation bar — animates from even split to weighted */}
+      {/* Allocation bar animates from even split to weighted */}
       <div className="mt-4 flex h-8 w-full overflow-hidden rounded-md border border-white/10 bg-white/[0.03]">
         {segments.map((s, i) => (
           <div
@@ -605,11 +605,11 @@ function AdsScene() {
         ))}
       </div>
 
-      {/* Decision pills — land after the bar rebalances */}
+      {/* Decision pills land after the bar rebalances */}
       <div className="mt-auto flex flex-col gap-1.5 pb-3">
         {showDecisions && (
           <>
-            <div className="audit-fade-up-sm flex items-center gap-2 rounded-lg border border-rose-500/20 bg-rose-500/10 px-2 py-1.5 text-left">
+            <div className="diagnostic-fade-up-sm flex items-center gap-2 rounded-lg border border-rose-500/20 bg-rose-500/10 px-2 py-1.5 text-left">
               <span className="flex h-[18px] w-[18px] items-center justify-center rounded-md bg-rose-500/30 font-mono text-[10px] text-rose-200">
                 ✗
               </span>
@@ -624,7 +624,7 @@ function AdsScene() {
               </span>
             </div>
             <div
-              className="audit-fade-up-sm flex items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-2 py-1.5 text-left"
+              className="diagnostic-fade-up-sm flex items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-2 py-1.5 text-left"
               style={{ animationDelay: "180ms" }}
             >
               <span className="flex h-[18px] w-[18px] items-center justify-center rounded-md bg-emerald-500/30 font-mono text-[10px] text-emerald-200">
@@ -737,13 +737,13 @@ function OpsScene() {
   }, []);
 
   return (
-    <div className="audit-screen-in absolute inset-0 flex flex-col px-3 pt-3">
+    <div className="diagnostic-screen-in absolute inset-0 flex flex-col px-3 pt-3">
       <div className="flex items-center justify-between">
         <div className="font-mono text-[9px] uppercase tracking-[0.18em] text-white/45">
           ops queue · today
         </div>
         <div className="flex items-center gap-1 font-mono text-[9px] text-emerald-400">
-          <span className="audit-spin h-2 w-2 rounded-full border border-white/15 border-t-emerald-400" />
+          <span className="diagnostic-spin h-2 w-2 rounded-full border border-white/15 border-t-emerald-400" />
           agent live
         </div>
       </div>
@@ -782,7 +782,7 @@ function TaskRow({ task, state }: { task: OpsTask; state: TaskState }) {
 
   return (
     <div
-      className={`audit-fade-up-sm flex items-center gap-2.5 rounded-xl border bg-white/[0.03] p-2 text-left transition-all duration-300 ${
+      className={`diagnostic-fade-up-sm flex items-center gap-2.5 rounded-xl border bg-white/[0.03] p-2 text-left transition-all duration-300 ${
         isDone
           ? "border-emerald-500/20 opacity-60"
           : isFlagged
@@ -808,15 +808,15 @@ function TaskRow({ task, state }: { task: OpsTask; state: TaskState }) {
           <span className="h-2 w-2 rounded-full bg-white/20" />
         )}
         {state === "working" && (
-          <span className="audit-spin h-4 w-4 rounded-full border-2 border-white/15 border-t-sky-400" />
+          <span className="diagnostic-spin h-4 w-4 rounded-full border-2 border-white/15 border-t-sky-400" />
         )}
         {state === "done" && (
-          <span className="audit-check-pop flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-300">
+          <span className="diagnostic-check-pop flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-300">
             <CheckIcon />
           </span>
         )}
         {state === "flagged" && (
-          <span className="audit-flag-shake text-orange">
+          <span className="diagnostic-flag-shake text-orange">
             <AlertIcon />
           </span>
         )}
@@ -852,7 +852,7 @@ function MoneyScene() {
   ];
 
   return (
-    <div className="audit-screen-in absolute inset-0 flex flex-col px-3 pt-3">
+    <div className="diagnostic-screen-in absolute inset-0 flex flex-col px-3 pt-3">
       <div className="font-mono text-[9px] uppercase tracking-[0.18em] text-white/45">
         portfolio · this month
       </div>
@@ -869,7 +869,7 @@ function MoneyScene() {
         {bars.map((h, i) => (
           <div
             key={i}
-            className="audit-bar-grow flex-1 rounded-sm bg-gradient-to-t from-orange/70 to-orange"
+            className="diagnostic-bar-grow flex-1 rounded-sm bg-gradient-to-t from-orange/70 to-orange"
             style={{ height: `${h}%`, animationDelay: `${i * 95}ms` }}
           />
         ))}
@@ -880,7 +880,7 @@ function MoneyScene() {
         {channels.map((c, i) => (
           <div
             key={c.name}
-            className="audit-fade-up-sm flex items-center justify-between rounded-md bg-white/[0.03] px-2.5 py-1.5"
+            className="diagnostic-fade-up-sm flex items-center justify-between rounded-md bg-white/[0.03] px-2.5 py-1.5"
             style={{ animationDelay: `${850 + i * 160}ms` }}
           >
             <div className="flex items-center gap-2">
@@ -899,7 +899,7 @@ function MoneyScene() {
   );
 }
 
-// ---- Scene 5: Final — capability grid ----------------------------------
+// ---- Scene 5: Final capability grid ----------------------------------
 
 function FinalScene() {
   const tiles = [
@@ -911,7 +911,7 @@ function FinalScene() {
     { icon: <ChartIcon />, label: "Money", tint: "text-rose-400" },
   ];
   return (
-    <div className="audit-screen-in absolute inset-0 flex flex-col px-3 pt-3">
+    <div className="diagnostic-screen-in absolute inset-0 flex flex-col px-3 pt-3">
       <div className="flex items-center justify-between">
         <div className="font-mono text-[9px] uppercase tracking-[0.18em] text-white/45">
           your operating system
@@ -923,7 +923,7 @@ function FinalScene() {
         {tiles.map((t, i) => (
           <div
             key={t.label}
-            className="audit-fade-up-sm flex flex-col items-start justify-between rounded-xl border border-white/8 bg-white/[0.03] p-2"
+            className="diagnostic-fade-up-sm flex flex-col items-start justify-between rounded-xl border border-white/8 bg-white/[0.03] p-2"
             style={{ animationDelay: `${i * 120}ms`, minHeight: "70px" }}
           >
             <div className={`${t.tint}`}>{t.icon}</div>
@@ -941,11 +941,11 @@ function FinalScene() {
       </div>
 
       <div
-        className="audit-fade-up-sm mt-3 flex items-center justify-between rounded-lg bg-orange/15 px-3 py-2"
+        className="diagnostic-fade-up-sm mt-3 flex items-center justify-between rounded-lg bg-orange/15 px-3 py-2"
         style={{ animationDelay: "900ms" }}
       >
         <span className="font-sans text-[11px] text-white">
-          Audit complete
+          Diagnostic complete
         </span>
         <span className="font-mono text-[10px] text-orange">→ open</span>
       </div>

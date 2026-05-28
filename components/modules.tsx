@@ -35,7 +35,7 @@ const modules: ModuleEntry[] = [
     title: "The Data Layer",
     span: 2,
     large: true,
-    body: "Every system, one schema — the diagnostic behind every fix.",
+    body: "Every system, one schema the diagnostic behind every fix.",
     bullets: [
       "POS, finance, Google, and call data unified",
       "Per-store views with cross-store comparison",
@@ -45,7 +45,7 @@ const modules: ModuleEntry[] = [
     className: "border-b border-edge md:border-r",
     detail: {
       overview:
-        "Most operators run on a stack of dashboards that don't talk to each other. The Data Layer pulls every signal — POS sales, calendar bookings, Google profile activity, finance — into one unified schema, normalized per location. Every module reads from it, so the numbers always match and you stop arguing about whose dashboard is right.",
+        "Most operators run on a stack of dashboards that don't talk to each other. The Data Layer pulls every signal POS sales, calendar bookings, Google profile activity, finance into one unified schema, normalized per location. Every module reads from it, so the numbers always match and you stop arguing about whose dashboard is right.",
       included: [
         "Daily ingest from POS, QuickBooks, Google Business, and call logs",
         "Per-store and cross-store schemas with historical backfill",
@@ -78,7 +78,7 @@ const modules: ModuleEntry[] = [
   {
     tag: "phone",
     title: "Missed Communications",
-    body: "Every missed call answered by SMS — instantly.",
+    body: "Every missed call answered by SMS instantly.",
     illustration: MissedCallIllo,
     className: "border-b border-edge",
     detail: {
@@ -102,9 +102,9 @@ const modules: ModuleEntry[] = [
     className: "border-b border-edge md:border-r",
     detail: {
       overview:
-        "Local search is fragmented across Google Maps, Apple Maps, and now LLM answer engines. We optimize every surface — Google Business Profiles, citations, schema markup, and the structured data that LLMs cite when customers ask where to go.",
+        "Local search is fragmented across Google Maps, Apple Maps, and now LLM answer engines. We optimize every surface Google Business Profiles, citations, schema markup, and the structured data that LLMs cite when customers ask where to go.",
       included: [
-        "Google Business Profile audit + optimization per location",
+        "Google Business Profile diagnostic + optimization per location",
         "Citation cleanup across 50+ directories",
         "Schema.org markup for menu, services, and hours",
         "LLM answer-engine monitoring (ChatGPT, Perplexity, Gemini)",
@@ -145,7 +145,7 @@ const modules: ModuleEntry[] = [
     className: "border-b border-edge md:border-r",
     detail: {
       overview:
-        "A single command center for paid acquisition. Meta and Google Ads sit next to landing page performance and lead source tracking, so you can see which dollar produced which booking — not just which click.",
+        "A single command center for paid acquisition. Meta and Google Ads sit next to landing page performance and lead source tracking, so you can see which dollar produced which booking not just which click.",
       included: [
         "Meta Ads + Google Ads unified dashboard",
         "Landing pages built per campaign",
@@ -183,7 +183,7 @@ const modules: ModuleEntry[] = [
   {
     tag: "dollar",
     title: "Finance Pulse",
-    body: "Know what is making money — and what is not.",
+    body: "Know what is making money and what is not.",
     bullets: [
       "QuickBooks integration, by location",
       "Margin & cash-flow visibility",
@@ -193,7 +193,7 @@ const modules: ModuleEntry[] = [
     className: "border-b border-edge md:border-b-0 md:border-r",
     detail: {
       overview:
-        "QuickBooks tells you whether the business made money. Finance Pulse tells you which location, which day, and which service line — with cash-flow forecasts your accountant won't give you for free.",
+        "QuickBooks tells you whether the business made money. Finance Pulse tells you which location, which day, and which service line with cash-flow forecasts your accountant won't give you for free.",
       included: [
         "Live QuickBooks sync, broken out by location",
         "Margin breakdown by service and product",
@@ -217,7 +217,7 @@ const modules: ModuleEntry[] = [
     className: "border-b border-edge md:border-b-0 md:border-r",
     detail: {
       overview:
-        "The boring stuff that eats a GM's day: checklists, inventory orders, staff tasks, SOP lookups. We give every location the same operating cadence — and you the visibility to know it's actually happening.",
+        "The boring stuff that eats a GM's day: checklists, inventory orders, staff tasks, SOP lookups. We give every location the same operating cadence and you the visibility to know it's actually happening.",
       included: [
         "Daily and weekly checklists per location",
         "Searchable SOP library",
@@ -240,7 +240,7 @@ const modules: ModuleEntry[] = [
     illustration: AgentsIllo,
     detail: {
       overview:
-        "Sometimes the missing piece doesn't exist as a SaaS product. When that's the case, we build it — a custom dashboard, an automation, an internal tool — on the same data layer, deployed across every location.",
+        "Sometimes the missing piece doesn't exist as a SaaS product. When that's the case, we build it a custom dashboard, an automation, an internal tool on the same data layer, deployed across every location.",
       included: [
         "Custom workflows scoped in week one",
         "Built on your existing stack (no rip-and-replace)",
@@ -271,7 +271,7 @@ export function Modules() {
         <div>
           <div className="mb-4 font-mono text-[11px] uppercase tracking-[0.18em]">
             <span className="text-orange">Step 03</span>
-            <span className="ml-2 text-ink-dimmer">— Fix</span>
+            <span className="ml-2 text-ink-dimmer">Fix</span>
           </div>
           <Pill>Capability modules</Pill>
           <h2 className="mt-4 text-[clamp(34px,7.5vw,64px)] font-medium leading-[1.02] tracking-[-0.03em] sm:mt-5 sm:leading-none">
@@ -282,7 +282,7 @@ export function Modules() {
         </div>
         <p className="max-w-[360px] text-[14px] leading-[1.5] text-ink-dim sm:text-[15px]">
           The modules below are <span className="text-ink">examples</span> of
-          what our system can do — not a fixed menu. We build the pieces your
+          what our system can do not a fixed menu. We build the pieces your
           business actually needs, all on one data layer, with custom AI models
           trained on your business that turn the numbers into decisions.
         </p>

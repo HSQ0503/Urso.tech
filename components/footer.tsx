@@ -4,7 +4,7 @@ const columns: Array<readonly [string, ReadonlyArray<string>]> = [
   ["Product", ["Operating System", "Modules", "Pricing", "Roadmap"]],
   ["Solutions", ["Pet franchises", "Wellness multi-unit", "Service brands"]],
   ["Company", ["About", "Founders", "Master context", "Careers"]],
-  ["Contact", ["Book an audit", "hello@urso.co", "X / Twitter", "LinkedIn"]],
+  ["Contact", ["Book a diagnostic", "hello@urso.co", "X / Twitter", "LinkedIn"]],
 ];
 
 export function Footer() {
@@ -40,7 +40,7 @@ export function Footer() {
       </div>
       <div className="mt-14 flex flex-wrap justify-between gap-2 border-t border-edge pt-6 font-mono text-[11px] tracking-[0.04em] text-ink-dimmer">
         <span>© 2026 Urso. All rights reserved.</span>
-        <span>&ldquo;Urso&rdquo; — Portuguese for bear.</span>
+        <span>&ldquo;Urso&rdquo; Portuguese for bear.</span>
       </div>
     </footer>
   );

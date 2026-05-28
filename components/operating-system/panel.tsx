@@ -379,7 +379,7 @@ function RetainViz() {
 function ReputationViz() {
   const reviews = [
     { stars: 5, text: "Best groomers in town. Booked again same day.", resp: "1h" },
-    { stars: 5, text: "Took such good care of our Lola — will return.", resp: "22m" },
+    { stars: 5, text: "Took such good care of our Lola will return.", resp: "22m" },
     { stars: 4, text: "Pricey but worth it. The cut lasted weeks.", resp: "3h" },
     { stars: 2, text: "Long wait time. Staff was apologetic though.", resp: "45m", bad: true },
   ];

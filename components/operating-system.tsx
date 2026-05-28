@@ -11,10 +11,10 @@ const tabs: TabData[] = [
     key: "Findability",
     headline: "Show up when nearby customers search.",
     description:
-      "Local pack rank, map citations, schema parity — measured per store, compared across the portfolio.",
+      "Local pack rank, map citations, schema parity measured per store, compared across the portfolio.",
     bullets: [
       "Local pack rank tracking",
-      "Citation audit per store",
+      "Citation diagnostic per store",
       "Schema / citation parity",
       "Per-store keyword file",
     ],
@@ -69,9 +69,9 @@ const tabs: TabData[] = [
   },
   {
     key: "Retain",
-    headline: "Measure repeat — per store, not in aggregate.",
+    headline: "Measure repeat per store, not in aggregate.",
     description:
-      "Cohorted by first visit, measured per location. Which stores keep customers and which don't — and why.",
+      "Cohorted by first visit, measured per location. Which stores keep customers and which don't and why.",
     bullets: [
       "Per-store cohort retention",
       "Repeat-rate by source",
@@ -91,7 +91,7 @@ const tabs: TabData[] = [
     key: "Reputation",
     headline: "Reviews you respond to, by store.",
     description:
-      "Star averages, response rate, time-to-respond. Where the bad ones cluster — and which stores ignore them.",
+      "Star averages, response rate, time-to-respond. Where the bad ones cluster and which stores ignore them.",
     bullets: [
       "Per-store star average",
       "Response rate / SLA",
@@ -111,7 +111,7 @@ const tabs: TabData[] = [
     key: "Money",
     headline: "Revenue tied back to channel and store.",
     description:
-      "What every channel actually made you, broken out per store. Attribution that survives audit.",
+      "What every channel actually made you, broken out per store. Attribution that survives diagnostic.",
     bullets: [
       "Per-store channel revenue",
       "CAC by acquisition source",
@@ -139,7 +139,7 @@ export function OperatingSystem() {
         <div className="max-w-[720px]">
           <div className="mb-4 font-mono text-[11px] uppercase tracking-[0.18em]">
             <span className="text-orange">Step 01</span>
-            <span className="ml-2 text-ink-dimmer">— See</span>
+            <span className="ml-2 text-ink-dimmer">See</span>
           </div>
           <Pill>The AI Operating System</Pill>
           <h2 className="mt-4 text-[clamp(34px,7.5vw,64px)] font-medium leading-[1.02] tracking-[-0.03em] sm:mt-5 sm:leading-none">
@@ -152,7 +152,7 @@ export function OperatingSystem() {
         </div>
         <p className="max-w-[360px] text-[14px] leading-[1.5] text-ink-dim sm:text-[15px]">
           One dashboard, every store. The six panels below are where we
-          start — we add views for whatever your business measures.
+          start we add views for whatever your business measures.
         </p>
       </div>
 
@@ -259,7 +259,7 @@ export function OperatingSystem() {
           </h3>
           <p className="mt-3 max-w-[560px] text-[13.5px] leading-[1.55] text-ink-dim sm:text-[14px]">
             The six panels above are the default. Every operator runs differently
-            — we build the panels for the metrics that move your needle, on the
+            we build the panels for the metrics that move your needle, on the
             same per-store schema.
           </p>
         </div>

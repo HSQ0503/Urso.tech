@@ -9,7 +9,7 @@ export function Research() {
     >
       <div className="mb-10 max-w-[820px] sm:mb-14">
         <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-ink-dimmer">
-          02 — Research
+          02 Research
         </div>
         <h2 className="mt-5 text-[clamp(34px,7.5vw,64px)] font-medium leading-[1.02] tracking-[-0.03em] sm:mt-6">
           Notes from inside the{" "}
@@ -18,7 +18,7 @@ export function Research() {
         </h2>
         <p className="mt-5 max-w-[600px] text-[15px] leading-[1.5] text-ink-dim sm:mt-6 sm:text-[17px]">
           Short, honest pieces about what actually moves the needle for
-          founder-led service businesses — written while we build, not after.
+          founder-led service businesses written while we build, not after.
           No gated PDFs, no fake stats.
         </p>
       </div>

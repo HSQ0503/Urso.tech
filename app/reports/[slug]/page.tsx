@@ -73,7 +73,7 @@ export default async function ReportPage({
           </div>
           <p className="mt-4 text-[17px] leading-[1.65] text-ink-dim">
             The long-form version of this piece is being prepared for the web.
-            In the meantime, request a copy and we&apos;ll send the PDF — along
+            In the meantime, request a copy and we&apos;ll send the PDF along
             with the sources behind every figure.
           </p>
           <Link

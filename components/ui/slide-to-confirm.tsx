@@ -145,7 +145,7 @@ export function SlideToConfirm({
         </div>
       )}
 
-      {/* Handle (visual only — pointer events are on the track) */}
+      {/* Handle (visual only pointer events are on the track) */}
       <div
         role="button"
         tabIndex={disabled ? -1 : 0}

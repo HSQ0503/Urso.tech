@@ -109,7 +109,7 @@ export default function DarkVeil({
         canvas,
       });
     } catch {
-      // WebGL unavailable (headless screenshot, older device, etc.) —
+      // WebGL unavailable (headless screenshot, older device, etc.)
       // fail silently; the page's dark background remains.
       return;
     }

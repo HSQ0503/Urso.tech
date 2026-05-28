@@ -18,7 +18,7 @@ const cadence: Array<{ tag: string; title: string; body: string }> = [
   {
     tag: "WEEK 4–8",
     title: "Fix one leak, measure the after",
-    body: "Depth over breadth. The biggest provable leak — fixed well across every store. The delta becomes your case study.",
+    body: "Depth over breadth. The biggest provable leak fixed well across every store. The delta becomes your case study.",
   },
 ];
 
@@ -27,7 +27,7 @@ type Stage = "email" | "details" | "confirm" | "success";
 const RESPONSE_TIMEFRAME = "two business days";
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export function AuditCta() {
+export function DiagnosticCta() {
   const [stage, setStage] = useState<Stage>("email");
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
@@ -44,7 +44,7 @@ export function AuditCta() {
     setSubmitting(true);
     setError(null);
     try {
-      const res = await fetch("/api/request-audit", {
+      const res = await fetch("/api/request-diagnostic", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, email, phone, about }),
@@ -63,7 +63,7 @@ export function AuditCta() {
 
   return (
     <section
-      id="request-an-audit"
+      id="request-a-diagnostic"
       className="relative overflow-hidden border-t border-edge bg-bg px-5 py-20 text-ink sm:px-8 sm:py-24 md:px-14 md:py-[120px]"
     >
       <div
@@ -76,12 +76,12 @@ export function AuditCta() {
       />
 
       <div className="relative mx-auto max-w-[880px] text-center">
-        <Pill>Book the audit</Pill>
+        <Pill>Book the diagnostic</Pill>
         <h2 className="mt-5 text-[clamp(44px,11vw,88px)] font-medium leading-[0.95] tracking-[-0.035em] sm:mt-6">
           Find your leak<span className="text-orange">.</span>
         </h2>
         <p className="mx-auto mt-5 max-w-[560px] text-[15px] leading-[1.5] text-ink-dim sm:mt-6 sm:text-[17px]">
-          45 minutes. We walk in with AI-driven recon already done — every
+          45 minutes. We walk in with AI-driven recon already done every
           store profiled before we sit down. You leave with a dollar-priced
           list of leaks across every store.
         </p>
@@ -287,7 +287,7 @@ function DetailsStage({
         <textarea
           value={about}
           onChange={(e) => setAbout(e.target.value)}
-          placeholder="What you run, where, what you'd like the audit to dig into."
+          placeholder="What you run, where, what you'd like the diagnostic to dig into."
           rows={3}
           className={`${inputClass} h-auto resize-none rounded-[20px] py-3`}
         />
@@ -423,7 +423,7 @@ function SuccessStage() {
         </svg>
       </div>
       <div className="text-[20px] font-medium tracking-[-0.02em]">
-        Thanks — we&apos;ll be in touch.
+        Thanks we&apos;ll be in touch.
       </div>
       <p className="mx-auto mt-3 max-w-[420px] text-[14px] text-ink-dim">
         We&apos;ll reach out within {RESPONSE_TIMEFRAME} to set up a call.

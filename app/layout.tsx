@@ -14,9 +14,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Urso — First click to final sale.",
+  title: "Urso First click to final sale.",
   description:
-    "An AI-powered data agency for multi-unit operators. We train custom models on your business data — then find the leaks across your stores and fix them on retainer.",
+    "An AI-powered data agency for founder-led businesses. We train custom models on your business data, then find the leaks across your operation and fix them on retainer.",
 };
 
 export default function RootLayout({

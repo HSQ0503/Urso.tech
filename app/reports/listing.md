@@ -4,10 +4,10 @@ Lives at anchor `#work` on the homepage. Four report cards in a responsive grid.
 
 ## Section header copy
 
-- **Eyebrow:** `02 — Research`
+- **Eyebrow:** `02 Research`
 - **Headline:** `Notes from inside the *work*.` (the word "work" is italicized)
 - **Deck:**
-  > Short, honest pieces about what actually moves the needle for founder-led service businesses — written while we build, not after. No gated PDFs, no fake stats.
+  > Short, honest pieces about what actually moves the needle for founder-led service businesses written while we build, not after. No gated PDFs, no fake stats.
 
 ## Card grid
 
@@ -95,4 +95,4 @@ group-hover:opacity-100 group-focus-visible:opacity-100
 
 ## Cover-art SVGs
 
-All four art pieces are inline `<svg viewBox="0 0 200 200" aria-hidden="true">`. They're abstract, monochrome on their tone background. See each report file for its exact SVG source — kept in the frontmatter `cover_art` field.
+All four art pieces are inline `<svg viewBox="0 0 200 200" aria-hidden="true">`. They're abstract, monochrome on their tone background. See each report file for its exact SVG source kept in the frontmatter `cover_art` field.

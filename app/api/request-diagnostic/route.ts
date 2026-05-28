@@ -14,13 +14,14 @@ import { NextResponse } from "next/server";
 //     "Content-Type": "application/json",
 //   },
 //   body: JSON.stringify({
-//     from: "Urso Audit <onboarding@resend.dev>",
+//     from: "Urso Diagnostic <onboarding@resend.dev>",
 //     to: ["hsq0503@gmail.com"],
-//     subject: `Audit request — ${name}`,
+//     subject: `Diagnostic request — ${name} (${brand}, ${stores} stores)`,
 //     html: `<p><b>Name:</b> ${escapeHtml(name)}</p>
 //            <p><b>Email:</b> ${escapeHtml(email)}</p>
-//            <p><b>Phone:</b> ${escapeHtml(phone || "(not provided)")}</p>
-//            <p><b>About:</b><br/>${escapeHtml(about || "(not provided)").replace(/\n/g, "<br/>")}</p>`,
+//            <p><b>Brand:</b> ${escapeHtml(brand || "(not provided)")}</p>
+//            <p><b>Stores:</b> ${escapeHtml(stores || "(not provided)")}</p>
+//            <p><b>Where they're leaking:</b><br/>${escapeHtml(leak || "(not provided)").replace(/\n/g, "<br/>")}</p>`,
 //   }),
 // });
 // if (!res.ok) throw new Error("Resend rejected the message");
@@ -28,8 +29,9 @@ import { NextResponse } from "next/server";
 type Payload = {
   name: string;
   email: string;
-  phone: string;
-  about: string;
+  brand: string;
+  stores: string;
+  leak: string;
 };
 
 export async function POST(req: Request) {
@@ -49,11 +51,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Email looks invalid" }, { status: 400 });
   }
 
-  console.log("[audit request]", {
+  console.log("[diagnostic request]", {
     name,
     email,
-    phone: body.phone,
-    about: body.about,
+    brand: body.brand,
+    stores: body.stores,
+    leak: body.leak,
     at: new Date().toISOString(),
   });
 

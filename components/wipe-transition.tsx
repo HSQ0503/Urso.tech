@@ -82,7 +82,7 @@ export function WipeTransition() {
       return;
     }
     // Only mark the new page once it's actually mounted (or once we're
-    // uncovering anyway) — otherwise the OLD page wrap would match these
+    // uncovering anyway) otherwise the OLD page wrap would match these
     // rules and visually disappear before the cover panel reaches it.
     if (phase !== "uncovering" && pathname !== pendingHref) return;
     root.dataset.wipeVariant = variant;
@@ -123,7 +123,7 @@ export function WipeTransition() {
     );
   }
 
-  // Slide variant — left-to-right sweep
+  // Slide variant left-to-right sweep
   const animation =
     phase === "uncovering"
       ? `wipe-slide-uncover ${SLIDE_UNCOVER_MS}ms cubic-bezier(0.25, 1, 0.5, 1) forwards`

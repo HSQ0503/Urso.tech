@@ -5,7 +5,7 @@ import { HowItWorks } from "@/components/how-it-works";
 import { OperatingSystem } from "@/components/operating-system";
 import { Modules } from "@/components/modules";
 import { Research } from "@/components/research";
-import { AuditCta } from "@/components/audit-cta";
+import { DiagnosticCta } from "@/components/diagnostic-cta";
 import { Footer } from "@/components/footer";
 
 export default function Home() {
@@ -18,7 +18,7 @@ export default function Home() {
       <OperatingSystem />
       <Modules />
       <Research />
-      <AuditCta />
+      <DiagnosticCta />
       <Footer />
     </main>
   );

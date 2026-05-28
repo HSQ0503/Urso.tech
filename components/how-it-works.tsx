@@ -428,7 +428,7 @@ function FindIllo({ hover }: IlloProps) {
 function FixIllo({ hover }: IlloProps) {
   const c = lineColor(hover);
   const phases = [
-    { num: "01", label: "PLAN", time: "WK 1", sub: "scope + audit" },
+    { num: "01", label: "PLAN", time: "WK 1", sub: "scope + diagnostic" },
     { num: "02", label: "BUILD", time: "WK 2–4", sub: "software + auto" },
     { num: "03", label: "DEPLOY", time: "WK 5", sub: "every store" },
     { num: "04", label: "MEASURE", time: "ONGOING", sub: "weekly reports" },
@@ -639,7 +639,7 @@ const steps: Step[] = [
     num: "01",
     verb: "SEE",
     headline: "We unify your data into one dashboard",
-    body: "POS, calls, ads, finance — every system in one view. Because real decisions need real data, not gut feel.",
+    body: "POS, calls, ads, finance every system in one view. Because real decisions need real data, not gut feel.",
     illustration: SeeIllo,
   },
   {
@@ -653,7 +653,7 @@ const steps: Step[] = [
     num: "03",
     verb: "FIX",
     headline: "You sit down with us. We build the plan",
-    body: "Custom technical plans — software, automations, advisory — built with you to fix the leaks your data exposed.",
+    body: "Custom technical plans software, automations, advisory built with you to fix the leaks your data exposed.",
     illustration: FixIllo,
   },
 ];
@@ -672,7 +672,7 @@ function StepCard({ step, hasBorder }: { step: Step; hasBorder: boolean }) {
     >
       <div className="font-mono text-[11px] uppercase tracking-[0.18em]">
         <span className="text-orange">{step.num}</span>
-        <span className="ml-2 text-ink">— {step.verb}</span>
+        <span className="ml-2 text-ink">{step.verb}</span>
       </div>
       <h3 className="mt-4 text-[clamp(24px,3.4vw,28px)] font-medium leading-[1.08] tracking-[-0.02em]">
         {step.headline}
@@ -702,7 +702,7 @@ export function HowItWorks() {
         </div>
         <p className="max-w-[360px] text-[14px] leading-[1.5] text-ink-dim sm:text-[15px]">
           More agency than software. We unify your data, AI surfaces the
-          leaks, then our team builds the fixes — with you.
+          leaks, then our team builds the fixes with you.
         </p>
       </div>
 

@@ -34,7 +34,7 @@ export function Hero() {
         <p className="mx-auto mt-6 max-w-[720px] text-[16px] leading-[1.5] tracking-[-0.005em] text-ink-dim sm:mt-8 sm:text-[19px]">
           Urso is an AI-powered operational intelligence agency. Custom models
           trained on your data, paired with advisory, automation, and custom
-          software — to connect systems, streamline operations, and make
+          software to connect systems, streamline operations, and make
           smarter decisions.
         </p>
         <div className="mt-7 flex justify-center sm:mt-9">
@@ -43,7 +43,7 @@ export function Hero() {
       </div>
 
       <div className="relative px-5 pb-14 pt-10 sm:px-8 sm:pb-[72px] sm:pt-14 md:px-14">
-        <div id="audit-cta-trigger" aria-hidden="true" className="h-px w-full" />
+        <div id="diagnostic-cta-trigger" aria-hidden="true" className="h-px w-full" />
         <IntegrationStrip />
       </div>
     </section>

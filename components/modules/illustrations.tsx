@@ -607,7 +607,7 @@ export function MissedCallIllo({ hover }: IlloProps) {
         </text>
         <line x1="160" y1="60" x2="280" y2="60" stroke="rgba(255,255,255,0.08)" strokeWidth="1" />
         <text x="160" y="74" fontSize="7" fontFamily="monospace" fill="rgba(255,255,255,0.75)">
-          Hi — we missed your call.
+          Hi we missed your call.
         </text>
         <text x="160" y="84" fontSize="7" fontFamily="monospace" fill={hover ? "#FE5100" : "rgba(255,255,255,0.6)"} style={{ transition: "fill .3s" }}>
           Want us to book you in?
@@ -647,7 +647,7 @@ export function MissedCallIllo({ hover }: IlloProps) {
           CUSTOMER · INBOUND
         </text>
         <text x="190" y="152" fontSize="7" fontFamily="monospace" fill="rgba(255,255,255,0.85)">
-          Yes — Thursday 2pm?
+          Yes Thursday 2pm?
         </text>
         <g transform="translate(280, 158)">
           <circle r="4.5" fill="#FE5100" />
@@ -673,7 +673,7 @@ export function MissedCallIllo({ hover }: IlloProps) {
 export function SEOIllo({ hover }: IlloProps) {
   const c = lineColor(hover);
   const rows = [
-    { rank: 1, name: "Your Brand — Winter Park", restingPos: 2, delta: "↑ 2" },
+    { rank: 1, name: "Your Brand Winter Park", restingPos: 2, delta: "↑ 2" },
     { rank: 2, name: "Petsmart Grooming", restingPos: 0, delta: "↓ 1" },
     { rank: 3, name: "Pampered Pups", restingPos: 1, delta: "↓ 1" },
   ];
@@ -978,7 +978,7 @@ export function RetentionIllo({ hover }: IlloProps) {
         textAnchor="middle"
         style={{ transition: "fill .4s", letterSpacing: "-0.04em" }}
       >
-        {hover ? "61%" : "—"}
+        {hover ? "61%" : ""}
       </text>
       <g
         style={{
@@ -1692,7 +1692,7 @@ export function OperationsIllo({ hover }: IlloProps) {
           textAnchor="end"
           style={{ transition: "fill .3s", letterSpacing: "0.08em" }}
         >
-          {hover ? "3 / 5" : "—"}
+          {hover ? "3 / 5" : ""}
         </text>
         <line x1="12" y1="26" x2="206" y2="26" stroke="rgba(255,255,255,0.06)" />
 
@@ -1923,7 +1923,7 @@ export function AgentsIllo({ hover }: IlloProps) {
         <div className="mb-1.5 flex items-center justify-between text-[8.5px] tracking-[0.1em] text-white/40">
           <span>DEPLOY · 4 / 4</span>
           <span style={{ color: hover ? "#FE5100" : "rgba(255,255,255,0.4)", transition: "color .3s" }}>
-            {hover ? "100%" : "—"}
+            {hover ? "100%" : ""}
           </span>
         </div>
         <div className="h-[3px] w-full overflow-hidden rounded-full bg-white/[0.05]">

@@ -24,14 +24,14 @@ export function Nav() {
   const [sliderKey, setSliderKey] = useState(0);
 
   useEffect(() => {
-    router.prefetch("/book-an-audit");
+    router.prefetch("/book-a-diagnostic");
   }, [router]);
 
   useEffect(() => {
     let raf = 0;
     const check = () => {
       raf = 0;
-      const target = document.getElementById("audit-cta-trigger");
+      const target = document.getElementById("diagnostic-cta-trigger");
       if (!target) {
         setShowCta(false);
         return;
@@ -56,8 +56,8 @@ export function Nav() {
     };
   }, []);
 
-  const goToBookAudit = () => {
-    triggerWipe("/book-an-audit");
+  const goToBookDiagnostic = () => {
+    triggerWipe("/book-a-diagnostic");
     // Re-mount the slider so it visually resets if user comes back.
     setTimeout(() => setSliderKey((k) => k + 1), 800);
   };
@@ -121,8 +121,8 @@ export function Nav() {
             <SlideToConfirm
               key={sliderKey}
               compact
-              label="Slide to book an audit"
-              onConfirm={goToBookAudit}
+              label="Slide to book a diagnostic"
+              onConfirm={goToBookDiagnostic}
             />
           </div>
         </div>
