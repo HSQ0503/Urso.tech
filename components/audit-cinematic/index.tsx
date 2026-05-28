@@ -14,6 +14,7 @@ import { GridScene } from "./scenes/grid-scene";
 import { TaglineScene } from "./scenes/tagline-scene";
 import { ProcessStepScene } from "./scenes/process-step-scene";
 import { LeakCardScene } from "./scenes/leak-card-scene";
+import { SilenceScene } from "./scenes/silence-scene";
 import "./cinematic.css";
 
 type Props = { onComplete: () => void };
@@ -90,6 +91,9 @@ export function AuditCinematic({ onComplete }: Props) {
           return <ProcessStepScene key={key} step={beat.step} title={beat.title} />;
         }
         if (beat.scene === "leak-card") return <LeakCardScene key={key} />;
+        if (beat.scene === "silence") {
+          return <SilenceScene key={key} phase={beat.phase} text={beat.text} />;
+        }
         return (
           <div
             key={key}
