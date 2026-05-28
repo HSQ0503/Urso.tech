@@ -47,6 +47,11 @@ export function SlideToBook() {
   };
 
   const fireWipe = () => {
+    const isMobile = window.matchMedia("(max-width: 767px)").matches;
+    if (!isMobile) {
+      triggerWipe("/book-an-audit");
+      return;
+    }
     const rect = trackRef.current?.getBoundingClientRect();
     if (!rect) {
       triggerWipe("/book-an-audit", {

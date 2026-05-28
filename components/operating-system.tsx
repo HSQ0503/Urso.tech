@@ -139,19 +139,16 @@ export function OperatingSystem() {
         <div className="max-w-[720px]">
           <Pill>The AI Operating System</Pill>
           <h2 className="mt-4 text-[clamp(34px,7.5vw,64px)] font-medium leading-[1.02] tracking-[-0.03em] sm:mt-5 sm:leading-none">
-            Know what is working.
+            An operating system<span className="text-orange">.</span>
             <br />
             <span className="text-ink-dim">
-              And what is not.
+              For every store you run.
             </span>
           </h2>
         </div>
         <p className="max-w-[360px] text-[14px] leading-[1.5] text-ink-dim sm:text-[15px]">
-          One screen that follows your customer — from finding you, to
-          booking, to coming back. Each stage is its own view, with every
-          location side by side, and AI surfaces the patterns that matter.
-          The six below are where we start; we add views for whatever your
-          business actually measures.
+          One dashboard, every store. The six panels below are where we
+          start — we add views for whatever your business measures.
         </p>
       </div>
 

@@ -73,70 +73,83 @@ function PanelViz({ tabKey }: { tabKey: string }) {
   }
 }
 
-/* ---------- Findability: live rank ladder ---------- */
+/* ---------- Findability: SEO + GEO split ---------- */
 function FindabilityViz() {
-  const rows = [
-    { rank: 1, name: "Your store", you: true, delta: "↑ 2", strength: 1 },
-    { rank: 2, name: "Petsmart Grooming", delta: "↓ 1", strength: 0.84 },
-    { rank: 3, name: "Pampered Pups", delta: "—", strength: 0.7 },
-    { rank: 4, name: "BarkBox Local", delta: "↓ 1", strength: 0.54 },
-    { rank: 5, name: "Top Dog Salon", delta: "↑ 1", strength: 0.4 },
+  const keywords = [
+    { kw: "dog grooming orlando", rank: 2, delta: "↑3", type: "SEO" as const },
+    { kw: "pet spa near me", rank: 1, delta: "↑1", type: "GEO" as const },
+    { kw: "puppy bath orlando", rank: 5, delta: "↓1", type: "SEO" as const },
+    { kw: "groomer near me", rank: 1, delta: "↑2", type: "GEO" as const },
   ];
   return (
-    <div className="grid gap-1.5">
-      {rows.map((r, i) => (
+    <div className="space-y-2.5">
+      <div className="grid grid-cols-2 gap-2">
+        <div className="relative overflow-hidden rounded-md border border-edge bg-white/[0.02] px-3 py-2">
+          <div className="flex items-center justify-between font-mono text-[9px] uppercase tracking-[0.1em] text-ink-dimmer">
+            <span>SEO · Organic</span>
+            <span className="text-orange">↑3</span>
+          </div>
+          <div className="mt-0.5 font-mono text-[15px] tracking-[-0.01em] text-ink">
+            avg <span className="text-orange">#3.4</span>
+          </div>
+          <div className="mt-0.5 font-mono text-[9px] text-ink-dimmer">
+            12 keywords tracked
+          </div>
+        </div>
+        <div className="relative overflow-hidden rounded-md border border-orange/30 bg-orange/[0.05] px-3 py-2">
+          <div className="flex items-center justify-between font-mono text-[9px] uppercase tracking-[0.1em] text-orange/80">
+            <span>GEO · Local pack</span>
+            <span className="text-orange">↑1</span>
+          </div>
+          <div className="mt-0.5 font-mono text-[15px] tracking-[-0.01em] text-ink">
+            avg <span className="text-orange">#1.5</span>
+          </div>
+          <div className="mt-0.5 font-mono text-[9px] text-ink-dimmer">
+            4 markets · 3-mi radius
+          </div>
+        </div>
+      </div>
+
+      {keywords.map((k, i) => (
         <div
-          key={r.name}
-          className="bar-rise relative flex items-center gap-3 overflow-hidden rounded-md px-3 py-2"
-          style={{
-            background: r.you ? "rgba(254,81,0,0.08)" : "rgba(255,255,255,0.02)",
-            border: `1px solid ${
-              r.you ? "rgba(254,81,0,0.5)" : "rgba(255,255,255,0.06)"
-            }`,
-            animationDelay: `${i * 70}ms`,
-          }}
+          key={k.kw}
+          className="bar-rise flex items-center gap-2.5 rounded-md border border-edge bg-white/[0.015] px-3 py-1.5"
+          style={{ animationDelay: `${100 + i * 60}ms` }}
         >
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-y-0 left-0"
-            style={{
-              width: `${r.strength * 100}%`,
-              background: r.you
-                ? "linear-gradient(90deg, rgba(254,81,0,0.18), transparent)"
-                : "linear-gradient(90deg, rgba(255,255,255,0.04), transparent)",
-            }}
-          />
           <span
-            className={`relative w-7 font-mono text-[12px] ${
-              r.you ? "text-orange" : "text-ink-dimmer"
-            }`}
+            className="flex h-6 w-9 shrink-0 items-center justify-center rounded font-mono text-[12px] font-medium"
+            style={{
+              background:
+                k.type === "GEO"
+                  ? "rgba(254,81,0,0.15)"
+                  : "rgba(255,255,255,0.04)",
+              color: k.type === "GEO" ? "#FE5100" : "rgba(255,255,255,0.85)",
+            }}
           >
-            #{r.rank}
+            #{k.rank}
+          </span>
+          <span className="flex-1 truncate text-[12px] tracking-[-0.005em] text-ink-dim">
+            “{k.kw}”
           </span>
           <span
-            className="relative size-1.5 rounded-full"
+            className="shrink-0 rounded-sm px-1.5 py-[1px] font-mono text-[9px] uppercase tracking-[0.08em]"
             style={{
-              background: r.you ? "#FE5100" : "rgba(255,255,255,0.4)",
-              boxShadow: r.you ? "0 0 0 3px rgba(254,81,0,0.18)" : "none",
+              background:
+                k.type === "GEO"
+                  ? "rgba(254,81,0,0.12)"
+                  : "rgba(255,255,255,0.05)",
+              color:
+                k.type === "GEO" ? "#FE5100" : "rgba(255,255,255,0.45)",
             }}
-          />
-          <span
-            className={`relative flex-1 text-[13px] tracking-[-0.005em] ${
-              r.you ? "text-white" : "text-ink-dim"
-            }`}
           >
-            {r.name}
+            {k.type}
           </span>
           <span
-            className={`relative font-mono text-[11px] ${
-              r.delta.startsWith("↑")
-                ? "text-orange"
-                : r.delta.startsWith("↓")
-                ? "text-[#F87171]"
-                : "text-ink-dimmer"
+            className={`w-7 shrink-0 text-right font-mono text-[10px] ${
+              k.delta.startsWith("↑") ? "text-orange" : "text-[#F87171]"
             }`}
           >
-            {r.delta}
+            {k.delta}
           </span>
         </div>
       ))}
@@ -144,310 +157,304 @@ function FindabilityViz() {
   );
 }
 
-/* ---------- Capture: live call log ---------- */
+/* ---------- Capture: iOS-style missed call list ---------- */
 function CaptureViz() {
   const calls = [
-    { time: "12:42 AM", phone: "+1 (407) 555-0148", missed: true, action: "Booked", booked: true },
-    { time: "11:28 PM", phone: "+1 (321) 555-0902", missed: true, action: "SMS reply" },
-    { time: "10:15 PM", phone: "+1 (407) 555-2241", missed: true, action: "SMS reply" },
-    { time: "9:48 PM", phone: "+1 (407) 555-0166", missed: true, action: "Booked", booked: true },
-    { time: "8:22 PM", phone: "+1 (321) 555-7733", missed: false, action: "Connected" },
+    { phone: "+1 (407) 555-0148", time: "12:42 AM", count: 2, label: "Mobile" },
+    { phone: "+1 (321) 555-0902", time: "11:28 PM", count: 1, label: "Mobile" },
+    { phone: "+1 (407) 555-2241", time: "10:15 PM", count: 3, label: "Mobile" },
+    { phone: "+1 (407) 555-0166", time: "9:48 PM", count: 1, label: "Mobile" },
   ];
+  const RED = "#FF453A";
+
   return (
-    <div className="grid gap-1.5">
+    <div className="relative overflow-hidden rounded-[10px] border border-edge bg-black/40">
+      <div className="flex items-center justify-between border-b border-edge px-3 py-1.5">
+        <span className="font-mono text-[9px] uppercase tracking-[0.1em] text-ink-dimmer">
+          Recents · Missed
+        </span>
+        <span className="font-mono text-[10px]" style={{ color: RED }}>
+          ● 38 unanswered today
+        </span>
+      </div>
       {calls.map((c, i) => (
         <div
-          key={c.time}
-          className="bar-rise flex items-center gap-3 rounded-md border border-edge bg-white/[0.015] px-3 py-[7px]"
-          style={{ animationDelay: `${i * 65}ms` }}
+          key={c.phone}
+          className="bar-rise flex items-center gap-3 px-3 py-2"
+          style={{
+            animationDelay: `${i * 75}ms`,
+            borderTop: i > 0 ? "1px solid rgba(255,255,255,0.05)" : undefined,
+          }}
         >
           <span
-            className="size-2 rounded-full"
+            className="grid size-7 shrink-0 place-items-center rounded-full"
             style={{
-              background: c.missed ? "#FE5100" : "rgba(255,255,255,0.4)",
-              boxShadow: c.missed
-                ? "0 0 0 3px rgba(254,81,0,0.15)"
-                : "0 0 0 3px rgba(255,255,255,0.04)",
+              background: "rgba(255,69,58,0.12)",
+              boxShadow: "0 0 0 1px rgba(255,69,58,0.25)",
             }}
-          />
-          <span className="w-[68px] font-mono text-[11px] text-ink-dim">
-            {c.time}
-          </span>
-          <span className="flex-1 truncate font-mono text-[11px] text-ink-dimmer">
-            {c.phone}
-          </span>
-          <span
-            className={`font-mono text-[10px] uppercase tracking-[0.08em] ${
-              c.booked
-                ? "text-orange"
-                : c.missed
-                ? "text-ink-dim"
-                : "text-ink-dimmer"
-            }`}
           >
-            {c.action}
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+              <path
+                d="M5 4h3l2 5-2.5 1.5a11 11 0 0 0 6 6L15 14l5 2v3a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"
+                fill={RED}
+              />
+              <path d="M16 4l4 4M20 4l-4 4" stroke={RED} strokeWidth="1.6" strokeLinecap="round" />
+            </svg>
           </span>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-baseline gap-1.5">
+              <span className="truncate text-[13px] tracking-[-0.005em] text-ink">
+                {c.phone}
+              </span>
+              {c.count > 1 && (
+                <span className="font-mono text-[11px]" style={{ color: RED }}>
+                  ({c.count})
+                </span>
+              )}
+            </div>
+            <div className="font-mono text-[10px]" style={{ color: RED }}>
+              Missed Call <span className="text-ink-dimmer">· {c.label}</span>
+            </div>
+          </div>
+          <div className="flex shrink-0 flex-col items-end gap-0.5">
+            <span className="font-mono text-[10px] text-ink-dim">{c.time}</span>
+            <span
+              className="grid size-4 place-items-center rounded-full border text-[9px]"
+              style={{
+                borderColor: "rgba(255,255,255,0.18)",
+                color: "rgba(255,255,255,0.45)",
+              }}
+            >
+              i
+            </span>
+          </div>
         </div>
       ))}
     </div>
   );
 }
 
-/* ---------- Convert: funnel ---------- */
+/* ---------- Convert: visual funnel ---------- */
 function ConvertViz() {
   const stages = [
     { label: "Visits", value: 4820, w: 1, drop: null as string | null },
-    { label: "Form started", value: 1240, w: 0.55, drop: "−74%" },
-    { label: "Form complete", value: 720, w: 0.36, drop: "−42%" },
-    { label: "Confirmed booking", value: 230, w: 0.18, drop: "−68%", best: true },
+    { label: "Form started", value: 1240, w: 0.62, drop: "−74%" },
+    { label: "Form complete", value: 720, w: 0.42, drop: "−42%" },
+    { label: "Confirmed booking", value: 230, w: 0.22, drop: "−68%", best: true },
   ];
   return (
-    <div className="space-y-3">
+    <div className="space-y-1.5">
       {stages.map((s, i) => (
         <div
           key={s.label}
           className="bar-rise"
           style={{ animationDelay: `${i * 100}ms` }}
         >
-          <div className="mb-1.5 flex items-end justify-between">
-            <span
-              className={`text-[12.5px] tracking-[-0.005em] ${
-                s.best ? "text-orange" : "text-ink-dim"
-              }`}
+          <div className="flex justify-center">
+            <div
+              className="relative flex h-9 items-center justify-between gap-3 rounded-md px-3"
+              style={{
+                width: `${s.w * 100}%`,
+                minWidth: 130,
+                background: s.best
+                  ? "linear-gradient(90deg, rgba(254,81,0,0.18), rgba(254,81,0,0.55), rgba(254,81,0,0.18))"
+                  : "linear-gradient(90deg, rgba(255,255,255,0.04), rgba(255,255,255,0.10), rgba(255,255,255,0.04))",
+                border: `1px solid ${
+                  s.best ? "rgba(254,81,0,0.6)" : "rgba(255,255,255,0.08)"
+                }`,
+                boxShadow: s.best ? "0 0 22px rgba(254,81,0,0.35)" : "none",
+              }}
             >
-              {s.label}
-            </span>
-            <div className="flex items-baseline gap-2">
-              {s.drop && (
-                <span className="font-mono text-[10px] text-ink-dimmer">
-                  {s.drop}
-                </span>
-              )}
-              <span className="font-mono text-[13px] tracking-[-0.005em]">
+              <span
+                className={`truncate text-[12px] tracking-[-0.005em] ${
+                  s.best ? "text-white" : "text-ink-dim"
+                }`}
+              >
+                {s.label}
+              </span>
+              <span
+                className={`shrink-0 font-mono text-[12px] tracking-[-0.005em] ${
+                  s.best ? "text-white" : "text-ink"
+                }`}
+              >
                 {s.value.toLocaleString()}
               </span>
             </div>
           </div>
-          <div className="relative h-[10px] overflow-hidden rounded-[3px] bg-white/[0.04]">
-            <div
-              className="absolute inset-y-0 left-0 rounded-[3px]"
-              style={{
-                width: `${s.w * 100}%`,
-                background: s.best
-                  ? "linear-gradient(90deg, #FE5100 0%, rgba(254,81,0,0.45) 100%)"
-                  : "linear-gradient(90deg, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0.16) 100%)",
-                boxShadow: s.best ? "0 0 14px rgba(254,81,0,0.4)" : "none",
-              }}
-            />
-          </div>
+          {s.drop && (
+            <div className="mt-0.5 flex justify-center">
+              <span className="font-mono text-[9px] uppercase tracking-[0.1em] text-[#F87171]">
+                ↓ {s.drop} drop-off
+              </span>
+            </div>
+          )}
+        </div>
+      ))}
+      <div className="!mt-3 flex items-center justify-between rounded-md border border-dashed border-edge-strong px-3 py-1.5">
+        <span className="font-mono text-[9px] uppercase tracking-[0.1em] text-ink-dimmer">
+          End-to-end conversion
+        </span>
+        <span className="font-mono text-[12px] text-orange">
+          4.8% · ↑1.2pp 30d
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- Retain: cohort heatmap ---------- */
+function RetainViz() {
+  const cols = ["D0", "D30", "D60", "D90"] as const;
+  type Col = (typeof cols)[number];
+  const rows: Array<{ label: string; best?: boolean } & Record<Col, number>> = [
+    { label: "Feb '26", D0: 100, D30: 74, D60: 48, D90: 28 },
+    { label: "Mar '26", D0: 100, D30: 78, D60: 52, D90: 30 },
+    { label: "Apr '26", D0: 100, D30: 82, D60: 58, D90: 36 },
+    { label: "May '26", D0: 100, D30: 86, D60: 64, D90: 42, best: true },
+  ];
+
+  const cellBg = (v: number, best: boolean) => {
+    const a = v / 100;
+    return best
+      ? `rgba(254, 81, 0, ${0.12 + a * 0.6})`
+      : `rgba(255, 255, 255, ${0.025 + a * 0.16})`;
+  };
+
+  return (
+    <div className="overflow-hidden rounded-md border border-edge">
+      <div className="grid grid-cols-[78px_1fr_1fr_1fr_1fr] bg-white/[0.02]">
+        <span className="px-3 py-1.5 font-mono text-[9px] uppercase tracking-[0.1em] text-ink-dimmer">
+          Cohort
+        </span>
+        {cols.map((c) => (
+          <span
+            key={c}
+            className="border-l border-edge px-3 py-1.5 text-center font-mono text-[9px] uppercase tracking-[0.1em] text-ink-dimmer"
+          >
+            {c}
+          </span>
+        ))}
+      </div>
+      {rows.map((row, i) => (
+        <div
+          key={row.label}
+          className="bar-rise grid grid-cols-[78px_1fr_1fr_1fr_1fr] border-t border-edge"
+          style={{ animationDelay: `${i * 70}ms` }}
+        >
+          <span
+            className={`flex items-center px-3 py-2 font-mono text-[11px] tracking-[-0.005em] ${
+              row.best ? "text-orange" : "text-ink-dim"
+            }`}
+          >
+            {row.label}
+          </span>
+          {cols.map((c) => {
+            const v = row[c];
+            return (
+              <div
+                key={c}
+                className="relative border-l border-edge text-center font-mono text-[11px] tracking-[-0.005em]"
+                style={{
+                  background: cellBg(v, !!row.best),
+                  color: row.best
+                    ? "#fff"
+                    : `rgba(255,255,255,${0.55 + (v / 100) * 0.35})`,
+                  padding: "8px 0",
+                  boxShadow: row.best && c === "D90"
+                    ? "inset 0 0 16px rgba(254,81,0,0.35)"
+                    : undefined,
+                }}
+              >
+                {v}%
+              </div>
+            );
+          })}
         </div>
       ))}
     </div>
   );
 }
 
-/* ---------- Retain: cohort curves ---------- */
-function RetainViz() {
-  const cohorts = [
-    {
-      label: "Mar",
-      pts: [100, 78, 64, 52, 44, 38, 33, 30],
-      color: "rgba(255,255,255,0.22)",
-    },
-    {
-      label: "Apr",
-      pts: [100, 82, 70, 58, 50, 44, 40, 36],
-      color: "rgba(255,255,255,0.45)",
-    },
-    {
-      label: "May",
-      pts: [100, 86, 74, 64, 56, 50, 46, 42],
-      color: "#FE5100",
-      best: true,
-    },
-  ];
-  const w = 480;
-  const h = 130;
-  const stepX = w / 7;
-  const yFor = (v: number) => h - ((v - 25) / 75) * h;
-
-  return (
-    <svg
-      viewBox={`0 0 ${w + 24} ${h + 22}`}
-      className="w-full"
-      preserveAspectRatio="none"
-      style={{ overflow: "visible" }}
-    >
-      {[0, 0.25, 0.5, 0.75, 1].map((p) => (
-        <line
-          key={p}
-          x1="0"
-          y1={p * h}
-          x2={w}
-          y2={p * h}
-          stroke="rgba(255,255,255,0.05)"
-          strokeDasharray={p === 0 || p === 1 ? "" : "2 4"}
-        />
-      ))}
-
-      <text x="0" y="-4" fontSize="9" fontFamily="monospace" fill="rgba(255,255,255,0.4)">
-        100%
-      </text>
-      <text x="0" y={h + 12} fontSize="9" fontFamily="monospace" fill="rgba(255,255,255,0.4)">
-        25%
-      </text>
-
-      {cohorts.map((c, ci) => {
-        const points = c.pts
-          .map((v, i) => `${i * stepX},${yFor(v)}`)
-          .join(" ");
-        const lastX = 7 * stepX;
-        const lastY = yFor(c.pts[7]);
-        return (
-          <g key={c.label}>
-            <polyline
-              points={points}
-              fill="none"
-              stroke={c.color}
-              strokeWidth={c.best ? 2 : 1.2}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              style={{
-                filter: c.best
-                  ? "drop-shadow(0 0 6px rgba(254,81,0,0.45))"
-                  : "none",
-                strokeDasharray: 600,
-                strokeDashoffset: 0,
-                animation: `panel-fade-in 0.7s cubic-bezier(0.16, 1, 0.3, 1) ${
-                  ci * 0.12
-                }s backwards`,
-              }}
-            />
-            {c.best && (
-              <circle
-                cx={lastX}
-                cy={lastY}
-                r="3.5"
-                fill="#FE5100"
-                style={{
-                  filter: "drop-shadow(0 0 6px rgba(254,81,0,0.6))",
-                }}
-              />
-            )}
-            <text
-              x={lastX + 8}
-              y={lastY + 3}
-              fontSize="10"
-              fontFamily="monospace"
-              fill={c.color}
-            >
-              {c.label}
-            </text>
-          </g>
-        );
-      })}
-
-      <text
-        x="0"
-        y={h + 18}
-        fontSize="9"
-        fontFamily="monospace"
-        fill="rgba(255,255,255,0.4)"
-      >
-        D0
-      </text>
-      <text
-        x={3 * stepX}
-        y={h + 18}
-        fontSize="9"
-        fontFamily="monospace"
-        fill="rgba(255,255,255,0.4)"
-        textAnchor="middle"
-      >
-        D30
-      </text>
-      <text
-        x={5 * stepX}
-        y={h + 18}
-        fontSize="9"
-        fontFamily="monospace"
-        fill="rgba(255,255,255,0.4)"
-        textAnchor="middle"
-      >
-        D60
-      </text>
-      <text
-        x={7 * stepX}
-        y={h + 18}
-        fontSize="9"
-        fontFamily="monospace"
-        fill="rgba(255,255,255,0.4)"
-        textAnchor="middle"
-      >
-        D90
-      </text>
-    </svg>
-  );
-}
-
-/* ---------- Reputation: star distribution ---------- */
+/* ---------- Reputation: rating + recent reviews + SLA ---------- */
 function ReputationViz() {
-  const rows = [
-    { stars: 5, count: 412, w: 1 },
-    { stars: 4, count: 218, w: 0.52 },
-    { stars: 3, count: 64, w: 0.16 },
-    { stars: 2, count: 22, w: 0.06 },
-    { stars: 1, count: 9, w: 0.025 },
+  const reviews = [
+    { stars: 5, text: "Best groomers in town. Booked again same day.", resp: "1h" },
+    { stars: 5, text: "Took such good care of our Lola — will return.", resp: "22m" },
+    { stars: 4, text: "Pricey but worth it. The cut lasted weeks.", resp: "3h" },
+    { stars: 2, text: "Long wait time. Staff was apologetic though.", resp: "45m", bad: true },
   ];
+
   return (
-    <div className="space-y-2.5">
-      {rows.map((r, i) => (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between rounded-md border border-edge bg-white/[0.02] px-3 py-2">
+        <div>
+          <div className="flex items-baseline gap-2">
+            <span className="text-[22px] font-medium leading-none tracking-[-0.02em]">
+              4.7
+            </span>
+            <span className="flex gap-[1px]">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <span
+                  key={i}
+                  className="text-[13px] leading-none"
+                  style={{ color: "#FE5100" }}
+                >
+                  ★
+                </span>
+              ))}
+            </span>
+          </div>
+          <div className="mt-1 font-mono text-[9px] uppercase tracking-[0.1em] text-ink-dimmer">
+            721 reviews · ↑0.3 vs Q1
+          </div>
+        </div>
+        <div className="text-right">
+          <div className="font-mono text-[9px] uppercase tracking-[0.1em] text-ink-dimmer">
+            Response rate
+          </div>
+          <div className="mt-0.5 font-mono text-[14px] text-orange">
+            82% <span className="text-ink-dimmer">· &lt; 4h SLA</span>
+          </div>
+        </div>
+      </div>
+
+      {reviews.map((r, i) => (
         <div
-          key={r.stars}
-          className="bar-rise flex items-center gap-3"
-          style={{ animationDelay: `${i * 75}ms` }}
+          key={i}
+          className="bar-rise flex items-center gap-2.5 rounded-md border border-edge px-3 py-1.5"
+          style={{
+            animationDelay: `${i * 70}ms`,
+            background: r.bad
+              ? "rgba(248,113,113,0.04)"
+              : "rgba(255,255,255,0.015)",
+          }}
         >
-          <div className="flex w-[68px] items-center gap-[1px]">
+          <span className="flex w-[56px] shrink-0 gap-[1px]">
             {Array.from({ length: 5 }).map((_, j) => (
               <span
                 key={j}
-                className="text-[11px] leading-none"
+                className="text-[10px] leading-none"
                 style={{
                   color:
                     j < r.stars
                       ? r.stars >= 4
                         ? "#FE5100"
-                        : "rgba(255,255,255,0.7)"
+                        : "#F87171"
                       : "rgba(255,255,255,0.14)",
                 }}
               >
                 ★
               </span>
             ))}
-          </div>
-          <div className="relative h-[8px] flex-1 overflow-hidden rounded-[2px] bg-white/[0.04]">
-            <div
-              className="absolute inset-y-0 left-0 rounded-[2px]"
-              style={{
-                width: `${r.w * 100}%`,
-                background:
-                  r.stars >= 4
-                    ? "linear-gradient(90deg, #FE5100 0%, rgba(254,81,0,0.5) 100%)"
-                    : "linear-gradient(90deg, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0.18) 100%)",
-              }}
-            />
-          </div>
-          <span className="w-10 text-right font-mono text-[12px] text-ink-dim">
-            {r.count}
+          </span>
+          <span className="flex-1 truncate text-[11.5px] italic tracking-[-0.005em] text-ink-dim">
+            “{r.text}”
+          </span>
+          <span className="shrink-0 font-mono text-[10px] text-ink-dimmer">
+            ↳ {r.resp}
           </span>
         </div>
       ))}
-      <div className="mt-3 flex items-center justify-between rounded-md border border-dashed border-edge-strong px-3 py-2">
-        <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-ink-dimmer">
-          Response rate
-        </span>
-        <span className="font-mono text-[12px] text-orange">82% · &lt; 4h SLA</span>
-      </div>
     </div>
   );
 }
