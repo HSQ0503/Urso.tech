@@ -1,6 +1,8 @@
 import { AuditHero } from "@/components/audit-page/hero";
 import { AuditProblem } from "@/components/audit-page/problem";
 import { AuditProcess } from "@/components/audit-page/process";
+import { AuditDeliverables } from "@/components/audit-page/deliverables";
+import { AuditWhoItsFor } from "@/components/audit-page/who-its-for";
 
 export default function BookAnAuditPage() {
   return (
@@ -8,6 +10,8 @@ export default function BookAnAuditPage() {
       <AuditHero />
       <AuditProblem />
       <AuditProcess />
+      <AuditDeliverables />
+      <AuditWhoItsFor />
     </main>
   );
 }
