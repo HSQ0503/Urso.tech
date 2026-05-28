@@ -196,20 +196,20 @@ function FindIllo({ hover }: IlloProps) {
     leak: boolean;
     dollars?: string;
   }> = [
-    { name: "WINTER PARK", metric: "calls/day 142", leak: false },
     {
-      name: "MAITLAND",
-      metric: "missed 38",
+      name: "ADS",
+      metric: "Meta ROAS 2.1×",
       leak: true,
-      dollars: "$4,180 / mo",
+      dollars: "$2,840 / mo",
     },
-    { name: "ORLANDO", metric: "repeat 31%", leak: false },
+    { name: "FINANCE", metric: "margin 22%", leak: false },
     {
-      name: "ALTAMONTE",
-      metric: "rating 4.1★",
+      name: "CONVERSION",
+      metric: "booking 3.2%",
       leak: true,
-      dollars: "$3,740 / mo",
+      dollars: "$3,100 / mo",
     },
+    { name: "CALLS", metric: "142 / day", leak: false },
   ];
 
   return (
@@ -419,7 +419,7 @@ function FindIllo({ hover }: IlloProps) {
         opacity="0.9"
         style={{ transition: "fill .3s", letterSpacing: "0.1em" }}
       >
-        {hover ? "→ 2 LEAKS · $7,920 / MO" : "→ READY TO SCAN"}
+        {hover ? "→ 2 LEAKS · $5,940 / MO" : "→ READY TO SCAN"}
       </text>
     </svg>
   );
@@ -427,9 +427,17 @@ function FindIllo({ hover }: IlloProps) {
 
 function FixIllo({ hover }: IlloProps) {
   const c = lineColor(hover);
-  const stores = Array.from({ length: 5 }, (_, i) => ({
-    cx: 50 + i * 60,
-  }));
+  const phases = [
+    { num: "01", label: "PLAN", time: "WK 1", sub: "scope + audit" },
+    { num: "02", label: "BUILD", time: "WK 2–4", sub: "software + auto" },
+    { num: "03", label: "DEPLOY", time: "WK 5", sub: "every store" },
+    { num: "04", label: "MEASURE", time: "ONGOING", sub: "weekly reports" },
+  ];
+  const trackY = 96;
+  const trackStartX = 40;
+  const trackEndX = 300;
+  const trackLength = trackEndX - trackStartX;
+  const step = trackLength / (phases.length - 1);
 
   return (
     <svg
@@ -437,170 +445,173 @@ function FixIllo({ hover }: IlloProps) {
       className="w-full max-w-[360px] transition-[filter] duration-300"
       style={{ filter: lineGlow(hover) }}
     >
-      <g transform="translate(80, 14)">
+      <text
+        x={20}
+        y={20}
+        fontSize="7"
+        fontFamily="monospace"
+        fill={c}
+        opacity="0.7"
+        style={{ transition: "fill .3s", letterSpacing: "0.1em" }}
+      >
+        PROJECT ROADMAP
+      </text>
+      <g transform="translate(228, 10)">
         <rect
-          width="180"
-          height="38"
-          rx="6"
-          stroke={hover ? "#FE5100" : c}
-          strokeWidth="1.2"
-          fill={hover ? "rgba(254,81,0,0.10)" : "rgba(255,255,255,0.02)"}
-          style={{ transition: "stroke .3s, fill .3s" }}
+          width="100"
+          height="14"
+          rx="3"
+          fill={hover ? "rgba(254,81,0,0.15)" : "rgba(255,255,255,0.04)"}
+          stroke={hover ? "#FE5100" : "rgba(255,255,255,0.14)"}
+          strokeWidth="0.8"
+          style={{ transition: "fill .3s, stroke .3s" }}
         />
-        <g
-          transform="translate(18, 19)"
-          stroke={hover ? "#FE5100" : "rgba(255,255,255,0.6)"}
-          strokeWidth="1.2"
-          fill="none"
-          strokeLinecap="round"
-          style={{ transition: "stroke .3s" }}
-        >
-          <circle r="4.5" />
-          <circle r="1.2" fill={hover ? "#FE5100" : "rgba(255,255,255,0.6)"} stroke="none" />
-          <line x1="0" y1="-7" x2="0" y2="-9" />
-          <line x1="0" y1="7" x2="0" y2="9" />
-          <line x1="-7" y1="0" x2="-9" y2="0" />
-          <line x1="7" y1="0" x2="9" y2="0" />
-          <line x1="-5" y1="-5" x2="-6.5" y2="-6.5" />
-          <line x1="5" y1="5" x2="6.5" y2="6.5" />
-          <line x1="-5" y1="5" x2="-6.5" y2="6.5" />
-          <line x1="5" y1="-5" x2="6.5" y2="-6.5" />
-        </g>
         <text
-          x={34}
-          y={17}
-          fontSize="8"
-          fontFamily="monospace"
-          fill={hover ? "#fff" : "rgba(255,255,255,0.78)"}
-          style={{ transition: "fill .3s", letterSpacing: "0.08em" }}
-        >
-          MISSED-CALL · AUTO-SMS
-        </text>
-        <text
-          x={34}
-          y={30}
+          x={50}
+          y={10}
           fontSize="6.5"
           fontFamily="monospace"
-          fill={hover ? "#FE5100" : "rgba(255,255,255,0.42)"}
-          style={{ transition: "fill .3s", letterSpacing: "0.08em" }}
+          fill={hover ? "#FE5100" : "rgba(255,255,255,0.6)"}
+          textAnchor="middle"
+          style={{ transition: "fill .3s", letterSpacing: "0.1em" }}
         >
-          DEPLOY · ALL STORES
+          CUSTOM · 6 WEEKS
         </text>
       </g>
 
-      {stores.map((s, i) => (
-        <g key={`line-${i}`}>
-          <line
-            x1={170}
-            y1={52}
-            x2={s.cx}
-            y2={152}
-            stroke="rgba(255,255,255,0.12)"
-            strokeWidth="1"
-            strokeDasharray="2 4"
-          />
-          {hover && (
-            <circle r="2.2" fill="#FE5100">
-              <animate
-                attributeName="cx"
-                from={170}
-                to={s.cx}
-                dur="1.4s"
-                begin={`${i * 0.15}s`}
-                repeatCount="indefinite"
-              />
-              <animate
-                attributeName="cy"
-                from={52}
-                to={152}
-                dur="1.4s"
-                begin={`${i * 0.15}s`}
-                repeatCount="indefinite"
-              />
-              <animate
-                attributeName="opacity"
-                values="0;1;1;0"
-                keyTimes="0;0.1;0.85;1"
-                dur="1.4s"
-                begin={`${i * 0.15}s`}
-                repeatCount="indefinite"
-              />
-            </circle>
-          )}
-        </g>
-      ))}
+      <line
+        x1={14}
+        y1={34}
+        x2={326}
+        y2={34}
+        stroke="rgba(255,255,255,0.06)"
+        strokeWidth="1"
+      />
 
-      {stores.map((s, i) => {
-        const revealDelay = 0.35 + i * 0.12;
+      <line
+        x1={trackStartX}
+        y1={trackY}
+        x2={trackEndX}
+        y2={trackY}
+        stroke="rgba(255,255,255,0.12)"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+      {hover && (
+        <line
+          x1={trackStartX}
+          y1={trackY}
+          x2={trackEndX}
+          y2={trackY}
+          stroke="#FE5100"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeDasharray={trackLength}
+          strokeDashoffset={trackLength}
+          style={{ filter: "drop-shadow(0 0 5px rgba(254,81,0,0.5))" }}
+        >
+          <animate
+            attributeName="stroke-dashoffset"
+            from={trackLength}
+            to="0"
+            dur="2.4s"
+            begin="0.2s"
+            fill="freeze"
+          />
+        </line>
+      )}
+
+      {phases.map((p, i) => {
+        const x = trackStartX + i * step;
+        const revealDelay = 0.4 + (i / (phases.length - 1)) * 2.0;
         return (
-          <g key={`store-${i}`} transform={`translate(${s.cx}, 168)`}>
-            <rect
-              x={-18}
-              y={-6}
-              width={36}
-              height={34}
-              rx={3}
-              fill={
-                hover ? "rgba(254,81,0,0.10)" : "rgba(255,255,255,0.025)"
-              }
-              stroke={hover ? "#FE5100" : "rgba(255,255,255,0.18)"}
-              strokeWidth="1"
-              style={{
-                transition: `fill .4s ease ${revealDelay}s, stroke .4s ease ${revealDelay}s`,
-              }}
-            />
-            <path
-              d="M-20 -6 l20 -10 l20 10"
-              stroke={hover ? "#FE5100" : "rgba(255,255,255,0.35)"}
-              strokeWidth="1"
-              fill="none"
-              strokeLinejoin="round"
+          <g key={p.num}>
+            <circle
+              cx={x}
+              cy={trackY}
+              r="12"
+              fill="#0b0b0b"
+              stroke={hover ? "#FE5100" : c}
+              strokeWidth="1.4"
               style={{ transition: `stroke .4s ease ${revealDelay}s` }}
             />
-            <g
+            <circle
+              cx={x}
+              cy={trackY}
+              r="11"
+              fill="#FE5100"
+              opacity={hover ? 1 : 0}
+              style={{ transition: `opacity .4s ease ${revealDelay}s` }}
+            />
+            <text
+              x={x}
+              y={trackY + 3.5}
+              fontSize="8.5"
+              fontFamily="monospace"
+              fontWeight="500"
+              fill={hover ? "#fff" : "rgba(255,255,255,0.75)"}
+              textAnchor="middle"
               style={{
-                opacity: hover ? 0 : 0.75,
-                transition: `opacity .4s ease ${revealDelay}s`,
+                transition: `fill .4s ease ${revealDelay}s`,
+                letterSpacing: "0.03em",
               }}
             >
-              <circle
-                cx={0}
-                cy={10}
-                r="5"
-                fill="none"
-                stroke="rgba(255,255,255,0.4)"
-                strokeWidth="1"
-              />
-              <path
-                d="M-2.5 7.5 l5 5 M2.5 7.5 l-5 5"
-                stroke="rgba(255,255,255,0.55)"
-                strokeWidth="1.2"
-                strokeLinecap="round"
-              />
-            </g>
-            <g
+              {p.num}
+            </text>
+            <text
+              x={x}
+              y={trackY + 32}
+              fontSize="8.5"
+              fontFamily="monospace"
+              fontWeight="500"
+              fill={hover ? "#fff" : "rgba(255,255,255,0.8)"}
+              textAnchor="middle"
               style={{
-                opacity: hover ? 1 : 0,
-                transition: `opacity .4s ease ${revealDelay}s`,
+                transition: `fill .4s ease ${revealDelay}s`,
+                letterSpacing: "0.08em",
               }}
             >
-              <circle cx={0} cy={10} r="5.5" fill="#FE5100" />
-              <path
-                d="M-2.5 10 l1.8 1.8 4.2 -3.8"
-                stroke="#fff"
-                strokeWidth="1.5"
-                fill="none"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </g>
+              {p.label}
+            </text>
+            <text
+              x={x}
+              y={trackY + 46}
+              fontSize="6.5"
+              fontFamily="monospace"
+              fill={hover ? "#FE5100" : "rgba(255,255,255,0.4)"}
+              textAnchor="middle"
+              style={{
+                transition: `fill .4s ease ${revealDelay}s`,
+                letterSpacing: "0.08em",
+              }}
+            >
+              {p.time}
+            </text>
+            <text
+              x={x}
+              y={trackY + 64}
+              fontSize="6.5"
+              fontFamily="monospace"
+              fill={
+                hover
+                  ? "rgba(255,255,255,0.7)"
+                  : "rgba(255,255,255,0.32)"
+              }
+              textAnchor="middle"
+              style={{
+                transition: `fill .4s ease ${revealDelay + 0.1}s`,
+                letterSpacing: "0.04em",
+              }}
+            >
+              {p.sub}
+            </text>
           </g>
         );
       })}
 
       <text
         x={14}
-        y={212}
+        y={210}
         fontSize="7"
         fontFamily="monospace"
         fill={hover ? "#FE5100" : c}
@@ -608,8 +619,8 @@ function FixIllo({ hover }: IlloProps) {
         style={{ transition: "fill .3s", letterSpacing: "0.1em" }}
       >
         {hover
-          ? "→ 5 / 5 STORES · DEPLOYED & MEASURED"
-          : "→ READY TO DEPLOY"}
+          ? "→ CUSTOM ROADMAP · BUILT FOR YOUR STORES"
+          : "→ READY TO PLAN"}
       </text>
     </svg>
   );

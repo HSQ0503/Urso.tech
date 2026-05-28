@@ -22,6 +22,7 @@ type ModuleCardProps = {
   span?: 1 | 2;
   large?: boolean;
   className?: string;
+  onClick?: () => void;
 };
 
 export function ModuleCard({
@@ -33,6 +34,7 @@ export function ModuleCard({
   span = 1,
   large = false,
   className = "",
+  onClick,
 }: ModuleCardProps) {
   const [hover, setHover] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -48,10 +50,20 @@ export function ModuleCard({
   return (
     <div
       ref={ref}
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onClick={onClick}
+      onKeyDown={(e) => {
+        if (!onClick) return;
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick();
+        }
+      }}
       onPointerEnter={() => setHover(true)}
       onPointerLeave={() => setHover(false)}
       onPointerMove={onMove}
-      className={`group relative flex h-full cursor-pointer flex-col overflow-hidden ${
+      className={`group relative flex h-full cursor-pointer flex-col overflow-hidden outline-none focus-visible:ring-1 focus-visible:ring-orange ${
         span === 2 ? "md:col-span-2" : ""
       } ${large ? "px-6 py-7 md:px-9 md:py-9" : "px-5 py-6 md:px-8 md:py-7"} ${className}`}
       style={

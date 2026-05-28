@@ -22,15 +22,25 @@ export function SlideToConfirm({
   const [dragging, setDragging] = useState(false);
   const [completed, setCompleted] = useState(false);
   const [maxOffset, setMaxOffset] = useState(0);
-  const liveRef = useRef({ startX: 0, pointerId: 0, max: 0, offset: 0 });
+  const liveRef = useRef({
+    startX: 0,
+    startOffset: 0,
+    pointerId: -1,
+    max: 0,
+    offset: 0,
+    dragging: false,
+  });
 
-  const handleSize = compact ? 32 : 52;
+  const handleSize = compact ? 36 : 52;
   const pad = compact ? 4 : 6;
-  const trackHeight = compact ? 40 : 64;
+  const trackHeight = compact ? 44 : 64;
   const textSize = compact ? 13 : 15;
+  const THRESHOLD = 0.97;
 
   const reset = useCallback(() => {
     liveRef.current.offset = 0;
+    liveRef.current.dragging = false;
+    liveRef.current.pointerId = -1;
     setOffset(0);
     setDragging(false);
   }, []);
@@ -41,31 +51,38 @@ export function SlideToConfirm({
     if (!track) return;
     const trackRect = track.getBoundingClientRect();
     const max = trackRect.width - handleSize - pad * 2;
+
     liveRef.current.startX = e.clientX;
+    liveRef.current.startOffset = 0;
     liveRef.current.pointerId = e.pointerId;
     liveRef.current.max = max;
     liveRef.current.offset = 0;
+    liveRef.current.dragging = true;
+
     setMaxOffset(max);
-    (e.target as Element).setPointerCapture(e.pointerId);
+    setOffset(0);
     setDragging(true);
+    track.setPointerCapture(e.pointerId);
   };
 
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!dragging) return;
-    const dx = e.clientX - liveRef.current.startX;
-    const next = Math.max(0, Math.min(liveRef.current.max, dx));
-    liveRef.current.offset = next;
+    const s = liveRef.current;
+    if (!s.dragging || e.pointerId !== s.pointerId) return;
+    const dx = e.clientX - s.startX;
+    const next = Math.max(0, Math.min(s.max, s.startOffset + dx));
+    s.offset = next;
     setOffset(next);
   };
 
   const onPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!dragging) return;
+    const s = liveRef.current;
+    if (!s.dragging || e.pointerId !== s.pointerId) return;
     try {
-      (e.target as Element).releasePointerCapture(liveRef.current.pointerId);
+      trackRef.current?.releasePointerCapture(s.pointerId);
     } catch {}
-    const { offset: finalOffset, max } = liveRef.current;
-    if (finalOffset >= max * 0.9) {
-      setOffset(max);
+    if (s.offset >= s.max * THRESHOLD) {
+      s.dragging = false;
+      setOffset(s.max);
       setCompleted(true);
       setDragging(false);
       onConfirm();
@@ -79,9 +96,17 @@ export function SlideToConfirm({
   return (
     <div
       ref={trackRef}
-      className={`relative w-full select-none overflow-hidden rounded-full border border-edge bg-[#0d0d0d] ${
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={(e) => {
+        if (e.pointerId === liveRef.current.pointerId) reset();
+      }}
+      className={`relative w-full touch-none select-none overflow-hidden rounded-full border border-edge bg-[#0d0d0d] ${
         compact ? "shadow-[0_2px_10px_rgba(0,0,0,0.4)]" : "shadow-[0_8px_28px_rgba(0,0,0,0.4)]"
-      } ${disabled ? "opacity-50" : ""}`}
+      } ${disabled || loading || completed ? "" : "cursor-grab active:cursor-grabbing"} ${
+        disabled ? "opacity-50" : ""
+      }`}
       style={{ padding: pad, height: trackHeight }}
       aria-disabled={disabled}
     >
@@ -120,15 +145,11 @@ export function SlideToConfirm({
         </div>
       )}
 
-      {/* Handle */}
+      {/* Handle (visual only — pointer events are on the track) */}
       <div
         role="button"
         tabIndex={disabled ? -1 : 0}
         aria-label={label}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerCancel={reset}
         onKeyDown={(e) => {
           if (disabled || loading || completed) return;
           if (e.key === "Enter" || e.key === " ") {
@@ -137,13 +158,11 @@ export function SlideToConfirm({
             onConfirm();
           }
         }}
-        className={`relative grid place-items-center rounded-full bg-orange text-white ${
+        className={`pointer-events-none relative grid place-items-center rounded-full bg-orange text-white ${
           compact
             ? "shadow-[0_2px_10px_rgba(254,81,0,0.45)]"
             : "shadow-[0_4px_18px_rgba(254,81,0,0.55)]"
-        } ${
-          disabled || loading ? "cursor-not-allowed" : "cursor-grab active:cursor-grabbing"
-        } touch-none`}
+        }`}
         style={{
           width: handleSize,
           height: handleSize,
