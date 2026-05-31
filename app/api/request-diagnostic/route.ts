@@ -16,22 +16,25 @@ import { NextResponse } from "next/server";
 //   body: JSON.stringify({
 //     from: "Urso Diagnostic <onboarding@resend.dev>",
 //     to: ["hsq0503@gmail.com"],
-//     subject: `Diagnostic request — ${name} (${brand}, ${stores} stores)`,
+//     subject: `Diagnostic request — ${name} (${brand || "—"})`,
 //     html: `<p><b>Name:</b> ${escapeHtml(name)}</p>
 //            <p><b>Email:</b> ${escapeHtml(email)}</p>
-//            <p><b>Brand:</b> ${escapeHtml(brand || "(not provided)")}</p>
-//            <p><b>Stores:</b> ${escapeHtml(stores || "(not provided)")}</p>
-//            <p><b>Where they're leaking:</b><br/>${escapeHtml(leak || "(not provided)").replace(/\n/g, "<br/>")}</p>`,
+//            <p><b>Business:</b> ${escapeHtml(brand || "(not provided)")}</p>
+//            <p><b>Knows where they're leaking:</b> ${escapeHtml(clarity || "(not provided)")}</p>`,
 //   }),
 // });
 // if (!res.ok) throw new Error("Resend rejected the message");
 
+// Accepts both the homepage CTA (name/email/phone/about) and the
+// book-a-diagnostic form (name/email/brand/clarity). Only name + email
+// are required; the rest is captured opportunistically.
 type Payload = {
-  name: string;
-  email: string;
-  brand: string;
-  stores: string;
-  leak: string;
+  name?: string;
+  email?: string;
+  brand?: string;
+  clarity?: string;
+  phone?: string;
+  about?: string;
 };
 
 export async function POST(req: Request) {
@@ -55,8 +58,9 @@ export async function POST(req: Request) {
     name,
     email,
     brand: body.brand,
-    stores: body.stores,
-    leak: body.leak,
+    clarity: body.clarity,
+    phone: body.phone,
+    about: body.about,
     at: new Date().toISOString(),
   });
 

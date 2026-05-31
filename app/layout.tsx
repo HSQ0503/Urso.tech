@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { WipeTransition } from "@/components/wipe-transition";
@@ -13,10 +13,31 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://urso-tech.vercel.app";
+const TITLE = "Urso | First click to final sale.";
+const DESCRIPTION =
+  "A data agency for founder-led businesses. We find where your operation is losing money, then fix it with you on retainer.";
+
 export const metadata: Metadata = {
-  title: "Urso First click to final sale.",
-  description:
-    "An AI-powered data agency for founder-led businesses. We train custom models on your business data, then find the leaks across your operation and fix them on retainer.",
+  metadataBase: new URL(SITE_URL),
+  title: TITLE,
+  description: DESCRIPTION,
+  openGraph: {
+    title: TITLE,
+    description: DESCRIPTION,
+    url: SITE_URL,
+    siteName: "Urso",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: TITLE,
+    description: DESCRIPTION,
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#070707",
 };
 
 export default function RootLayout({

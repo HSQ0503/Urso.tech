@@ -7,15 +7,19 @@ type FormState = {
   name: string;
   email: string;
   brand: string;
-  stores: string;
-  leak: string;
+  clarity: string;
 };
 
-const empty: FormState = { name: "", email: "", brand: "", stores: "", leak: "" };
+const empty: FormState = { name: "", email: "", brand: "", clarity: "" };
 type Status = "idle" | "submitting" | "ok" | "error";
 
 const RESPONSE_TIMEFRAME = "two business days";
-const STORE_OPTIONS = ["1", "2–4", "5–10", "11+"] as const;
+const CLARITY_OPTIONS = [
+  "No idea",
+  "A rough sense",
+  "Pretty clear",
+  "Dialed in",
+] as const;
 
 export function DiagnosticForm() {
   const [form, setForm] = useState<FormState>(empty);
@@ -27,8 +31,8 @@ export function DiagnosticForm() {
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (status === "submitting") return;
-    if (!form.stores) {
-      setError("Tell us how many locations you run.");
+    if (!form.clarity) {
+      setError("Pick the one that sounds most like you.");
       return;
     }
     setStatus("submitting");
@@ -106,18 +110,10 @@ export function DiagnosticForm() {
       />
 
       <Segmented
-        label="How many locations"
-        value={form.stores}
-        onChange={(v) => set("stores", v)}
-        options={STORE_OPTIONS}
-      />
-
-      <Field
-        label="Where you think you're leaking"
-        value={form.leak}
-        onChange={(v) => set("leak", v)}
-        placeholder="A line or two — phones after hours, leads you can't trace, ad spend with no payback…"
-        type="textarea"
+        label="How well do you know where you're losing money?"
+        value={form.clarity}
+        onChange={(v) => set("clarity", v)}
+        options={CLARITY_OPTIONS}
       />
 
       {error && <div className="text-[13px] text-[#F87171]">{error}</div>}
@@ -191,7 +187,7 @@ function Segmented({
   return (
     <div>
       <FieldLabel label={label} required />
-      <div className="grid grid-cols-4 gap-2">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {options.map((opt) => {
           const active = value === opt;
           return (
@@ -200,7 +196,7 @@ function Segmented({
               type="button"
               onClick={() => onChange(opt)}
               aria-pressed={active}
-              className={`cursor-pointer rounded-[10px] border py-3 font-sans text-[14px] tabular-nums tracking-[-0.005em] transition-colors duration-200 ${
+              className={`cursor-pointer rounded-[10px] border px-2 py-3 font-sans text-[13px] tracking-[-0.005em] transition-colors duration-200 ${
                 active
                   ? "border-orange/60 bg-orange-soft text-ink"
                   : "border-edge bg-[#0d0d0d] text-ink-dim hover:border-edge-strong hover:text-ink"

@@ -154,6 +154,16 @@ html, body {
   overflow-x: clip;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
 html::-webkit-scrollbar,
 body::-webkit-scrollbar {
   display: none;

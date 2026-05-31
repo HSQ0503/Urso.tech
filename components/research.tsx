@@ -5,7 +5,7 @@ export function Research() {
   return (
     <section
       id="work"
-      className="relative border-t border-edge bg-bg px-5 py-16 text-ink sm:px-8 sm:py-20 md:px-14 md:py-24"
+      className="relative scroll-mt-24 border-t border-edge bg-bg px-5 py-16 text-ink sm:px-8 sm:py-20 md:px-14 md:py-24"
     >
       <div className="mb-10 max-w-[820px] sm:mb-14">
         <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-ink-dimmer">

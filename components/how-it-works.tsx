@@ -690,7 +690,10 @@ function StepCard({ step, hasBorder }: { step: Step; hasBorder: boolean }) {
 
 export function HowItWorks() {
   return (
-    <section className="border-t border-edge bg-bg px-5 py-16 text-ink sm:px-8 sm:py-20 md:px-14 md:py-24">
+    <section
+      id="how-it-works"
+      className="scroll-mt-24 border-t border-edge bg-bg px-5 py-16 text-ink sm:px-8 sm:py-20 md:px-14 md:py-24"
+    >
       <div className="mb-10 flex flex-col items-start justify-between gap-6 sm:mb-14 sm:gap-8 md:flex-row md:items-end">
         <div>
           <Pill>How Urso works</Pill>
