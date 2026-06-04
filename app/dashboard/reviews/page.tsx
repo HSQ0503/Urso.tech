@@ -6,9 +6,9 @@ export default function ReviewsPage() {
     <div className="animate-stage-in space-y-10">
       <div>
         <PageHeader
-          eyebrow="Reputation & findability · live from Google"
-          title="What people see before they walk in."
-          sub="Your rating and your search rank decide whether a new customer ever reaches you. We also cross-check reviewers against your FranPOS customers to prove the fake ones."
+          eyebrow="Reputation & visibility · Live from Google"
+          title="Reputation & visibility"
+          sub="Search ranking and review quality determine whether prospective customers reach a location. Reviews are also cross-referenced against FranPOS records to identify those with no matching customer on file."
           right={
             <div className="flex gap-2">
               <Tag tone="orange">{reputation.suspectedFakes} suspected fakes</Tag>
@@ -57,9 +57,9 @@ export default function ReviewsPage() {
         <Card className="flex flex-col gap-3">
           <div className="flex items-center gap-2">
             <span className="size-2 rounded-full bg-orange" />
-            <Micro className="!text-orange">Fake reviews</Micro>
+            <Micro className="!text-orange">Review integrity</Micro>
           </div>
-          <h2 className="text-[19px] font-medium tracking-[-0.01em]">{reputation.suspectedFakes} one-star reviews with no matching customer</h2>
+          <h2 className="text-[19px] font-medium tracking-[-0.01em]">{reputation.suspectedFakes} one-star reviews with no matching customer on file</h2>
           <p className="text-[14px] leading-[1.6] text-ink-dim">
             We cross-reference each reviewer’s name against your FranPOS customer records. When there’s no matching customer, it’s strong evidence the review is fake — enough to submit a one-click flag to Google. We can’t delete them automatically, but we can hand you a proven case for each.
           </p>
@@ -71,9 +71,9 @@ export default function ReviewsPage() {
         <Card className="flex flex-col gap-3">
           <div className="flex items-center gap-2">
             <span className="size-2 rounded-full bg-orange" />
-            <Micro className="!text-orange">Findability</Micro>
+            <Micro className="!text-orange">Search visibility</Micro>
           </div>
-          <h2 className="text-[19px] font-medium tracking-[-0.01em]">Winter Park ranks #2 but has no “Book online” button</h2>
+          <h2 className="text-[19px] font-medium tracking-[-0.01em]">Winter Park ranks #2 but has no booking link on Google</h2>
           <p className="text-[14px] leading-[1.6] text-ink-dim">
             Your best store is missing the one button that turns a Google listing into a booking — so the easiest appointments never start. The newer stores also rank #5 and #6 locally, which is the single biggest lever on how many new customers find them at all.
           </p>

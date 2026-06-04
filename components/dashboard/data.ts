@@ -41,25 +41,26 @@ export const totals = {
 };
 
 export type LeakStatus = "live" | "instrument" | "fix";
+export type Severity = "High" | "Medium" | "Low";
 
 export type Leak = {
   rank: number;
   name: string;
   scope: string;
-  amount: number; // $/mo
+  metric: string; // the observed statistic — never a promised dollar figure
+  severity: Severity;
   status: LeakStatus;
   source: string;
-  trend: "up" | "down" | "flat";
   action: string;
 };
 
 export const leaks: Leak[] = [
-  { rank: 1, name: "Lapsed customers never won back", scope: "All stores", amount: 4200, status: "live", source: "FranPOS history", trend: "up", action: "Start win-back" },
-  { rank: 2, name: "Missed calls (open + after-hours)", scope: "Lakeside · Windermere", amount: 3400, status: "instrument", source: "Twilio call tracking", trend: "up", action: "Add tracking" },
-  { rank: 3, name: "Low retail attach on grooms", scope: "Lakeside · Windermere", amount: 1900, status: "live", source: "FranPOS order items", trend: "flat", action: "Coach front desk" },
-  { rank: 4, name: "No-shows & late cancels", scope: "Newer stores", amount: 1100, status: "live", source: "FranPOS bookings", trend: "down", action: "Turn on deposits" },
-  { rank: 5, name: "Web booking abandonment", scope: "All stores", amount: 800, status: "instrument", source: "Web analytics", trend: "flat", action: "Add tracking" },
-  { rank: 6, name: "Winter Park has no 'Book online' button", scope: "Winter Park", amount: 600, status: "fix", source: "Google Business Profile", trend: "flat", action: "Fix listing" },
+  { rank: 1, name: "Lapsed customers not returning", scope: "All stores", metric: "142 inactive customers", severity: "High", status: "live", source: "FranPOS history", action: "Start win-back" },
+  { rank: 2, name: "Unanswered inbound calls", scope: "Lakeside · Windermere", metric: "28% of calls missed", severity: "High", status: "instrument", source: "Call tracking", action: "Add tracking" },
+  { rank: 3, name: "Low retail attachment on grooms", scope: "Lakeside · Windermere", metric: "24% attach rate", severity: "Medium", status: "live", source: "FranPOS order items", action: "Review process" },
+  { rank: 4, name: "No-shows and late cancellations", scope: "Newer stores", metric: "11% no-show rate", severity: "Medium", status: "live", source: "FranPOS bookings", action: "Enable deposits" },
+  { rank: 5, name: "Online booking abandonment", scope: "All stores", metric: "63% form drop-off", severity: "Low", status: "instrument", source: "Web analytics", action: "Add tracking" },
+  { rank: 6, name: "Incomplete Google listing", scope: "Winter Park", metric: "No booking link", severity: "Low", status: "fix", source: "Google Business Profile", action: "Update listing" },
 ];
 
 export type FunnelStage = {
@@ -203,9 +204,97 @@ export type ActionItem = {
 };
 
 export const actions: ActionItem[] = [
-  { store: "Windermere", text: "3 missed calls after close last night", value: "~$540", action: "Text back" },
-  { store: "Lakeside", text: "New 2★ review, unanswered 14 hrs", action: "Reply" },
-  { store: "Winter Park", text: "Still no 'Book online' button on Google", value: "~$600/mo", action: "Fix" },
-  { store: "All stores", text: "142 lapsed clients ready for win-back", value: "~$9,800", action: "Start" },
-  { store: "Lakeside", text: "Suspected fake 1★ — no matching customer", action: "Review" },
+  { store: "Windermere", text: "3 calls missed after close last night", value: "3 calls", action: "Text back" },
+  { store: "Lakeside", text: "New 2★ review unanswered for 14 hours", action: "Reply" },
+  { store: "Winter Park", text: "Google listing is missing a booking link", action: "Update" },
+  { store: "All stores", text: "142 inactive customers eligible for win-back", value: "142", action: "Review" },
+  { store: "Lakeside", text: "Suspected fake 1★ — no matching customer on file", action: "Review" },
 ];
+
+// ---- Time series (deterministic, SSR-safe — no Math.random) ----------------
+export type Granularity = "daily" | "weekly" | "monthly";
+
+const MONTHS = ["Jul", "Aug", "Sep", "Oct", "Nov", "Dec", "Jan", "Feb", "Mar", "Apr", "May", "Jun"];
+
+export const timeMeta: Record<Granularity, { labels: string[]; caption: string }> = {
+  daily: { labels: Array.from({ length: 30 }, (_, i) => String(i + 1)), caption: "Last 30 days" },
+  weekly: { labels: Array.from({ length: 12 }, (_, i) => `W${i + 1}`), caption: "Last 12 weeks" },
+  monthly: { labels: MONTHS, caption: "Last 12 months" },
+};
+
+function wave(seed: number, i: number) {
+  return Math.sin(seed * 12.9 + i * 2.3) * 0.5 + Math.sin(seed * 7.1 + i * 0.7) * 0.3 + Math.sin(seed * 3.7 + i * 1.9) * 0.2;
+}
+function gen(seed: number, len: number, base: number, amp: number, growth: number) {
+  return Array.from({ length: len }, (_, i) => Math.max(0, Math.round(base * (1 + (growth * i) / len) + wave(seed, i) * amp)));
+}
+
+export type Series = {
+  revenue: Record<Granularity, number[]>;
+  callsTotal: number[];
+  callsMissed: number[];
+  webVisits: number[];
+  webBookings: number[];
+};
+
+const baseByStore: Record<StoreId, { rev: number; callsDay: number; miss: number; visitsW: number; bookW: number; seed: number }> = {
+  wp: { rev: 58400, callsDay: 44, miss: 0.18, visitsW: 262, bookW: 16, seed: 1 },
+  wg: { rev: 49200, callsDay: 38, miss: 0.22, visitsW: 220, bookW: 13, seed: 2 },
+  lv: { rev: 39600, callsDay: 32, miss: 0.31, visitsW: 160, bookW: 9, seed: 3 },
+  wm: { rev: 36900, callsDay: 28, miss: 0.34, visitsW: 138, bookW: 7, seed: 4 },
+};
+
+function buildStore(id: StoreId): Series {
+  const b = baseByStore[id];
+  const callsTotal = gen(b.seed + 30, 12, b.callsDay * 7, b.callsDay * 7 * 0.18, 0.06);
+  return {
+    revenue: {
+      daily: gen(b.seed, 30, b.rev / 30, (b.rev / 30) * 0.22, 0.12),
+      weekly: gen(b.seed + 10, 12, b.rev / 4.33, (b.rev / 4.33) * 0.16, 0.14),
+      monthly: gen(b.seed + 20, 12, b.rev * 0.78, b.rev * 0.1, 0.3),
+    },
+    callsTotal,
+    callsMissed: callsTotal.map((c, i) => Math.round(c * (b.miss + wave(b.seed + 5, i) * 0.03))),
+    webVisits: gen(b.seed + 40, 12, b.visitsW, b.visitsW * 0.2, 0.08),
+    webBookings: gen(b.seed + 50, 12, b.bookW, b.bookW * 0.25, 0.1),
+  };
+}
+
+const perStore: Record<StoreId, Series> = { wp: buildStore("wp"), wg: buildStore("wg"), lv: buildStore("lv"), wm: buildStore("wm") };
+
+function sumSeries(arrs: number[][]): number[] {
+  return arrs[0].map((_, i) => arrs.reduce((s, a) => s + a[i], 0));
+}
+
+const allValues = Object.values(perStore);
+const allSeries: Series = {
+  revenue: {
+    daily: sumSeries(allValues.map((s) => s.revenue.daily)),
+    weekly: sumSeries(allValues.map((s) => s.revenue.weekly)),
+    monthly: sumSeries(allValues.map((s) => s.revenue.monthly)),
+  },
+  callsTotal: sumSeries(allValues.map((s) => s.callsTotal)),
+  callsMissed: sumSeries(allValues.map((s) => s.callsMissed)),
+  webVisits: sumSeries(allValues.map((s) => s.webVisits)),
+  webBookings: sumSeries(allValues.map((s) => s.webBookings)),
+};
+
+export function getSeries(store: "all" | StoreId): Series {
+  return store === "all" ? allSeries : perStore[store];
+}
+
+const sum = (a: number[]) => a.reduce((x, y) => x + y, 0);
+
+export function callStats(store: "all" | StoreId) {
+  const s = getSeries(store);
+  const total = sum(s.callsTotal);
+  const missed = sum(s.callsMissed);
+  return { total, missed, missedPct: missed / total, answeredPct: 1 - missed / total };
+}
+
+export function webStats(store: "all" | StoreId) {
+  const s = getSeries(store);
+  const visits = sum(s.webVisits);
+  const bookings = sum(s.webBookings);
+  return { visits, bookings, convRate: bookings / visits };
+}

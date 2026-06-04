@@ -1,112 +1,230 @@
+"use client";
+
+import { useState } from "react";
 import Link from "next/link";
-import { totals, leaks, actions, stores, funnel } from "@/components/dashboard/data";
-import { Card, PageHeader, BigStat, Display, Micro, Tag, Meter, fmtMoney, pct } from "@/components/dashboard/ui";
+import {
+  stores,
+  totals,
+  leaks,
+  actions,
+  getSeries,
+  callStats,
+  webStats,
+  timeMeta,
+  type StoreId,
+  type Granularity,
+  type Severity,
+} from "@/components/dashboard/data";
+import {
+  Card,
+  Micro,
+  Tag,
+  Delta,
+  Meter,
+  AreaChart,
+  CallsBars,
+  TrafficChart,
+  Legend,
+  Segmented,
+  fmtMoney,
+  pct,
+} from "@/components/dashboard/ui";
+
+const scopeOptions = [
+  { value: "all" as const, label: "All stores" },
+  { value: "wp" as const, label: "Winter Park" },
+  { value: "wg" as const, label: "Winter Garden" },
+  { value: "lv" as const, label: "Lakeside" },
+  { value: "wm" as const, label: "Windermere" },
+];
+
+const granOptions: { value: Granularity; label: string }[] = [
+  { value: "daily", label: "Daily" },
+  { value: "weekly", label: "Weekly" },
+  { value: "monthly", label: "Monthly" },
+];
+
+const sevTone: Record<Severity, "orange" | "warn" | "muted"> = { High: "orange", Medium: "warn", Low: "muted" };
+
+function kpisFor(scope: "all" | StoreId) {
+  const s = scope === "all" ? null : stores.find((x) => x.id === scope)!;
+  const cs = callStats(scope);
+  return {
+    revenue: s ? s.revenue : totals.revenue,
+    bookings: s ? s.bookings : totals.bookings,
+    avgTicket: s ? s.avgTicket : 89,
+    rebook: s ? s.rebook : totals.rebook,
+    noShow: s ? s.noShow : totals.noShow,
+    answered: cs.answeredPct,
+    rating: s ? s.rating : 4.48,
+  };
+}
 
 export default function HomePage() {
-  const topLeaks = leaks.slice(0, 3);
+  const [scope, setScope] = useState<"all" | StoreId>("all");
+  const [gran, setGran] = useState<Granularity>("weekly");
+
+  const series = getSeries(scope);
+  const k = kpisFor(scope);
+  const cs = callStats(scope);
+  const ws = webStats(scope);
+  const scopeLabel = scopeOptions.find((o) => o.value === scope)!.label;
 
   return (
     <div className="animate-stage-in">
-      <PageHeader
-        eyebrow="Good morning · all four stores · last 30 days"
-        title={
-          <>
-            You made <Display className="text-ink">{fmtMoney(totals.revenue, true)}</Display> — and left{" "}
-            <Display className="text-orange" italic>
-              {fmtMoney(totals.leak, true)}
-            </Display>{" "}
-            on the table.
-          </>
-        }
-        sub="Here is the whole business at a glance. The orange numbers are money you can still get back."
-      />
+      {/* Header */}
+      <header className="mb-7 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+        <div>
+          <Micro>Overview · {scopeLabel} · Last 30 days</Micro>
+          <h1 className="mt-2.5 text-[clamp(26px,3.6vw,34px)] font-medium tracking-[-0.02em]">Performance overview</h1>
+          <p className="mt-2 max-w-[560px] text-[14px] leading-[1.5] text-ink-dim">
+            Revenue, demand and conversion across {scope === "all" ? "all four locations" : scopeLabel}.
+          </p>
+        </div>
+        <Segmented options={scopeOptions} value={scope} onChange={setScope} />
+      </header>
 
-      {/* Hero stats */}
-      <section className="grid grid-cols-2 gap-x-8 gap-y-6 border-y border-edge py-7 md:grid-cols-4">
-        <BigStat label="Revenue" value={fmtMoney(totals.revenue, true)} delta={0.06} sub={`${pct(totals.groomingShare)} grooming · ${pct(1 - totals.groomingShare)} retail`} />
-        <BigStat label="Recoverable / mo" value={fmtMoney(totals.leak, true)} delta={0.04} deltaInvert accent sub="across 6 leaks" />
-        <BigStat label="Rebook rate" value={pct(totals.rebook)} delta={0.05} sub="booked again before leaving" />
-        <BigStat label="No-show rate" value={pct(totals.noShow)} delta={-0.02} deltaInvert sub="booked but didn’t show" />
+      {/* KPI row */}
+      <section className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-edge bg-edge md:grid-cols-3 xl:grid-cols-6">
+        <Kpi label="Revenue" value={fmtMoney(k.revenue, true)} delta={0.06} />
+        <Kpi label="Bookings" value={k.bookings.toLocaleString()} delta={0.03} />
+        <Kpi label="Avg ticket" value={fmtMoney(k.avgTicket)} delta={0.02} />
+        <Kpi label="Calls answered" value={pct(k.answered)} delta={0.04} />
+        <Kpi label="Rebook rate" value={pct(k.rebook)} delta={0.05} />
+        <Kpi label="No-show rate" value={pct(k.noShow)} delta={-0.02} deltaInvert />
       </section>
 
-      <div className="mt-8 grid grid-cols-1 gap-5 lg:grid-cols-[1.1fr_1fr]">
-        {/* Needs you today */}
+      {/* Revenue chart */}
+      <Card className="mt-5">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <Micro>Revenue</Micro>
+            <div className="mt-1.5 flex items-baseline gap-2.5">
+              <span className="text-[22px] font-medium tracking-[-0.01em]">{fmtMoney(k.revenue, true)}</span>
+              <Delta value={0.06} />
+              <span className="text-[12px] text-ink-dim">{timeMeta[gran].caption}</span>
+            </div>
+          </div>
+          <Segmented options={granOptions} value={gran} onChange={setGran} />
+        </div>
+        <AreaChart
+          data={series.revenue[gran]}
+          labels={timeMeta[gran].labels}
+          valueFmt={(n) => `$${Math.round(n / 1000)}k`}
+        />
+      </Card>
+
+      {/* Calls + Traffic */}
+      <section className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-2">
+        <Card>
+          <div className="mb-4 flex items-start justify-between">
+            <div>
+              <Micro>Inbound calls</Micro>
+              <div className="mt-1.5 text-[22px] font-medium tracking-[-0.01em]">{cs.total.toLocaleString()} <span className="text-[13px] text-ink-dim">calls</span></div>
+            </div>
+            <div className="text-right">
+              <div className="text-[20px] font-medium text-orange">{pct(cs.missedPct)}</div>
+              <Micro>missed</Micro>
+            </div>
+          </div>
+          <CallsBars labels={timeMeta.weekly.labels} total={series.callsTotal} missed={series.callsMissed} />
+          <div className="mt-3 flex items-center justify-between">
+            <Legend items={[{ label: "Answered", color: "rgba(255,255,255,0.3)" }, { label: "Missed", color: "#fe5100" }]} />
+            <Tag tone="orange">Call tracking pending</Tag>
+          </div>
+        </Card>
+
+        <Card>
+          <div className="mb-4 flex items-start justify-between">
+            <div>
+              <Micro>Website traffic vs bookings</Micro>
+              <div className="mt-1.5 text-[22px] font-medium tracking-[-0.01em]">{ws.visits.toLocaleString()} <span className="text-[13px] text-ink-dim">visits</span></div>
+            </div>
+            <div className="text-right">
+              <div className="text-[20px] font-medium">{pct(ws.convRate, 1)}</div>
+              <Micro>book online</Micro>
+            </div>
+          </div>
+          <TrafficChart labels={timeMeta.weekly.labels} visits={series.webVisits} bookings={series.webBookings} />
+          <div className="mt-3 flex items-center justify-between">
+            <Legend items={[{ label: "Visits", color: "rgba(255,255,255,0.3)" }, { label: "New bookings", color: "#fe5100" }]} />
+            <Tag tone="orange">Analytics pending</Tag>
+          </div>
+        </Card>
+      </section>
+
+      {/* Action items + Priority issues */}
+      <section className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-[1.1fr_1fr]">
         <Card pad={false}>
           <div className="flex items-center justify-between px-5 pb-3 pt-5">
             <div>
-              <Micro>Needs you today</Micro>
-              <h2 className="mt-1.5 text-[18px] font-medium tracking-[-0.01em]">A few things only you can clear</h2>
+              <Micro>Action items</Micro>
+              <h2 className="mt-1.5 text-[17px] font-medium tracking-[-0.01em]">Requires attention</h2>
             </div>
-            <Tag tone="orange">{actions.length}</Tag>
+            <Tag tone="muted">{actions.length}</Tag>
           </div>
           {actions.map((a, i) => (
             <div key={i} className="flex items-center gap-3 border-t border-edge px-5 py-3.5">
-              <span className="grid size-7 shrink-0 place-items-center rounded-full bg-orange-soft font-mono text-[11px] text-orange">{i + 1}</span>
+              <span className="grid size-6 shrink-0 place-items-center rounded-full border border-edge-strong font-mono text-[10px] text-ink-dim">{i + 1}</span>
               <div className="min-w-0 flex-1">
-                <div className="text-[14px] leading-snug text-ink">{a.text}</div>
-                <Micro className="mt-1 !text-ink-dimmer">{a.store}{a.value ? ` · ${a.value}` : ""}</Micro>
+                <div className="text-[13.5px] leading-snug text-ink">{a.text}</div>
+                <Micro className="mt-1 !text-ink-dimmer">{a.store}</Micro>
               </div>
-              <button className="shrink-0 rounded-lg border border-edge-strong px-3 py-1.5 text-[12.5px] text-ink transition-colors hover:bg-white/[0.05]">
+              <button className="shrink-0 rounded-lg border border-edge-strong px-3 py-1.5 text-[12px] text-ink transition-colors hover:bg-white/[0.05]">
                 {a.action}
               </button>
             </div>
           ))}
         </Card>
 
-        {/* Biggest leaks */}
         <Card pad={false}>
           <div className="flex items-center justify-between px-5 pb-3 pt-5">
             <div>
-              <Micro>Where it’s going</Micro>
-              <h2 className="mt-1.5 text-[18px] font-medium tracking-[-0.01em]">Your three biggest leaks</h2>
+              <Micro>Priority issues</Micro>
+              <h2 className="mt-1.5 text-[17px] font-medium tracking-[-0.01em]">Flagged for review</h2>
             </div>
             <Link href="/dashboard/leaks" className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-dim transition-colors hover:text-orange">
-              All leaks →
+              View all →
             </Link>
           </div>
-          {topLeaks.map((l) => (
-            <div key={l.rank} className="flex items-center gap-4 border-t border-edge px-5 py-4">
-              <Display className="text-[22px] text-orange">{fmtMoney(l.amount, true)}</Display>
+          {leaks.slice(0, 4).map((l) => (
+            <div key={l.rank} className="flex items-center gap-4 border-t border-edge px-5 py-3.5">
               <div className="min-w-0 flex-1">
-                <div className="truncate text-[14px] text-ink">{l.name}</div>
+                <div className="truncate text-[13.5px] text-ink">{l.name}</div>
                 <Micro className="mt-0.5 !text-ink-dimmer">{l.scope}</Micro>
               </div>
-              <Tag tone={l.status === "live" ? "good" : "orange"}>{l.status === "live" ? "Measurable" : "Needs setup"}</Tag>
+              <span className="shrink-0 font-mono text-[12px] text-ink-dim">{l.metric}</span>
+              <Tag tone={sevTone[l.severity]}>{l.severity}</Tag>
             </div>
           ))}
-          <div className="border-t border-edge px-5 py-3.5">
-            <div className="flex items-baseline justify-between">
-              <Micro>Total recoverable</Micro>
-              <Display className="text-[20px] text-orange">{fmtMoney(totals.leak, true)}/mo</Display>
-            </div>
-          </div>
         </Card>
-      </div>
+      </section>
 
-      {/* Store snapshot */}
-      <section className="mt-8">
+      {/* Store performance */}
+      <section className="mt-5">
         <div className="mb-4 flex items-end justify-between">
           <div>
-            <Micro>Your stores</Micro>
-            <h2 className="mt-1.5 text-[18px] font-medium tracking-[-0.01em]">How each location is doing</h2>
+            <Micro>By location</Micro>
+            <h2 className="mt-1.5 text-[17px] font-medium tracking-[-0.01em]">Store performance</h2>
           </div>
           <Link href="/dashboard/stores" className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-dim transition-colors hover:text-orange">
-            Compare stores →
+            Compare →
           </Link>
         </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {stores.map((s) => {
             const lag = s.id === "wm";
+            const sc = callStats(s.id);
             return (
               <Card key={s.id} className="flex flex-col gap-4">
                 <div className="flex items-start justify-between">
                   <div>
-                    <div className="text-[15px] text-ink">{s.name}</div>
+                    <div className="text-[14.5px] text-ink">{s.name}</div>
                     <Micro className="mt-0.5">{s.tier}</Micro>
                   </div>
-                  {lag ? <Tag tone="orange">Watch</Tag> : <span className="font-mono text-[12px] text-ink-dim">{s.rating.toFixed(1)}★</span>}
+                  {lag ? <Tag tone="orange">Review</Tag> : <span className="font-mono text-[12px] text-ink-dim">{s.rating.toFixed(1)}★</span>}
                 </div>
-                <Display className="text-[30px] leading-none tracking-[-0.02em] text-ink">{fmtMoney(s.revenue, true)}</Display>
+                <div className="text-[27px] font-medium leading-none tracking-[-0.02em]">{fmtMoney(s.revenue, true)}</div>
                 <div>
                   <div className="mb-1.5 flex items-center justify-between">
                     <Micro>Rebook</Micro>
@@ -115,48 +233,26 @@ export default function HomePage() {
                   <Meter value={s.rebook} />
                 </div>
                 <div className="flex items-center justify-between border-t border-edge pt-3">
-                  <Micro>Leaking</Micro>
-                  <span className="font-mono text-[13px] text-orange">−{fmtMoney(s.leak, true)}/mo</span>
+                  <Micro>Calls missed</Micro>
+                  <span className="font-mono text-[12px]" style={{ color: sc.missedPct > 0.25 ? "#fe5100" : "rgba(255,255,255,0.58)" }}>{pct(sc.missedPct)}</span>
                 </div>
               </Card>
             );
           })}
         </div>
       </section>
+    </div>
+  );
+}
 
-      {/* Journey */}
-      <section className="mt-8">
-        <div className="mb-4">
-          <Micro>The journey</Micro>
-          <h2 className="mt-1.5 text-[18px] font-medium tracking-[-0.01em]">First click to final sale</h2>
-        </div>
-        <Card>
-          <div className="flex items-end gap-2">
-            {funnel.map((f, i) => {
-              const prev = i > 0 ? funnel[i - 1].value : f.value;
-              const drop = i > 0 ? 1 - f.value / prev : 0;
-              return (
-                <div key={f.stage} className="flex flex-1 flex-col">
-                  <div
-                    className="rounded-xl border px-3 py-4"
-                    style={{
-                      borderColor: f.dropLeak ? "rgba(254,81,0,0.3)" : "rgba(255,255,255,0.08)",
-                      background: f.dropLeak ? "rgba(254,81,0,0.05)" : "rgba(255,255,255,0.015)",
-                    }}
-                  >
-                    <Display className="text-[24px] leading-none text-ink">{f.value >= 1000 ? `${(f.value / 1000).toFixed(1)}k` : f.value}</Display>
-                    <div className="mt-2 text-[13px] text-ink">{f.stage}</div>
-                    <Micro className="mt-0.5 !text-ink-dimmer">{f.note}</Micro>
-                  </div>
-                  <div className={`mt-2 text-center font-mono text-[10px] ${f.dropLeak ? "text-orange" : "text-ink-dimmer"}`}>
-                    {i > 0 ? `−${pct(drop)}` : "start"}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </Card>
-      </section>
+function Kpi({ label, value, delta, deltaInvert }: { label: string; value: string; delta: number; deltaInvert?: boolean }) {
+  return (
+    <div className="bg-bg p-4">
+      <div className="flex items-center justify-between">
+        <Micro>{label}</Micro>
+        <Delta value={delta} invert={deltaInvert} />
+      </div>
+      <div className="mt-2.5 text-[24px] font-medium leading-none tracking-[-0.02em]">{value}</div>
     </div>
   );
 }

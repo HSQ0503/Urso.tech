@@ -40,16 +40,18 @@ export function Card({
   );
 }
 
-// Editorial serif display — used only for hero numbers & page headlines.
-export function Display({ children, className = "", italic = false }: { children: ReactNode; className?: string; italic?: boolean }) {
-  return (
-    <span
-      className={className}
-      style={{ fontFamily: "var(--font-display), Georgia, serif", fontStyle: italic ? "italic" : "normal" }}
-    >
-      {children}
-    </span>
-  );
+// Large display numbers — Geist, tight tracking. Just a sizing/weight wrapper.
+export function Display({ children, className = "" }: { children: ReactNode; className?: string }) {
+  return <span className={`font-medium tracking-[-0.02em] ${className}`}>{children}</span>;
+}
+
+// Loading skeleton block — pulses in the brand's surface color.
+export function Skeleton({ className = "" }: { className?: string }) {
+  return <div className={`animate-pulse rounded-md bg-white/[0.05] ${className}`} />;
+}
+
+export function SkeletonCard({ className = "", children }: { className?: string; children?: ReactNode }) {
+  return <div className={`rounded-2xl border border-edge bg-panel p-5 ${className}`}>{children}</div>;
 }
 
 export function PageHeader({
@@ -316,5 +318,204 @@ export function CohortCurve({ data, label = "months since first visit" }: { data
         {label}
       </text>
     </svg>
+  );
+}
+
+// ===========================================================================
+//  Statistical charts with axes — for the analytics dashboard
+// ===========================================================================
+
+const AX = "rgba(255,255,255,0.32)"; // axis label color
+const GRID = "rgba(255,255,255,0.07)";
+
+function xTicks(n: number, max = 6) {
+  if (n <= max) return Array.from({ length: n }, (_, i) => i);
+  const step = Math.ceil(n / max);
+  const out: number[] = [];
+  for (let i = 0; i < n; i += step) out.push(i);
+  if (out[out.length - 1] !== n - 1) out.push(n - 1);
+  return out;
+}
+
+// Single-series area chart with gridlines + axes.
+export function AreaChart({
+  data,
+  labels,
+  valueFmt = (n: number) => String(n),
+  color = "#fe5100",
+  height = 196,
+}: {
+  data: number[];
+  labels: string[];
+  valueFmt?: (n: number) => string;
+  color?: string;
+  height?: number;
+}) {
+  const W = 600;
+  const H = height;
+  const padL = 48;
+  const padR = 12;
+  const padT = 12;
+  const padB = 26;
+  const lo = Math.min(...data);
+  const hi = Math.max(...data);
+  const floor = lo - (hi - lo) * 0.3;
+  const ceil = hi + (hi - lo) * 0.12;
+  const span = ceil - floor || 1;
+  const x = (i: number) => padL + (i / (data.length - 1)) * (W - padL - padR);
+  const y = (v: number) => padT + (1 - (v - floor) / span) * (H - padT - padB);
+  const line = data.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)} ${y(v).toFixed(1)}`).join(" ");
+  const area = `${line} L${x(data.length - 1).toFixed(1)} ${(H - padB).toFixed(1)} L${padL} ${(H - padB).toFixed(1)} Z`;
+  const grid = [0, 0.25, 0.5, 0.75, 1].map((t) => floor + t * span);
+  const gid = `area-${color.replace("#", "")}`;
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" preserveAspectRatio="none" style={{ height }} aria-hidden="true">
+      <defs>
+        <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity={0.28} />
+          <stop offset="100%" stopColor={color} stopOpacity={0} />
+        </linearGradient>
+      </defs>
+      {grid.map((v, i) => (
+        <g key={i}>
+          <line x1={padL} x2={W - padR} y1={y(v)} y2={y(v)} stroke={GRID} strokeWidth={1} />
+          <text x={padL - 8} y={y(v) + 3} fontSize={9.5} fontFamily="monospace" fill={AX} textAnchor="end">
+            {valueFmt(v)}
+          </text>
+        </g>
+      ))}
+      <path d={area} fill={`url(#${gid})`} />
+      <path d={line} fill="none" stroke={color} strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx={x(data.length - 1)} cy={y(data[data.length - 1])} r={3} fill={color} />
+      {xTicks(data.length).map((i) => (
+        <text key={i} x={x(i)} y={H - 9} fontSize={9.5} fontFamily="monospace" fill={AX} textAnchor="middle">
+          {labels[i]}
+        </text>
+      ))}
+    </svg>
+  );
+}
+
+// Stacked bars: answered (muted) + missed (orange), with axes.
+export function CallsBars({ labels, total, missed, color = "#fe5100", height = 196 }: { labels: string[]; total: number[]; missed: number[]; color?: string; height?: number }) {
+  const W = 600;
+  const H = height;
+  const padL = 40;
+  const padR = 12;
+  const padT = 12;
+  const padB = 26;
+  const max = Math.max(...total) * 1.15;
+  const n = total.length;
+  const step = (W - padL - padR) / n;
+  const bw = step * 0.6;
+  const y = (v: number) => padT + (1 - v / max) * (H - padT - padB);
+  const grid = [0, 0.5, 1].map((t) => t * max);
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height }} aria-hidden="true">
+      {grid.map((v, i) => (
+        <g key={i}>
+          <line x1={padL} x2={W - padR} y1={y(v)} y2={y(v)} stroke={GRID} strokeWidth={1} />
+          <text x={padL - 7} y={y(v) + 3} fontSize={9.5} fontFamily="monospace" fill={AX} textAnchor="end">
+            {Math.round(v)}
+          </text>
+        </g>
+      ))}
+      {total.map((t, i) => {
+        const cx = padL + i * step + step / 2 - bw / 2;
+        const answered = t - missed[i];
+        const yAns = y(answered);
+        const yMiss = y(t);
+        return (
+          <g key={i}>
+            <rect x={cx} y={yAns} width={bw} height={H - padB - yAns} rx={2} fill="rgba(255,255,255,0.16)" />
+            <rect x={cx} y={yMiss} width={bw} height={yAns - yMiss} rx={2} fill={color} />
+          </g>
+        );
+      })}
+      {xTicks(n).map((i) => (
+        <text key={i} x={padL + i * step + step / 2} y={H - 9} fontSize={9.5} fontFamily="monospace" fill={AX} textAnchor="middle">
+          {labels[i]}
+        </text>
+      ))}
+    </svg>
+  );
+}
+
+// Dual-axis: visits as bars (muted, left scale), bookings as line (orange, right scale).
+export function TrafficChart({ labels, visits, bookings, color = "#fe5100", height = 196 }: { labels: string[]; visits: number[]; bookings: number[]; color?: string; height?: number }) {
+  const W = 600;
+  const H = height;
+  const padL = 40;
+  const padR = 38;
+  const padT = 12;
+  const padB = 26;
+  const vMax = Math.max(...visits) * 1.15;
+  const bMax = Math.max(...bookings) * 1.35;
+  const n = visits.length;
+  const step = (W - padL - padR) / n;
+  const bw = step * 0.55;
+  const yV = (v: number) => padT + (1 - v / vMax) * (H - padT - padB);
+  const yB = (v: number) => padT + (1 - v / bMax) * (H - padT - padB);
+  const x = (i: number) => padL + i * step + step / 2;
+  const bookLine = bookings.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)} ${yB(v).toFixed(1)}`).join(" ");
+  const grid = [0, 0.5, 1].map((t) => t * vMax);
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height }} aria-hidden="true">
+      {grid.map((v, i) => (
+        <g key={i}>
+          <line x1={padL} x2={W - padR} y1={yV(v)} y2={yV(v)} stroke={GRID} strokeWidth={1} />
+          <text x={padL - 6} y={yV(v) + 3} fontSize={9} fontFamily="monospace" fill={AX} textAnchor="end">
+            {Math.round(v)}
+          </text>
+        </g>
+      ))}
+      {visits.map((v, i) => {
+        const yy = yV(v);
+        return <rect key={i} x={x(i) - bw / 2} y={yy} width={bw} height={H - padB - yy} rx={2} fill="rgba(255,255,255,0.14)" />;
+      })}
+      <path d={bookLine} fill="none" stroke={color} strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" />
+      {bookings.map((v, i) => (
+        <circle key={i} cx={x(i)} cy={yB(v)} r={2.4} fill={color} />
+      ))}
+      {[0, 0.5, 1].map((t, i) => (
+        <text key={i} x={W - padR + 6} y={yB(t * bMax) + 3} fontSize={9} fontFamily="monospace" fill={color} fillOpacity={0.7} textAnchor="start">
+          {Math.round(t * bMax)}
+        </text>
+      ))}
+      {xTicks(n).map((i) => (
+        <text key={i} x={x(i)} y={H - 9} fontSize={9.5} fontFamily="monospace" fill={AX} textAnchor="middle">
+          {labels[i]}
+        </text>
+      ))}
+    </svg>
+  );
+}
+
+export function Legend({ items }: { items: { label: string; color: string }[] }) {
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+      {items.map((it) => (
+        <span key={it.label} className="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.1em] text-ink-dim">
+          <span className="size-2 rounded-[2px]" style={{ background: it.color }} />
+          {it.label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+export function Segmented<T extends string>({ options, value, onChange }: { options: { value: T; label: string }[]; value: T; onChange: (v: T) => void }) {
+  return (
+    <div className="inline-flex items-center gap-0.5 rounded-full border border-edge bg-white/[0.02] p-0.5">
+      {options.map((o) => (
+        <button
+          key={o.value}
+          onClick={() => onChange(o.value)}
+          className={`rounded-full px-2.5 py-1 text-[11.5px] transition-colors ${value === o.value ? "bg-white/[0.08] text-ink" : "text-ink-dim hover:text-ink"}`}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
   );
 }

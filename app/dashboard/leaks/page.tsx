@@ -1,5 +1,5 @@
-import { leaks, totals, type LeakStatus } from "@/components/dashboard/data";
-import { Card, PageHeader, Display, Micro, Tag, fmtMoney } from "@/components/dashboard/ui";
+import { leaks, type LeakStatus, type Severity } from "@/components/dashboard/data";
+import { Card, PageHeader, Micro, Tag } from "@/components/dashboard/ui";
 
 const statusMeta: Record<LeakStatus, { tone: "good" | "orange" | "warn"; label: string }> = {
   live: { tone: "good", label: "Measurable now" },
@@ -7,72 +7,68 @@ const statusMeta: Record<LeakStatus, { tone: "good" | "orange" | "warn"; label: 
   fix: { tone: "warn", label: "One-time fix" },
 };
 
-// Plain-English explanation per leak.
+const sevTone: Record<Severity, "orange" | "warn" | "muted"> = { High: "orange", Medium: "warn", Low: "muted" };
+
 const explain: Record<number, string> = {
-  1: "Grooming is repeat business — a dog needs a cut every 4–8 weeks. Customers who quietly stop coming are the biggest leak in the business, and nobody feels it because there’s no single moment it happens.",
-  2: "Calls that ring out — during the day when the desk is busy, and after you close — are new customers who simply call the next groomer instead. You can’t see them today because nothing records a call that was never answered.",
-  3: "A dog in the chair is your best retail shopper, if someone asks. Stores where the front desk doesn’t attach food or treats to a groom leave easy margin on the floor.",
-  4: "Booked appointments that don’t show — or cancel last minute — leave an empty chair you can’t refill. A deposit and a reminder text close most of it.",
-  5: "People who start your online booking form but never finish. A short, mobile-friendly form recovers most of them.",
-  6: "Winter Park is your top store but has no “Book online” button on Google — so the easiest bookings never start. A 10-minute listing fix.",
+  1: "Grooming is recurring revenue — a dog needs a cut every four to eight weeks. Customers who quietly stop returning are the largest source of lost revenue, and the hardest to notice, because there is no single moment it happens.",
+  2: "Calls that ring out — during the day when the desk is busy, and after closing — are prospective customers who book elsewhere. They are not visible in current reporting because nothing records a call that was never answered.",
+  3: "A grooming appointment is the strongest moment to sell food, treats, and accessories. Locations where the front desk does not attach retail to a groom are leaving margin uncaptured.",
+  4: "Booked appointments that do not show, or cancel at the last minute, leave an unfillable slot. Deposits and reminder messages reduce both materially.",
+  5: "Visitors who begin the online booking form but do not complete it. A shorter, mobile-first form recovers most of them.",
+  6: "Winter Park ranks well locally but has no booking link on its Google listing, so the most direct path to an appointment is unavailable.",
 };
 
 export default function LeaksPage() {
-  const liveTotal = leaks.filter((l) => l.status === "live").reduce((s, l) => s + l.amount, 0);
-  const instrumentTotal = leaks.filter((l) => l.status !== "live").reduce((s, l) => s + l.amount, 0);
+  const liveCount = leaks.filter((l) => l.status === "live").length;
+  const trackCount = leaks.filter((l) => l.status !== "live").length;
 
   return (
     <div className="animate-stage-in">
       <PageHeader
-        eyebrow="Leak register · last 30 days"
-        title={
-          <>
-            You’re losing about <Display className="text-orange" italic>{fmtMoney(totals.leak, true)}</Display> a month.
-          </>
-        }
-        sub="Ranked by how much you can recover. Green leaks we can measure today with the data you already have. Orange ones need a small piece of tracking switched on first."
+        eyebrow="Leak register · Last 30 days"
+        title="Identified issues"
+        sub="Operational issues ranked by severity, each tied to the data source behind it. Items marked measurable can be tracked from existing data; the rest need a small piece of tracking enabled first."
       />
 
-      {/* Summary */}
       <section className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Card className="flex flex-col gap-2">
-          <Micro>Total recoverable</Micro>
-          <Display className="text-[34px] leading-none text-orange">{fmtMoney(totals.leak, true)}<span className="text-[16px] text-ink-dimmer">/mo</span></Display>
+          <Micro>Issues flagged</Micro>
+          <div className="text-[34px] font-medium leading-none tracking-[-0.02em]">{leaks.length}</div>
         </Card>
         <Card className="flex flex-col gap-2">
-          <Micro>Measurable today</Micro>
-          <Display className="text-[34px] leading-none text-ink">{fmtMoney(liveTotal, true)}</Display>
-          <span className="text-[12px] text-ink-dim">no new setup needed</span>
+          <Micro>Measurable now</Micro>
+          <div className="text-[34px] font-medium leading-none tracking-[-0.02em]">{liveCount}</div>
+          <span className="text-[12px] text-ink-dim">from existing data</span>
         </Card>
         <Card className="flex flex-col gap-2">
-          <Micro>Needs tracking first</Micro>
-          <Display className="text-[34px] leading-none text-ink">{fmtMoney(instrumentTotal, true)}</Display>
+          <Micro>Needs tracking</Micro>
+          <div className="text-[34px] font-medium leading-none tracking-[-0.02em]">{trackCount}</div>
           <span className="text-[12px] text-ink-dim">calls + web analytics</span>
         </Card>
       </section>
 
-      {/* Register */}
       <div className="space-y-3">
         {leaks.map((l) => {
           const st = statusMeta[l.status];
           return (
             <Card key={l.rank} className="flex flex-col gap-4 md:flex-row md:items-start md:gap-6">
-              <div className="flex items-center gap-4 md:w-[180px] md:flex-col md:items-start md:gap-2">
-                <Display className="text-[32px] leading-none text-orange">{fmtMoney(l.amount, true)}<span className="text-[14px] text-ink-dimmer">/mo</span></Display>
-                <div className="flex items-center gap-2">
+              <div className="flex items-center gap-4 md:w-[200px] md:flex-col md:items-start md:gap-2.5">
+                <div className="text-[22px] font-medium leading-none tracking-[-0.01em]">{l.metric}</div>
+                <div className="flex flex-wrap items-center gap-2">
                   <span className="font-mono text-[11px] text-ink-dimmer">#{l.rank}</span>
-                  <Tag tone={st.tone}>{st.label}</Tag>
+                  <Tag tone={sevTone[l.severity]}>{l.severity} priority</Tag>
                 </div>
               </div>
               <div className="flex-1 border-t border-edge pt-4 md:border-l md:border-t-0 md:pl-6 md:pt-0">
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <div className="flex flex-wrap items-center gap-2">
                   <h2 className="text-[17px] font-medium tracking-[-0.01em] text-ink">{l.name}</h2>
+                  <Tag tone={st.tone}>{st.label}</Tag>
                 </div>
                 <Micro className="mt-1.5 !text-ink-dimmer">{l.scope} · source: {l.source}</Micro>
                 <p className="mt-3 max-w-[640px] text-[14px] leading-[1.6] text-ink-dim">{explain[l.rank]}</p>
               </div>
               <div className="md:self-center">
-                <button className="w-full rounded-lg bg-orange px-4 py-2 text-[13px] font-medium text-white transition hover:brightness-110 md:w-auto">
+                <button className="w-full rounded-lg border border-edge-strong px-4 py-2 text-[13px] text-ink transition-colors hover:bg-white/[0.05] md:w-auto">
                   {l.action}
                 </button>
               </div>
