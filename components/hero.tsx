@@ -27,10 +27,7 @@ export function Hero() {
 
       <div className="relative px-5 pb-8 pt-14 text-center sm:px-8 sm:pb-10 sm:pt-20 md:px-14">
         <LiveTicker />
-        <h1
-          className="mx-auto mt-7 max-w-[1200px] text-[clamp(46px,13vw,124px)] font-medium leading-[0.95] tracking-[-0.045em] sm:mt-9 sm:leading-[0.94]"
-          style={{ fontFamily: '"Comic Sans MS", "Comic Sans", cursive' }}
-        >
+        <h1 className="mx-auto mt-7 max-w-[1200px] text-[clamp(46px,13vw,124px)] font-medium leading-[0.95] tracking-[-0.045em] sm:mt-9 sm:leading-[0.94]">
           First click to
           <br />
           final sale<span className="text-orange">.</span>
