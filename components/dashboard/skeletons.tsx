@@ -45,13 +45,10 @@ function ListCard({ rows = 4 }: { rows?: number }) {
 export function HomeSkeleton() {
   return (
     <div>
-      <div className="mb-7 flex items-end justify-between">
-        <div className="space-y-2.5">
-          <Skeleton className="h-3 w-64" />
-          <Skeleton className="h-8 w-72" />
-          <Skeleton className="h-4 w-80" />
-        </div>
-        <Skeleton className="h-8 w-72 rounded-full" />
+      <div className="mb-7 space-y-2.5">
+        <Skeleton className="h-3 w-64" />
+        <Skeleton className="h-8 w-72" />
+        <Skeleton className="h-4 w-80" />
       </div>
       <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-edge bg-edge md:grid-cols-3 xl:grid-cols-6">
         {Array.from({ length: 6 }).map((_, i) => (
@@ -61,10 +58,18 @@ export function HomeSkeleton() {
           </div>
         ))}
       </div>
-      <SkeletonCard className="mt-5 space-y-4">
-        <div className="flex justify-between"><Skeleton className="h-7 w-40" /><Skeleton className="h-8 w-48 rounded-full" /></div>
-        <Skeleton className="h-48 w-full" />
-      </SkeletonCard>
+      <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-[1fr_1.25fr]">
+        <SkeletonCard className="space-y-3">
+          <Skeleton className="h-3 w-40" />
+          <Skeleton className="h-5 w-[80%]" />
+          <Skeleton className="h-3 w-full" />
+          <Skeleton className="h-3 w-[70%]" />
+        </SkeletonCard>
+        <SkeletonCard className="space-y-4">
+          <div className="flex justify-between"><Skeleton className="h-7 w-40" /><Skeleton className="h-8 w-48 rounded-full" /></div>
+          <Skeleton className="h-48 w-full" />
+        </SkeletonCard>
+      </div>
       <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-2">
         {Array.from({ length: 2 }).map((_, i) => (
           <SkeletonCard key={i} className="space-y-4">
@@ -73,39 +78,36 @@ export function HomeSkeleton() {
           </SkeletonCard>
         ))}
       </div>
-      <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-[1.1fr_1fr]">
-        <ListCard rows={4} />
-        <ListCard rows={4} />
+      <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <SkeletonCard key={i} className="space-y-4">
+            <Skeleton className="h-4 w-24" />
+            <Skeleton className="h-7 w-20" />
+            <Skeleton className="h-1.5 w-full" />
+          </SkeletonCard>
+        ))}
       </div>
     </div>
   );
 }
 
-export function LeaksSkeleton() {
+export function PerformanceSkeleton() {
   return (
-    <div>
+    <div className="space-y-12">
       <Header />
-      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
-        {Array.from({ length: 3 }).map((_, i) => (
-          <SkeletonCard key={i} className="space-y-3">
-            <Skeleton className="h-3 w-28" />
-            <Skeleton className="h-8 w-32" />
-          </SkeletonCard>
-        ))}
-      </div>
-      <div className="space-y-3">
-        {Array.from({ length: 6 }).map((_, i) => (
-          <SkeletonCard key={i} className="flex flex-col gap-4 md:flex-row md:items-center md:gap-6">
-            <Skeleton className="h-9 w-28" />
-            <div className="flex-1 space-y-2.5">
-              <Skeleton className="h-4 w-56" />
-              <Skeleton className="h-3 w-72" />
-              <Skeleton className="h-3 w-[80%]" />
-            </div>
-            <Skeleton className="h-9 w-28 rounded-lg" />
-          </SkeletonCard>
-        ))}
-      </div>
+      {Array.from({ length: 3 }).map((_, s) => (
+        <div key={s}>
+          <Skeleton className="mb-4 h-6 w-48" />
+          <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+            {Array.from({ length: 2 }).map((_, i) => (
+              <SkeletonCard key={i} className="space-y-4">
+                <Skeleton className="h-5 w-40" />
+                <Skeleton className="h-48 w-full" />
+              </SkeletonCard>
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -126,21 +128,14 @@ export function StoresSkeleton() {
           ))}
         </SkeletonCard>
       </div>
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-        {Array.from({ length: 2 }).map((_, i) => (
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+        {Array.from({ length: 3 }).map((_, i) => (
           <SkeletonCard key={i} className="space-y-4">
-            <Skeleton className="h-5 w-44" />
-            <div className="grid grid-cols-3 gap-3">
-              {Array.from({ length: 3 }).map((_, j) => <Skeleton key={j} className="h-14 w-full rounded-xl" />)}
-            </div>
-            <Skeleton className="h-28 w-full" />
+            <Skeleton className="h-4 w-28" />
+            <Skeleton className="h-40 w-full" />
           </SkeletonCard>
         ))}
       </div>
-      <SkeletonCard className="space-y-4">
-        <Skeleton className="h-5 w-44" />
-        <Skeleton className="h-28 w-full" />
-      </SkeletonCard>
     </div>
   );
 }

@@ -1,8 +1,16 @@
 "use client";
 
-import { useState } from "react";
-import { groomers, type Groomer } from "@/components/dashboard/data";
-import { Card, PageHeader, Micro, Tag, CohortCurve, fmtMoney, pct } from "@/components/dashboard/ui";
+import { use, useState } from "react";
+import {
+  groomers,
+  STORE_OPTIONS,
+  parseScope,
+  parseMonth,
+  scopeLabel,
+  monthLabel,
+  type Groomer,
+} from "@/components/dashboard/data";
+import { Card, PageHeader, Micro, Tag, BarRanking, CohortCurve, fmtMoney, pct } from "@/components/dashboard/ui";
 
 // Synthesize a full profile from a scorecard row so every groomer is clickable.
 function profileFor(g: Groomer) {
@@ -10,7 +18,6 @@ function profileFor(g: Groomer) {
   const loyal = Math.round(clientBook * (0.3 + g.rebook * 0.3));
   const requestRate = Math.min(0.6, g.rebook * 0.78);
   const redo = g.flag === "coach" ? 0.06 : 0.02;
-  // retention cohort: better rebook -> flatter decay
   const decay = 1 - g.rebook * 0.55;
   const cohort = Array.from({ length: 8 }, (_, i) => Math.round(100 * Math.pow(1 - decay * 0.18, i)));
   const initials = g.name.split(" ").map((p) => p[0]).join("");
@@ -18,23 +25,47 @@ function profileFor(g: Groomer) {
     g.flag === "star"
       ? "Highest revenue per hour and request rate on the team. Their loyal client base is also a retention risk for the business, and worth protecting."
       : g.flag === "coach"
-        ? `Strong in the chair, but rebooking (${pct(g.rebook)}) and retail attachment (${pct(g.attach)}) trail the company average. The clearest opportunity is the rebooking process.`
+        ? `Strong in the chair, but rebooking (${pct(g.rebook)}) and retail attachment (${pct(g.attach)}) trail the company average. The clearest opportunity is the rebooking conversation at checkout.`
         : "Consistent all-rounder. The clearest opportunity is moving retail attachment closer to the top performers.";
   return { clientBook, loyal, requestRate, redo, cohort, initials, coaching };
 }
 
-export default function TeamPage() {
+export default function TeamPage({ searchParams }: { searchParams: Promise<{ store?: string; month?: string }> }) {
+  const sp = use(searchParams);
+  const scope = parseScope(sp.store);
+  const month = parseMonth(sp.month);
+  const period = month === "all" ? "Last 12 months" : monthLabel(month);
+
+  const fullName = STORE_OPTIONS.find((o) => o.value === scope)?.label;
+  const roster = scope === "all" ? groomers : groomers.filter((g) => g.store === fullName);
+
   const [selectedId, setSelectedId] = useState(groomers[0].id);
-  const selected = groomers.find((g) => g.id === selectedId)!;
+  const selected = roster.find((g) => g.id === selectedId) ?? roster[0] ?? groomers[0];
   const p = profileFor(selected);
 
+  const ranking = [...roster]
+    .sort((a, b) => b.revPerHr - a.revPerHr)
+    .map((g) => ({ name: g.name, value: g.revPerHr, highlight: g.id === selected.id }));
+
   return (
-    <div className="animate-stage-in">
+    <div className="animate-stage-in space-y-10">
       <PageHeader
-        eyebrow="Team · Last 30 days"
+        eyebrow={`Team · ${scopeLabel(scope)} · ${period}`}
         title="Groomer performance"
-        sub="Ranked by overall value — revenue per hour, customer retention, and average ticket — rather than appointment volume alone. Select a groomer to view their full profile."
+        sub="A coaching view, not a leaderboard — ranked by productivity (revenue per labour hour) alongside retention and retail attachment. Select a groomer to see their full profile."
       />
+
+      {/* Productivity ranking */}
+      <Card>
+        <div className="mb-4 flex items-end justify-between">
+          <div>
+            <Micro>Productivity</Micro>
+            <h2 className="mt-1.5 text-[17px] font-medium tracking-[-0.01em]">Revenue per labour hour</h2>
+          </div>
+          <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-dimmer">{roster.length} groomers</span>
+        </div>
+        <BarRanking data={ranking} valueFmt={(n) => fmtMoney(n)} labelWidth={130} />
+      </Card>
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.45fr_1fr]">
         {/* Scorecard */}
@@ -53,8 +84,8 @@ export default function TeamPage() {
                 </tr>
               </thead>
               <tbody>
-                {groomers.map((g) => {
-                  const active = g.id === selectedId;
+                {roster.map((g) => {
+                  const active = g.id === selected.id;
                   return (
                     <tr
                       key={g.id}
@@ -95,8 +126,15 @@ export default function TeamPage() {
             {selected.flag === "coach" && <Tag tone="orange">Coach</Tag>}
           </div>
 
+          {selected.rebook < 0.45 && (
+            <div className="flex items-center gap-2 rounded-xl border border-[rgba(254,81,0,0.35)] bg-orange-soft px-3.5 py-2.5">
+              <span className="size-1.5 rounded-full bg-orange" />
+              <span className="text-[12.5px] text-ink">Rebook rate ({pct(selected.rebook)}) is below the team floor — the clearest single thing to address.</span>
+            </div>
+          )}
+
           <div className="grid grid-cols-3 gap-2.5">
-            <Stat label="$/labor hr" value={fmtMoney(selected.revPerHr)} />
+            <Stat label="$/labour hr" value={fmtMoney(selected.revPerHr)} />
             <Stat label="Rebook" value={pct(selected.rebook)} />
             <Stat label="Requests" value={pct(p.requestRate)} />
             <Stat label="Attach" value={pct(selected.attach)} />

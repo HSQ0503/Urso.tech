@@ -1,5 +1,21 @@
-import { retention } from "@/components/dashboard/data";
-import { Card, PageHeader, Micro, DonutSplit, CohortCurve, pct } from "@/components/dashboard/ui";
+import {
+  retention,
+  metrics,
+  crossSell,
+  parseScope,
+  parseMonth,
+  scopeLabel,
+  monthLabel,
+} from "@/components/dashboard/data";
+import {
+  Card,
+  PageHeader,
+  Micro,
+  DonutSplit,
+  CohortCurve,
+  StackedShareBar,
+  pct,
+} from "@/components/dashboard/ui";
 
 const inactive = [
   { name: "Bella — Goldendoodle", store: "Winter Park", last: "63 days ago", visits: 11 },
@@ -9,18 +25,27 @@ const inactive = [
   { name: "Daisy — Poodle", store: "Winter Park", last: "66 days ago", visits: 16 },
 ];
 
-export default function CustomersPage() {
+export default async function CustomersPage({ searchParams }: { searchParams: Promise<{ store?: string; month?: string }> }) {
+  const sp = await searchParams;
+  const scope = parseScope(sp.store);
+  const month = parseMonth(sp.month);
+  const period = month === "all" ? "Last 12 months" : monthLabel(month);
+
+  const m = metrics(scope, month);
+  const xs = crossSell(scope, month);
+  const list = scope === "all" ? inactive : inactive.filter((c) => c.store === scopeLabel(scope) || scopeLabel(scope).startsWith(c.store.split(" ")[0]));
+
   return (
     <div className="animate-stage-in">
       <PageHeader
-        eyebrow="Customers · Last 30 days"
+        eyebrow={`Customers · ${scopeLabel(scope)} · ${period}`}
         title="Customer retention"
-        sub="Grooming is recurring revenue, so retention is the clearest indicator of long-term performance. The figures below track repeat behaviour and identify customers who have lapsed."
+        sub="Grooming is recurring revenue, so retention is the clearest indicator of long-term performance. These figures track repeat behaviour, cross-selling, and customers who have lapsed."
       />
 
       <section className="grid grid-cols-2 gap-x-8 gap-y-6 border-y border-edge py-7 md:grid-cols-4">
         <Stat label="Returning" value={pct(retention.returningPct)} sub="of visits are repeat customers" />
-        <Stat label="Rebook rate" value={pct(retention.rebook)} sub="rebook before leaving" />
+        <Stat label="Rebook rate" value={pct(m.rebook)} sub="rebook before leaving" />
         <Stat label="Average cadence" value={`${retention.cadenceDays} days`} sub="between grooms" />
         <Stat label="Single-visit" value={String(retention.oneAndDone)} sub="came once, did not return" accent />
       </section>
@@ -42,18 +67,41 @@ export default function CustomersPage() {
           </div>
         </Card>
 
-        <Card pad={false} className="flex flex-col">
-          <div className="flex items-center justify-between gap-3 px-5 pb-4 pt-5">
-            <div>
-              <Micro>Retention</Micro>
-              <h2 className="mt-1.5 text-[18px] font-medium tracking-[-0.01em]">Inactive customers</h2>
-            </div>
-            <div className="text-right">
-              <div className="text-[22px] font-medium tracking-[-0.01em]">{retention.winbackCount}</div>
-              <Micro>eligible for win-back</Micro>
-            </div>
+        <Card className="flex flex-col gap-6">
+          <div>
+            <Micro>Cross-sell</Micro>
+            <h2 className="mt-1.5 text-[18px] font-medium tracking-[-0.01em]">Retail &amp; grooming overlap</h2>
+            <p className="mt-2 text-[13px] leading-[1.55] text-ink-dim">
+              Customers who buy both spend materially more per visit. The largest opportunity is converting grooming-only customers into retail buyers at checkout.
+            </p>
           </div>
-          {inactive.map((c) => (
+          <div className="mt-auto">
+            <StackedShareBar
+              segments={[
+                { label: "Both", value: xs.both, color: "#fe5100" },
+                { label: "Grooming only", value: xs.groomingOnly, color: "rgba(255,255,255,0.26)" },
+                { label: "Retail only", value: xs.retailOnly, color: "rgba(255,255,255,0.13)" },
+              ]}
+            />
+          </div>
+        </Card>
+      </div>
+
+      <Card pad={false} className="mt-5 flex flex-col">
+        <div className="flex items-center justify-between gap-3 px-5 pb-4 pt-5">
+          <div>
+            <Micro>Retention</Micro>
+            <h2 className="mt-1.5 text-[18px] font-medium tracking-[-0.01em]">Inactive customers</h2>
+          </div>
+          <div className="text-right">
+            <div className="text-[22px] font-medium tracking-[-0.01em]">{retention.winbackCount}</div>
+            <Micro>eligible for win-back</Micro>
+          </div>
+        </div>
+        {list.length === 0 ? (
+          <div className="border-t border-edge px-5 py-8 text-center text-[13px] text-ink-dim">No lapsed customers flagged for this location in the selected period.</div>
+        ) : (
+          list.map((c) => (
             <div key={c.name} className="flex items-center gap-3 border-t border-edge px-5 py-3.5">
               <div className="min-w-0 flex-1">
                 <div className="truncate text-[14px] text-ink">{c.name}</div>
@@ -64,14 +112,14 @@ export default function CustomersPage() {
                 Contact
               </button>
             </div>
-          ))}
-          <div className="mt-auto border-t border-edge p-4">
-            <button className="w-full rounded-lg border border-edge-strong py-2.5 text-[13.5px] font-medium text-ink transition-colors hover:bg-white/[0.05]">
-              Start win-back campaign · {retention.winbackCount} customers
-            </button>
-          </div>
-        </Card>
-      </div>
+          ))
+        )}
+        <div className="mt-auto border-t border-edge p-4">
+          <button className="w-full rounded-lg border border-edge-strong py-2.5 text-[13.5px] font-medium text-ink transition-colors hover:bg-white/[0.05]">
+            Start win-back campaign · {retention.winbackCount} customers
+          </button>
+        </div>
+      </Card>
     </div>
   );
 }

@@ -211,31 +211,64 @@ export const actions: ActionItem[] = [
   { store: "Lakeside", text: "Suspected fake 1★ — no matching customer on file", action: "Review" },
 ];
 
-// ---- Time series (deterministic, SSR-safe — no Math.random) ----------------
+// ---- Filters (store + month) -----------------------------------------------
+// The whole dashboard is driven by two global filters held in the URL
+// (?store=&month=). Everything below is deterministic / SSR-safe — no
+// Math.random / Date.now, so server and client render identically.
+
+export type Scope = "all" | StoreId;
+export type MonthValue = "all" | string; // "all" or "YYYY-MM"
 export type Granularity = "daily" | "weekly" | "monthly";
 
-const MONTHS = ["Jul", "Aug", "Sep", "Oct", "Nov", "Dec", "Jan", "Feb", "Mar", "Apr", "May", "Jun"];
+const storesById: Record<StoreId, Store> = Object.fromEntries(stores.map((s) => [s.id, s])) as Record<StoreId, Store>;
 
-export const timeMeta: Record<Granularity, { labels: string[]; caption: string }> = {
-  daily: { labels: Array.from({ length: 30 }, (_, i) => String(i + 1)), caption: "Last 30 days" },
-  weekly: { labels: Array.from({ length: 12 }, (_, i) => `W${i + 1}`), caption: "Last 12 weeks" },
-  monthly: { labels: MONTHS, caption: "Last 12 months" },
-};
+export const STORE_OPTIONS: { value: Scope; label: string; short: string }[] = [
+  { value: "all", label: "All stores", short: "All stores" },
+  { value: "wp", label: "Winter Park", short: "Winter Park" },
+  { value: "wg", label: "Winter Garden", short: "Winter Garden" },
+  { value: "lv", label: "Lakeside Village", short: "Lakeside" },
+  { value: "wm", label: "Windermere", short: "Windermere" },
+];
 
+// Trailing 12 months ending Jun 2026 (fixed mapping — no Date at module scope).
+const MONTH_LABELS = ["Jul", "Aug", "Sep", "Oct", "Nov", "Dec", "Jan", "Feb", "Mar", "Apr", "May", "Jun"];
+const MONTH_NUMS = [7, 8, 9, 10, 11, 12, 1, 2, 3, 4, 5, 6];
+const MONTH_YEARS = [2025, 2025, 2025, 2025, 2025, 2025, 2026, 2026, 2026, 2026, 2026, 2026];
+export const MONTH_KEYS = MONTH_LABELS.map((_, i) => `${MONTH_YEARS[i]}-${String(MONTH_NUMS[i]).padStart(2, "0")}`);
+
+export const MONTH_OPTIONS: { value: MonthValue; label: string }[] = [
+  { value: "all", label: "Last 12 months" },
+  ...MONTH_KEYS.map((k, i) => ({ value: k as MonthValue, label: `${MONTH_LABELS[i]} ${MONTH_YEARS[i]}` })).reverse(),
+];
+
+export function parseScope(v?: string | null): Scope {
+  return STORE_OPTIONS.some((o) => o.value === v) ? (v as Scope) : "all";
+}
+export function parseMonth(v?: string | null): MonthValue {
+  return v && MONTH_KEYS.includes(v) ? v : "all";
+}
+export function scopeLabel(s: Scope) {
+  return STORE_OPTIONS.find((o) => o.value === s)!.short;
+}
+export function monthLabel(m: MonthValue) {
+  return MONTH_OPTIONS.find((o) => o.value === m)?.label ?? "Last 12 months";
+}
+function monthIndex(m: MonthValue) {
+  return m === "all" ? -1 : MONTH_KEYS.indexOf(m);
+}
+function scopeStores(scope: Scope): Store[] {
+  return scope === "all" ? stores : [storesById[scope]];
+}
+
+// ---- Deterministic generators ----------------------------------------------
 function wave(seed: number, i: number) {
   return Math.sin(seed * 12.9 + i * 2.3) * 0.5 + Math.sin(seed * 7.1 + i * 0.7) * 0.3 + Math.sin(seed * 3.7 + i * 1.9) * 0.2;
 }
 function gen(seed: number, len: number, base: number, amp: number, growth: number) {
   return Array.from({ length: len }, (_, i) => Math.max(0, Math.round(base * (1 + (growth * i) / len) + wave(seed, i) * amp)));
 }
-
-export type Series = {
-  revenue: Record<Granularity, number[]>;
-  callsTotal: number[];
-  callsMissed: number[];
-  webVisits: number[];
-  webBookings: number[];
-};
+const sum = (a: number[]) => a.reduce((x, y) => x + y, 0);
+const sumSeries = (arrs: number[][]) => arrs[0].map((_, i) => arrs.reduce((s, a) => s + a[i], 0));
 
 const baseByStore: Record<StoreId, { rev: number; callsDay: number; miss: number; visitsW: number; bookW: number; seed: number }> = {
   wp: { rev: 58400, callsDay: 44, miss: 0.18, visitsW: 262, bookW: 16, seed: 1 },
@@ -244,57 +277,231 @@ const baseByStore: Record<StoreId, { rev: number; callsDay: number; miss: number
   wm: { rev: 36900, callsDay: 28, miss: 0.34, visitsW: 138, bookW: 7, seed: 4 },
 };
 
-function buildStore(id: StoreId): Series {
+// Per-store monthly arrays (12 points, one per trailing month).
+type Monthly = {
+  revenue: number[];
+  grooming: number[];
+  retail: number[];
+  bookings: number[];
+  callsTotal: number[];
+  callsMissed: number[];
+  webVisits: number[];
+  webStart: number[];
+  webComplete: number[];
+  webBooked: number[];
+};
+
+function buildMonthly(id: StoreId): Monthly {
   const b = baseByStore[id];
-  const callsTotal = gen(b.seed + 30, 12, b.callsDay * 7, b.callsDay * 7 * 0.18, 0.06);
+  const s = storesById[id];
+  const revenue = gen(b.seed + 20, 12, b.rev, b.rev * 0.08, 0.18);
+  const grooming = revenue.map((r, i) => Math.round(r * (s.groomingPct + wave(b.seed + 7, i) * 0.02)));
+  const retail = revenue.map((r, i) => r - grooming[i]);
+  const bookings = revenue.map((r) => Math.round(r / s.avgTicket));
+  const callsTotal = gen(b.seed + 30, 12, b.callsDay * 30, b.callsDay * 30 * 0.12, 0.06);
+  const callsMissed = callsTotal.map((c, i) => Math.round(c * (b.miss + wave(b.seed + 5, i) * 0.03)));
+  const webVisits = gen(b.seed + 40, 12, b.visitsW * 4.33, b.visitsW * 4.33 * 0.15, 0.08);
+  const webStart = webVisits.map((v, i) => Math.round(v * (0.18 + wave(b.seed + 11, i) * 0.01)));
+  const webComplete = webStart.map((v, i) => Math.round(v * (0.37 + wave(b.seed + 13, i) * 0.02)));
+  const webBooked = webComplete.map((v) => Math.round(v * 0.9));
+  return { revenue, grooming, retail, bookings, callsTotal, callsMissed, webVisits, webStart, webComplete, webBooked };
+}
+
+const monthlyByStore: Record<StoreId, Monthly> = { wp: buildMonthly("wp"), wg: buildMonthly("wg"), lv: buildMonthly("lv"), wm: buildMonthly("wm") };
+
+function aggregateMonthly(scope: Scope): Monthly {
+  const set = scopeStores(scope).map((s) => monthlyByStore[s.id]);
+  const keys = Object.keys(set[0]) as (keyof Monthly)[];
+  return Object.fromEntries(keys.map((k) => [k, sumSeries(set.map((m) => m[k]))])) as Monthly;
+}
+
+// Pick a value from a monthly array: total across the year, or one month.
+function pick(arr: number[], mi: number) {
+  return mi < 0 ? sum(arr) : arr[mi];
+}
+
+// ---- Chart series ----------------------------------------------------------
+export type Series = {
+  revenue: Record<Granularity, number[]>;
+  callsTotal: number[];
+  callsMissed: number[];
+  webVisits: number[];
+  webBookings: number[];
+};
+
+// A 30-day daily breakdown of a single month's total (deterministic).
+function dailyFromTotal(total: number, seed: number) {
+  const raw = Array.from({ length: 30 }, (_, i) => 1 + wave(seed, i) * 0.4 + 0.25);
+  const rawSum = sum(raw);
+  return raw.map((v) => Math.round((v / rawSum) * total));
+}
+
+export function getSeries(scope: Scope, month: MonthValue = "all"): Series {
+  const m = aggregateMonthly(scope);
+  const mi = monthIndex(month);
+  if (mi < 0) {
+    // Trailing window: weekly/monthly from the monthly arrays, daily reconstructed.
+    return {
+      revenue: {
+        daily: dailyFromTotal(m.revenue[11], 91),
+        weekly: gen(scope === "all" ? 99 : 50, 12, sum(m.revenue) / 12 / 4.33, (sum(m.revenue) / 12 / 4.33) * 0.14, 0.12),
+        monthly: m.revenue,
+      },
+      callsTotal: m.callsTotal,
+      callsMissed: m.callsMissed,
+      webVisits: m.webVisits,
+      webBookings: m.webBooked,
+    };
+  }
+  // Specific month → daily breakdowns for that month.
+  const daily = dailyFromTotal(m.revenue[mi], 17 + mi);
   return {
-    revenue: {
-      daily: gen(b.seed, 30, b.rev / 30, (b.rev / 30) * 0.22, 0.12),
-      weekly: gen(b.seed + 10, 12, b.rev / 4.33, (b.rev / 4.33) * 0.16, 0.14),
-      monthly: gen(b.seed + 20, 12, b.rev * 0.78, b.rev * 0.1, 0.3),
-    },
-    callsTotal,
-    callsMissed: callsTotal.map((c, i) => Math.round(c * (b.miss + wave(b.seed + 5, i) * 0.03))),
-    webVisits: gen(b.seed + 40, 12, b.visitsW, b.visitsW * 0.2, 0.08),
-    webBookings: gen(b.seed + 50, 12, b.bookW, b.bookW * 0.25, 0.1),
+    revenue: { daily, weekly: daily, monthly: daily },
+    callsTotal: dailyFromTotal(m.callsTotal[mi], 31 + mi),
+    callsMissed: dailyFromTotal(m.callsMissed[mi], 47 + mi),
+    webVisits: dailyFromTotal(m.webVisits[mi], 59 + mi),
+    webBookings: dailyFromTotal(m.webBooked[mi], 71 + mi),
   };
 }
 
-const perStore: Record<StoreId, Series> = { wp: buildStore("wp"), wg: buildStore("wg"), lv: buildStore("lv"), wm: buildStore("wm") };
-
-function sumSeries(arrs: number[][]): number[] {
-  return arrs[0].map((_, i) => arrs.reduce((s, a) => s + a[i], 0));
-}
-
-const allValues = Object.values(perStore);
-const allSeries: Series = {
-  revenue: {
-    daily: sumSeries(allValues.map((s) => s.revenue.daily)),
-    weekly: sumSeries(allValues.map((s) => s.revenue.weekly)),
-    monthly: sumSeries(allValues.map((s) => s.revenue.monthly)),
-  },
-  callsTotal: sumSeries(allValues.map((s) => s.callsTotal)),
-  callsMissed: sumSeries(allValues.map((s) => s.callsMissed)),
-  webVisits: sumSeries(allValues.map((s) => s.webVisits)),
-  webBookings: sumSeries(allValues.map((s) => s.webBookings)),
+// X-axis labels + caption for the active filter.
+export const timeMeta: Record<Granularity, { labels: string[]; caption: string }> = {
+  daily: { labels: Array.from({ length: 30 }, (_, i) => String(i + 1)), caption: "by day" },
+  weekly: { labels: Array.from({ length: 12 }, (_, i) => `W${i + 1}`), caption: "Last 12 weeks" },
+  monthly: { labels: MONTH_LABELS, caption: "Last 12 months" },
 };
 
-export function getSeries(store: "all" | StoreId): Series {
-  return store === "all" ? allSeries : perStore[store];
+export function seriesLabels(month: MonthValue, gran: Granularity): string[] {
+  return month === "all" ? timeMeta[gran].labels : timeMeta.daily.labels;
 }
 
-const sum = (a: number[]) => a.reduce((x, y) => x + y, 0);
+const clamp01 = (n: number) => Math.max(0, Math.min(1, n));
 
-export function callStats(store: "all" | StoreId) {
-  const s = getSeries(store);
-  const total = sum(s.callsTotal);
-  const missed = sum(s.callsMissed);
+// ---- Headline metrics ------------------------------------------------------
+export function metrics(scope: Scope, month: MonthValue = "all") {
+  const m = aggregateMonthly(scope);
+  const mi = monthIndex(month);
+  const ss = scopeStores(scope);
+  const revenue = pick(m.revenue, mi);
+  const bookings = pick(m.bookings, mi);
+  const grooming = pick(m.grooming, mi);
+  const retail = pick(m.retail, mi);
+  // Revenue-weighted average across the stores in scope.
+  const wAvg = (sel: (s: Store) => number) => ss.reduce((a, s) => a + sel(s) * s.revenue, 0) / ss.reduce((a, s) => a + s.revenue, 0);
+  const drift = mi < 0 ? 0 : wave(7, mi) * 0.02;
+  return {
+    revenue,
+    bookings,
+    grooming,
+    retail,
+    groomingShare: grooming / (grooming + retail),
+    avgTicket: Math.round(revenue / bookings),
+    rebook: clamp01(wAvg((s) => s.rebook) + drift),
+    noShow: clamp01(wAvg((s) => s.noShow) - drift),
+    attach: clamp01(wAvg((s) => s.attach) + drift),
+    rating: wAvg((s) => s.rating),
+  };
+}
+
+export function callStats(scope: Scope, month: MonthValue = "all") {
+  const m = aggregateMonthly(scope);
+  const mi = monthIndex(month);
+  const total = pick(m.callsTotal, mi);
+  const missed = pick(m.callsMissed, mi);
   return { total, missed, missedPct: missed / total, answeredPct: 1 - missed / total };
 }
 
-export function webStats(store: "all" | StoreId) {
-  const s = getSeries(store);
-  const visits = sum(s.webVisits);
-  const bookings = sum(s.webBookings);
+export function webStats(scope: Scope, month: MonthValue = "all") {
+  const m = aggregateMonthly(scope);
+  const mi = monthIndex(month);
+  const visits = pick(m.webVisits, mi);
+  const bookings = pick(m.webBooked, mi);
   return { visits, bookings, convRate: bookings / visits };
+}
+
+// ---- Conversion funnel -----------------------------------------------------
+export type FunnelStep = { stage: string; value: number; pct: number; stepConv: number; leak: boolean };
+
+export function funnelData(scope: Scope, month: MonthValue = "all"): FunnelStep[] {
+  const m = aggregateMonthly(scope);
+  const mi = monthIndex(month);
+  const visited = pick(m.webVisits, mi);
+  const started = pick(m.webStart, mi);
+  const completed = pick(m.webComplete, mi);
+  const booked = pick(m.webBooked, mi);
+  const raw = [
+    { stage: "Visited site", value: visited },
+    { stage: "Started booking", value: started },
+    { stage: "Completed form", value: completed },
+    { stage: "Booked", value: booked },
+  ];
+  return raw.map((r, i) => {
+    const stepConv = i === 0 ? 1 : r.value / raw[i - 1].value;
+    return { ...r, pct: r.value / visited, stepConv, leak: i > 0 && stepConv < 0.45 };
+  });
+}
+
+// ---- Cross-sell: retail + grooming overlap ---------------------------------
+export function crossSell(scope: Scope, month: MonthValue = "all") {
+  const mi = monthIndex(month);
+  const ss = scopeStores(scope);
+  const attach = ss.reduce((a, s) => a + s.attach * s.bookings, 0) / ss.reduce((a, s) => a + s.bookings, 0);
+  const drift = mi < 0 ? 0 : wave(5, mi) * 0.02;
+  const both = clamp01(attach + drift);
+  const groomingOnly = clamp01((1 - both) * 0.62);
+  const retailOnly = clamp01(1 - both - groomingOnly);
+  return { both, groomingOnly, retailOnly };
+}
+
+// ---- Reviews: per-store distribution + sample list -------------------------
+export type Review = { author: string; rating: number; days: number; text: string; flagged: boolean };
+
+const reviewSeeds: Record<string, { authors: string[]; good: string[]; bad: string[] }> = {
+  default: {
+    authors: ["Jordan M.", "Casey R.", "Avery T.", "Sam P.", "Riley K.", "Morgan D.", "Quinn L.", "Drew B.", "Parker S.", "Reese H."],
+    good: [
+      "Bella came back so soft and happy. The groomer clearly cares.",
+      "Booked online, in and out on time, great cut.",
+      "They remembered our dog by name. Best grooming in the area.",
+      "Friendly front desk and the nail trim was painless for once.",
+      "Consistent results every visit. Highly recommend.",
+    ],
+    bad: [
+      "Called twice and no one picked up. Booked elsewhere.",
+      "Waited 20 minutes past my appointment time.",
+      "Cut wasn't what I asked for this time.",
+      "Never been here. Not sure why this is on my account.",
+    ],
+  },
+};
+
+export function reviewDistribution(store: string) {
+  const rep = reputation.byStore.find((r) => r.store === store)!;
+  const total = rep.volume;
+  // Skew toward 5★ based on the store's rating.
+  const t = (rep.rating - 4) / 1; // 0..1-ish
+  const w = [0.04 - t * 0.02, 0.04 - t * 0.015, 0.07 - t * 0.02, 0.2 - t * 0.04, 0.65 + t * 0.1];
+  const ws = w.reduce((a, x) => a + Math.max(0.01, x), 0);
+  const counts = w.map((x) => Math.round((Math.max(0.01, x) / ws) * total));
+  return { stars: [1, 2, 3, 4, 5], counts, total, rating: rep.rating };
+}
+
+export function reviewsFor(store: string): Review[] {
+  const seed = reviewSeeds.default;
+  const rep = reputation.byStore.find((r) => r.store === store)!;
+  const si = reputation.byStore.findIndex((r) => r.store === store);
+  return Array.from({ length: 8 }, (_, i) => {
+    const r = Math.round(2.5 + wave(si + 3, i) * 1.6 + rep.rating - 4.5);
+    const rating = Math.max(1, Math.min(5, r));
+    const low = rating <= 2;
+    const flagged = low && (i + si) % 3 === 0;
+    const pool = low ? seed.bad : seed.good;
+    return {
+      author: seed.authors[(i + si) % seed.authors.length],
+      rating,
+      days: Math.round(2 + Math.abs(wave(si + 9, i)) * 40),
+      text: flagged ? seed.bad[3] : pool[(i + si) % pool.length],
+      flagged,
+    };
+  }).sort((a, b) => a.days - b.days);
 }
