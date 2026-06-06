@@ -505,3 +505,277 @@ export function reviewsFor(store: string): Review[] {
     };
   }).sort((a, b) => a.days - b.days);
 }
+
+// Local, import-light formatters so this module stays the source of truth
+// (it must not import from ui.tsx — that would create a charts→data cycle).
+const money = (n: number) => (Math.abs(n) >= 1000 ? `$${(n / 1000).toFixed(n % 1000 === 0 ? 0 : 1)}k` : `$${n.toLocaleString("en-US")}`);
+const pctStr = (n: number, digits = 0) => `${(n * 100).toFixed(digits)}%`;
+
+// ============================================================================
+//  Revenue Map — where the money comes from (every cut, one definition)
+// ============================================================================
+
+export function revenueByLocation(month: MonthValue = "all") {
+  return stores
+    .map((s) => ({ id: s.id, name: s.name, value: metrics(s.id, month).revenue }))
+    .sort((a, b) => b.value - a.value);
+}
+
+export type ServiceLine = "Grooming" | "Retail";
+export function revenueByService(scope: Scope, month: MonthValue = "all"): { name: string; value: number; line: ServiceLine }[] {
+  const m = metrics(scope, month);
+  const grooming = [
+    { name: "Full groom", w: 0.54 },
+    { name: "Bath & brush", w: 0.24 },
+    { name: "Nail & add-ons", w: 0.13 },
+    { name: "De-shed", w: 0.09 },
+  ];
+  const retail = [
+    { name: "Food & treats", w: 0.47 },
+    { name: "Accessories", w: 0.31 },
+    { name: "Health & wellness", w: 0.22 },
+  ];
+  return [
+    ...grooming.map((s) => ({ name: s.name, value: Math.round(m.grooming * s.w), line: "Grooming" as const })),
+    ...retail.map((s) => ({ name: s.name, value: Math.round(m.retail * s.w), line: "Retail" as const })),
+  ].sort((a, b) => b.value - a.value);
+}
+
+export function revenueByGroomer(scope: Scope, month: MonthValue = "all") {
+  const fullName = STORE_OPTIONS.find((o) => o.value === scope)?.label;
+  const set = scope === "all" ? groomers : groomers.filter((g) => g.store === fullName);
+  const months = monthIndex(month) < 0 ? 12 : 1;
+  return set
+    .map((g) => ({ name: g.name, store: g.store, value: g.appts * g.avgTicket * months }))
+    .sort((a, b) => b.value - a.value);
+}
+
+export function revenueNewVsRepeat(scope: Scope, month: MonthValue = "all") {
+  const m = metrics(scope, month);
+  return {
+    repeat: Math.round(m.revenue * retention.returningPct),
+    fresh: Math.round(m.revenue * retention.newPct),
+  };
+}
+
+// ============================================================================
+//  AI Action Center — the agent turns a finding into a result, owner approves
+//  Metrics are observed statistics, never a promised dollar figure.
+// ============================================================================
+
+export type ActionStatus = "suggested" | "approved" | "running" | "completed";
+
+export type AgentAction = {
+  id: string;
+  title: string;
+  store: string;
+  agent: string;
+  detail: string;
+  metric: string;
+  status: ActionStatus;
+  result?: string;
+  pending?: boolean; // depends on a feed not yet wired
+};
+
+export const ACTION_FLOW: ActionStatus[] = ["suggested", "approved", "running", "completed"];
+export const actionStatusLabel: Record<ActionStatus, string> = {
+  suggested: "Suggested",
+  approved: "Approved",
+  running: "Running",
+  completed: "Completed",
+};
+
+export const agentActions: AgentAction[] = [
+  {
+    id: "a1",
+    title: "Text back missed after-hours calls",
+    store: "Windermere",
+    agent: "Call capture",
+    detail: "Send an instant message to callers who reached voicemail after closing, inviting them to book online or request a callback the next morning.",
+    metric: "14 missed after-hours calls",
+    status: "suggested",
+    pending: true,
+  },
+  {
+    id: "a2",
+    title: "Reply to unanswered reviews",
+    store: "Lakeside Village",
+    agent: "Reputation",
+    detail: "Draft on-brand responses to the seven reviews left without a reply, prioritising the two rated below three stars.",
+    metric: "7 reviews unanswered",
+    status: "suggested",
+  },
+  {
+    id: "a3",
+    title: "Coach the two lowest-rebooking groomers",
+    store: "Lakeside · Windermere",
+    agent: "Team",
+    detail: "Create a coaching task for each store manager covering the rebooking conversation at checkout, with this period's figures attached.",
+    metric: "Rebook 38–43%",
+    status: "approved",
+  },
+  {
+    id: "a4",
+    title: "Request reviews from recent grooming customers",
+    store: "All stores",
+    agent: "Reputation",
+    detail: "Send a review request a day after each completed groom to clients who rated their visit four or five stars.",
+    metric: "38 eligible this period",
+    status: "running",
+  },
+  {
+    id: "a5",
+    title: "Win back single-visit customers",
+    store: "All stores",
+    agent: "Retention",
+    detail: "Message customers who came once and did not return within 60 days with a personalised rebooking link.",
+    metric: "88 single-visit customers",
+    status: "running",
+  },
+  {
+    id: "a6",
+    title: "Flag suspected fake reviews to Google",
+    store: "Lakeside Village",
+    agent: "Reputation",
+    detail: "Cross-reference one-star reviewers against FranPOS records and submit a removal case for those with no matching customer on file.",
+    metric: "4 with no customer on file",
+    status: "completed",
+    result: "4 cases submitted to Google",
+  },
+  {
+    id: "a7",
+    title: "Reactivate lapsed grooming customers",
+    store: "Winter Park",
+    agent: "Retention",
+    detail: "A staged win-back sequence to customers inactive for 60–90 days who previously visited at least three times.",
+    metric: "31 contacted",
+    status: "completed",
+    result: "31 messaged · 18 replied · 11 rebooked",
+  },
+  {
+    id: "a8",
+    title: "Add the missing booking link on Google",
+    store: "Winter Park",
+    agent: "Visibility",
+    detail: "Prepare the Google Business Profile update that adds an online booking button to the highest-ranked listing.",
+    metric: "Ranks #2, no book link",
+    status: "completed",
+    result: "Update prepared — awaiting owner publish",
+  },
+];
+
+// ============================================================================
+//  Customer Intelligence — value, risk and the next best action
+// ============================================================================
+
+export type CustomerSegment = "VIP" | "Loyal" | "At risk" | "Lapsed";
+export type CustomerRow = {
+  name: string;
+  pet: string;
+  store: string;
+  storeId: StoreId;
+  visits: number;
+  ltv: number;
+  lastVisit: number; // days since last visit
+  segment: CustomerSegment;
+  next: string;
+};
+
+export const customerBook: CustomerRow[] = [
+  { name: "Daisy Whitfield", pet: "Poodle", store: "Winter Park", storeId: "wp", visits: 24, ltv: 2880, lastVisit: 12, segment: "VIP", next: "Invite to loyalty tier" },
+  { name: "Marcus Lee", pet: "Goldendoodle", store: "Winter Garden", storeId: "wg", visits: 19, ltv: 2140, lastVisit: 9, segment: "VIP", next: "Offer standing appointment" },
+  { name: "Grace Nolan", pet: "Cocker Spaniel", store: "Winter Park", storeId: "wp", visits: 21, ltv: 2460, lastVisit: 16, segment: "VIP", next: "Thank-you note" },
+  { name: "Elena Ortiz", pet: "Schnauzer", store: "Winter Park", storeId: "wp", visits: 16, ltv: 1760, lastVisit: 27, segment: "Loyal", next: "Confirm next groom" },
+  { name: "Owen Hartley", pet: "Border Collie", store: "Winter Garden", storeId: "wg", visits: 13, ltv: 1410, lastVisit: 34, segment: "Loyal", next: "Suggest add-on at next visit" },
+  { name: "Priya Raman", pet: "Cavapoo", store: "Lakeside Village", storeId: "lv", visits: 14, ltv: 1520, lastVisit: 58, segment: "At risk", next: "Send rebooking link" },
+  { name: "Tom Becker", pet: "Labrador", store: "Windermere", storeId: "wm", visits: 11, ltv: 1180, lastVisit: 71, segment: "At risk", next: "Win-back message" },
+  { name: "Sara Klein", pet: "Bichon", store: "Winter Garden", storeId: "wg", visits: 9, ltv: 980, lastVisit: 96, segment: "Lapsed", next: "Reactivation offer" },
+  { name: "Devon Pryce", pet: "Shih Tzu", store: "Lakeside Village", storeId: "lv", visits: 8, ltv: 860, lastVisit: 104, segment: "Lapsed", next: "Reactivation offer" },
+];
+
+function customerSet(scope: Scope): CustomerRow[] {
+  return scope === "all" ? customerBook : customerBook.filter((c) => c.storeId === scope);
+}
+
+export function customerSegments(scope: Scope) {
+  const set = customerSet(scope);
+  const order: CustomerSegment[] = ["VIP", "Loyal", "At risk", "Lapsed"];
+  return order.map((segment) => ({ segment, count: set.filter((c) => c.segment === segment).length }));
+}
+
+export function customersByValue(scope: Scope): CustomerRow[] {
+  return [...customerSet(scope)].sort((a, b) => b.ltv - a.ltv);
+}
+
+export function customerIntel(scope: Scope) {
+  const set = customerSet(scope);
+  const avgLtv = set.length ? Math.round(set.reduce((a, c) => a + c.ltv, 0) / set.length) : 0;
+  const atRisk = set.filter((c) => c.segment === "At risk" || c.segment === "Lapsed").length;
+  return { avgLtv, atRisk, count: set.length };
+}
+
+// ============================================================================
+//  Weekly Brief — the auto-generated digest ("this becomes the meeting")
+// ============================================================================
+
+export type BriefChange = { label: string; value: string; delta: number; good: boolean };
+export type WeeklyBrief = {
+  headline: string;
+  changes: BriefChange[];
+  wins: string[];
+  risks: string[];
+  opportunity: { title: string; detail: string };
+  actionsCompleted: number;
+  actionsOpen: number;
+  recommendation: string;
+};
+
+export function weeklyBrief(scope: Scope, month: MonthValue = "all"): WeeklyBrief {
+  const m = metrics(scope, month);
+  const cs = callStats(scope, month);
+  const ws = webStats(scope, month);
+  const here = scope === "all" ? "across the four stores" : `at ${scopeLabel(scope)}`;
+  const seed = scope === "all" ? 0 : STORE_OPTIONS.findIndex((o) => o.value === scope);
+  // Deterministic period-over-period deltas (seeded — no Date/random).
+  const d = (n: number, span = 0.08) => Math.round(wave(seed + n, 4) * span * 1000) / 1000;
+
+  const revD = d(1);
+  const bookD = d(2, 0.06);
+  const missD = d(3, 0.05); // positive = more missed = worse
+  const rebookD = d(4, 0.05);
+  const ratingD = d(5, 0.02);
+
+  const changes: BriefChange[] = [
+    { label: "Revenue", value: money(m.revenue), delta: revD, good: revD >= 0 },
+    { label: "Bookings", value: m.bookings.toLocaleString(), delta: bookD, good: bookD >= 0 },
+    { label: "Calls missed", value: pctStr(cs.missedPct), delta: missD, good: missD < 0 },
+    { label: "Rebook rate", value: pctStr(m.rebook), delta: rebookD, good: rebookD >= 0 },
+    { label: "Avg rating", value: m.rating.toFixed(1), delta: ratingD, good: ratingD >= 0 },
+  ];
+
+  const dir = (n: number) => (n >= 0 ? "up" : "down");
+  const wins = changes
+    .filter((c) => c.good && Math.abs(c.delta) >= 0.01)
+    .map((c) => `${c.label} ${dir(c.delta)} ${pctStr(Math.abs(c.delta))} ${here}.`);
+  const risks = changes
+    .filter((c) => !c.good && Math.abs(c.delta) >= 0.01)
+    .map((c) => `${c.label} moved the wrong way (${dir(c.delta)} ${pctStr(Math.abs(c.delta))}) ${here}.`);
+
+  const opportunity =
+    cs.missedPct > 0.22
+      ? { title: "Call capture is the biggest lever", detail: `${pctStr(cs.missedPct)} of inbound calls went unanswered ${here}. Instant text-back is the fastest recovery.` }
+      : m.rebook < 0.5
+        ? { title: "Rebooking is the biggest lever", detail: `Only ${pctStr(m.rebook)} of grooming customers rebook before leaving ${here}. A prompt at checkout is the most durable fix.` }
+        : { title: "Online conversion is the biggest lever", detail: `${pctStr(1 - ws.convRate)} of website visitors leave without booking ${here}. The drop is concentrated in the booking form.` };
+
+  return {
+    headline: `Revenue ${revD >= 0 ? "rose" : "eased"} to ${money(m.revenue)} ${here}, and ${opportunity.title.replace(" is the biggest lever", "")} is the clearest opportunity to act on.`,
+    changes,
+    wins: wins.length ? wins : ["Performance held steady across the headline metrics."],
+    risks: risks.length ? risks : ["No metric moved materially in the wrong direction."],
+    opportunity,
+    actionsCompleted: agentActions.filter((a) => a.status === "completed").length,
+    actionsOpen: agentActions.filter((a) => a.status !== "completed").length,
+    recommendation: opportunity.title,
+  };
+}

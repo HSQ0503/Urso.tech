@@ -10,15 +10,21 @@ import {
   parseMonth,
 } from "@/components/dashboard/data";
 
-type IconName = "home" | "activity" | "store" | "users" | "scissors" | "star";
+type IconName = "home" | "brief" | "activity" | "money" | "spark" | "store" | "users" | "scissors" | "star";
 
 function Icon({ name }: { name: IconName }) {
   const common = { width: 17, height: 17, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.6, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
   switch (name) {
     case "home":
       return <svg {...common}><path d="M3 10.5 12 3l9 7.5" /><path d="M5 9.5V21h14V9.5" /></svg>;
+    case "brief":
+      return <svg {...common}><rect x="5" y="3" width="14" height="18" rx="2" /><path d="M9 8h6M9 12h6M9 16h4" /></svg>;
     case "activity":
       return <svg {...common}><path d="M3 12h3.5l2.5-7 4 14 2.5-7H21" /></svg>;
+    case "money":
+      return <svg {...common}><rect x="2.5" y="6" width="19" height="12" rx="2" /><circle cx="12" cy="12" r="2.5" /><path d="M6 9.5v5M18 9.5v5" /></svg>;
+    case "spark":
+      return <svg {...common}><path d="M12 3l1.7 4.8L18 9.5l-4.3 1.7L12 16l-1.7-4.8L6 9.5l4.3-1.7L12 3Z" /><path d="M18.5 14l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8.8-2.2Z" /></svg>;
     case "store":
       return <svg {...common}><path d="M4 9V5h16v4" /><path d="M4 9h16l-1 11H5L4 9Z" /><path d="M9 13h6" /></svg>;
     case "users":
@@ -33,8 +39,21 @@ function Icon({ name }: { name: IconName }) {
 type NavGroup = { group: string; items: { href: string; label: string; icon: IconName }[] };
 
 const navGroups: NavGroup[] = [
-  { group: "Overview", items: [{ href: "/dashboard", label: "Home", icon: "home" }] },
-  { group: "Performance", items: [{ href: "/dashboard/performance", label: "Performance", icon: "activity" }] },
+  {
+    group: "Overview",
+    items: [
+      { href: "/dashboard", label: "Home", icon: "home" },
+      { href: "/dashboard/brief", label: "Weekly brief", icon: "brief" },
+    ],
+  },
+  {
+    group: "Analyze",
+    items: [
+      { href: "/dashboard/performance", label: "Performance", icon: "activity" },
+      { href: "/dashboard/revenue", label: "Revenue map", icon: "money" },
+    ],
+  },
+  { group: "Act", items: [{ href: "/dashboard/actions", label: "AI actions", icon: "spark" }] },
   {
     group: "Drill in",
     items: [

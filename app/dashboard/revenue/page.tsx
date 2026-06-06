@@ -1,0 +1,118 @@
+import {
+  metrics,
+  revenueByLocation,
+  revenueByService,
+  revenueByGroomer,
+  revenueNewVsRepeat,
+  parseScope,
+  parseMonth,
+  scopeLabel,
+  monthLabel,
+} from "@/components/dashboard/data";
+import {
+  Card,
+  PageHeader,
+  Micro,
+  Tag,
+  BarRanking,
+  DonutSplit,
+  StackedShareBar,
+  fmtMoney,
+  pct,
+} from "@/components/dashboard/ui";
+
+export default async function RevenueMapPage({ searchParams }: { searchParams: Promise<{ store?: string; month?: string }> }) {
+  const sp = await searchParams;
+  const scope = parseScope(sp.store);
+  const month = parseMonth(sp.month);
+  const period = month === "all" ? "Last 12 months" : monthLabel(month);
+
+  const m = metrics(scope, month);
+  const byLocation = revenueByLocation(month).map((r) => ({ name: r.name.replace("Village", "").trim(), value: r.value, highlight: scope === r.id }));
+  const byService = revenueByService(scope, month);
+  const byGroomer = revenueByGroomer(scope, month).slice(0, 6).map((g) => ({ name: g.name, value: g.value }));
+  const nvr = revenueNewVsRepeat(scope, month);
+  const repeatShare = nvr.repeat / (nvr.repeat + nvr.fresh);
+
+  return (
+    <div className="animate-stage-in space-y-12">
+      <PageHeader
+        eyebrow={`Revenue map · ${scopeLabel(scope)} · ${period}`}
+        title="Where the money comes from"
+        sub="Revenue broken down by location, service line and groomer — so the picture is concrete rather than a single top-line figure. Every cut uses the same definitions across the four stores."
+      />
+
+      {/* Headline strip */}
+      <section className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-edge bg-edge md:grid-cols-4">
+        <Kpi label="Total revenue" value={fmtMoney(m.revenue, true)} />
+        <Kpi label="Avg ticket" value={fmtMoney(m.avgTicket)} />
+        <Kpi label="Grooming share" value={pct(m.groomingShare)} />
+        <Kpi label="Repeat revenue" value={pct(repeatShare)} />
+      </section>
+
+      {/* Location + line */}
+      <section className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+        <Card>
+          <Micro>By location</Micro>
+          <h2 className="mb-4 mt-1.5 text-[17px] font-medium tracking-[-0.01em]">Revenue by store</h2>
+          <BarRanking data={byLocation} format="moneyK" labelWidth={104} />
+        </Card>
+        <Card className="flex flex-col gap-6">
+          <div>
+            <Micro>By line</Micro>
+            <h2 className="mt-1.5 text-[17px] font-medium tracking-[-0.01em]">Grooming vs retail</h2>
+            <div className="mt-4">
+              <DonutSplit a={m.grooming} b={m.retail} labelA="Grooming" labelB="Retail" />
+            </div>
+          </div>
+          <div className="border-t border-edge pt-5">
+            <Micro className="mb-3">New vs repeat revenue</Micro>
+            <StackedShareBar
+              segments={[
+                { label: "Repeat customers", value: nvr.repeat, color: "#fe5100" },
+                { label: "New customers", value: nvr.fresh, color: "rgba(255,255,255,0.22)" },
+              ]}
+            />
+          </div>
+        </Card>
+      </section>
+
+      {/* Service + groomer */}
+      <section className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+        <Card>
+          <Micro>By service</Micro>
+          <h2 className="mb-3 mt-1.5 text-[17px] font-medium tracking-[-0.01em]">Top revenue lines</h2>
+          <div className="divide-y divide-edge">
+            {byService.map((s) => (
+              <div key={s.name} className="flex items-center justify-between py-2.5">
+                <div className="flex items-center gap-2.5">
+                  <span className="text-[13.5px] text-ink">{s.name}</span>
+                  <Tag tone={s.line === "Grooming" ? "orange" : "muted"}>{s.line}</Tag>
+                </div>
+                <span className="font-mono text-[13px] text-ink-dim">{fmtMoney(s.value, true)}</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+        <Card>
+          <Micro>By groomer</Micro>
+          <h2 className="mb-4 mt-1.5 text-[17px] font-medium tracking-[-0.01em]">Revenue handled</h2>
+          <BarRanking data={byGroomer} format="moneyK" labelWidth={130} />
+        </Card>
+      </section>
+
+      <p className="-mt-6 text-[13px] leading-[1.6] text-ink-dim">
+        Retail attaches to grooming visits, so grooming share and retail attach move together. The clearest revenue lever is converting grooming-only customers into retail buyers at checkout.
+      </p>
+    </div>
+  );
+}
+
+function Kpi({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="bg-bg p-4">
+      <Micro>{label}</Micro>
+      <div className="mt-2.5 text-[22px] font-medium leading-none tracking-[-0.02em]">{value}</div>
+    </div>
+  );
+}

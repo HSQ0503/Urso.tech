@@ -2,6 +2,9 @@ import {
   retention,
   metrics,
   crossSell,
+  customerSegments,
+  customersByValue,
+  customerIntel,
   parseScope,
   parseMonth,
   scopeLabel,
@@ -11,9 +14,11 @@ import {
   Card,
   PageHeader,
   Micro,
+  Tag,
   DonutSplit,
   CohortCurve,
   StackedShareBar,
+  fmtMoney,
   pct,
 } from "@/components/dashboard/ui";
 
@@ -33,6 +38,9 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
 
   const m = metrics(scope, month);
   const xs = crossSell(scope, month);
+  const segments = customerSegments(scope);
+  const topCustomers = customersByValue(scope);
+  const intel = customerIntel(scope);
   const list = scope === "all" ? inactive : inactive.filter((c) => c.store === scopeLabel(scope) || scopeLabel(scope).startsWith(c.store.split(" ")[0]));
 
   return (
@@ -86,6 +94,64 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
           </div>
         </Card>
       </div>
+
+      {/* Customer intelligence */}
+      <section className="mt-8">
+        <div className="mb-4 flex items-end justify-between gap-3">
+          <div>
+            <Micro>Customer intelligence</Micro>
+            <h2 className="mt-1.5 text-[18px] font-medium tracking-[-0.01em]">Value, risk &amp; next action</h2>
+          </div>
+          <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-dimmer">Avg LTV {fmtMoney(intel.avgLtv)}</span>
+        </div>
+
+        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-edge bg-edge md:grid-cols-4">
+          {segments.map((s) => {
+            const risk = s.segment === "At risk" || s.segment === "Lapsed";
+            return (
+              <div key={s.segment} className="bg-bg p-4">
+                <Micro>{s.segment}</Micro>
+                <div className="mt-2.5 text-[24px] font-medium leading-none tracking-[-0.02em]" style={{ color: risk ? "#fe5100" : undefined }}>{s.count}</div>
+              </div>
+            );
+          })}
+        </div>
+
+        <Card pad={false} className="mt-5">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[680px] border-collapse text-[13.5px]">
+              <thead>
+                <tr className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-dimmer">
+                  {["Customer", "Store", "Visits", "Lifetime value", "Last visit", "Next action"].map((h, i) => (
+                    <th key={h} className={`px-5 py-3 font-normal ${i === 2 || i === 3 ? "text-right" : "text-left"}`}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {topCustomers.map((c) => {
+                  const risk = c.segment === "At risk" || c.segment === "Lapsed";
+                  return (
+                    <tr key={c.name} className="border-t border-edge transition-colors hover:bg-white/[0.02]">
+                      <td className="px-5 py-3.5">
+                        <div className="flex items-center gap-2">
+                          <span className="text-ink">{c.name}</span>
+                          <Tag tone={c.segment === "VIP" ? "good" : risk ? "orange" : "muted"}>{c.segment}</Tag>
+                        </div>
+                        <Micro className="mt-0.5">{c.pet}</Micro>
+                      </td>
+                      <td className="px-5 py-3.5 text-ink-dim">{c.store}</td>
+                      <td className="px-5 py-3.5 text-right font-mono text-ink-dim">{c.visits}</td>
+                      <td className="px-5 py-3.5 text-right font-mono text-ink">{fmtMoney(c.ltv)}</td>
+                      <td className="px-5 py-3.5 font-mono" style={{ color: c.lastVisit > 60 ? "#fe5100" : "rgba(255,255,255,0.58)" }}>{c.lastVisit}d ago</td>
+                      <td className="px-5 py-3.5 text-ink-dim">{c.next}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      </section>
 
       <Card pad={false} className="mt-5 flex flex-col">
         <div className="flex items-center justify-between gap-3 px-5 pb-4 pt-5">
