@@ -779,3 +779,122 @@ export function weeklyBrief(scope: Scope, month: MonthValue = "all"): WeeklyBrie
     recommendation: opportunity.title,
   };
 }
+
+// ============================================================================
+//  Manager dashboard — store-scoped, action-first views. Everything compares
+//  the manager's store against the group on the SAME metric definitions (the
+//  iron rule), never exposing another store's internals.
+// ============================================================================
+
+export function groomersForStore(store: StoreId): Groomer[] {
+  const full = STORE_OPTIONS.find((o) => o.value === store)!.label;
+  return groomers.filter((g) => g.store === full);
+}
+
+// The four-store average on each manager-movable metric (the comparison line).
+export function groupAverages(month: MonthValue = "all") {
+  const m = metrics("all", month);
+  const cs = callStats("all", month);
+  return { answeredPct: cs.answeredPct, rebook: m.rebook, attach: m.attach, noShow: m.noShow, rating: m.rating };
+}
+
+export type ScoreRow = {
+  label: string;
+  value: string;
+  raw: number;
+  avgLabel: string;
+  delta: number; // deterministic period-over-period change
+  invert: boolean; // true when lower is better (no-show)
+  beatsAvg: boolean; // true = at or better than the group average
+};
+
+export function managerScorecard(store: StoreId, month: MonthValue = "all"): ScoreRow[] {
+  const m = metrics(store, month);
+  const cs = callStats(store, month);
+  const g = groupAverages(month);
+  const seed = STORE_OPTIONS.findIndex((o) => o.value === store);
+  const d = (n: number, span: number) => Math.round(wave(seed + n, 6) * span * 1000) / 1000;
+  const rows: { label: string; raw: number; avg: number; fmt: (n: number) => string; delta: number; invert?: boolean }[] = [
+    { label: "Calls answered", raw: cs.answeredPct, avg: g.answeredPct, fmt: (n) => pctStr(n), delta: d(1, 0.05) },
+    { label: "Rebook rate", raw: m.rebook, avg: g.rebook, fmt: (n) => pctStr(n), delta: d(2, 0.05) },
+    { label: "Retail attach", raw: m.attach, avg: g.attach, fmt: (n) => pctStr(n), delta: d(3, 0.05) },
+    { label: "No-show rate", raw: m.noShow, avg: g.noShow, fmt: (n) => pctStr(n), delta: d(4, 0.04), invert: true },
+    { label: "Avg rating", raw: m.rating, avg: g.rating, fmt: (n) => n.toFixed(1), delta: d(5, 0.02) },
+  ];
+  return rows.map((r) => ({
+    label: r.label,
+    value: r.fmt(r.raw),
+    raw: r.raw,
+    avgLabel: r.fmt(r.avg),
+    delta: r.delta,
+    invert: !!r.invert,
+    beatsAvg: r.invert ? r.raw <= r.avg : r.raw >= r.avg,
+  }));
+}
+
+// Cross-store ranking on a single metric, for "where you stand".
+export type RankMetric = "rebook" | "answered" | "attach" | "revenue";
+export function storeRanking(metric: RankMetric, month: MonthValue = "all") {
+  return stores
+    .map((s) => {
+      const value =
+        metric === "revenue"
+          ? metrics(s.id, month).revenue
+          : metric === "answered"
+            ? callStats(s.id, month).answeredPct
+            : metric === "rebook"
+              ? metrics(s.id, month).rebook
+              : metrics(s.id, month).attach;
+      return { id: s.id, name: s.name, value };
+    })
+    .sort((a, b) => b.value - a.value);
+}
+
+// The single highest-priority focus for a store (store-scoped mirror of Home's
+// deterministic topAction; AI-generated once data is live).
+export function managerFocus(store: StoreId, month: MonthValue = "all") {
+  const cs = callStats(store, month);
+  const m = metrics(store, month);
+  const here = `at ${scopeLabel(store)}`;
+  const candidates = [
+    {
+      score: cs.missedPct,
+      title: "Unanswered inbound calls are the biggest capture leak",
+      detail: `${pctStr(cs.missedPct)} of inbound calls went unanswered ${here}. Each unanswered call is most often a booking that goes to a competitor instead.`,
+      metric: `${pctStr(cs.missedPct)} of calls missed`,
+      pending: true,
+    },
+    {
+      score: 1 - m.rebook,
+      title: "Rebooking at checkout is the most durable lever",
+      detail: `Only ${pctStr(m.rebook)} of grooming customers rebook before leaving ${here}. A short prompt at checkout is the most reliable fix.`,
+      metric: `${pctStr(m.rebook)} rebook rate`,
+      pending: false,
+    },
+    {
+      score: 1 - m.attach,
+      title: "Retail attachment on grooming visits is below the group",
+      detail: `${pctStr(m.attach)} of grooming visits ${here} add a retail item. Suggesting food or accessories at checkout is the simplest add.`,
+      metric: `${pctStr(m.attach)} retail attach`,
+      pending: false,
+    },
+  ];
+  return candidates.sort((a, b) => b.score - a.score)[0];
+}
+
+// The agent actions relevant to one store (its own + all-store actions).
+export function agentActionsForStore(store: StoreId): AgentAction[] {
+  const full = STORE_OPTIONS.find((o) => o.value === store)!.label;
+  return agentActions.filter(
+    (a) =>
+      a.store === "All stores" ||
+      a.store === full ||
+      a.store.split(" · ").some((part) => part === full || full.startsWith(part)),
+  );
+}
+
+export function customersNeedingAttention(store: StoreId): CustomerRow[] {
+  return customerBook
+    .filter((c) => c.storeId === store && (c.segment === "At risk" || c.segment === "Lapsed"))
+    .sort((a, b) => b.lastVisit - a.lastVisit);
+}

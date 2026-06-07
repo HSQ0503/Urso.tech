@@ -8,7 +8,11 @@ import {
   MONTH_OPTIONS,
   parseScope,
   parseMonth,
+  scopeLabel,
+  type StoreId,
 } from "@/components/dashboard/data";
+import type { Role } from "@/lib/auth";
+import { signOut } from "@/app/login/actions";
 
 type IconName = "home" | "brief" | "activity" | "money" | "spark" | "store" | "users" | "scissors" | "star";
 
@@ -36,58 +40,82 @@ function Icon({ name }: { name: IconName }) {
   }
 }
 
-type NavGroup = { group: string; items: { href: string; label: string; icon: IconName }[] };
+// `roles` omitted = visible to everyone in the shell (owner + manager). Owner-only
+// pages are tagged so managers get a trimmed, store-scoped nav.
+type NavItem = { href: string; label: string; icon: IconName; roles?: Role[] };
+type NavGroup = { group: string; items: NavItem[] };
 
 const navGroups: NavGroup[] = [
   {
     group: "Overview",
     items: [
       { href: "/dashboard", label: "Home", icon: "home" },
-      { href: "/dashboard/brief", label: "Weekly brief", icon: "brief" },
+      { href: "/dashboard/brief", label: "Weekly brief", icon: "brief", roles: ["owner"] },
     ],
   },
   {
     group: "Analyze",
     items: [
-      { href: "/dashboard/performance", label: "Performance", icon: "activity" },
-      { href: "/dashboard/revenue", label: "Revenue map", icon: "money" },
+      { href: "/dashboard/performance", label: "Performance", icon: "activity", roles: ["owner"] },
+      { href: "/dashboard/revenue", label: "Revenue map", icon: "money", roles: ["owner"] },
     ],
   },
-  { group: "Act", items: [{ href: "/dashboard/actions", label: "AI actions", icon: "spark" }] },
+  { group: "Act", items: [{ href: "/dashboard/actions", label: "AI actions", icon: "spark", roles: ["owner"] }] },
   {
     group: "Drill in",
     items: [
-      { href: "/dashboard/stores", label: "Stores", icon: "store" },
-      { href: "/dashboard/customers", label: "Customers", icon: "users" },
-      { href: "/dashboard/team", label: "Team", icon: "scissors" },
-      { href: "/dashboard/reviews", label: "Reviews", icon: "star" },
+      { href: "/dashboard/stores", label: "Stores", icon: "store", roles: ["owner"] },
+      { href: "/dashboard/customers", label: "Customers", icon: "users", roles: ["owner"] },
+      { href: "/dashboard/team", label: "Team", icon: "scissors", roles: ["owner"] },
+      { href: "/dashboard/reviews", label: "Reviews", icon: "star", roles: ["owner"] },
     ],
   },
 ];
-
-const flatNav = navGroups.flatMap((g) => g.items);
 
 function isActive(pathname: string, href: string) {
   return href === "/dashboard" ? pathname === "/dashboard" : pathname.startsWith(href);
 }
 
-export function Shell({ children }: { children: ReactNode }) {
+export function Shell({
+  role,
+  storeId,
+  clientName,
+  userName,
+  children,
+}: {
+  role: Role;
+  storeId: StoreId | null;
+  clientName: string;
+  userName: string;
+  children: ReactNode;
+}) {
   return (
-    <Suspense fallback={<ShellChrome qs="">{children}</ShellChrome>}>
-      <ShellLive>{children}</ShellLive>
+    <Suspense fallback={<ShellChrome qs="" role={role} storeId={storeId} clientName={clientName} userName={userName}>{children}</ShellChrome>}>
+      <ShellLive role={role} storeId={storeId} clientName={clientName} userName={userName}>{children}</ShellLive>
     </Suspense>
   );
 }
 
-function ShellLive({ children }: { children: ReactNode }) {
+function ShellLive({ role, storeId, clientName, userName, children }: { role: Role; storeId: StoreId | null; clientName: string; userName: string; children: ReactNode }) {
   const qs = useSearchParams().toString();
-  return <ShellChrome qs={qs}>{children}</ShellChrome>;
+  return <ShellChrome qs={qs} role={role} storeId={storeId} clientName={clientName} userName={userName}>{children}</ShellChrome>;
 }
 
-function ShellChrome({ qs, children }: { qs: string; children: ReactNode }) {
+function ShellChrome({ qs, role, storeId, clientName, userName, children }: { qs: string; role: Role; storeId: StoreId | null; clientName: string; userName: string; children: ReactNode }) {
   const pathname = usePathname();
+  const lockedStore = role === "manager" ? storeId : null;
+
+  const groups = navGroups
+    .map((g) => ({ ...g, items: g.items.filter((n) => !n.roles || n.roles.includes(role)) }))
+    .filter((g) => g.items.length > 0);
+  const flatNav = groups.flatMap((g) => g.items);
+
   const current = flatNav.find((n) => isActive(pathname, n.href))?.label ?? "Home";
   const withQs = (href: string) => (qs ? `${href}?${qs}` : href);
+
+  const storeName = lockedStore ? scopeLabel(lockedStore) : null;
+  const orgSub = lockedStore ? `${storeName} · store manager` : "4 stores · Orlando";
+  const orgBadge = lockedStore ? lockedStore.toUpperCase() : "WG";
 
   return (
     <div className="min-h-screen bg-bg text-ink lg:flex">
@@ -101,15 +129,15 @@ function ShellChrome({ qs, children }: { qs: string; children: ReactNode }) {
         </Link>
 
         <div className="mt-7 flex items-center gap-2.5 rounded-xl border border-edge bg-white/[0.02] px-3 py-2.5">
-          <span className="grid size-8 place-items-center rounded-lg bg-orange-soft font-mono text-[12px] text-orange">WG</span>
+          <span className="grid size-8 place-items-center rounded-lg bg-orange-soft font-mono text-[12px] text-orange">{orgBadge}</span>
           <div className="min-w-0">
-            <div className="truncate text-[13px] text-ink">Woof Gang</div>
-            <div className="truncate font-mono text-[10px] uppercase tracking-[0.12em] text-ink-dimmer">4 stores · Orlando</div>
+            <div className="truncate text-[13px] text-ink">{clientName}</div>
+            <div className="truncate font-mono text-[10px] uppercase tracking-[0.12em] text-ink-dimmer">{orgSub}</div>
           </div>
         </div>
 
         <nav className="mt-6 flex flex-col gap-5">
-          {navGroups.map((g) => (
+          {groups.map((g) => (
             <div key={g.group} className="flex flex-col gap-1">
               <div className="px-3 pb-1 font-mono text-[9.5px] uppercase tracking-[0.16em] text-ink-dimmer">{g.group}</div>
               {g.items.map((n) => {
@@ -134,9 +162,26 @@ function ShellChrome({ qs, children }: { qs: string; children: ReactNode }) {
           ))}
         </nav>
 
-        <div className="mt-auto rounded-xl border border-dashed border-edge-strong p-3">
-          <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-dimmer">Pilot · mock data</div>
-          <p className="mt-1.5 text-[11.5px] leading-[1.45] text-ink-dim">Shaped like the live FranPOS, Twilio &amp; Google feeds.</p>
+        {/* Identity + sign out */}
+        <div className="mt-auto flex flex-col gap-3 pt-5">
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <div className="truncate text-[12.5px] text-ink">{userName}</div>
+              <div className="truncate font-mono text-[9.5px] uppercase tracking-[0.12em] text-ink-dimmer">{lockedStore ? "Store manager" : "Owner"}</div>
+            </div>
+            <form action={signOut}>
+              <button
+                type="submit"
+                className="cursor-pointer rounded-lg border border-edge px-2.5 py-1.5 font-mono text-[9.5px] uppercase tracking-[0.12em] text-ink-dim transition-colors hover:border-edge-strong hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-orange/60"
+              >
+                Sign out
+              </button>
+            </form>
+          </div>
+          <div className="rounded-xl border border-dashed border-edge-strong p-3">
+            <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-dimmer">Pilot · mock data</div>
+            <p className="mt-1.5 text-[11.5px] leading-[1.45] text-ink-dim">Shaped like the live FranPOS, Twilio &amp; Google feeds.</p>
+          </div>
         </div>
       </aside>
 
@@ -145,15 +190,15 @@ function ShellChrome({ qs, children }: { qs: string; children: ReactNode }) {
         <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-edge bg-bg/75 px-5 py-3 backdrop-blur-md md:px-8">
           <div className="flex min-w-0 items-center gap-2 font-mono text-[11px] uppercase tracking-[0.14em] text-ink-dimmer">
             <span className="text-[15px] font-medium normal-case tracking-normal text-ink lg:hidden">Urso</span>
-            <span className="hidden sm:inline">Woof Gang</span>
+            <span className="hidden sm:inline">{clientName}</span>
             <span className="hidden text-edge-strong sm:inline">/</span>
             <span className="truncate text-ink-dim">{current}</span>
           </div>
-          <FilterBar qs={qs} pathname={pathname} />
+          <FilterBar qs={qs} pathname={pathname} lockedStore={lockedStore} />
         </header>
 
         {/* Mobile nav */}
-        <nav className="no-scrollbar flex gap-1 overflow-x-auto border-b border-edge px-4 py-2 lg:hidden">
+        <nav className="no-scrollbar flex items-center gap-1 overflow-x-auto border-b border-edge px-4 py-2 lg:hidden">
           {flatNav.map((n) => {
             const active = isActive(pathname, n.href);
             return (
@@ -166,6 +211,11 @@ function ShellChrome({ qs, children }: { qs: string; children: ReactNode }) {
               </Link>
             );
           })}
+          <form action={signOut} className="ml-auto shrink-0">
+            <button type="submit" className="cursor-pointer rounded-full px-3 py-1.5 font-mono text-[10.5px] uppercase tracking-[0.1em] text-ink-dimmer">
+              Sign out
+            </button>
+          </form>
         </nav>
 
         <main className="mx-auto max-w-[1200px] px-5 py-8 md:px-8 md:py-10">{children}</main>
@@ -175,7 +225,9 @@ function ShellChrome({ qs, children }: { qs: string; children: ReactNode }) {
 }
 
 // ---- Global filter (Store + Month), URL-driven -----------------------------
-function FilterBar({ qs, pathname }: { qs: string; pathname: string }) {
+// Managers have their store pinned (shown as a static label); everyone else
+// gets the store dropdown.
+function FilterBar({ qs, pathname, lockedStore }: { qs: string; pathname: string; lockedStore: StoreId | null }) {
   const router = useRouter();
   const params = new URLSearchParams(qs);
   const store = parseScope(params.get("store"));
@@ -191,12 +243,21 @@ function FilterBar({ qs, pathname }: { qs: string; pathname: string }) {
 
   return (
     <div className="flex items-center gap-2">
-      <FilterSelect
-        glyph="store"
-        value={store}
-        options={STORE_OPTIONS.map((o) => ({ value: o.value, label: o.short }))}
-        onChange={(v) => setParam("store", v, "all")}
-      />
+      {lockedStore ? (
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-edge bg-white/[0.02] px-3 py-1.5 text-[11.5px] text-ink-dim">
+          <span className="text-ink-dimmer">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M4 9V5h16v4" /><path d="M4 9h16l-1 11H5L4 9Z" /></svg>
+          </span>
+          <span className="font-medium text-ink">{scopeLabel(lockedStore)}</span>
+        </span>
+      ) : (
+        <FilterSelect
+          glyph="store"
+          value={store}
+          options={STORE_OPTIONS.map((o) => ({ value: o.value, label: o.short }))}
+          onChange={(v) => setParam("store", v, "all")}
+        />
+      )}
       <FilterSelect
         glyph="calendar"
         value={month}
