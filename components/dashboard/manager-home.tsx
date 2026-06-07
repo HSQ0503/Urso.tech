@@ -4,6 +4,7 @@ import {
   managerFocus,
   managerScorecard,
   storeRanking,
+  storeScores,
   agentActionsForStore,
   groomersForStore,
   customersNeedingAttention,
@@ -12,7 +13,11 @@ import {
   type StoreId,
   type MonthValue,
 } from "@/components/dashboard/data";
-import { Card, Micro, Tag, Delta, Meter, BarRanking, fmtMoney, pct } from "@/components/dashboard/ui";
+import { Card, Micro, Tag, Delta, Meter, BarRanking, WelcomeBanner, fmtMoney, pct } from "@/components/dashboard/ui";
+import { ActionItemCard } from "@/components/dashboard/action-item-card";
+import { StoreScoreboard } from "@/components/dashboard/store-scoreboard";
+import { InfoTip } from "@/components/dashboard/info-tip";
+import { GROOMER_COL_HELP } from "@/components/dashboard/team-help";
 
 const GREEN = "#46d18a";
 const ORANGE = "#fe5100";
@@ -26,19 +31,22 @@ const statusTone: Record<ActionStatus, "muted" | "orange" | "good" | "warn"> = {
 
 const shorten = (name: string) => name.replace(" Village", "");
 
-export function ManagerHome({ store, month, userName }: { store: StoreId; month: MonthValue; userName: string }) {
+export function ManagerHome({ store, month, userName, streak }: { store: StoreId; month: MonthValue; userName: string; streak: number }) {
   const storeName = scopeLabel(store);
   const period = month === "all" ? "Last 12 months" : monthLabel(month);
   const focus = managerFocus(store, month);
   const scorecard = managerScorecard(store, month);
   const rebookRank = storeRanking("rebook", month);
   const answeredRank = storeRanking("answered", month);
+  const scores = storeScores(month);
   const actions = agentActionsForStore(store);
   const team = groomersForStore(store);
   const watch = customersNeedingAttention(store);
 
   return (
     <div className="animate-stage-in space-y-10">
+      <WelcomeBanner name={userName} streak={streak} />
+
       <header>
         <Micro>Store dashboard · {storeName} · {period}</Micro>
         <h1 className="mt-2.5 text-[clamp(26px,3.6vw,34px)] font-medium tracking-[-0.02em]">{storeName}</h1>
@@ -48,29 +56,23 @@ export function ManagerHome({ store, month, userName }: { store: StoreId; month:
       </header>
 
       {/* 1 — Your focus */}
-      <Card className="relative flex flex-col overflow-hidden">
-        <div
-          aria-hidden
-          className="pointer-events-none absolute -right-16 -top-16 h-44 w-44 rounded-full opacity-60 blur-3xl"
-          style={{ background: "radial-gradient(circle, rgba(254,81,0,0.18), transparent 70%)" }}
-        />
-        <div className="relative flex items-center gap-2">
-          <span className="size-2 rounded-full bg-orange" />
-          <Micro className="!text-orange">Your focus · what to fix first</Micro>
-        </div>
-        <h2 className="relative mt-3 text-[19px] font-medium leading-[1.25] tracking-[-0.01em]">{focus.title}</h2>
-        <p className="relative mt-2.5 max-w-[680px] text-[13.5px] leading-[1.6] text-ink-dim">{focus.detail}</p>
-        <div className="relative mt-5 flex items-center gap-2">
-          <Tag tone="orange">{focus.metric}</Tag>
-          {focus.pending && <Tag tone="muted">Pending data</Tag>}
-        </div>
-      </Card>
+      <ActionItemCard
+        eyebrow="Your focus · what to fix first"
+        title={focus.title}
+        detail={focus.detail}
+        metric={focus.metric}
+        pending={focus.pending}
+        planKey={focus.planKey}
+      />
 
       {/* 2 — Where you stand */}
       <section>
         <div className="mb-4">
           <Micro>Where you stand</Micro>
           <h2 className="mt-1.5 text-[18px] font-medium tracking-[-0.01em]">How {storeName} ranks across the four stores</h2>
+        </div>
+        <div className="mb-5">
+          <StoreScoreboard rows={scores} highlightId={store} variant="manager" />
         </div>
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
           <RateRankCard title="Rebook rate" ranking={rebookRank} storeId={store} />
@@ -139,7 +141,10 @@ export function ManagerHome({ store, month, userName }: { store: StoreId; month:
       <section>
         <div className="mb-4">
           <Micro>Your team</Micro>
-          <h2 className="mt-1.5 text-[18px] font-medium tracking-[-0.01em]">Groomer scorecards</h2>
+          <div className="mt-1.5 flex items-center gap-1.5">
+            <h2 className="text-[18px] font-medium tracking-[-0.01em]">Groomer scorecards</h2>
+            <InfoTip text={GROOMER_COL_HELP} />
+          </div>
           <p className="mt-1.5 max-w-[560px] text-[13px] leading-[1.5] text-ink-dim">A coaching view — where each groomer is strong and where a conversation would help. Not a ranking against other stores.</p>
         </div>
         <Card pad={false}>
@@ -240,7 +245,7 @@ function RateRankCard({ title, ranking, storeId }: { title: string; ranking: { i
           {pos > 1 ? ` · ${gap} pts behind ${shorten(leader.name)}` : " · leading"}
         </span>
       </div>
-      <BarRanking data={data} format="pct" labelWidth={96} />
+      <BarRanking data={data} format="pct" labelWidth={96} valueLabel={title} />
     </Card>
   );
 }

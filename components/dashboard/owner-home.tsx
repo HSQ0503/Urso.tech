@@ -29,9 +29,12 @@ import {
   TrafficChart,
   Legend,
   Segmented,
+  WelcomeBanner,
   fmtMoney,
   pct,
 } from "@/components/dashboard/ui";
+import { AskAi } from "@/components/dashboard/ask-ai";
+import { ActionItemCard } from "@/components/dashboard/action-item-card";
 
 const granOptions: { value: Granularity; label: string }[] = [
   { value: "daily", label: "Daily" },
@@ -39,8 +42,9 @@ const granOptions: { value: Granularity; label: string }[] = [
   { value: "monthly", label: "Monthly" },
 ];
 
-// The single most important fix — what an AI layer will eventually generate
-// from the live data. Deterministic here: the highest-scoring leak in scope.
+// The single most important fix — what an AI layer will eventually generate from
+// the live data. The pilot leads with call capture (the #1 suspected leak); the
+// score keeps it on top while the metric values stay scope-aware.
 function topAction(scope: Scope, month: MonthValue) {
   const cs = callStats(scope, month);
   const ws = webStats(scope, month);
@@ -48,41 +52,39 @@ function topAction(scope: Scope, month: MonthValue) {
   const here = scope === "all" ? "across the four stores" : `at ${scopeLabel(scope)}`;
   const candidates = [
     {
-      score: cs.missedPct,
-      title: "Unanswered inbound calls are the largest capture leak",
-      detail: `${pct(cs.missedPct)} of inbound calls went unanswered ${here}. Each unanswered call is a prospective booking that most often goes to a competitor instead.`,
+      score: 2 + cs.missedPct,
+      planKey: "call-capture",
+      title: "Missed calls aren't being followed up fast enough",
+      detail: `${pct(cs.missedPct)} of inbound calls ${here} go unanswered, and nothing texts those callers back. Each one is usually a booking that goes to whoever picks up next. Urso recommends a Twilio line that logs every missed call and has the AI text back a booking link within seconds.`,
       metric: `${pct(cs.missedPct)} of calls missed`,
-      cta: "Review call capture",
-      href: "/dashboard/performance",
       pending: true,
     },
     {
       score: 1 - m.rebook,
+      planKey: "rebook-coach",
       title: "Rebooking is below the level where recurring revenue holds",
       detail: `Only ${pct(m.rebook)} of grooming customers ${here} rebook before leaving. Grooming is recurring revenue, so this is the most durable lever on long-term performance.`,
       metric: `${pct(m.rebook)} rebook rate`,
-      cta: "See retention",
-      href: "/dashboard/customers",
       pending: false,
     },
     {
       score: 1 - ws.convRate * 3.5,
+      planKey: "booking-form",
       title: "Online booking abandonment is suppressing new bookings",
       detail: `${pct(1 - ws.convRate, 0)} of website visitors ${here} leave without booking. The drop is concentrated in the booking form — a shorter, mobile-first form recovers most of it.`,
       metric: `${pct(ws.convRate, 1)} book online`,
-      cta: "Open the funnel",
-      href: "/dashboard/performance",
       pending: true,
     },
   ];
   return candidates.sort((a, b) => b.score - a.score)[0];
 }
 
-export function OwnerHome({ searchParams }: { searchParams: Promise<{ store?: string; month?: string }> }) {
+export function OwnerHome({ searchParams, userName, streak }: { searchParams: Promise<{ store?: string; month?: string }>; userName: string; streak: number }) {
   const sp = use(searchParams);
   const scope = parseScope(sp.store);
   const month = parseMonth(sp.month);
   const monthScoped = month !== "all";
+  const here = scope === "all" ? "across the four stores" : `at ${scopeLabel(scope)}`;
 
   const [gran, setGran] = useState<Granularity>("monthly");
   const effGran: Granularity = monthScoped ? "daily" : gran;
@@ -97,6 +99,8 @@ export function OwnerHome({ searchParams }: { searchParams: Promise<{ store?: st
 
   return (
     <div className="animate-stage-in">
+      <WelcomeBanner name={userName} streak={streak} />
+
       <header className="mb-7">
         <Micro>Overview · {scopeLabel(scope)} · {periodLabel}</Micro>
         <h1 className="mt-2.5 text-[clamp(26px,3.6vw,34px)] font-medium tracking-[-0.02em]">Performance overview</h1>
@@ -117,38 +121,32 @@ export function OwnerHome({ searchParams }: { searchParams: Promise<{ store?: st
 
       {/* One action item + revenue */}
       <section className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-[1fr_1.25fr]">
-        <Card className="relative flex flex-col overflow-hidden">
-          <div
-            aria-hidden
-            className="pointer-events-none absolute -right-16 -top-16 h-44 w-44 rounded-full opacity-60 blur-3xl"
-            style={{ background: "radial-gradient(circle, rgba(254,81,0,0.18), transparent 70%)" }}
-          />
-          <div className="relative flex items-center gap-2">
-            <span className="size-2 rounded-full bg-orange" />
-            <Micro className="!text-orange">Action item · what to fix first</Micro>
-          </div>
-          <h2 className="relative mt-3 text-[19px] font-medium leading-[1.25] tracking-[-0.01em]">{action.title}</h2>
-          <p className="relative mt-2.5 text-[13.5px] leading-[1.6] text-ink-dim">{action.detail}</p>
-          <div className="relative mt-auto flex items-center justify-between gap-3 pt-5">
-            <div className="flex items-center gap-2">
-              <Tag tone="orange">{action.metric}</Tag>
-              {action.pending && <Tag tone="muted">Pending data</Tag>}
-            </div>
-            <Link
-              href={action.href}
-              className="shrink-0 rounded-lg bg-orange px-4 py-2 text-[13px] font-medium text-white transition hover:brightness-110"
-            >
-              {action.cta} →
-            </Link>
-          </div>
-        </Card>
+        <ActionItemCard
+          eyebrow="Action item · what to fix first"
+          title={action.title}
+          detail={action.detail}
+          metric={action.metric}
+          pending={action.pending}
+          planKey={action.planKey}
+        />
 
         <Card>
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div>
-              <Micro>Revenue</Micro>
+              <div className="flex items-center gap-2">
+                <Micro>Revenue</Micro>
+                <AskAi
+                  topic="Revenue trend"
+                  read={`Revenue ${here} is ${fmtMoney(m.revenue)} over ${monthScoped ? monthLabel(month) : "the last 12 months"}, trending up. This is measured directly from FranPOS, so it's solid ground.`}
+                  points={[
+                    "Grooming drives roughly two-thirds of revenue — it's recurring, so retention compounds it.",
+                    "The fastest growth here is recovering demand you already pay for: missed calls and online drop-off.",
+                  ]}
+                  recommendation="Don't chase more traffic yet — close the call-capture and rebooking leaks first. They convert demand you already have."
+                />
+              </div>
               <div className="mt-1.5 flex items-baseline gap-2.5">
-                <span className="text-[22px] font-medium tracking-[-0.01em]">{fmtMoney(m.revenue, true)}</span>
+                <span className="text-[22px] font-medium tracking-[-0.01em]">{fmtMoney(m.revenue)}</span>
                 <Delta value={0.06} />
                 <span className="text-[12px] text-ink-dim">{monthScoped ? monthLabel(month) : timeMeta[effGran].caption}</span>
               </div>
@@ -162,9 +160,18 @@ export function OwnerHome({ searchParams }: { searchParams: Promise<{ store?: st
       {/* Calls + Traffic */}
       <section className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-2">
         <Card>
-          <div className="mb-4 flex items-start justify-between">
+          <div className="mb-4 flex items-start justify-between gap-3">
             <div>
-              <Micro>Inbound calls</Micro>
+              <div className="flex items-center gap-2">
+                <Micro>Inbound calls</Micro>
+                <AskAi
+                  topic="Inbound call capture"
+                  pending
+                  read={`${pct(cs.missedPct)} of inbound calls ${here} go unanswered — ${cs.missed.toLocaleString()} of ${cs.total.toLocaleString()}. The misses cluster after closing, when no one is at the desk.`}
+                  points={["An unanswered call is usually a booking that goes to a competitor.", "Call tracking isn't live yet — this is shaped like the Twilio feed."]}
+                  recommendation="Stand up the Twilio missed-call line so every unanswered call gets an instant text-back with a booking link."
+                />
+              </div>
               <div className="mt-1.5 text-[22px] font-medium tracking-[-0.01em]">{cs.total.toLocaleString()} <span className="text-[13px] text-ink-dim">calls</span></div>
             </div>
             <div className="text-right">
@@ -180,21 +187,31 @@ export function OwnerHome({ searchParams }: { searchParams: Promise<{ store?: st
         </Card>
 
         <Card>
-          <div className="mb-4 flex items-start justify-between">
+          <div className="mb-4 flex items-start justify-between gap-3">
             <div>
-              <Micro>Website traffic vs bookings</Micro>
+              <div className="flex items-center gap-2">
+                <Micro>Website traffic vs bookings</Micro>
+                <AskAi
+                  topic="Website traffic vs bookings"
+                  pending
+                  read={`${ws.visits.toLocaleString()} people visited the site ${here} but only ${pct(ws.convRate, 1)} booked. The bars are visits; the line is how many became bookings — the gap between them is demand leaving without an appointment.`}
+                  points={["Most of the drop happens inside the booking form itself.", "Web analytics aren't wired yet — shaped like the GA4 feed."]}
+                  recommendation="Test a shorter, mobile-first booking form to recover the visitors abandoning mid-form."
+                />
+              </div>
               <div className="mt-1.5 text-[22px] font-medium tracking-[-0.01em]">{ws.visits.toLocaleString()} <span className="text-[13px] text-ink-dim">visits</span></div>
             </div>
             <div className="text-right">
-              <div className="text-[20px] font-medium">{pct(ws.convRate, 1)}</div>
+              <div className="text-[20px] font-medium text-orange">{pct(ws.convRate, 1)}</div>
               <Micro>book online</Micro>
             </div>
           </div>
           <TrafficChart labels={labels} visits={series.webVisits} bookings={series.webBookings} />
-          <div className="mt-3 flex items-center justify-between">
-            <Legend items={[{ label: "Visits", color: "rgba(255,255,255,0.3)" }, { label: "New bookings", color: "#fe5100" }]} />
+          <div className="mt-3 flex items-center justify-between gap-3">
+            <Legend items={[{ label: "Visits", color: "rgba(255,255,255,0.3)" }, { label: "Became bookings", color: "#fe5100" }]} />
             <Tag tone="orange">Analytics pending</Tag>
           </div>
+          <p className="mt-2.5 text-[12px] leading-[1.5] text-ink-dimmer">The gap between the bars and the line is the booking demand leaving without an appointment.</p>
         </Card>
       </section>
 

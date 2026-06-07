@@ -16,6 +16,8 @@ export type SessionUser = {
   clientId: string; // tenant; "*" for urso_admin (spans all clients)
   clientName: string;
   storeId: StoreId | null; // set only for managers
+  streak: number; // consecutive days signed in (mock — real value comes from login history)
+  memberSince: string;
 };
 
 export const SESSION_COOKIE = "urso_session";
@@ -23,12 +25,12 @@ export const SESSION_COOKIE = "urso_session";
 // Mock directory. Real auth resolves the signed-in user from the Supabase
 // session + `users` membership and returns this same shape.
 export const MOCK_USERS: Record<string, SessionUser> = {
-  urso: { id: "urso", name: "Han · Urso", email: "han@urso.tech", role: "urso_admin", clientId: "*", clientName: "Urso", storeId: null },
-  owner: { id: "owner", name: "Woof Gang owner", email: "owner@woofgangbakery.com", role: "owner", clientId: "woof-gang", clientName: "Woof Gang", storeId: null },
-  "mgr-wp": { id: "mgr-wp", name: "Winter Park manager", email: "winterpark@woofgangbakery.com", role: "manager", clientId: "woof-gang", clientName: "Woof Gang", storeId: "wp" },
-  "mgr-wg": { id: "mgr-wg", name: "Winter Garden manager", email: "wintergarden@woofgangbakery.com", role: "manager", clientId: "woof-gang", clientName: "Woof Gang", storeId: "wg" },
-  "mgr-lv": { id: "mgr-lv", name: "Lakeside manager", email: "lakeside@woofgangbakery.com", role: "manager", clientId: "woof-gang", clientName: "Woof Gang", storeId: "lv" },
-  "mgr-wm": { id: "mgr-wm", name: "Windermere manager", email: "windermere@woofgangbakery.com", role: "manager", clientId: "woof-gang", clientName: "Woof Gang", storeId: "wm" },
+  urso: { id: "urso", name: "Han · Urso", email: "han@urso.tech", role: "urso_admin", clientId: "*", clientName: "Urso", storeId: null, streak: 21, memberSince: "May 2026" },
+  owner: { id: "owner", name: "Woof Gang owner", email: "owner@woofgangbakery.com", role: "owner", clientId: "woof-gang", clientName: "Woof Gang", storeId: null, streak: 9, memberSince: "May 2026" },
+  "mgr-wp": { id: "mgr-wp", name: "Winter Park manager", email: "winterpark@woofgangbakery.com", role: "manager", clientId: "woof-gang", clientName: "Woof Gang", storeId: "wp", streak: 14, memberSince: "May 2026" },
+  "mgr-wg": { id: "mgr-wg", name: "Winter Garden manager", email: "wintergarden@woofgangbakery.com", role: "manager", clientId: "woof-gang", clientName: "Woof Gang", storeId: "wg", streak: 8, memberSince: "May 2026" },
+  "mgr-lv": { id: "mgr-lv", name: "Lakeside manager", email: "lakeside@woofgangbakery.com", role: "manager", clientId: "woof-gang", clientName: "Woof Gang", storeId: "lv", streak: 5, memberSince: "Jun 2026" },
+  "mgr-wm": { id: "mgr-wm", name: "Windermere manager", email: "windermere@woofgangbakery.com", role: "manager", clientId: "woof-gang", clientName: "Woof Gang", storeId: "wm", streak: 6, memberSince: "Jun 2026" },
 };
 
 export async function getSession(): Promise<SessionUser | null> {

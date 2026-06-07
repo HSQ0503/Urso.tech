@@ -11,6 +11,8 @@ import {
   type Groomer,
 } from "@/components/dashboard/data";
 import { Card, PageHeader, Micro, Tag, BarRanking, CohortCurve, fmtMoney, pct } from "@/components/dashboard/ui";
+import { InfoTip } from "@/components/dashboard/info-tip";
+import { GROOMER_COL_HELP } from "@/components/dashboard/team-help";
 
 // Synthesize a full profile from a scorecard row so every groomer is clickable.
 function profileFor(g: Groomer) {
@@ -64,7 +66,7 @@ export default function TeamPage({ searchParams }: { searchParams: Promise<{ sto
           </div>
           <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-dimmer">{roster.length} groomers</span>
         </div>
-        <BarRanking data={ranking} valueFmt={(n) => fmtMoney(n)} labelWidth={130} />
+        <BarRanking data={ranking} valueFmt={(n) => fmtMoney(n)} labelWidth={130} valueLabel="Revenue / hour" />
       </Card>
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.45fr_1fr]">
@@ -72,7 +74,10 @@ export default function TeamPage({ searchParams }: { searchParams: Promise<{ sto
         <Card pad={false}>
           <div className="px-5 pb-3 pt-5">
             <Micro>Scorecard</Micro>
-            <h2 className="mt-1.5 text-[18px] font-medium tracking-[-0.01em]">Groomer scorecard</h2>
+            <div className="mt-1.5 flex items-center gap-1.5">
+              <h2 className="text-[18px] font-medium tracking-[-0.01em]">Groomer scorecard</h2>
+              <InfoTip text={GROOMER_COL_HELP} />
+            </div>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[520px] border-collapse text-[13.5px]">

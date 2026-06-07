@@ -4,6 +4,7 @@ import {
   callStats,
   webStats,
   funnelData,
+  crossSell,
   getSeries,
   seriesLabels,
   parseScope,
@@ -25,9 +26,12 @@ import {
   ConversionFunnel,
   RadialGauge,
   DonutSplit,
+  StackedShareBar,
   fmtMoney,
   pct,
 } from "@/components/dashboard/ui";
+import { AskAi } from "@/components/dashboard/ask-ai";
+import { InfoTip } from "@/components/dashboard/info-tip";
 
 function SubHead({ eyebrow, title, right }: { eyebrow: string; title: string; right?: React.ReactNode }) {
   return (
@@ -53,6 +57,8 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
   const ws = webStats(scope, month);
   const series = getSeries(scope, month);
   const funnel = funnelData(scope, month);
+  const xs = crossSell(scope, month);
+  const here = scope === "all" ? "across the four stores" : `at ${scopeLabel(scope)}`;
   const period = month === "all" ? "Last 12 months" : monthLabel(month);
 
   return (
@@ -65,7 +71,22 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
 
       {/* Capture */}
       <section>
-        <SubHead eyebrow="Capture · Twilio" title="Inbound call handling" right={<Tag tone="orange">Call tracking pending</Tag>} />
+        <SubHead
+          eyebrow="Capture · Twilio"
+          title="Inbound call handling"
+          right={
+            <div className="flex items-center gap-2">
+              <AskAi
+                topic="Inbound call capture"
+                pending
+                read={`${pct(cs.missedPct)} of inbound calls ${here} go unanswered — ${cs.missed.toLocaleString()} of ${cs.total.toLocaleString()}. The misses cluster in the busy midday hours and after closing.`}
+                points={["Every missed call is usually a booking that goes to a competitor.", "Call tracking isn't live yet — shaped like the Twilio feed."]}
+                recommendation="Stand up the Twilio missed-call line so every unanswered call gets an instant text-back with a booking link."
+              />
+              <Tag tone="orange">Call tracking pending</Tag>
+            </div>
+          }
+        />
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.7fr_1fr]">
           <Card>
             <div className="mb-4 flex items-start justify-between">
@@ -116,7 +137,22 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
 
       {/* Convert */}
       <section>
-        <SubHead eyebrow="Convert · Web analytics + FranPOS" title="Booking conversion" right={<Tag tone="orange">Analytics pending</Tag>} />
+        <SubHead
+          eyebrow="Convert · Web analytics + FranPOS"
+          title="Booking conversion"
+          right={
+            <div className="flex items-center gap-2">
+              <AskAi
+                topic="Booking conversion"
+                pending
+                read={`Only ${pct(ws.convRate, 1)} of website visitors ${here} finish a booking. Most drop out inside the booking form itself, not before it.`}
+                points={["The biggest single drop is between starting and completing the form.", "Web analytics aren't wired yet — shaped like the GA4 feed."]}
+                recommendation="Ship a shorter, mobile-first booking form and A/B test it against the current one."
+              />
+              <Tag tone="orange">Analytics pending</Tag>
+            </div>
+          }
+        />
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
           <Card>
             <div className="mb-4 flex items-end justify-between">
@@ -145,15 +181,30 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
             </div>
             <TrafficChart labels={labels} visits={series.webVisits} bookings={series.webBookings} height={228} />
             <div className="mt-3">
-              <Legend items={[{ label: "Visits", color: "rgba(255,255,255,0.3)" }, { label: "New bookings", color: "#fe5100" }]} />
+              <Legend items={[{ label: "Visits", color: "rgba(255,255,255,0.3)" }, { label: "Became bookings", color: "#fe5100" }]} />
             </div>
+            <p className="mt-2.5 text-[12px] leading-[1.5] text-ink-dimmer">Bars are site visits; the line is how many became bookings. The gap between them is demand leaving without an appointment.</p>
           </Card>
         </div>
       </section>
 
       {/* Money */}
       <section>
-        <SubHead eyebrow="Money · FranPOS" title="Revenue and mix" right={<Tag tone="good">Measurable now</Tag>} />
+        <SubHead
+          eyebrow="Money · FranPOS"
+          title="Revenue and mix"
+          right={
+            <div className="flex items-center gap-2">
+              <AskAi
+                topic="Revenue and mix"
+                read={`Revenue ${here} is ${fmtMoney(m.revenue)}, with grooming about ${pct(m.groomingShare)} of the mix. Retail attaches to ${pct(m.attach)} of grooming visits.`}
+                points={["Grooming is recurring, so retention compounds this line.", "Lifting retail attach is the simplest lever on average ticket."]}
+                recommendation={m.attach < 0.25 ? "Attach is low — prompt a relevant add-on at checkout based on the pet's history." : "Hold attach where it is and protect rebooking — both defend recurring revenue."}
+              />
+              <Tag tone="good">Measurable now</Tag>
+            </div>
+          }
+        />
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.5fr_1fr]">
           <Card>
             <div className="mb-4 flex items-end justify-between">
@@ -172,6 +223,19 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
               <div className="mt-4">
                 <DonutSplit a={m.grooming} b={m.retail} labelA="Grooming" labelB="Retail" />
               </div>
+            </div>
+            <div className="border-t border-edge pt-5">
+              <div className="mb-3 flex items-center gap-1.5">
+                <Micro>Customer overlap</Micro>
+                <InfoTip text="Share of customers buying grooming, retail, or both. Customers who buy both spend materially more per visit, so the goal is moving grooming-only customers into 'both'." />
+              </div>
+              <StackedShareBar
+                segments={[
+                  { label: "Both", value: xs.both, color: "#fe5100" },
+                  { label: "Grooming only", value: xs.groomingOnly, color: "rgba(255,255,255,0.26)" },
+                  { label: "Retail only", value: xs.retailOnly, color: "rgba(255,255,255,0.13)" },
+                ]}
+              />
             </div>
             <div className="grid grid-cols-2 gap-x-3 gap-y-4 border-t border-edge pt-5">
               <div>

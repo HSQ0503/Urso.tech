@@ -182,11 +182,39 @@ export function Segmented<T extends string>({ options, value, onChange }: { opti
         <button
           key={o.value}
           onClick={() => onChange(o.value)}
-          className={`rounded-full px-2.5 py-1 text-[11.5px] transition-colors ${value === o.value ? "bg-white/[0.08] text-ink" : "text-ink-dim hover:text-ink"}`}
+          className={`cursor-pointer rounded-full px-2.5 py-1 text-[11.5px] transition-colors ${value === o.value ? "bg-white/[0.08] text-ink" : "text-ink-dim hover:text-ink"}`}
         >
           {o.label}
         </button>
       ))}
+    </div>
+  );
+}
+
+// Consecutive-days-active counter — shown in the welcome row after sign-in.
+export function StreakPill({ streak }: { streak: number }) {
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 rounded-full border border-[rgba(254,81,0,0.35)] bg-orange-soft px-2.5 py-1 font-mono text-[10.5px] uppercase tracking-[0.1em] text-orange"
+      title={`${streak} consecutive days active`}
+    >
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+        <path d="M12 2c1 3-1 4.6-1 6.6 0 1.4 1 2.3 2 2.3 1.6 0 2.2-1.7 2-3.4 2 1.7 3 4 3 6.5a6 6 0 1 1-12 0c0-2.7 1.7-4.8 3-6 .5 1.2 1.4 1.9 2.3 1.4C9 8 8.5 5 12 2Z" />
+      </svg>
+      {streak}-day streak
+    </span>
+  );
+}
+
+// "Welcome back" row with the streak counter — the first thing after sign-in.
+export function WelcomeBanner({ name, streak }: { name: string; streak: number }) {
+  const first = name.split(" ")[0];
+  return (
+    <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+      <div className="text-[13.5px] text-ink-dim">
+        Welcome back, <span className="font-medium text-ink">{first}</span>.
+      </div>
+      <StreakPill streak={streak} />
     </div>
   );
 }

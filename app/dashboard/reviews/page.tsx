@@ -6,11 +6,15 @@ import {
   findability,
   reviewsFor,
   reviewDistribution,
+  actionPlans,
   STORE_OPTIONS,
   parseScope,
   type Review,
+  type ActionPlan,
 } from "@/components/dashboard/data";
 import { Card, PageHeader, Display, Micro, Tag, Meter, RatingBars, Segmented, pct } from "@/components/dashboard/ui";
+import { Modal } from "@/components/dashboard/modal";
+import { ActionPlanBody } from "@/components/dashboard/action-plan";
 
 type SortKey = "recent" | "high" | "low" | "flagged";
 const sortOptions: { value: SortKey; label: string }[] = [
@@ -35,9 +39,12 @@ export default function ReviewsPage({ searchParams }: { searchParams: Promise<{ 
 
   const [store, setStore] = useState(defaultStore);
   const [sort, setSort] = useState<SortKey>("recent");
+  const [expanded, setExpanded] = useState(false);
+  const [plan, setPlan] = useState<{ title: string; plan: ActionPlan } | null>(null);
 
   const dist = reviewDistribution(store);
   const reviews = sortReviews(reviewsFor(store), sort);
+  const shown = expanded ? reviews : reviews.slice(0, 5);
   const storeOpts = reputation.byStore.map((r) => ({ value: r.store, label: r.store.replace("Village", "").trim() }));
 
   return (
@@ -94,8 +101,8 @@ export default function ReviewsPage({ searchParams }: { searchParams: Promise<{ 
       </div>
 
       {/* Review browser */}
-      <section className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_1.6fr]">
-        <Card className="flex h-fit flex-col gap-5">
+      <section className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[1fr_1.6fr]">
+        <Card className="flex h-fit flex-col gap-5 lg:sticky lg:top-[84px]">
           <div>
             <Micro>Distribution</Micro>
             <div className="mt-2 flex items-baseline gap-2.5">
@@ -123,26 +130,39 @@ export default function ReviewsPage({ searchParams }: { searchParams: Promise<{ 
           {reviews.length === 0 ? (
             <div className="border-t border-edge px-5 py-10 text-center text-[13px] text-ink-dim">No reviews match this filter.</div>
           ) : (
-            reviews.map((rev, i) => (
-              <div key={i} className="border-t border-edge px-5 py-4">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2.5">
-                    <span className="font-mono text-[13px] text-ink" style={{ color: rev.rating <= 2 ? "#fe5100" : undefined }}>
-                      {"★".repeat(rev.rating)}<span className="text-ink-dimmer">{"★".repeat(5 - rev.rating)}</span>
-                    </span>
-                    <span className="text-[13.5px] text-ink-dim">{rev.author}</span>
-                    {rev.flagged && <Tag tone="orange">Suspected fake</Tag>}
+            <>
+              {shown.map((rev, i) => (
+                <div key={i} className="border-t border-edge px-5 py-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5">
+                      <span className="font-mono text-[13px] text-ink" style={{ color: rev.rating <= 2 ? "#fe5100" : undefined }}>
+                        {"★".repeat(rev.rating)}<span className="text-ink-dimmer">{"★".repeat(5 - rev.rating)}</span>
+                      </span>
+                      <span className="text-[13.5px] text-ink-dim">{rev.author}</span>
+                      {rev.flagged && <Tag tone="orange">Suspected fake</Tag>}
+                    </div>
+                    <span className="font-mono text-[11px] text-ink-dimmer">{rev.days}d ago</span>
                   </div>
-                  <span className="font-mono text-[11px] text-ink-dimmer">{rev.days}d ago</span>
+                  <p className="mt-2 text-[13.5px] leading-[1.55] text-ink-dim">{rev.text}</p>
+                  {rev.flagged && (
+                    <button
+                      onClick={() => setPlan({ title: "Suspected fake review", plan: actionPlans["fake-reviews"] })}
+                      className="mt-2.5 cursor-pointer rounded-lg border border-edge-strong px-3 py-1.5 text-[12px] text-ink transition-colors hover:bg-white/[0.05]"
+                    >
+                      Review the case →
+                    </button>
+                  )}
                 </div>
-                <p className="mt-2 text-[13.5px] leading-[1.55] text-ink-dim">{rev.text}</p>
-                {rev.flagged && (
-                  <button className="mt-2.5 rounded-lg border border-edge-strong px-3 py-1.5 text-[12px] text-ink transition-colors hover:bg-white/[0.05]">
-                    Review the case →
-                  </button>
-                )}
-              </div>
-            ))
+              ))}
+              {reviews.length > 5 && (
+                <button
+                  onClick={() => setExpanded((v) => !v)}
+                  className="w-full cursor-pointer border-t border-edge px-5 py-3 text-center font-mono text-[11px] uppercase tracking-[0.12em] text-ink-dim transition-colors hover:text-orange"
+                >
+                  {expanded ? "Show less" : `Show all ${reviews.length} reviews`}
+                </button>
+              )}
+            </>
           )}
         </Card>
       </section>
@@ -158,7 +178,10 @@ export default function ReviewsPage({ searchParams }: { searchParams: Promise<{ 
           <p className="text-[14px] leading-[1.6] text-ink-dim">
             We cross-reference each reviewer&rsquo;s name against your FranPOS customer records. When there&rsquo;s no matching customer, it&rsquo;s strong evidence the review is fake — enough to submit a one-click flag to Google. We can&rsquo;t delete them automatically, but we can hand you a proven case for each.
           </p>
-          <button className="mt-1 w-fit rounded-lg border border-edge-strong px-4 py-2 text-[13px] text-ink transition-colors hover:bg-white/[0.05]">
+          <button
+            onClick={() => setPlan({ title: `${reputation.suspectedFakes} suspected fake reviews`, plan: actionPlans["fake-reviews"] })}
+            className="mt-1 w-fit cursor-pointer rounded-lg border border-edge-strong px-4 py-2 text-[13px] text-ink transition-colors hover:bg-white/[0.05]"
+          >
             Review the {reputation.suspectedFakes} flagged
           </button>
         </Card>
@@ -172,11 +195,28 @@ export default function ReviewsPage({ searchParams }: { searchParams: Promise<{ 
           <p className="text-[14px] leading-[1.6] text-ink-dim">
             Your best store is missing the one button that turns a Google listing into a booking — so the easiest appointments never start. The newer stores also rank #5 and #6 locally, which is the single biggest lever on how many new customers find them at all.
           </p>
-          <button className="mt-1 w-fit rounded-lg bg-orange px-4 py-2 text-[13px] font-medium text-white transition hover:brightness-110">
+          <button
+            onClick={() => setPlan({ title: "Add the missing booking link", plan: actionPlans["booking-link"] })}
+            className="mt-1 w-fit cursor-pointer rounded-lg bg-orange px-4 py-2 text-[13px] font-medium text-white transition hover:brightness-110"
+          >
             Fix Winter Park listing
           </button>
         </Card>
       </section>
+
+      <Modal
+        open={!!plan}
+        onClose={() => setPlan(null)}
+        eyebrow="Proposed fix"
+        title={plan?.title ?? ""}
+        footer={
+          <a href="mailto:han@urso.tech?subject=Urso%20%E2%80%94%20reviews" className="flex w-full items-center justify-center rounded-lg bg-orange px-4 py-2.5 text-[13px] font-medium text-white transition hover:brightness-110">
+            Talk to Urso about this →
+          </a>
+        }
+      >
+        {plan && <ActionPlanBody plan={plan.plan} />}
+      </Modal>
     </div>
   );
 }

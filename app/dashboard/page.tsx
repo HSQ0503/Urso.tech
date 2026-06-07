@@ -10,8 +10,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
   if (user?.role === "manager" && user.storeId) {
     const sp = await searchParams;
-    return <ManagerHome store={user.storeId} month={parseMonth(sp.month)} userName={user.name} />;
+    return <ManagerHome store={user.storeId} month={parseMonth(sp.month)} userName={user.name} streak={user.streak} />;
   }
 
-  return <OwnerHome searchParams={searchParams} />;
+  return <OwnerHome searchParams={searchParams} userName={user?.name ?? "there"} streak={user?.streak ?? 0} />;
 }

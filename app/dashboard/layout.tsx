@@ -14,7 +14,15 @@ export default async function DashboardLayout({ children }: { children: React.Re
   if (user.role === "urso_admin") redirect("/console");
 
   return (
-    <Shell role={user.role} storeId={user.storeId} clientName={user.clientName} userName={user.name}>
+    <Shell
+      role={user.role}
+      storeId={user.storeId}
+      clientName={user.clientName}
+      userName={user.name}
+      email={user.email}
+      streak={user.streak}
+      memberSince={user.memberSince}
+    >
       {children}
     </Shell>
   );

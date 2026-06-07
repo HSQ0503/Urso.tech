@@ -2,6 +2,7 @@ import {
   stores,
   metrics,
   callStats,
+  storeScores,
   parseScope,
   parseMonth,
   scopeLabel,
@@ -17,6 +18,7 @@ import {
   fmtMoney,
   pct,
 } from "@/components/dashboard/ui";
+import { StoreScoreboard } from "@/components/dashboard/store-scoreboard";
 
 const COLS = ["Location", "Revenue", "Bookings", "Avg ticket", "No-show", "Rebook", "Attach", "Calls missed", "Rating"];
 
@@ -44,6 +46,9 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
         title="Store comparison"
         sub="Every metric is defined identically across the four locations, so differences reflect performance rather than measurement. Use the store filter to highlight one; the month filter rescopes every figure."
       />
+
+      {/* Scoreboard */}
+      <StoreScoreboard rows={storeScores(month)} highlightId={scope === "all" ? null : scope} variant="owner" />
 
       {/* Comparison table */}
       <Card pad={false}>
@@ -99,17 +104,17 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
         <Card>
           <Micro>Revenue</Micro>
           <h2 className="mt-1.5 mb-4 text-[16px] font-medium tracking-[-0.01em]">By location</h2>
-          <BarRanking data={rank((r) => r.m.revenue)} format="moneyK" labelWidth={104} />
+          <BarRanking data={rank((r) => r.m.revenue)} format="moneyK" labelWidth={104} valueLabel="Revenue" />
         </Card>
         <Card>
           <Micro>Rebook rate</Micro>
           <h2 className="mt-1.5 mb-4 text-[16px] font-medium tracking-[-0.01em]">By location</h2>
-          <BarRanking data={rank((r) => Math.round(r.m.rebook * 100))} format="pct" labelWidth={104} />
+          <BarRanking data={rank((r) => Math.round(r.m.rebook * 100))} format="pct" labelWidth={104} valueLabel="Rebook rate" />
         </Card>
         <Card>
           <Micro>Calls missed</Micro>
           <h2 className="mt-1.5 mb-4 text-[16px] font-medium tracking-[-0.01em]">By location</h2>
-          <BarRanking data={rank((r) => Math.round(r.missed * 100))} format="pct" labelWidth={104} />
+          <BarRanking data={rank((r) => Math.round(r.missed * 100))} format="pct" labelWidth={104} valueLabel="Calls missed" />
         </Card>
       </section>
 

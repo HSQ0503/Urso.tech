@@ -456,22 +456,79 @@ export function crossSell(scope: Scope, month: MonthValue = "all") {
 // ---- Reviews: per-store distribution + sample list -------------------------
 export type Review = { author: string; rating: number; days: number; text: string; flagged: boolean };
 
-const reviewSeeds: Record<string, { authors: string[]; good: string[]; bad: string[] }> = {
-  default: {
-    authors: ["Jordan M.", "Casey R.", "Avery T.", "Sam P.", "Riley K.", "Morgan D.", "Quinn L.", "Drew B.", "Parker S.", "Reese H."],
+// Per-store review pools so the browser reads differently at each location —
+// each store's character (Winter Park's missing book link, Windermere's
+// after-hours misses, the newer stores' inconsistency) shows up in the text.
+type ReviewSeed = { authors: string[]; good: string[]; bad: string[]; fake: string };
+const reviewSeeds: Record<string, ReviewSeed> = {
+  "Winter Park": {
+    authors: ["Morgan D.", "Sam P.", "Casey R.", "Avery T.", "Quinn L.", "Elena O.", "Grace N.", "Priya R."],
     good: [
-      "Bella came back so soft and happy. The groomer clearly cares.",
+      "Bella came back so soft and happy. Maria clearly cares.",
+      "Been coming for two years — the most consistent groom in Winter Park.",
       "Booked online, in and out on time, great cut.",
-      "They remembered our dog by name. Best grooming in the area.",
       "Friendly front desk and the nail trim was painless for once.",
-      "Consistent results every visit. Highly recommend.",
+      "They remember our dog by name every single time.",
     ],
     bad: [
-      "Called twice and no one picked up. Booked elsewhere.",
-      "Waited 20 minutes past my appointment time.",
-      "Cut wasn't what I asked for this time.",
-      "Never been here. Not sure why this is on my account.",
+      "Tried to book online but there's no link on their Google page — had to call.",
+      "Called twice during the day and no one picked up.",
     ],
+    fake: "Never been here. Not sure why this is on my account.",
+  },
+  "Winter Garden": {
+    authors: ["Jordan M.", "Reese H.", "Drew B.", "Parker S.", "Owen H.", "Marcus L.", "Sara K.", "Riley K."],
+    good: [
+      "Great with our anxious rescue — took their time and it shows.",
+      "James did a fantastic teddy-bear cut. Booked the next one on the spot.",
+      "Consistent results every visit. Highly recommend.",
+      "Easy to reschedule and always on time.",
+      "Our goldendoodle actually pulls toward the door now.",
+    ],
+    bad: [
+      "Waited 20 minutes past my appointment time.",
+      "Cut wasn't quite what I asked for this time.",
+    ],
+    fake: "Worst place ever, never going back — no appointment on record.",
+  },
+  "Lakeside Village": {
+    authors: ["Devon P.", "Riley K.", "Casey R.", "Jordan M.", "Avery T.", "Sam P.", "Quinn L.", "Drew B."],
+    good: [
+      "New to the area and so glad we found them — lovely with our cavapoo.",
+      "Nice improvement since they opened — the groomers are getting dialed in.",
+      "Clean shop, friendly staff, fair price.",
+      "Quick bath and brush, no fuss.",
+    ],
+    bad: [
+      "Quality is hit or miss depending on who you get.",
+      "Left a voicemail and never heard back.",
+      "Showed up for my slot and they had no record of it.",
+    ],
+    fake: "One star — reviewer has no record of ever visiting.",
+  },
+  "Windermere": {
+    authors: ["Tom B.", "Riley K.", "Avery T.", "Casey R.", "Jordan M.", "Parker S.", "Drew B.", "Sam P."],
+    good: [
+      "Newer location but already our go-to. Sweet with our lab.",
+      "Booked easily and the groomer listened to exactly what we wanted.",
+      "In and out, great cut, will be back.",
+    ],
+    bad: [
+      "Called after work to book and it went to voicemail — no callback.",
+      "Tried three times after 6pm and never got through.",
+      "Rebooking was awkward, had to chase them.",
+    ],
+    fake: "Terrible, do not recommend — no matching customer on file.",
+  },
+  default: {
+    authors: ["Jordan M.", "Casey R.", "Avery T.", "Sam P.", "Riley K.", "Morgan D.", "Quinn L.", "Drew B."],
+    good: [
+      "Booked online, in and out on time, great cut.",
+      "They remembered our dog by name. Best grooming in the area.",
+      "Consistent results every visit. Highly recommend.",
+    ],
+    bad: ["Called twice and no one picked up. Booked elsewhere.", "Waited 20 minutes past my appointment time."],
+    fake: "Never been here. Not sure why this is on my account.",
   },
 };
 
@@ -487,20 +544,19 @@ export function reviewDistribution(store: string) {
 }
 
 export function reviewsFor(store: string): Review[] {
-  const seed = reviewSeeds.default;
+  const seed = reviewSeeds[store] ?? reviewSeeds.default;
   const rep = reputation.byStore.find((r) => r.store === store)!;
-  const si = reputation.byStore.findIndex((r) => r.store === store);
+  const si = Math.max(0, reputation.byStore.findIndex((r) => r.store === store));
   return Array.from({ length: 8 }, (_, i) => {
     const r = Math.round(2.5 + wave(si + 3, i) * 1.6 + rep.rating - 4.5);
     const rating = Math.max(1, Math.min(5, r));
     const low = rating <= 2;
     const flagged = low && (i + si) % 3 === 0;
-    const pool = low ? seed.bad : seed.good;
     return {
       author: seed.authors[(i + si) % seed.authors.length],
       rating,
       days: Math.round(2 + Math.abs(wave(si + 9, i)) * 40),
-      text: flagged ? seed.bad[3] : pool[(i + si) % pool.length],
+      text: flagged ? seed.fake : low ? seed.bad[(i + si) % seed.bad.length] : seed.good[(i + si) % seed.good.length],
       flagged,
     };
   }).sort((a, b) => a.days - b.days);
@@ -664,6 +720,138 @@ export const agentActions: AgentAction[] = [
   },
 ];
 
+// ----------------------------------------------------------------------------
+// Action plans — the comprehensive view behind an approval. Each one states the
+// problem, the system we propose, what the dashboard/AI does, and what the owner
+// does. Shown in the Home action-item overview and the AI-action approval
+// workflow. A real model assembles these from the live feeds; deterministic here.
+export type ActionPlan = {
+  problem: string;
+  system: string; // the system / tool we recommend
+  proposal: string; // one-line summary of the fix
+  how: string[]; // what the dashboard / AI does
+  your: string[]; // what the owner does
+};
+
+export const actionPlans: Record<string, ActionPlan> = {
+  "call-capture": {
+    problem:
+      "Calls that go unanswered — especially after closing — are the largest source of lost bookings. With no system catching them, a missed call is simply a customer who books with whoever picks up next.",
+    system: "Twilio missed-call capture + instant AI text-back",
+    proposal: "Put a Twilio number behind your existing line so every unanswered call is logged, then text the caller back within seconds with a booking link.",
+    how: [
+      "Forward-on-no-answer routes every missed call to a backend Twilio number — your published number never changes and customers never dial it.",
+      "The AI reads each missed call (time, after-hours or busy) and drafts a personal text inviting them to book online or request a morning callback.",
+      "The message sends within seconds, and the booking link is tracked so recovered appointments show up right here.",
+    ],
+    your: [
+      "Approve the message wording and tone once.",
+      "Choose the after-hours callback window.",
+      "Nothing day-to-day — it runs automatically and reports the bookings it recovers.",
+    ],
+  },
+  reviews: {
+    problem: "Reviews left without a reply quietly lower how much prospective customers trust a location. A visible reply signals an owner who is paying attention.",
+    system: "AI review responder (you approve every reply)",
+    proposal: "Draft an on-brand response to every unanswered review, lowest-rated first, queued for your one-click approval.",
+    how: [
+      "The AI drafts a reply to each unanswered review, matched to its rating and what it actually says.",
+      "The reviews rated below three stars are prioritised so the most damaging ones are handled first.",
+      "Every draft waits for your approval — nothing posts on its own.",
+    ],
+    your: ["Skim each draft and approve, edit, or skip.", "Set the tone once; the AI matches it from then on."],
+  },
+  "fake-reviews": {
+    problem: "Some one-star reviews come from people who were never customers. They drag the rating down unfairly and there is no obvious way to prove it.",
+    system: "FranPOS cross-reference + Google flag",
+    proposal: "Cross-reference each one-star reviewer against your customer records and prepare an evidence-backed removal case for any with no match.",
+    how: [
+      "Each one-star reviewer's name is checked against your FranPOS customer history.",
+      "Reviews with no matching customer on file are compiled into a case with the evidence attached.",
+      "Google's API can't delete reviews, so each case is prepared for a one-click flag submission.",
+    ],
+    your: ["Review the prepared cases and submit the flags.", "Forward the strongest cases to Google support where an appeal helps."],
+  },
+  "rebook-coach": {
+    problem: "The two lowest-rebooking groomers leave recurring revenue on the table at checkout — grooming is repeat business, so a missed rebook compounds.",
+    system: "Coaching task for the store manager",
+    proposal: "Hand each store manager a short, specific coaching task on the rebooking conversation, with this period's figures attached.",
+    how: [
+      "The AI assembles each groomer's rebooking rate versus the team for the period.",
+      "It writes a focused coaching task for the relevant manager — about the checkout conversation, framed as support, not a reprimand.",
+    ],
+    your: ["Have the manager run the conversation at the next shift.", "Check back next period — the scorecard tracks whether it moved."],
+  },
+  winback: {
+    problem: "Customers who came once or have lapsed are the cheapest revenue to recover — they already know you. Left alone, most never come back on their own.",
+    system: "Staged win-back sequence",
+    proposal: "Message lapsed customers a personalised rebooking link over a short, spaced sequence and track who returns.",
+    how: [
+      "The AI identifies customers inactive 60–90 days who previously visited.",
+      "It sends a personalised rebooking link, spaced over a short sequence so it never feels like spam.",
+      "Replies and rebookings are tracked back to each customer.",
+    ],
+    your: ["Approve any offer you want to include.", "Greet the returning customers — the system handles the outreach."],
+  },
+  "request-reviews": {
+    problem: "Happy customers rarely leave a review unless asked, so your public rating undercounts how good the service actually is.",
+    system: "Post-groom review request",
+    proposal: "A day after each completed groom, ask the clients who rated their visit four or five stars to leave a Google review.",
+    how: [
+      "The AI messages clients a day after a completed groom, only those who rated the visit 4–5 stars in-store.",
+      "The message links straight to your Google review form.",
+      "Volume and the resulting rating change are tracked here.",
+    ],
+    your: ["Approve the message once.", "Nothing ongoing."],
+  },
+  "booking-link": {
+    problem: "Winter Park ranks #2 locally but has no 'Book online' button on its Google listing — the easiest appointments never start.",
+    system: "Google Business Profile update",
+    proposal: "Add an online booking button to the highest-ranked listing so search traffic can convert without a phone call.",
+    how: [
+      "The AI prepares the exact listing change that adds an online booking button.",
+      "Because Urso is added as Manager (not Owner), the update is staged for your one-click publish — you keep full ownership.",
+    ],
+    your: ["Publish the prepared update from your Google Business Profile.", "Confirm the link points at your live booking page."],
+  },
+  "booking-form": {
+    problem: "Most website visitors leave on the booking form before finishing. The drop is concentrated in a long, desktop-first form.",
+    system: "Shorter, mobile-first booking form",
+    proposal: "Pinpoint where visitors abandon, then ship a shorter mobile-first form and test it against the current one.",
+    how: [
+      "Analytics pinpoint the exact field where visitors drop out.",
+      "The AI proposes a shorter, mobile-first form and A/B tests it against the current one so the win is measured, not assumed.",
+    ],
+    your: ["Approve the new form layout.", "Urso handles the build and the test."],
+  },
+  "retail-attach": {
+    problem: "Retail attachment on grooming visits is below the group. Every groom is a chance to add food or accessories, and most leave without one.",
+    system: "Checkout retail prompt + reorder reminders",
+    proposal: "Suggest the right add-on at checkout based on the pet and past purchases, and remind customers when consumables run low.",
+    how: [
+      "The AI suggests a relevant add-on at checkout from the pet's history — food, dental, de-shed.",
+      "It schedules a reorder reminder timed to when the last food purchase runs out.",
+      "Attach rate is tracked per groomer and store so coaching is specific.",
+    ],
+    your: ["Have staff make the one-line suggestion at checkout.", "Keep the recommended items in stock."],
+  },
+};
+
+const actionPlanKey: Record<string, string> = {
+  a1: "call-capture",
+  a2: "reviews",
+  a3: "rebook-coach",
+  a4: "request-reviews",
+  a5: "winback",
+  a6: "fake-reviews",
+  a7: "winback",
+  a8: "booking-link",
+};
+
+export function actionPlanFor(a: AgentAction): ActionPlan {
+  return actionPlans[actionPlanKey[a.id]] ?? actionPlans["call-capture"];
+}
+
 // ============================================================================
 //  Customer Intelligence — value, risk and the next best action
 // ============================================================================
@@ -682,15 +870,15 @@ export type CustomerRow = {
 };
 
 export const customerBook: CustomerRow[] = [
-  { name: "Daisy Whitfield", pet: "Poodle", store: "Winter Park", storeId: "wp", visits: 24, ltv: 2880, lastVisit: 12, segment: "VIP", next: "Invite to loyalty tier" },
-  { name: "Marcus Lee", pet: "Goldendoodle", store: "Winter Garden", storeId: "wg", visits: 19, ltv: 2140, lastVisit: 9, segment: "VIP", next: "Offer standing appointment" },
-  { name: "Grace Nolan", pet: "Cocker Spaniel", store: "Winter Park", storeId: "wp", visits: 21, ltv: 2460, lastVisit: 16, segment: "VIP", next: "Thank-you note" },
-  { name: "Elena Ortiz", pet: "Schnauzer", store: "Winter Park", storeId: "wp", visits: 16, ltv: 1760, lastVisit: 27, segment: "Loyal", next: "Confirm next groom" },
-  { name: "Owen Hartley", pet: "Border Collie", store: "Winter Garden", storeId: "wg", visits: 13, ltv: 1410, lastVisit: 34, segment: "Loyal", next: "Suggest add-on at next visit" },
-  { name: "Priya Raman", pet: "Cavapoo", store: "Lakeside Village", storeId: "lv", visits: 14, ltv: 1520, lastVisit: 58, segment: "At risk", next: "Send rebooking link" },
-  { name: "Tom Becker", pet: "Labrador", store: "Windermere", storeId: "wm", visits: 11, ltv: 1180, lastVisit: 71, segment: "At risk", next: "Win-back message" },
-  { name: "Sara Klein", pet: "Bichon", store: "Winter Garden", storeId: "wg", visits: 9, ltv: 980, lastVisit: 96, segment: "Lapsed", next: "Reactivation offer" },
-  { name: "Devon Pryce", pet: "Shih Tzu", store: "Lakeside Village", storeId: "lv", visits: 8, ltv: 860, lastVisit: 104, segment: "Lapsed", next: "Reactivation offer" },
+  { name: "Daisy Whitfield", pet: "Poodle", store: "Winter Park", storeId: "wp", visits: 24, ltv: 2880, lastVisit: 12, segment: "VIP", next: "Send a message" },
+  { name: "Marcus Lee", pet: "Goldendoodle", store: "Winter Garden", storeId: "wg", visits: 19, ltv: 2140, lastVisit: 9, segment: "VIP", next: "Send a message" },
+  { name: "Grace Nolan", pet: "Cocker Spaniel", store: "Winter Park", storeId: "wp", visits: 21, ltv: 2460, lastVisit: 16, segment: "VIP", next: "Send a message" },
+  { name: "Elena Ortiz", pet: "Schnauzer", store: "Winter Park", storeId: "wp", visits: 16, ltv: 1760, lastVisit: 27, segment: "Loyal", next: "Send a message" },
+  { name: "Owen Hartley", pet: "Border Collie", store: "Winter Garden", storeId: "wg", visits: 13, ltv: 1410, lastVisit: 34, segment: "Loyal", next: "Send a message" },
+  { name: "Priya Raman", pet: "Cavapoo", store: "Lakeside Village", storeId: "lv", visits: 14, ltv: 1520, lastVisit: 58, segment: "At risk", next: "Send a message" },
+  { name: "Tom Becker", pet: "Labrador", store: "Windermere", storeId: "wm", visits: 11, ltv: 1180, lastVisit: 71, segment: "At risk", next: "Send a message" },
+  { name: "Sara Klein", pet: "Bichon", store: "Winter Garden", storeId: "wg", visits: 9, ltv: 980, lastVisit: 96, segment: "Lapsed", next: "Send a message" },
+  { name: "Devon Pryce", pet: "Shih Tzu", store: "Lakeside Village", storeId: "lv", visits: 8, ltv: 860, lastVisit: 104, segment: "Lapsed", next: "Send a message" },
 ];
 
 function customerSet(scope: Scope): CustomerRow[] {
@@ -850,6 +1038,36 @@ export function storeRanking(metric: RankMetric, month: MonthValue = "all") {
     .sort((a, b) => b.value - a.value);
 }
 
+// Composite store score (0–100) for the scoreboard. Built only from things a
+// store can control — calls answered, rebook, retail attach, no-show, review
+// rating — so revenue and store size are deliberately excluded and the newer
+// stores compete fairly. Deterministic; the weights are the published criteria.
+export type StoreScore = {
+  id: StoreId;
+  name: string;
+  score: number;
+  rank: number;
+};
+export const SCORE_WEIGHTS = [
+  { key: "answered", label: "Calls answered", weight: 25 },
+  { key: "rebook", label: "Rebook rate", weight: 25 },
+  { key: "rating", label: "Review rating", weight: 20 },
+  { key: "attach", label: "Retail attach", weight: 15 },
+  { key: "noShow", label: "No-show rate", weight: 15 },
+] as const;
+
+export function storeScores(month: MonthValue = "all"): StoreScore[] {
+  const rows = stores.map((s) => {
+    const m = metrics(s.id, month);
+    const cs = callStats(s.id, month);
+    const ratingN = (m.rating - 4) / 1;
+    const raw = cs.answeredPct * 0.25 + m.rebook * 0.25 + ratingN * 0.2 + m.attach * 0.15 + (1 - m.noShow) * 0.15;
+    const score = Math.round(Math.min(99, Math.max(40, 50 + raw * 70)));
+    return { id: s.id, name: s.name, score };
+  });
+  return rows.sort((a, b) => b.score - a.score).map((r, i) => ({ ...r, rank: i + 1 }));
+}
+
 // The single highest-priority focus for a store (store-scoped mirror of Home's
 // deterministic topAction; AI-generated once data is live).
 export function managerFocus(store: StoreId, month: MonthValue = "all") {
@@ -859,6 +1077,7 @@ export function managerFocus(store: StoreId, month: MonthValue = "all") {
   const candidates = [
     {
       score: cs.missedPct,
+      planKey: "call-capture",
       title: "Unanswered inbound calls are the biggest capture leak",
       detail: `${pctStr(cs.missedPct)} of inbound calls went unanswered ${here}. Each unanswered call is most often a booking that goes to a competitor instead.`,
       metric: `${pctStr(cs.missedPct)} of calls missed`,
@@ -866,6 +1085,7 @@ export function managerFocus(store: StoreId, month: MonthValue = "all") {
     },
     {
       score: 1 - m.rebook,
+      planKey: "rebook-coach",
       title: "Rebooking at checkout is the most durable lever",
       detail: `Only ${pctStr(m.rebook)} of grooming customers rebook before leaving ${here}. A short prompt at checkout is the most reliable fix.`,
       metric: `${pctStr(m.rebook)} rebook rate`,
@@ -873,6 +1093,7 @@ export function managerFocus(store: StoreId, month: MonthValue = "all") {
     },
     {
       score: 1 - m.attach,
+      planKey: "retail-attach",
       title: "Retail attachment on grooming visits is below the group",
       detail: `${pctStr(m.attach)} of grooming visits ${here} add a retail item. Suggesting food or accessories at checkout is the simplest add.`,
       metric: `${pctStr(m.attach)} retail attach`,

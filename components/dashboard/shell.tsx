@@ -13,6 +13,7 @@ import {
 } from "@/components/dashboard/data";
 import type { Role } from "@/lib/auth";
 import { signOut } from "@/app/login/actions";
+import { Modal } from "./modal";
 
 type IconName = "home" | "brief" | "activity" | "money" | "spark" | "store" | "users" | "scissors" | "star";
 
@@ -76,34 +77,36 @@ function isActive(pathname: string, href: string) {
   return href === "/dashboard" ? pathname === "/dashboard" : pathname.startsWith(href);
 }
 
-export function Shell({
-  role,
-  storeId,
-  clientName,
-  userName,
-  children,
-}: {
+type ShellProps = {
   role: Role;
   storeId: StoreId | null;
   clientName: string;
   userName: string;
+  email: string;
+  streak: number;
+  memberSince: string;
   children: ReactNode;
-}) {
+};
+
+export function Shell({ children, ...rest }: ShellProps) {
   return (
-    <Suspense fallback={<ShellChrome qs="" role={role} storeId={storeId} clientName={clientName} userName={userName}>{children}</ShellChrome>}>
-      <ShellLive role={role} storeId={storeId} clientName={clientName} userName={userName}>{children}</ShellLive>
+    <Suspense fallback={<ShellChrome qs="" {...rest}>{children}</ShellChrome>}>
+      <ShellLive {...rest}>{children}</ShellLive>
     </Suspense>
   );
 }
 
-function ShellLive({ role, storeId, clientName, userName, children }: { role: Role; storeId: StoreId | null; clientName: string; userName: string; children: ReactNode }) {
+function ShellLive({ children, ...rest }: ShellProps) {
   const qs = useSearchParams().toString();
-  return <ShellChrome qs={qs} role={role} storeId={storeId} clientName={clientName} userName={userName}>{children}</ShellChrome>;
+  return <ShellChrome qs={qs} {...rest}>{children}</ShellChrome>;
 }
 
-function ShellChrome({ qs, role, storeId, clientName, userName, children }: { qs: string; role: Role; storeId: StoreId | null; clientName: string; userName: string; children: ReactNode }) {
+function ShellChrome({ qs, role, storeId, clientName, userName, email, streak, memberSince, children }: ShellProps & { qs: string }) {
   const pathname = usePathname();
+  const [accountOpen, setAccountOpen] = useState(false);
   const lockedStore = role === "manager" ? storeId : null;
+  const initials = userName.replace(/[^a-zA-Z ]/g, "").split(" ").filter(Boolean).slice(0, 2).map((p) => p[0]).join("").toUpperCase() || "WG";
+  const roleLabel = role === "manager" ? "Store manager" : role === "owner" ? "Owner" : "Platform";
 
   const groups = navGroups
     .map((g) => ({ ...g, items: g.items.filter((n) => !n.roles || n.roles.includes(role)) }))
@@ -162,19 +165,29 @@ function ShellChrome({ qs, role, storeId, clientName, userName, children }: { qs
           ))}
         </nav>
 
-        {/* Identity + sign out */}
+        {/* Identity (click → account) + sign out */}
         <div className="mt-auto flex flex-col gap-3 pt-5">
-          <div className="flex items-center justify-between gap-2">
-            <div className="min-w-0">
-              <div className="truncate text-[12.5px] text-ink">{userName}</div>
-              <div className="truncate font-mono text-[9.5px] uppercase tracking-[0.12em] text-ink-dimmer">{lockedStore ? "Store manager" : "Owner"}</div>
-            </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setAccountOpen(true)}
+              className="group flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 rounded-xl border border-edge bg-white/[0.02] px-2.5 py-2 text-left transition-colors hover:border-edge-strong hover:bg-white/[0.04]"
+            >
+              <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-orange-soft font-mono text-[11px] text-orange">{initials}</span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[12.5px] text-ink">{userName}</span>
+                <span className="block truncate font-mono text-[9px] uppercase tracking-[0.12em] text-ink-dimmer">{roleLabel} · account</span>
+              </span>
+              <span className="shrink-0 text-ink-dimmer transition-colors group-hover:text-orange" aria-hidden>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg>
+              </span>
+            </button>
             <form action={signOut}>
               <button
                 type="submit"
-                className="cursor-pointer rounded-lg border border-edge px-2.5 py-1.5 font-mono text-[9.5px] uppercase tracking-[0.12em] text-ink-dim transition-colors hover:border-edge-strong hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-orange/60"
+                aria-label="Sign out"
+                className="grid size-9 shrink-0 cursor-pointer place-items-center rounded-lg border border-edge text-ink-dim transition-colors hover:border-edge-strong hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-orange/60"
               >
-                Sign out
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M15 4h3a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-3" /><path d="M10 17l-5-5 5-5" /><path d="M5 12h11" /></svg>
               </button>
             </form>
           </div>
@@ -220,6 +233,46 @@ function ShellChrome({ qs, role, storeId, clientName, userName, children }: { qs
 
         <main className="mx-auto max-w-[1200px] px-5 py-8 md:px-8 md:py-10">{children}</main>
       </div>
+
+      <Modal open={accountOpen} onClose={() => setAccountOpen(false)} eyebrow="Account" title={userName} maxWidth={420}>
+        <div className="space-y-5">
+          <div className="flex items-center gap-3">
+            <span className="grid size-12 place-items-center rounded-full bg-orange-soft font-mono text-[15px] text-orange">{initials}</span>
+            <div className="min-w-0">
+              <div className="text-[15px] text-ink">{userName}</div>
+              <div className="truncate font-mono text-[11px] text-ink-dimmer">{email}</div>
+            </div>
+          </div>
+          <dl className="grid grid-cols-1 gap-px overflow-hidden rounded-xl border border-edge bg-edge">
+            <AccountRow k="Role" v={roleLabel} />
+            <AccountRow k="Client" v={clientName} />
+            {lockedStore && <AccountRow k="Store" v={scopeLabel(lockedStore)} />}
+            <AccountRow k="Member since" v={memberSince} />
+            <AccountRow k="Login streak" v={`${streak} days`} />
+          </dl>
+          <p className="text-[11.5px] leading-[1.5] text-ink-dimmer">
+            Pilot environment — profile editing and password changes arrive with Supabase auth.
+          </p>
+          <form action={signOut}>
+            <button
+              type="submit"
+              className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg border border-edge-strong py-2.5 text-[13px] text-ink transition-colors hover:bg-white/[0.05]"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M15 4h3a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-3" /><path d="M10 17l-5-5 5-5" /><path d="M5 12h11" /></svg>
+              Sign out
+            </button>
+          </form>
+        </div>
+      </Modal>
+    </div>
+  );
+}
+
+function AccountRow({ k, v }: { k: string; v: string }) {
+  return (
+    <div className="flex items-center justify-between bg-bg px-4 py-3 text-[13px]">
+      <span className="text-ink-dim">{k}</span>
+      <span className="font-mono text-ink">{v}</span>
     </div>
   );
 }

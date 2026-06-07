@@ -350,6 +350,7 @@ export function BarRanking({
   track = "rgba(255,255,255,0.2)",
   labelWidth = 128,
   height,
+  valueLabel = "Value",
 }: {
   data: { name: string; value: number; highlight?: boolean }[];
   valueFmt?: (n: number) => string;
@@ -358,9 +359,10 @@ export function BarRanking({
   track?: string;
   labelWidth?: number;
   height?: number;
+  valueLabel?: string;
 }) {
   const fmt = valueFmt ?? formatFor(format);
-  const config = { value: { label: "Value", color } } satisfies ChartConfig;
+  const config = { value: { label: valueLabel, color } } satisfies ChartConfig;
   const h = height ?? Math.max(120, data.length * 40);
   return (
     <ChartContainer config={config} style={{ height: h }}>

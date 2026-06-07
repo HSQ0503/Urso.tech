@@ -55,7 +55,7 @@ export default async function RevenueMapPage({ searchParams }: { searchParams: P
         <Card>
           <Micro>By location</Micro>
           <h2 className="mb-4 mt-1.5 text-[17px] font-medium tracking-[-0.01em]">Revenue by store</h2>
-          <BarRanking data={byLocation} format="moneyK" labelWidth={104} />
+          <BarRanking data={byLocation} format="moneyK" labelWidth={104} valueLabel="Revenue" />
         </Card>
         <Card className="flex flex-col gap-6">
           <div>
@@ -97,7 +97,7 @@ export default async function RevenueMapPage({ searchParams }: { searchParams: P
         <Card>
           <Micro>By groomer</Micro>
           <h2 className="mb-4 mt-1.5 text-[17px] font-medium tracking-[-0.01em]">Revenue handled</h2>
-          <BarRanking data={byGroomer} format="moneyK" labelWidth={130} />
+          <BarRanking data={byGroomer} format="moneyK" labelWidth={130} valueLabel="Revenue handled" />
         </Card>
       </section>
 
