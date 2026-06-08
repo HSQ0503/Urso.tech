@@ -84,8 +84,8 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
             <StackedShareBar
               segments={[
                 { label: "Both", value: xs.both, color: "#fe5100" },
-                { label: "Grooming only", value: xs.groomingOnly, color: "rgba(255,255,255,0.26)" },
-                { label: "Retail only", value: xs.retailOnly, color: "rgba(255,255,255,0.13)" },
+                { label: "Grooming only", value: xs.groomingOnly, color: "var(--color-series)" },
+                { label: "Retail only", value: xs.retailOnly, color: "var(--color-series-soft)" },
               ]}
             />
           </div>
@@ -106,7 +106,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
           {segments.map((s) => {
             const risk = s.segment === "At risk" || s.segment === "Lapsed";
             return (
-              <div key={s.segment} className="bg-bg p-4">
+              <div key={s.segment} className="bg-cell p-4">
                 <Micro>{s.segment}</Micro>
                 <div className="mt-2.5 text-[24px] font-medium leading-none tracking-[-0.02em]" style={{ color: risk ? "#fe5100" : undefined }}>{s.count}</div>
               </div>
@@ -128,7 +128,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
                 {topCustomers.map((c) => {
                   const risk = c.segment === "At risk" || c.segment === "Lapsed";
                   return (
-                    <tr key={c.name} className="border-t border-edge transition-colors hover:bg-white/[0.02]">
+                    <tr key={c.name} className="border-t border-edge transition-colors hover:bg-raise">
                       <td className="px-5 py-3.5">
                         <div className="flex items-center gap-2">
                           <span className="text-ink">{c.name}</span>
@@ -139,7 +139,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
                       <td className="px-5 py-3.5 text-ink-dim">{c.store}</td>
                       <td className="px-5 py-3.5 text-right font-mono text-ink-dim">{c.visits}</td>
                       <td className="px-5 py-3.5 text-right font-mono text-ink">{fmtMoney(c.ltv)}</td>
-                      <td className="px-5 py-3.5 font-mono" style={{ color: c.lastVisit > 60 ? "#fe5100" : "rgba(255,255,255,0.58)" }}>{c.lastVisit}d ago</td>
+                      <td className="px-5 py-3.5 font-mono" style={{ color: c.lastVisit > 60 ? "#fe5100" : "var(--color-ink-dim)" }}>{c.lastVisit}d ago</td>
                       <td className="px-5 py-3.5 text-ink-dim">{c.next}</td>
                     </tr>
                   );

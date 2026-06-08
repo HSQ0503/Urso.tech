@@ -91,7 +91,7 @@ export function TeamClient({ roster, scopeName, period }: { roster: Groomer[]; s
                     <tr
                       key={g.id}
                       onClick={() => setSelectedId(g.id)}
-                      className={`cursor-pointer border-t border-edge transition-colors hover:bg-white/[0.03] ${active ? "bg-white/[0.04]" : ""}`}
+                      className={`cursor-pointer border-t border-edge transition-colors hover:bg-raise ${active ? "bg-raise-strong" : ""}`}
                     >
                       <td className="relative px-5 py-3">
                         {active && <span className="absolute left-0 top-1/2 h-5 w-[2.5px] -translate-y-1/2 rounded-full bg-orange" />}
@@ -148,7 +148,7 @@ export function TeamClient({ roster, scopeName, period }: { roster: Groomer[]; s
             <CohortCurve data={p.cohort} />
           </div>
 
-          <div className="rounded-xl border border-edge bg-white/[0.02] p-4">
+          <div className="rounded-xl border border-edge bg-raise p-4">
             <Micro>Assessment</Micro>
             <p className="mt-2 text-[13px] leading-[1.55] text-ink-dim">{p.coaching}</p>
           </div>
@@ -160,7 +160,7 @@ export function TeamClient({ roster, scopeName, period }: { roster: Groomer[]; s
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-edge bg-white/[0.015] px-3 py-2.5">
+    <div className="rounded-xl border border-edge bg-raise px-3 py-2.5">
       <Micro>{label}</Micro>
       <div className="mt-1 font-mono text-[15px] text-ink">{value}</div>
     </div>

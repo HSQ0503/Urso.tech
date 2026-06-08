@@ -89,7 +89,7 @@ export function ReviewsClient({
             <button
               key={r.store}
               onClick={() => setStore(r.store)}
-              className={`flex flex-col gap-4 rounded-2xl border bg-panel p-5 text-left transition-colors hover:border-edge-strong ${sel ? "border-edge-strong bg-white/[0.04]" : "border-edge"}`}
+              className={`flex flex-col gap-4 rounded-2xl border bg-panel p-5 text-left transition-colors hover:border-edge-strong ${sel ? "border-edge-strong bg-raise-strong" : "border-edge"}`}
             >
               <div className="flex items-start justify-between">
                 <div className="text-[14.5px] text-ink">{r.store}</div>
@@ -102,7 +102,7 @@ export function ReviewsClient({
                 </div>
                 <div className="text-right">
                   <Display className="text-[30px] leading-none">
-                    <span style={{ color: find.rank > 4 ? "#fe5100" : "#fff" }}>#{find.rank}</span>
+                    <span style={{ color: find.rank > 4 ? "#fe5100" : "var(--color-ink)" }}>#{find.rank}</span>
                   </Display>
                   <Micro className="mt-1.5">local rank</Micro>
                 </div>
@@ -112,7 +112,7 @@ export function ReviewsClient({
                   <Micro>Reply rate</Micro>
                   <span className="font-mono text-[11px] text-ink-dim">{pct(r.responseRate)} · {r.responseHrs}h avg</span>
                 </div>
-                <Meter value={r.responseRate} color={r.responseRate < 0.6 ? "#fe5100" : "#46d18a"} />
+                <Meter value={r.responseRate} color={r.responseRate < 0.6 ? "#fe5100" : "var(--color-good)"} />
               </div>
             </button>
           );
@@ -166,7 +166,7 @@ export function ReviewsClient({
                   {rev.flagged && (
                     <button
                       onClick={() => setPlan({ title: "Suspected fake review", plan: actionPlans["fake-reviews"] })}
-                      className="mt-2.5 cursor-pointer rounded-lg border border-edge-strong px-3 py-1.5 text-[12px] text-ink transition-colors hover:bg-white/[0.05]"
+                      className="mt-2.5 cursor-pointer rounded-lg border border-edge-strong px-3 py-1.5 text-[12px] text-ink transition-colors hover:bg-raise"
                     >
                       Review the case →
                     </button>
@@ -199,7 +199,7 @@ export function ReviewsClient({
           </p>
           <button
             onClick={() => setPlan({ title: `${suspectedFakes} suspected fake reviews`, plan: actionPlans["fake-reviews"] })}
-            className="mt-1 w-fit cursor-pointer rounded-lg border border-edge-strong px-4 py-2 text-[13px] text-ink transition-colors hover:bg-white/[0.05]"
+            className="mt-1 w-fit cursor-pointer rounded-lg border border-edge-strong px-4 py-2 text-[13px] text-ink transition-colors hover:bg-raise"
           >
             Review the {suspectedFakes} flagged
           </button>

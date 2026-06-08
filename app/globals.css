@@ -17,6 +17,7 @@
      mode below. Components reference these tokens instead of hardcoding white. */
   --color-surface: #0c0c0c;
   --color-sidebar: #060606;
+  --color-cell: #070707;
   --color-raise: rgba(255, 255, 255, 0.05);
   --color-raise-strong: rgba(255, 255, 255, 0.08);
   --color-track: rgba(255, 255, 255, 0.12);
@@ -90,6 +91,7 @@
   --color-ink-dimmer: rgba(20, 23, 28, 0.42);
   --color-surface: #ffffff;
   --color-sidebar: #f6f7f9;
+  --color-cell: #ffffff;
   --color-raise: rgba(15, 18, 22, 0.045);
   --color-raise-strong: rgba(15, 18, 22, 0.08);
   --color-track: rgba(15, 18, 22, 0.1);

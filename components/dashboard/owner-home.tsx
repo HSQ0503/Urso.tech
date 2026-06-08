@@ -132,7 +132,7 @@ export async function OwnerHome({ searchParams, userName, streak }: { searchPara
           </div>
           <CallsBars labels={labels} total={series.callsTotal} missed={series.callsMissed} />
           <div className="mt-3 flex items-center justify-between">
-            <Legend items={[{ label: "Answered", color: "rgba(255,255,255,0.3)" }, { label: "Missed", color: "#fe5100" }]} />
+            <Legend items={[{ label: "Answered", color: "var(--color-series)" }, { label: "Missed", color: "#fe5100" }]} />
             <Tag tone="muted">Call tracking pending</Tag>
           </div>
         </Card>
@@ -159,7 +159,7 @@ export async function OwnerHome({ searchParams, userName, streak }: { searchPara
           </div>
           <TrafficChart labels={labels} visits={series.webVisits} bookings={series.webBookings} />
           <div className="mt-3 flex items-center justify-between gap-3">
-            <Legend items={[{ label: "Visits", color: "rgba(255,255,255,0.3)" }, { label: "Became bookings", color: "#fe5100" }]} />
+            <Legend items={[{ label: "Visits", color: "var(--color-series)" }, { label: "Became bookings", color: "#fe5100" }]} />
             <Tag tone="muted">Analytics pending</Tag>
           </div>
         </Card>
@@ -199,7 +199,7 @@ export async function OwnerHome({ searchParams, userName, streak }: { searchPara
                 </div>
                 <div className="flex items-center justify-between border-t border-edge pt-3">
                   <Micro>Calls missed</Micro>
-                  <span className="font-mono text-[12px]" style={{ color: sm.missedPct > 0.25 ? "#fe5100" : "rgba(255,255,255,0.58)" }}>{pct(sm.missedPct)}</span>
+                  <span className="font-mono text-[12px]" style={{ color: sm.missedPct > 0.25 ? "#fe5100" : "var(--color-ink-dim)" }}>{pct(sm.missedPct)}</span>
                 </div>
               </Card>
             );
@@ -212,7 +212,7 @@ export async function OwnerHome({ searchParams, userName, streak }: { searchPara
 
 function Kpi({ label, value, delta, deltaInvert }: { label: string; value: string; delta: number; deltaInvert?: boolean }) {
   return (
-    <div className="bg-bg p-4">
+    <div className="bg-cell p-4">
       <div className="flex items-center justify-between">
         <Micro>{label}</Micro>
         <Delta value={delta} invert={deltaInvert} />

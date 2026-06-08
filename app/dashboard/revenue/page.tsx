@@ -68,8 +68,8 @@ export default async function RevenueMapPage({ searchParams }: { searchParams: P
               <StackedShareBar
                 segments={[
                   { label: "Both", value: xs.both, color: "#fe5100" },
-                  { label: "Grooming only", value: xs.groomingOnly, color: "rgba(255,255,255,0.26)" },
-                  { label: "Retail only", value: xs.retailOnly, color: "rgba(255,255,255,0.13)" },
+                  { label: "Grooming only", value: xs.groomingOnly, color: "var(--color-series)" },
+                  { label: "Retail only", value: xs.retailOnly, color: "var(--color-series-soft)" },
                 ]}
               />
             </div>
@@ -79,7 +79,7 @@ export default async function RevenueMapPage({ searchParams }: { searchParams: P
             <StackedShareBar
               segments={[
                 { label: "Repeat customers", value: nvr.repeat, color: "#fe5100" },
-                { label: "New customers", value: nvr.fresh, color: "rgba(255,255,255,0.22)" },
+                { label: "New customers", value: nvr.fresh, color: "var(--color-series)" },
               ]}
             />
           </div>
@@ -119,7 +119,7 @@ export default async function RevenueMapPage({ searchParams }: { searchParams: P
 
 function Kpi({ label, value }: { label: string; value: string }) {
   return (
-    <div className="bg-bg p-4">
+    <div className="bg-cell p-4">
       <Micro>{label}</Micro>
       <div className="mt-2.5 text-[22px] font-medium leading-none tracking-[-0.02em]">{value}</div>
     </div>

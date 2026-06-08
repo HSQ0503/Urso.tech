@@ -370,12 +370,12 @@ export function BarRanking({
         <CartesianGrid horizontal={false} />
         <XAxis type="number" hide />
         <YAxis type="category" dataKey="name" width={labelWidth} tickLine={false} axisLine={false} />
-        <ChartTooltip cursor={{ fill: "rgba(255,255,255,0.04)" }} content={<ChartTooltipContent hideLabel valueFormatter={(v) => fmt(v)} />} />
+        <ChartTooltip cursor={{ fill: "var(--color-raise)" }} content={<ChartTooltipContent hideLabel valueFormatter={(v) => fmt(v)} />} />
         <Bar dataKey="value" radius={[0, 3, 3, 0]} isAnimationActive={false}>
           {data.map((d, i) => (
             <Cell key={i} fill={d.highlight ? color : track} />
           ))}
-          <LabelList dataKey="value" position="right" fill="rgba(255,255,255,0.72)" fontSize={11} formatter={(v) => fmt(Number(v))} />
+          <LabelList dataKey="value" position="right" fill="var(--color-ink-dim)" fontSize={11} formatter={(v) => fmt(Number(v))} />
         </Bar>
       </BarChart>
     </ChartContainer>

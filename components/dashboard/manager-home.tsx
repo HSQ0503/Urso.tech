@@ -21,7 +21,7 @@ import { StoreScoreboard } from "@/components/dashboard/store-scoreboard";
 import { InfoTip } from "@/components/dashboard/info-tip";
 import { GROOMER_COL_HELP } from "@/components/dashboard/team-help";
 
-const GREEN = "#46d18a";
+const GREEN = "var(--color-good)";
 const ORANGE = "#fe5100";
 
 const statusTone: Record<ActionStatus, "muted" | "orange" | "good" | "warn"> = {
@@ -92,7 +92,7 @@ export async function ManagerHome({ store, month, userName, streak }: { store: S
         </div>
         <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-edge bg-edge md:grid-cols-3 xl:grid-cols-5">
           {scorecard.map((s) => (
-            <div key={s.label} className="bg-bg p-4">
+            <div key={s.label} className="bg-cell p-4">
               <div className="flex items-center justify-between gap-2">
                 <Micro>{s.label}</Micro>
                 <Delta value={s.delta} invert={s.invert} />
@@ -163,7 +163,7 @@ export async function ManagerHome({ store, month, userName, streak }: { store: S
               </thead>
               <tbody>
                 {team.map((g) => (
-                  <tr key={g.id} className="border-t border-edge transition-colors hover:bg-white/[0.02]">
+                  <tr key={g.id} className="border-t border-edge transition-colors hover:bg-raise">
                     <td className="px-5 py-3.5">
                       <div className="flex items-center gap-2">
                         <span className="text-ink">{g.name}</span>
@@ -172,7 +172,7 @@ export async function ManagerHome({ store, month, userName, streak }: { store: S
                       </div>
                     </td>
                     <td className="px-5 py-3.5 text-right font-mono text-ink">{fmtMoney(g.revPerHr)}</td>
-                    <td className="px-5 py-3.5 text-right font-mono" style={{ color: g.rebook < 0.45 ? ORANGE : "rgba(255,255,255,0.78)" }}>{pct(g.rebook)}</td>
+                    <td className="px-5 py-3.5 text-right font-mono" style={{ color: g.rebook < 0.45 ? ORANGE : "var(--color-ink-dim)" }}>{pct(g.rebook)}</td>
                     <td className="px-5 py-3.5 text-right font-mono text-ink-dim">{pct(g.attach)}</td>
                     <td className="px-5 py-3.5">
                       <div className="flex items-center justify-end gap-2.5">
@@ -211,7 +211,7 @@ export async function ManagerHome({ store, month, userName, streak }: { store: S
                 </thead>
                 <tbody>
                   {watch.map((c) => (
-                    <tr key={c.name} className="border-t border-edge transition-colors hover:bg-white/[0.02]">
+                    <tr key={c.name} className="border-t border-edge transition-colors hover:bg-raise">
                       <td className="px-5 py-3.5">
                         <div className="text-ink">{c.name}</div>
                         <Micro className="mt-0.5">{c.pet}</Micro>
@@ -219,7 +219,7 @@ export async function ManagerHome({ store, month, userName, streak }: { store: S
                       <td className="px-5 py-3.5">
                         <Tag tone="orange">{c.segment}</Tag>
                       </td>
-                      <td className="px-5 py-3.5 text-right font-mono" style={{ color: c.lastVisit > 60 ? ORANGE : "rgba(255,255,255,0.58)" }}>{c.lastVisit}d ago</td>
+                      <td className="px-5 py-3.5 text-right font-mono" style={{ color: c.lastVisit > 60 ? ORANGE : "var(--color-ink-dim)" }}>{c.lastVisit}d ago</td>
                       <td className="px-5 py-3.5 text-ink-dim">{c.next}</td>
                     </tr>
                   ))}

@@ -52,7 +52,7 @@ export function HomeSkeleton() {
       </div>
       <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-edge bg-edge md:grid-cols-3 xl:grid-cols-6">
         {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className="space-y-3 bg-bg p-4">
+          <div key={i} className="space-y-3 bg-cell p-4">
             <Skeleton className="h-3 w-16" />
             <Skeleton className="h-7 w-20" />
           </div>
@@ -197,7 +197,7 @@ export function RevenueSkeleton() {
       <Header />
       <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-edge bg-edge md:grid-cols-4">
         {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="space-y-3 bg-bg p-4"><Skeleton className="h-3 w-20" /><Skeleton className="h-6 w-24" /></div>
+          <div key={i} className="space-y-3 bg-cell p-4"><Skeleton className="h-3 w-20" /><Skeleton className="h-6 w-24" /></div>
         ))}
       </div>
       {Array.from({ length: 2 }).map((_, s) => (
@@ -217,7 +217,7 @@ export function ActionsSkeleton() {
       <Header />
       <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-edge bg-edge md:grid-cols-4">
         {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="space-y-3 bg-bg p-4"><Skeleton className="h-3 w-20" /><Skeleton className="h-6 w-10" /></div>
+          <div key={i} className="space-y-3 bg-cell p-4"><Skeleton className="h-3 w-20" /><Skeleton className="h-6 w-10" /></div>
         ))}
       </div>
       <div className="space-y-4">
@@ -240,7 +240,7 @@ export function BriefSkeleton() {
       <SkeletonCard className="space-y-3"><Skeleton className="h-3 w-24" /><Skeleton className="h-6 w-[80%]" /></SkeletonCard>
       <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-edge bg-edge md:grid-cols-5">
         {Array.from({ length: 5 }).map((_, i) => (
-          <div key={i} className="space-y-3 bg-bg p-4"><Skeleton className="h-3 w-16" /><Skeleton className="h-6 w-16" /></div>
+          <div key={i} className="space-y-3 bg-cell p-4"><Skeleton className="h-3 w-16" /><Skeleton className="h-6 w-16" /></div>
         ))}
       </div>
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">

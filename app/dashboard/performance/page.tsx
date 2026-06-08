@@ -100,7 +100,7 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
             </div>
             <CallsBars labels={labels} total={series.callsTotal} missed={series.callsMissed} height={224} />
             <div className="mt-3">
-              <Legend items={[{ label: "Answered", color: "rgba(255,255,255,0.3)" }, { label: "Missed", color: "#fe5100" }]} />
+              <Legend items={[{ label: "Answered", color: "var(--color-series)" }, { label: "Missed", color: "#fe5100" }]} />
             </div>
           </Card>
 
@@ -180,7 +180,7 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
             </div>
             <TrafficChart labels={labels} visits={series.webVisits} bookings={series.webBookings} height={228} />
             <div className="mt-3">
-              <Legend items={[{ label: "Visits", color: "rgba(255,255,255,0.3)" }, { label: "Became bookings", color: "#fe5100" }]} />
+              <Legend items={[{ label: "Visits", color: "var(--color-series)" }, { label: "Became bookings", color: "#fe5100" }]} />
             </div>
           </Card>
         </div>
@@ -230,8 +230,8 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
               <StackedShareBar
                 segments={[
                   { label: "Both", value: xs.both, color: "#fe5100" },
-                  { label: "Grooming only", value: xs.groomingOnly, color: "rgba(255,255,255,0.26)" },
-                  { label: "Retail only", value: xs.retailOnly, color: "rgba(255,255,255,0.13)" },
+                  { label: "Grooming only", value: xs.groomingOnly, color: "var(--color-series)" },
+                  { label: "Retail only", value: xs.retailOnly, color: "var(--color-series-soft)" },
                 ]}
               />
             </div>

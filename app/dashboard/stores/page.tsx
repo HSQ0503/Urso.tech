@@ -67,7 +67,7 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
                 return (
                   <tr
                     key={s.id}
-                    className={`border-t border-edge transition-colors hover:bg-white/[0.02] ${sel ? "bg-white/[0.04]" : ""}`}
+                    className={`border-t border-edge transition-colors hover:bg-raise ${sel ? "bg-raise-strong" : ""}`}
                   >
                     <td className="relative px-5 py-3.5">
                       {sel && <span className="absolute left-0 top-1/2 h-5 w-[2.5px] -translate-y-1/2 rounded-full bg-orange" />}
@@ -80,15 +80,15 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
                     <td className="px-5 py-3.5 text-right font-mono text-ink">{fmtMoney(m.revenue, true)}</td>
                     <td className="px-5 py-3.5 text-right font-mono text-ink-dim">{m.bookings.toLocaleString()}</td>
                     <td className="px-5 py-3.5 text-right font-mono text-ink-dim">{fmtMoney(m.avgTicket)}</td>
-                    <td className="px-5 py-3.5 text-right font-mono" style={{ color: m.noShow > 0.1 ? "#fe5100" : "rgba(255,255,255,0.58)" }}>{pct(m.noShow)}</td>
+                    <td className="px-5 py-3.5 text-right font-mono" style={{ color: m.noShow > 0.1 ? "#fe5100" : "var(--color-ink-dim)" }}>{pct(m.noShow)}</td>
                     <td className="px-5 py-3.5 text-right">
                       <div className="ml-auto flex w-[104px] items-center gap-2">
                         <Meter value={m.rebook} />
                         <span className="font-mono text-ink-dim">{pct(m.rebook)}</span>
                       </div>
                     </td>
-                    <td className="px-5 py-3.5 text-right font-mono" style={{ color: m.attach < 0.25 ? "#fe5100" : "rgba(255,255,255,0.58)" }}>{pct(m.attach)}</td>
-                    <td className="px-5 py-3.5 text-right font-mono" style={{ color: missed > 0.25 ? "#fe5100" : "rgba(255,255,255,0.58)" }}>{pct(missed)}</td>
+                    <td className="px-5 py-3.5 text-right font-mono" style={{ color: m.attach < 0.25 ? "#fe5100" : "var(--color-ink-dim)" }}>{pct(m.attach)}</td>
+                    <td className="px-5 py-3.5 text-right font-mono" style={{ color: missed > 0.25 ? "#fe5100" : "var(--color-ink-dim)" }}>{pct(missed)}</td>
                     <td className="px-5 py-3.5 text-right font-mono text-ink-dim">{s.rating.toFixed(1)}★</td>
                   </tr>
                 );

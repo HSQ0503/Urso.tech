@@ -44,7 +44,7 @@ export default async function BriefPage({ searchParams }: { searchParams: Promis
         <Micro>What changed</Micro>
         <div className="mt-3 grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-edge bg-edge md:grid-cols-5">
           {b.changes.map((c) => (
-            <div key={c.label} className="bg-bg p-4">
+            <div key={c.label} className="bg-cell p-4">
               <Micro>{c.label}</Micro>
               <div className="mt-2 text-[20px] font-medium leading-none tracking-[-0.02em]">{c.value}</div>
               <div className="mt-2">
@@ -59,7 +59,7 @@ export default async function BriefPage({ searchParams }: { searchParams: Promis
       <section className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <Card className="flex flex-col gap-3">
           <div className="flex items-center gap-2">
-            <span className="size-2 rounded-full bg-[#46d18a]" />
+            <span className="size-2 rounded-full bg-[var(--color-good)]" />
             <Micro>What improved</Micro>
           </div>
           <ul className="space-y-2.5">
@@ -94,7 +94,7 @@ export default async function BriefPage({ searchParams }: { searchParams: Promis
           <Micro>Actions this week</Micro>
           <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-edge bg-edge">
             <div className="bg-panel p-4">
-              <div className="text-[26px] font-medium leading-none tracking-[-0.02em] text-[#46d18a]">{b.actionsCompleted}</div>
+              <div className="text-[26px] font-medium leading-none tracking-[-0.02em] text-[var(--color-good)]">{b.actionsCompleted}</div>
               <Micro className="mt-2">Completed</Micro>
             </div>
             <div className="bg-panel p-4">

@@ -81,7 +81,7 @@ export function ActionsClient({ initialActions }: { initialActions: ActionWithPl
         </div>
         <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-edge bg-edge md:grid-cols-4">
           {ACTION_FLOW.map((s, i) => (
-            <div key={s} className="relative bg-bg p-4">
+            <div key={s} className="relative bg-cell p-4">
               <div className="flex items-center justify-between">
                 <Micro>{actionStatusLabel[s]}</Micro>
                 <span className="font-mono text-[10px] text-ink-dimmer">{i + 1}/4</span>
@@ -108,7 +108,7 @@ export function ActionsClient({ initialActions }: { initialActions: ActionWithPl
               <div key={a.key} className={`flex flex-wrap items-center justify-between gap-3 px-5 py-3.5 ${i > 0 ? "border-t border-edge" : ""}`}>
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className={`size-1.5 rounded-full ${st.active ? "bg-[#46d18a]" : "bg-ink-dimmer"}`} />
+                    <span className={`size-1.5 rounded-full ${st.active ? "bg-[var(--color-good)]" : "bg-ink-dimmer"}`} />
                     <span className="text-[14px] text-ink">{a.key} agent</span>
                   </div>
                   <Micro className="mt-0.5 !normal-case !tracking-normal">{a.desc}</Micro>
@@ -122,7 +122,7 @@ export function ActionsClient({ initialActions }: { initialActions: ActionWithPl
                   <button
                     onClick={() => setAgents((p) => ({ ...p, [a.key]: { ...p[a.key], active: !p[a.key].active } }))}
                     className={`w-[78px] cursor-pointer rounded-full border px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] transition-colors ${
-                      st.active ? "border-[rgba(70,209,138,0.3)] text-[#46d18a]" : "border-edge text-ink-dim hover:text-ink"
+                      st.active ? "border-[rgba(70,209,138,0.3)] text-[var(--color-good)]" : "border-edge text-ink-dim hover:text-ink"
                     }`}
                   >
                     {st.active ? "Active" : "Paused"}
@@ -143,7 +143,7 @@ export function ActionsClient({ initialActions }: { initialActions: ActionWithPl
               key={f.value}
               onClick={() => setFilter(f.value)}
               className={`shrink-0 cursor-pointer rounded-full border px-3.5 py-1.5 text-[12.5px] transition-colors ${
-                active ? "border-edge-strong bg-white/[0.06] text-ink" : "border-edge text-ink-dim hover:text-ink"
+                active ? "border-edge-strong bg-raise-strong text-ink" : "border-edge text-ink-dim hover:text-ink"
               }`}
             >
               {f.label}
@@ -193,7 +193,7 @@ function ActionCard({ action: a, onApprove, onDismiss }: { action: ActionWithPla
       {/* Lifecycle progress */}
       <div className="flex items-center gap-1.5">
         {ACTION_FLOW.map((s, i) => (
-          <span key={s} className={`h-1 flex-1 rounded-full ${i <= idx ? "bg-orange" : "bg-white/[0.08]"}`} />
+          <span key={s} className={`h-1 flex-1 rounded-full ${i <= idx ? "bg-orange" : "bg-raise-strong"}`} />
         ))}
       </div>
       <div className="flex items-center justify-between gap-3">
@@ -205,8 +205,8 @@ function ActionCard({ action: a, onApprove, onDismiss }: { action: ActionWithPla
       </div>
 
       {a.result && (
-        <div className="flex items-center gap-2 rounded-xl border border-[rgba(70,209,138,0.3)] bg-white/[0.02] px-3.5 py-2.5">
-          <span className="size-1.5 rounded-full bg-[#46d18a]" />
+        <div className="flex items-center gap-2 rounded-xl border border-[rgba(70,209,138,0.3)] bg-raise px-3.5 py-2.5">
+          <span className="size-1.5 rounded-full bg-[var(--color-good)]" />
           <span className="text-[12.5px] text-ink">{a.result}</span>
         </div>
       )}
@@ -217,12 +217,12 @@ function ActionCard({ action: a, onApprove, onDismiss }: { action: ActionWithPla
             <button onClick={() => setOpen(true)} className="cursor-pointer rounded-lg bg-orange px-4 py-2 text-[13px] font-medium text-white transition hover:brightness-110">
               Review &amp; approve
             </button>
-            <button onClick={onDismiss} className="cursor-pointer rounded-lg border border-edge-strong px-4 py-2 text-[13px] text-ink transition-colors hover:bg-white/[0.05]">
+            <button onClick={onDismiss} className="cursor-pointer rounded-lg border border-edge-strong px-4 py-2 text-[13px] text-ink transition-colors hover:bg-raise">
               Dismiss
             </button>
           </>
         ) : (
-          <button onClick={() => setOpen(true)} className="cursor-pointer rounded-lg border border-edge-strong px-4 py-2 text-[13px] text-ink transition-colors hover:bg-white/[0.05]">
+          <button onClick={() => setOpen(true)} className="cursor-pointer rounded-lg border border-edge-strong px-4 py-2 text-[13px] text-ink transition-colors hover:bg-raise">
             View plan
           </button>
         )}
@@ -250,13 +250,13 @@ function ActionCard({ action: a, onApprove, onDismiss }: { action: ActionWithPla
                   onDismiss();
                   setOpen(false);
                 }}
-                className="cursor-pointer rounded-lg border border-edge-strong px-4 py-2.5 text-[13px] text-ink transition-colors hover:bg-white/[0.05]"
+                className="cursor-pointer rounded-lg border border-edge-strong px-4 py-2.5 text-[13px] text-ink transition-colors hover:bg-raise"
               >
                 Dismiss
               </button>
             </div>
           ) : (
-            <a href="mailto:han@urso.tech?subject=Urso%20%E2%80%94%20action" className="flex w-full items-center justify-center rounded-lg border border-edge-strong px-4 py-2.5 text-[13px] text-ink transition-colors hover:bg-white/[0.05]">
+            <a href="mailto:han@urso.tech?subject=Urso%20%E2%80%94%20action" className="flex w-full items-center justify-center rounded-lg border border-edge-strong px-4 py-2.5 text-[13px] text-ink transition-colors hover:bg-raise">
               Talk to Urso about this →
             </a>
           )

@@ -249,7 +249,7 @@ function ShellChrome({ qs, role, storeId, clientName, userName, email, streak, m
           <form action={signOut}>
             <button
               type="submit"
-              className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg border border-edge-strong py-2.5 text-[13px] text-ink transition-colors hover:bg-white/[0.05]"
+              className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg border border-edge-strong py-2.5 text-[13px] text-ink transition-colors hover:bg-raise"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M15 4h3a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-3" /><path d="M10 17l-5-5 5-5" /><path d="M5 12h11" /></svg>
               Sign out
@@ -263,7 +263,7 @@ function ShellChrome({ qs, role, storeId, clientName, userName, email, streak, m
 
 function AccountRow({ k, v }: { k: string; v: string }) {
   return (
-    <div className="flex items-center justify-between bg-bg px-4 py-3 text-[13px]">
+    <div className="flex items-center justify-between bg-cell px-4 py-3 text-[13px]">
       <span className="text-ink-dim">{k}</span>
       <span className="font-mono text-ink">{v}</span>
     </div>
