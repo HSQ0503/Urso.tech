@@ -111,7 +111,7 @@ export function OwnerHome({ searchParams, userName, streak }: { searchParams: Pr
 
       {/* KPI row */}
       <section className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-edge bg-edge md:grid-cols-3 xl:grid-cols-6">
-        <Kpi label="Revenue" value={fmtMoney(m.revenue, true)} delta={0.06} />
+        <Kpi label="Revenue" value={fmtMoney(m.revenue)} delta={0.06} />
         <Kpi label="Bookings" value={m.bookings.toLocaleString()} delta={0.03} />
         <Kpi label="Avg ticket" value={fmtMoney(m.avgTicket)} delta={0.02} />
         <Kpi label="Calls answered" value={pct(cs.answeredPct)} delta={0.04} />

@@ -48,22 +48,22 @@ type NavGroup = { group: string; items: NavItem[] };
 
 const navGroups: NavGroup[] = [
   {
-    group: "Overview",
+    group: "Today",
     items: [
       { href: "/dashboard", label: "Home", icon: "home" },
       { href: "/dashboard/brief", label: "Weekly brief", icon: "brief", roles: ["owner"] },
     ],
   },
   {
-    group: "Analyze",
+    group: "Intelligence",
     items: [
       { href: "/dashboard/performance", label: "Performance", icon: "activity", roles: ["owner"] },
       { href: "/dashboard/revenue", label: "Revenue map", icon: "money", roles: ["owner"] },
     ],
   },
-  { group: "Act", items: [{ href: "/dashboard/actions", label: "AI actions", icon: "spark", roles: ["owner"] }] },
+  { group: "Next moves", items: [{ href: "/dashboard/actions", label: "AI actions", icon: "spark", roles: ["owner"] }] },
   {
-    group: "Drill in",
+    group: "Operations",
     items: [
       { href: "/dashboard/stores", label: "Stores", icon: "store", roles: ["owner"] },
       { href: "/dashboard/customers", label: "Customers", icon: "users", roles: ["owner"] },

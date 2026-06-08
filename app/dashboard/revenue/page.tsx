@@ -44,7 +44,7 @@ export default async function RevenueMapPage({ searchParams }: { searchParams: P
 
       {/* Headline strip */}
       <section className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-edge bg-edge md:grid-cols-4">
-        <Kpi label="Total revenue" value={fmtMoney(m.revenue, true)} />
+        <Kpi label="Total revenue" value={fmtMoney(m.revenue)} />
         <Kpi label="Avg ticket" value={fmtMoney(m.avgTicket)} />
         <Kpi label="Grooming share" value={pct(m.groomingShare)} />
         <Kpi label="Repeat revenue" value={pct(repeatShare)} />

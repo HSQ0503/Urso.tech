@@ -210,7 +210,7 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
             <div className="mb-4 flex items-end justify-between">
               <div>
                 <Micro>Revenue</Micro>
-                <div className="mt-1.5 text-[22px] font-medium tracking-[-0.01em]">{fmtMoney(m.revenue, true)}</div>
+                <div className="mt-1.5 text-[22px] font-medium tracking-[-0.01em]">{fmtMoney(m.revenue)}</div>
               </div>
               <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-dimmer">{period}</span>
             </div>
