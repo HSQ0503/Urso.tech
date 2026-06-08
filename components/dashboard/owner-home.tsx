@@ -1,23 +1,19 @@
-"use client";
-
-import { use, useState } from "react";
 import Link from "next/link";
 import {
   stores,
-  metrics,
-  getSeries,
-  callStats,
-  webStats,
-  seriesLabels,
-  timeMeta,
   parseScope,
   parseMonth,
   scopeLabel,
   monthLabel,
-  type Scope,
-  type MonthValue,
-  type Granularity,
 } from "@/components/dashboard/data";
+import {
+  getMetrics,
+  getCallStats,
+  getWebStats,
+  getSeries,
+  getTopAction,
+  storeComparison,
+} from "@/components/dashboard/data.server";
 import {
   Card,
   Micro,
@@ -28,7 +24,6 @@ import {
   CallsBars,
   TrafficChart,
   Legend,
-  Segmented,
   WelcomeBanner,
   fmtMoney,
   pct,
@@ -36,66 +31,23 @@ import {
 import { AskAi } from "@/components/dashboard/ask-ai";
 import { ActionItemCard } from "@/components/dashboard/action-item-card";
 
-const granOptions: { value: Granularity; label: string }[] = [
-  { value: "daily", label: "Daily" },
-  { value: "weekly", label: "Weekly" },
-  { value: "monthly", label: "Monthly" },
-];
-
-// The single most important fix — what an AI layer will eventually generate from
-// the live data. The pilot leads with call capture (the #1 suspected leak); the
-// score keeps it on top while the metric values stay scope-aware.
-function topAction(scope: Scope, month: MonthValue) {
-  const cs = callStats(scope, month);
-  const ws = webStats(scope, month);
-  const m = metrics(scope, month);
-  const here = scope === "all" ? "across the four stores" : `at ${scopeLabel(scope)}`;
-  const candidates = [
-    {
-      score: 2 + cs.missedPct,
-      planKey: "call-capture",
-      title: "Missed calls aren't being followed up fast enough",
-      detail: `${pct(cs.missedPct)} of inbound calls ${here} go unanswered, and nothing texts those callers back. Each one is usually a booking that goes to whoever picks up next. Urso recommends a Twilio line that logs every missed call and has the AI text back a booking link within seconds.`,
-      metric: `${pct(cs.missedPct)} of calls missed`,
-      pending: true,
-    },
-    {
-      score: 1 - m.rebook,
-      planKey: "rebook-coach",
-      title: "Rebooking is below the level where recurring revenue holds",
-      detail: `Only ${pct(m.rebook)} of grooming customers ${here} rebook before leaving. Grooming is recurring revenue, so this is the most durable lever on long-term performance.`,
-      metric: `${pct(m.rebook)} rebook rate`,
-      pending: false,
-    },
-    {
-      score: 1 - ws.convRate * 3.5,
-      planKey: "booking-form",
-      title: "Online booking abandonment is suppressing new bookings",
-      detail: `${pct(1 - ws.convRate, 0)} of website visitors ${here} leave without booking. The drop is concentrated in the booking form — a shorter, mobile-first form recovers most of it.`,
-      metric: `${pct(ws.convRate, 1)} book online`,
-      pending: true,
-    },
-  ];
-  return candidates.sort((a, b) => b.score - a.score)[0];
-}
-
-export function OwnerHome({ searchParams, userName, streak }: { searchParams: Promise<{ store?: string; month?: string }>; userName: string; streak: number }) {
-  const sp = use(searchParams);
+export async function OwnerHome({ searchParams, userName, streak }: { searchParams: Promise<{ store?: string; month?: string }>; userName: string; streak: number }) {
+  const sp = await searchParams;
   const scope = parseScope(sp.store);
   const month = parseMonth(sp.month);
   const monthScoped = month !== "all";
   const here = scope === "all" ? "across the four stores" : `at ${scopeLabel(scope)}`;
-
-  const [gran, setGran] = useState<Granularity>("monthly");
-  const effGran: Granularity = monthScoped ? "daily" : gran;
-
-  const m = metrics(scope, month);
-  const cs = callStats(scope, month);
-  const ws = webStats(scope, month);
-  const series = getSeries(scope, month);
-  const labels = seriesLabels(month, effGran);
-  const action = topAction(scope, month);
   const periodLabel = monthScoped ? monthLabel(month) : "Last 12 months";
+
+  const [m, cs, ws, series, action, cards] = await Promise.all([
+    getMetrics(scope, month),
+    getCallStats(scope, month),
+    getWebStats(scope, month),
+    getSeries(scope, month),
+    getTopAction(scope, month),
+    storeComparison(month),
+  ]);
+  const labels = series.labels;
 
   return (
     <div className="animate-stage-in">
@@ -148,12 +100,11 @@ export function OwnerHome({ searchParams, userName, streak }: { searchParams: Pr
               <div className="mt-1.5 flex items-baseline gap-2.5">
                 <span className="text-[22px] font-medium tracking-[-0.01em]">{fmtMoney(m.revenue)}</span>
                 <Delta value={0.06} />
-                <span className="text-[12px] text-ink-dim">{monthScoped ? monthLabel(month) : timeMeta[effGran].caption}</span>
+                <span className="text-[12px] text-ink-dim">{periodLabel}</span>
               </div>
             </div>
-            {!monthScoped && <Segmented options={granOptions} value={gran} onChange={setGran} />}
           </div>
-          <AreaChart data={series.revenue[effGran]} labels={labels} valueFmt={(n) => `$${Math.round(n / 1000)}k`} height={224} />
+          <AreaChart data={series.revenue} labels={labels} format="moneyK" height={224} />
         </Card>
       </section>
 
@@ -227,8 +178,7 @@ export function OwnerHome({ searchParams, userName, streak }: { searchParams: Pr
         </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {stores.map((s) => {
-            const sm = metrics(s.id, month);
-            const sc = callStats(s.id, month);
+            const sm = cards[s.id];
             const lag = s.id === "wm";
             return (
               <Card key={s.id} className="flex flex-col gap-4">
@@ -249,7 +199,7 @@ export function OwnerHome({ searchParams, userName, streak }: { searchParams: Pr
                 </div>
                 <div className="flex items-center justify-between border-t border-edge pt-3">
                   <Micro>Calls missed</Micro>
-                  <span className="font-mono text-[12px]" style={{ color: sc.missedPct > 0.25 ? "#fe5100" : "rgba(255,255,255,0.58)" }}>{pct(sc.missedPct)}</span>
+                  <span className="font-mono text-[12px]" style={{ color: sm.missedPct > 0.25 ? "#fe5100" : "rgba(255,255,255,0.58)" }}>{pct(sm.missedPct)}</span>
                 </div>
               </Card>
             );

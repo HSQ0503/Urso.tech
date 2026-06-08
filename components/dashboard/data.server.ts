@@ -22,6 +22,7 @@ import {
   type WeeklyBrief,
   type BriefChange,
   type FunnelStep,
+  type Review,
 } from "./data";
 
 // ── small helpers (kept local so this module stays self-contained) ──────────
@@ -482,4 +483,60 @@ export async function getTopAction(scope: Scope, month: MonthValue) {
     },
   ];
   return candidates.sort((a, b) => b.score - a.score)[0];
+}
+
+// ── public: reviews + reputation (Reviews page) ─────────────────────────────
+export async function getReviewsData() {
+  const supabase = await createClient();
+  const listings = await loadListings();
+
+  const reputation = stores.map((s) => {
+    const l = listings[s.id];
+    return { store: s.name, rating: l?.rating ?? 0, volume: l?.reviewCount ?? 0, responseRate: l?.responseRate ?? 0, responseHrs: l?.responseHours ?? 0 };
+  });
+  const findability = stores.map((s) => {
+    const l = listings[s.id];
+    return { store: s.name, rank: l?.localRank ?? 0, listing: l?.listing ?? 0, bookButton: l?.hasBook ?? true };
+  });
+
+  const { data, error } = await supabase
+    .from("reviews")
+    .select("store_id, author, rating, body, created_at, replied, flagged_fake")
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(`reviews read failed: ${error.message}`);
+
+  type RvRow = { store_id: StoreId; author: string; rating: number; body: string; created_at: string; replied: boolean; flagged_fake: boolean };
+  const now = Date.now();
+  const byStore: Record<string, Review[]> = {};
+  for (const s of stores) byStore[s.name] = [];
+  for (const r of (data ?? []) as unknown as RvRow[]) {
+    byStore[fullName(r.store_id)].push({
+      author: r.author,
+      rating: r.rating,
+      text: r.body,
+      days: Math.max(0, Math.round((now - new Date(r.created_at).getTime()) / 86400000)),
+      flagged: r.flagged_fake,
+    });
+  }
+  const rows = (data ?? []) as unknown as RvRow[];
+  return {
+    reputation,
+    findability,
+    byStore,
+    suspectedFakes: rows.filter((r) => r.flagged_fake).length,
+    unanswered: rows.filter((r) => !r.replied && r.rating <= 3).length,
+  };
+}
+
+// ── public: every agent action with its plan key (AI actions page) ──────────
+export type ActionWithPlan = AgentAction & { planKey: string };
+export async function getAllAgentActions(): Promise<ActionWithPlan[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("agent_actions")
+    .select("id, store_id, store_label, agent, title, detail, metric, status, result, pending, plan_key")
+    .order("created_at", { ascending: true });
+  if (error) throw new Error(`agent_actions read failed: ${error.message}`);
+  type R = RawAction & { plan_key: string };
+  return ((data ?? []) as unknown as R[]).map((a) => ({ ...toAction(a), planKey: a.plan_key }));
 }
