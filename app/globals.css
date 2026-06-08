@@ -13,6 +13,19 @@
   --color-orange-soft: rgba(254, 81, 0, 0.12);
   --color-orange-wash: rgba(254, 81, 0, 0.06);
 
+  /* Raised surfaces, overlays, tracks and chart colours — all flipped in light
+     mode below. Components reference these tokens instead of hardcoding white. */
+  --color-surface: #0c0c0c;
+  --color-sidebar: #060606;
+  --color-raise: rgba(255, 255, 255, 0.05);
+  --color-raise-strong: rgba(255, 255, 255, 0.08);
+  --color-track: rgba(255, 255, 255, 0.12);
+  --color-series: rgba(255, 255, 255, 0.28);
+  --color-series-soft: rgba(255, 255, 255, 0.14);
+  --color-axis: rgba(255, 255, 255, 0.4);
+  --color-grid: rgba(255, 255, 255, 0.07);
+  --color-good: #46d18a;
+
   --font-sans: var(--font-geist-sans), "Geist", system-ui, -apple-system, sans-serif;
   --font-mono: var(--font-geist-mono), "Geist Mono", ui-monospace, monospace;
 
@@ -59,6 +72,34 @@
     0%, 100% { opacity: 0.25; transform: translateX(-2px); }
     50%      { opacity: 1;    transform: translateX(2px); }
   }
+}
+
+/* ===== Theme ===== Dark is the default; light flips every semantic token while
+   keeping orange as the accent. Components reference tokens, so this is the only
+   place the palette lives — retune the light values here without touching JSX. */
+:root { color-scheme: dark; }
+:root[data-theme="light"] {
+  color-scheme: light;
+  --color-bg: #eceef1;
+  --color-panel: #ffffff;
+  --color-panel-strong: #ffffff;
+  --color-edge: rgba(15, 18, 22, 0.1);
+  --color-edge-strong: rgba(15, 18, 22, 0.17);
+  --color-ink: #14171c;
+  --color-ink-dim: rgba(20, 23, 28, 0.62);
+  --color-ink-dimmer: rgba(20, 23, 28, 0.42);
+  --color-surface: #ffffff;
+  --color-sidebar: #f6f7f9;
+  --color-raise: rgba(15, 18, 22, 0.045);
+  --color-raise-strong: rgba(15, 18, 22, 0.08);
+  --color-track: rgba(15, 18, 22, 0.1);
+  --color-series: rgba(20, 23, 28, 0.34);
+  --color-series-soft: rgba(20, 23, 28, 0.16);
+  --color-axis: rgba(20, 23, 28, 0.5);
+  --color-grid: rgba(20, 23, 28, 0.08);
+  --color-good: #11935a;
+  --color-orange-soft: rgba(254, 81, 0, 0.1);
+  --color-orange-wash: rgba(254, 81, 0, 0.05);
 }
 
 .slide-sheen {
@@ -147,8 +188,8 @@
 .tone-navy   { background: linear-gradient(170deg, var(--urso-navy) 0%, #0a1428 60%, var(--urso-blue-deep) 100%); }
 
 html, body {
-  background: #070707;
-  color: #fff;
+  background: var(--color-bg);
+  color: var(--color-ink);
   scrollbar-width: none;
   -ms-overflow-style: none;
   overflow-x: clip;

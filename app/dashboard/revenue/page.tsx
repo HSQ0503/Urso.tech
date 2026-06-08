@@ -6,6 +6,7 @@ import {
 } from "@/components/dashboard/data";
 import {
   getMetrics,
+  getCrossSell,
   getRevenueByLocation,
   getRevenueByService,
   getRevenueByGroomer,
@@ -17,7 +18,6 @@ import {
   Micro,
   Tag,
   BarRanking,
-  DonutSplit,
   StackedShareBar,
   fmtMoney,
   pct,
@@ -34,10 +34,11 @@ export default async function RevenueMapPage({ searchParams }: { searchParams: P
   const byService = await getRevenueByService(scope, month);
   const byGroomer = (await getRevenueByGroomer(scope, month)).slice(0, 6).map((g) => ({ name: g.name, value: g.value }));
   const nvr = await getRevenueNewVsRepeat(scope, month);
+  const xs = await getCrossSell(scope, month);
   const repeatShare = nvr.repeat / (nvr.repeat + nvr.fresh);
 
   return (
-    <div className="animate-stage-in space-y-12">
+    <div className="animate-stage-in space-y-8">
       <PageHeader
         eyebrow={`Revenue map · ${scopeLabel(scope)} · ${period}`}
         title="Where the money comes from"
@@ -61,10 +62,16 @@ export default async function RevenueMapPage({ searchParams }: { searchParams: P
         </Card>
         <Card className="flex flex-col gap-6">
           <div>
-            <Micro>By line</Micro>
+            <Micro>By line · customer overlap</Micro>
             <h2 className="mt-1.5 text-[17px] font-medium tracking-[-0.01em]">Grooming vs retail</h2>
             <div className="mt-4">
-              <DonutSplit a={m.grooming} b={m.retail} labelA="Grooming" labelB="Retail" />
+              <StackedShareBar
+                segments={[
+                  { label: "Both", value: xs.both, color: "#fe5100" },
+                  { label: "Grooming only", value: xs.groomingOnly, color: "rgba(255,255,255,0.26)" },
+                  { label: "Retail only", value: xs.retailOnly, color: "rgba(255,255,255,0.13)" },
+                ]}
+              />
             </div>
           </div>
           <div className="border-t border-edge pt-5">

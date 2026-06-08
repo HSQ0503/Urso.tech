@@ -14,30 +14,31 @@ import {
 import type { Role } from "@/lib/auth";
 import { signOut } from "@/app/login/actions";
 import { Modal } from "./modal";
+import { ThemeToggle } from "./theme-toggle";
 
 type IconName = "home" | "brief" | "activity" | "money" | "spark" | "store" | "users" | "scissors" | "star";
 
 function Icon({ name }: { name: IconName }) {
-  const common = { width: 17, height: 17, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.6, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
+  const common = { width: 18, height: 18, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.75, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
   switch (name) {
     case "home":
-      return <svg {...common}><path d="M3 10.5 12 3l9 7.5" /><path d="M5 9.5V21h14V9.5" /></svg>;
+      return <svg {...common}><path d="M3 10.5 12 3l9 7.5" /><path d="M5 9.5V20a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9.5" /><path d="M9.5 21v-6.5h5V21" /></svg>;
     case "brief":
-      return <svg {...common}><rect x="5" y="3" width="14" height="18" rx="2" /><path d="M9 8h6M9 12h6M9 16h4" /></svg>;
+      return <svg {...common}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" /><path d="M14 2v6h6" /><path d="M9 13h6M9 17h6M9 9h1" /></svg>;
     case "activity":
-      return <svg {...common}><path d="M3 12h3.5l2.5-7 4 14 2.5-7H21" /></svg>;
+      return <svg {...common}><path d="M22 12h-4l-3 9L9 3l-3 9H2" /></svg>;
     case "money":
-      return <svg {...common}><rect x="2.5" y="6" width="19" height="12" rx="2" /><circle cx="12" cy="12" r="2.5" /><path d="M6 9.5v5M18 9.5v5" /></svg>;
+      return <svg {...common}><rect x="2" y="6" width="20" height="12" rx="2.5" /><circle cx="12" cy="12" r="2.5" /><path d="M6 12h.01M18 12h.01" /></svg>;
     case "spark":
-      return <svg {...common}><path d="M12 3l1.7 4.8L18 9.5l-4.3 1.7L12 16l-1.7-4.8L6 9.5l4.3-1.7L12 3Z" /><path d="M18.5 14l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8.8-2.2Z" /></svg>;
+      return <svg {...common}><path d="M11.4 3.3a.65.65 0 0 1 1.2 0l1.27 4.13a2 2 0 0 0 1.32 1.32l4.13 1.27a.65.65 0 0 1 0 1.24l-4.13 1.27a2 2 0 0 0-1.32 1.32l-1.27 4.13a.65.65 0 0 1-1.2 0l-1.27-4.13a2 2 0 0 0-1.32-1.32L4.68 11.5a.65.65 0 0 1 0-1.24l4.13-1.27a2 2 0 0 0 1.32-1.32Z" /><path d="M19 3.5v3M20.5 5h-3" /></svg>;
     case "store":
-      return <svg {...common}><path d="M4 9V5h16v4" /><path d="M4 9h16l-1 11H5L4 9Z" /><path d="M9 13h6" /></svg>;
+      return <svg {...common}><path d="M4 8 6 4h12l2 4" /><path d="M4 8h16" /><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8" /><path d="M9.5 20v-5h5v5" /></svg>;
     case "users":
-      return <svg {...common}><circle cx="9" cy="8" r="3" /><path d="M3.5 19a5.5 5.5 0 0 1 11 0" /><path d="M16 6.2a3 3 0 0 1 0 5.6" /><path d="M18.5 19a5 5 0 0 0-3-4.6" /></svg>;
+      return <svg {...common}><path d="M16 21v-1.8a4 4 0 0 0-4-4H6.5a4 4 0 0 0-4 4V21" /><circle cx="9.25" cy="7" r="3.75" /><path d="M21.5 21v-1.8a4 4 0 0 0-3-3.85" /><path d="M16 3.6a3.75 3.75 0 0 1 0 7.3" /></svg>;
     case "scissors":
-      return <svg {...common}><circle cx="6" cy="7" r="2.4" /><circle cx="6" cy="17" r="2.4" /><path d="M8 8.5 20 18M8 15.5 20 6" /></svg>;
+      return <svg {...common}><circle cx="6" cy="6.5" r="2.75" /><circle cx="6" cy="17.5" r="2.75" /><path d="M8.2 8.4 20 19.5" /><path d="M20 4.5 8.2 15.6" /><path d="M12 12h.01" /></svg>;
     case "star":
-      return <svg {...common}><path d="M12 3.5l2.6 5.3 5.9.8-4.3 4.1 1 5.8L12 16.8 6.8 19.5l1-5.8-4.3-4.1 5.9-.8L12 3.5Z" /></svg>;
+      return <svg {...common}><path d="M12 3.2l2.62 5.32 5.88.86-4.25 4.14 1 5.86L12 16.77 6.75 19.4l1-5.86L3.5 9.4l5.88-.86Z" /></svg>;
   }
 }
 
@@ -125,13 +126,13 @@ function ShellChrome({ qs, role, storeId, clientName, userName, email, streak, m
       {/* Sidebar — sticky so it stays pinned while the page scrolls. (Can't use
           `fixed` here: the .wipe-page-wrap ancestor sets will-change:transform,
           which makes a fixed element resolve against the wrapper, not the viewport.) */}
-      <aside className="sticky top-0 z-30 hidden h-screen w-[228px] shrink-0 flex-col overflow-y-auto border-r border-edge bg-[#060606] px-4 py-5 lg:flex">
+      <aside className="sticky top-0 z-30 hidden h-screen w-[228px] shrink-0 flex-col overflow-y-auto border-r border-edge bg-sidebar px-4 py-5 lg:flex">
         <Link href={withQs("/dashboard")} className="flex items-center gap-2 px-2">
           <span className="text-[21px] font-medium tracking-[-0.02em] text-ink">Urso</span>
           <span className="size-1.5 rounded-full bg-orange" />
         </Link>
 
-        <div className="mt-7 flex items-center gap-2.5 rounded-xl border border-edge bg-white/[0.02] px-3 py-2.5">
+        <div className="mt-7 flex items-center gap-2.5 rounded-xl border border-edge bg-raise px-3 py-2.5">
           <span className="grid size-8 place-items-center rounded-lg bg-orange-soft font-mono text-[12px] text-orange">{orgBadge}</span>
           <div className="min-w-0">
             <div className="truncate text-[13px] text-ink">{clientName}</div>
@@ -150,7 +151,7 @@ function ShellChrome({ qs, role, storeId, clientName, userName, email, streak, m
                     key={n.href}
                     href={withQs(n.href)}
                     className={`group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-[14px] transition-colors ${
-                      active ? "bg-white/[0.06] text-ink" : "text-ink-dim hover:bg-white/[0.03] hover:text-ink"
+                      active ? "bg-raise-strong text-ink" : "text-ink-dim hover:bg-raise hover:text-ink"
                     }`}
                   >
                     {active && <span className="absolute left-0 top-1/2 h-5 w-[2.5px] -translate-y-1/2 rounded-full bg-orange" />}
@@ -170,7 +171,7 @@ function ShellChrome({ qs, role, storeId, clientName, userName, email, streak, m
           <div className="flex items-center gap-2">
             <button
               onClick={() => setAccountOpen(true)}
-              className="group flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 rounded-xl border border-edge bg-white/[0.02] px-2.5 py-2 text-left transition-colors hover:border-edge-strong hover:bg-white/[0.04]"
+              className="group flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 rounded-xl border border-edge bg-raise px-2.5 py-2 text-left transition-colors hover:border-edge-strong hover:bg-raise"
             >
               <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-orange-soft font-mono text-[11px] text-orange">{initials}</span>
               <span className="min-w-0 flex-1">
@@ -181,16 +182,8 @@ function ShellChrome({ qs, role, storeId, clientName, userName, email, streak, m
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg>
               </span>
             </button>
-            <form action={signOut}>
-              <button
-                type="submit"
-                aria-label="Sign out"
-                className="grid size-9 shrink-0 cursor-pointer place-items-center rounded-lg border border-edge text-ink-dim transition-colors hover:border-edge-strong hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-orange/60"
-              >
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M15 4h3a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-3" /><path d="M10 17l-5-5 5-5" /><path d="M5 12h11" /></svg>
-              </button>
-            </form>
           </div>
+          <ThemeToggle />
           <div className="rounded-xl border border-dashed border-edge-strong p-3">
             <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-dimmer">Pilot · mock data</div>
             <p className="mt-1.5 text-[11.5px] leading-[1.45] text-ink-dim">Shaped like the live FranPOS, Twilio &amp; Google feeds.</p>
@@ -218,7 +211,7 @@ function ShellChrome({ qs, role, storeId, clientName, userName, email, streak, m
               <Link
                 key={n.href}
                 href={withQs(n.href)}
-                className={`shrink-0 rounded-full px-3 py-1.5 text-[13px] ${active ? "bg-white/[0.08] text-ink" : "text-ink-dim"}`}
+                className={`shrink-0 rounded-full px-3 py-1.5 text-[13px] ${active ? "bg-raise-strong text-ink" : "text-ink-dim"}`}
               >
                 {n.label}
               </Link>
@@ -297,7 +290,7 @@ function FilterBar({ qs, pathname, lockedStore }: { qs: string; pathname: string
   return (
     <div className="flex items-center gap-2">
       {lockedStore ? (
-        <span className="inline-flex items-center gap-1.5 rounded-full border border-edge bg-white/[0.02] px-3 py-1.5 text-[11.5px] text-ink-dim">
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-edge bg-raise px-3 py-1.5 text-[11.5px] text-ink-dim">
           <span className="text-ink-dimmer">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M4 9V5h16v4" /><path d="M4 9h16l-1 11H5L4 9Z" /></svg>
           </span>
@@ -342,7 +335,7 @@ function FilterSelect<T extends string>({
         onClick={() => setOpen((o) => !o)}
         aria-haspopup="listbox"
         aria-expanded={open}
-        className="inline-flex items-center gap-1.5 rounded-full border border-edge bg-white/[0.02] px-3 py-1.5 text-[11.5px] text-ink-dim transition-colors hover:border-edge-strong hover:text-ink"
+        className="inline-flex items-center gap-1.5 rounded-full border border-edge bg-raise px-3 py-1.5 text-[11.5px] text-ink-dim transition-colors hover:border-edge-strong hover:text-ink"
       >
         <span className="text-ink-dimmer">
           {glyph === "store" ? (
@@ -360,7 +353,7 @@ function FilterSelect<T extends string>({
           <button type="button" aria-label="Close" className="fixed inset-0 z-30 cursor-default" onClick={() => setOpen(false)} />
           <div
             role="listbox"
-            className="absolute right-0 z-40 mt-2 max-h-[320px] w-[200px] overflow-y-auto rounded-xl border border-edge bg-[#0c0c0c] p-1 shadow-[0_18px_40px_-16px_rgba(0,0,0,0.8)]"
+            className="absolute right-0 z-40 mt-2 max-h-[320px] w-[200px] overflow-y-auto rounded-xl border border-edge bg-surface p-1 shadow-[0_18px_40px_-16px_rgba(0,0,0,0.8)]"
           >
             {options.map((o) => {
               const sel = o.value === value;
@@ -374,7 +367,7 @@ function FilterSelect<T extends string>({
                     setOpen(false);
                   }}
                   className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-[12.5px] transition-colors ${
-                    sel ? "bg-white/[0.06] text-ink" : "text-ink-dim hover:bg-white/[0.04] hover:text-ink"
+                    sel ? "bg-raise-strong text-ink" : "text-ink-dim hover:bg-raise hover:text-ink"
                   }`}
                 >
                   {o.label}

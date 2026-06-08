@@ -44,10 +44,10 @@ export function Modal({
     <div className="fixed inset-0 z-[70] flex items-end justify-center sm:items-center" role="dialog" aria-modal="true">
       <button aria-label="Close" className="absolute inset-0 cursor-default bg-black/70 backdrop-blur-sm" onClick={onClose} />
       <div
-        className="no-scrollbar animate-stage-in relative z-10 max-h-[88vh] w-full overflow-y-auto rounded-t-2xl border border-edge bg-[#0c0c0c] shadow-[0_24px_64px_-24px_rgba(0,0,0,0.85)] sm:rounded-2xl"
+        className="no-scrollbar animate-stage-in relative z-10 max-h-[88vh] w-full overflow-y-auto rounded-t-2xl border border-edge bg-surface shadow-[0_24px_64px_-24px_rgba(0,0,0,0.85)] sm:rounded-2xl"
         style={{ maxWidth }}
       >
-        <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-edge bg-[#0c0c0c]/95 px-5 py-4 backdrop-blur-md">
+        <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-edge bg-surface/95 px-5 py-4 backdrop-blur-md">
           <div className="min-w-0">
             {eyebrow && (
               <div className="flex items-center gap-2">
@@ -66,7 +66,7 @@ export function Modal({
           </button>
         </div>
         <div className="px-5 py-5">{children}</div>
-        {footer && <div className="sticky bottom-0 border-t border-edge bg-[#0c0c0c]/95 px-5 py-4 backdrop-blur-md">{footer}</div>}
+        {footer && <div className="sticky bottom-0 border-t border-edge bg-surface/95 px-5 py-4 backdrop-blur-md">{footer}</div>}
       </div>
     </div>,
     document.body,

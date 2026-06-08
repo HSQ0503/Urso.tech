@@ -33,11 +33,11 @@ export function ChartContainer({
         data-chart={chartId}
         className={cn(
           "w-full font-mono",
-          "[&_.recharts-cartesian-axis-tick_text]:fill-[rgba(255,255,255,0.4)] [&_.recharts-cartesian-axis-tick_text]:text-[10px]",
-          "[&_.recharts-cartesian-grid_line]:stroke-[rgba(255,255,255,0.07)]",
+          "[&_.recharts-cartesian-axis-tick_text]:fill-[var(--color-axis)] [&_.recharts-cartesian-axis-tick_text]:text-[10px]",
+          "[&_.recharts-cartesian-grid_line]:stroke-[var(--color-grid)]",
           "[&_.recharts-cartesian-axis-line]:stroke-transparent [&_.recharts-cartesian-axis-tick-line]:stroke-transparent",
-          "[&_.recharts-curve.recharts-tooltip-cursor]:stroke-[rgba(255,255,255,0.16)]",
-          "[&_.recharts-rectangle.recharts-tooltip-cursor]:fill-[rgba(255,255,255,0.04)]",
+          "[&_.recharts-curve.recharts-tooltip-cursor]:stroke-[var(--color-edge-strong)]",
+          "[&_.recharts-rectangle.recharts-tooltip-cursor]:fill-[var(--color-raise)]",
           "[&_.recharts-surface]:overflow-visible focus:outline-none [&_*]:outline-none",
           className,
         )}
@@ -81,7 +81,7 @@ export function ChartTooltipContent({
   const { config } = useChart();
   if (!active || !payload?.length) return null;
   return (
-    <div className="min-w-[8rem] rounded-lg border border-edge bg-[#0c0c0c] px-3 py-2 shadow-[0_12px_32px_-12px_rgba(0,0,0,0.75)]">
+    <div className="min-w-[8rem] rounded-lg border border-edge bg-surface px-3 py-2 shadow-[0_12px_32px_-12px_rgba(0,0,0,0.75)]">
       {!hideLabel && (
         <div className="mb-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-ink-dimmer">
           {labelFormatter ? labelFormatter(label ?? "") : label}

@@ -12,7 +12,7 @@ function SectionLabel({ children, className = "" }: { children: React.ReactNode;
 
 function PlanList({ title, items, accent = false }: { title: string; items: string[]; accent?: boolean }) {
   return (
-    <div className="rounded-xl border border-edge bg-white/[0.015] p-4">
+    <div className="rounded-xl border border-edge bg-raise p-4">
       <SectionLabel>{title}</SectionLabel>
       <ol className="mt-3 space-y-2.5">
         {items.map((it, i) => (

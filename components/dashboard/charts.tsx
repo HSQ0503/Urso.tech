@@ -28,7 +28,7 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } f
 import type { FunnelStep } from "./data";
 
 const ORANGE = "#fe5100";
-const MUTED = "rgba(255,255,255,0.26)";
+const MUTED = "var(--color-series)";
 const fmtPct = (n: number) => `${Math.round(n * 100)}%`;
 const fmtHour = (h: number) => `${h > 12 ? h - 12 : h}${h >= 12 ? "p" : "a"}`;
 
@@ -103,7 +103,7 @@ export function CallsBars({
 }) {
   const chartData = labels.map((l, i) => ({ label: l, answered: total[i] - missed[i], missed: missed[i] }));
   const config = {
-    answered: { label: "Answered", color: "rgba(255,255,255,0.3)" },
+    answered: { label: "Answered", color: "var(--color-series)" },
     missed: { label: "Missed", color },
   } satisfies ChartConfig;
   return (
@@ -136,7 +136,7 @@ export function TrafficChart({
 }) {
   const chartData = labels.map((l, i) => ({ label: l, visits: visits[i], bookings: bookings[i] }));
   const config = {
-    visits: { label: "Visits", color: "rgba(255,255,255,0.22)" },
+    visits: { label: "Visits", color: "var(--color-series)" },
     bookings: { label: "New bookings", color },
   } satisfies ChartConfig;
   return (
@@ -170,7 +170,7 @@ export function CallsChart({
 }) {
   const data = hourly.map((v, i) => ({ hour: startHour + i, answered: v - missedHourly[i], missed: missedHourly[i] }));
   const config = {
-    answered: { label: "Answered", color: "rgba(255,255,255,0.22)" },
+    answered: { label: "Answered", color: "var(--color-series)" },
     missed: { label: "Missed", color: ORANGE },
   } satisfies ChartConfig;
   return (
@@ -300,16 +300,16 @@ export function ConversionFunnel({ steps }: { steps: FunnelStep[] }) {
               <span className="ml-1.5 text-ink-dimmer">{Math.round(s.pct * 100)}% of top</span>
             </span>
           </div>
-          <div className="h-8 w-full overflow-hidden rounded-md bg-white/[0.04]">
+          <div className="h-8 w-full overflow-hidden rounded-md bg-raise">
             <div
               className="h-full rounded-md"
-              style={{ width: `${Math.max(5, (s.value / max) * 100)}%`, background: s.leak ? "rgba(254,81,0,0.42)" : "rgba(255,255,255,0.14)" }}
+              style={{ width: `${Math.max(5, (s.value / max) * 100)}%`, background: s.leak ? "rgba(254,81,0,0.42)" : "var(--color-series-soft)" }}
             />
           </div>
           {i > 0 && (
             <div
               className="mt-1 text-right font-mono text-[10px] uppercase tracking-[0.1em]"
-              style={{ color: s.leak ? ORANGE : "rgba(255,255,255,0.38)" }}
+              style={{ color: s.leak ? ORANGE : "var(--color-ink-dimmer)" }}
             >
               {Math.round(s.stepConv * 100)}% continued{s.leak ? " · leak" : ""}
             </div>
@@ -330,7 +330,7 @@ export function RadialGauge({ value, caption, color = ORANGE, height = 168 }: { 
       <ChartContainer config={config} style={{ height }}>
         <RadialBarChart data={data} startAngle={220} endAngle={-40} innerRadius="74%" outerRadius="100%">
           <PolarAngleAxis type="number" domain={[0, 100]} angleAxisId={0} tick={false} />
-          <RadialBar background={{ fill: "rgba(255,255,255,0.07)" }} dataKey="value" cornerRadius={10} fill="var(--color-value)" angleAxisId={0} />
+          <RadialBar background={{ fill: "var(--color-track)" }} dataKey="value" cornerRadius={10} fill="var(--color-value)" angleAxisId={0} />
         </RadialBarChart>
       </ChartContainer>
       <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
@@ -347,7 +347,7 @@ export function BarRanking({
   valueFmt,
   format = "number",
   color = ORANGE,
-  track = "rgba(255,255,255,0.2)",
+  track = "var(--color-track)",
   labelWidth = 128,
   height,
   valueLabel = "Value",
@@ -416,8 +416,8 @@ export function RatingBars({ stars, counts }: { stars: number[]; counts: number[
         return (
           <div key={star} className="flex items-center gap-2.5">
             <span className="w-7 shrink-0 font-mono text-[11px] text-ink-dim">{star}★</span>
-            <div className="h-3 flex-1 overflow-hidden rounded-full bg-white/[0.05]">
-              <div className="h-full rounded-full" style={{ width: `${(c / max) * 100}%`, background: star >= 4 ? "rgba(255,255,255,0.28)" : ORANGE }} />
+            <div className="h-3 flex-1 overflow-hidden rounded-full bg-raise">
+              <div className="h-full rounded-full" style={{ width: `${(c / max) * 100}%`, background: star >= 4 ? "var(--color-series)" : ORANGE }} />
             </div>
             <span className="w-9 shrink-0 text-right font-mono text-[11px] text-ink-dim">{c}</span>
           </div>

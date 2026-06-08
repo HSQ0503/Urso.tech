@@ -62,7 +62,7 @@ export function Display({ children, className = "" }: { children: ReactNode; cla
 
 // Loading skeleton block — pulses in the brand's surface color.
 export function Skeleton({ className = "" }: { className?: string }) {
-  return <div className={`animate-pulse rounded-md bg-white/[0.05] ${className}`} />;
+  return <div className={`animate-pulse rounded-md bg-raise ${className}`} />;
 }
 
 export function SkeletonCard({ className = "", children }: { className?: string; children?: ReactNode }) {
@@ -130,7 +130,7 @@ export function SectionHeader({ index, title, desc, right }: { index: string; ti
 export function Delta({ value, invert = false }: { value: number; invert?: boolean }) {
   const up = value >= 0;
   const good = invert ? !up : up;
-  const color = good ? "#46d18a" : ORANGE;
+  const color = good ? "var(--color-good)" : ORANGE;
   const bg = good ? "rgba(70,209,138,0.12)" : "rgba(254,81,0,0.12)";
   return (
     <span
@@ -149,7 +149,7 @@ export function Tag({ children, tone = "muted" }: { children: ReactNode; tone?: 
   const map = {
     muted: "border-edge text-ink-dim",
     orange: "border-[rgba(254,81,0,0.35)] bg-orange-soft text-orange",
-    good: "border-[rgba(70,209,138,0.3)] text-[#46d18a]",
+    good: "border-[rgba(70,209,138,0.3)] text-[var(--color-good)]",
     warn: "border-[rgba(254,81,0,0.35)] text-orange",
   } as const;
   return (
@@ -160,7 +160,7 @@ export function Tag({ children, tone = "muted" }: { children: ReactNode; tone?: 
 }
 
 // ---- Horizontal meter ------------------------------------------------------
-export function Meter({ value, color = ORANGE, track = "rgba(255,255,255,0.08)" }: { value: number; color?: string; track?: string }) {
+export function Meter({ value, color = ORANGE, track = "var(--color-track)" }: { value: number; color?: string; track?: string }) {
   return (
     <div className="h-1.5 w-full overflow-hidden rounded-full" style={{ background: track }}>
       <div className="h-full rounded-full" style={{ width: `${Math.min(100, value * 100)}%`, background: color }} />
@@ -183,12 +183,12 @@ export function Legend({ items }: { items: { label: string; color: string }[] })
 
 export function Segmented<T extends string>({ options, value, onChange }: { options: { value: T; label: string }[]; value: T; onChange: (v: T) => void }) {
   return (
-    <div className="inline-flex items-center gap-0.5 rounded-full border border-edge bg-white/[0.02] p-0.5">
+    <div className="inline-flex items-center gap-0.5 rounded-full border border-edge bg-raise p-0.5">
       {options.map((o) => (
         <button
           key={o.value}
           onClick={() => onChange(o.value)}
-          className={`cursor-pointer rounded-full px-2.5 py-1 text-[11.5px] transition-colors ${value === o.value ? "bg-white/[0.08] text-ink" : "text-ink-dim hover:text-ink"}`}
+          className={`cursor-pointer rounded-full px-2.5 py-1 text-[11.5px] transition-colors ${value === o.value ? "bg-raise-strong text-ink" : "text-ink-dim hover:text-ink"}`}
         >
           {o.label}
         </button>

@@ -114,8 +114,8 @@ export function StoreScoreboard({
                   )}
                   {mine && <span className="rounded-full border border-edge-strong px-1.5 py-[1px] font-mono text-[9px] uppercase tracking-[0.12em] text-ink">You</span>}
                 </div>
-                <div className="mt-1.5 h-1.5 w-full max-w-[260px] overflow-hidden rounded-full bg-white/[0.07]">
-                  <div className="h-full rounded-full" style={{ width: `${width}%`, background: isLeader || mine ? "#fe5100" : "rgba(255,255,255,0.28)" }} />
+                <div className="mt-1.5 h-1.5 w-full max-w-[260px] overflow-hidden rounded-full bg-track">
+                  <div className="h-full rounded-full" style={{ width: `${width}%`, background: isLeader || mine ? "#fe5100" : "var(--color-series)" }} />
                 </div>
               </div>
 

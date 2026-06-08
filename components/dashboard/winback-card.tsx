@@ -43,7 +43,7 @@ export function WinbackCard({ list, winbackCount }: { list: Inactive[]; winbackC
                 onClick={() => setContacted((p) => ({ ...p, [c.name]: true }))}
                 disabled={done}
                 className={`shrink-0 rounded-lg border px-3 py-1.5 text-[12.5px] transition-colors ${
-                  done ? "cursor-default border-[rgba(70,209,138,0.3)] text-[#46d18a]" : "cursor-pointer border-edge-strong text-ink hover:bg-white/[0.05]"
+                  done ? "cursor-default border-[rgba(70,209,138,0.3)] text-[var(--color-good)]" : "cursor-pointer border-edge-strong text-ink hover:bg-raise"
                 }`}
               >
                 {done ? "Messaged ✓" : "Contact"}
@@ -56,7 +56,7 @@ export function WinbackCard({ list, winbackCount }: { list: Inactive[]; winbackC
       <div className="mt-auto border-t border-edge p-4">
         <button
           onClick={() => setConfirm(true)}
-          className="w-full cursor-pointer rounded-lg border border-edge-strong py-2.5 text-[13.5px] font-medium text-ink transition-colors hover:bg-white/[0.05]"
+          className="w-full cursor-pointer rounded-lg border border-edge-strong py-2.5 text-[13.5px] font-medium text-ink transition-colors hover:bg-raise"
         >
           {launched ? "Win-back campaign running ✓" : `Start win-back campaign · ${winbackCount} customers`}
         </button>
@@ -69,7 +69,7 @@ export function WinbackCard({ list, winbackCount }: { list: Inactive[]; winbackC
         title={launched ? "Campaign is running" : `Message ${winbackCount} lapsed customers?`}
         footer={
           launched ? (
-            <button onClick={() => setConfirm(false)} className="w-full cursor-pointer rounded-lg border border-edge-strong px-4 py-2.5 text-[13px] text-ink transition-colors hover:bg-white/[0.05]">
+            <button onClick={() => setConfirm(false)} className="w-full cursor-pointer rounded-lg border border-edge-strong px-4 py-2.5 text-[13px] text-ink transition-colors hover:bg-raise">
               Close
             </button>
           ) : (
@@ -80,7 +80,7 @@ export function WinbackCard({ list, winbackCount }: { list: Inactive[]; winbackC
               >
                 Launch campaign
               </button>
-              <button onClick={() => setConfirm(false)} className="cursor-pointer rounded-lg border border-edge-strong px-4 py-2.5 text-[13px] text-ink transition-colors hover:bg-white/[0.05]">
+              <button onClick={() => setConfirm(false)} className="cursor-pointer rounded-lg border border-edge-strong px-4 py-2.5 text-[13px] text-ink transition-colors hover:bg-raise">
                 Cancel
               </button>
             </div>

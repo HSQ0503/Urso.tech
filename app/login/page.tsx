@@ -14,7 +14,7 @@ const roleLabel: Record<Role, string> = {
 };
 
 const initials: Record<string, string> = {
-  urso: "UR", owner: "WG", "mgr-wp": "WP", "mgr-wg": "WG", "mgr-lv": "LV", "mgr-wm": "WM",
+  urso: "UR", owner: "RC", "mgr-wp": "WP", "mgr-wg": "WG", "mgr-lv": "LV", "mgr-wm": "WM",
 };
 
 const groups: { label: string; ids: string[] }[] = [
