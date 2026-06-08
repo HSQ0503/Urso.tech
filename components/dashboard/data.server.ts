@@ -21,6 +21,7 @@ import {
   type ServiceLine,
   type WeeklyBrief,
   type BriefChange,
+  type FunnelStep,
 } from "./data";
 
 // ── small helpers (kept local so this module stays self-contained) ──────────
@@ -55,23 +56,20 @@ type DailyRow = {
 
 async function loadDaily(month: MonthValue): Promise<Record<StoreId, Agg>> {
   const supabase = await createClient();
-  let query = supabase
-    .from("metrics_daily")
-    .select("store_id, revenue, grooming_revenue, retail_revenue, bookings, no_shows, rebooks, retail_attached, calls_total, calls_missed, web_visits, web_form_starts, web_form_completes, web_booked");
   const range = monthRange(month);
-  if (range) query = query.gte("date", range.start).lt("date", range.end);
-  const { data, error } = await query;
-  if (error) throw new Error(`metrics_daily read failed: ${error.message}`);
+  // Aggregate in the DB (returns ≤4 rows) — avoids PostgREST's 1,000-row cap.
+  const { data, error } = await supabase.rpc("metrics_by_store", { p_start: range?.start ?? null, p_end: range?.end ?? null });
+  if (error) throw new Error(`metrics_by_store failed: ${error.message}`);
 
   const acc = {} as Record<StoreId, Agg>;
   for (const s of stores) acc[s.id] = emptyAgg();
   for (const r of (data ?? []) as unknown as DailyRow[]) {
     const a = acc[r.store_id];
     if (!a) continue;
-    a.rev += Number(r.revenue); a.groom += Number(r.grooming_revenue); a.retail += Number(r.retail_revenue);
-    a.bookings += r.bookings; a.noShows += r.no_shows; a.rebooks += r.rebooks; a.attached += r.retail_attached;
-    a.calls += r.calls_total; a.missed += r.calls_missed;
-    a.visits += r.web_visits; a.starts += r.web_form_starts; a.completes += r.web_form_completes; a.booked += r.web_booked;
+    a.rev = Number(r.revenue); a.groom = Number(r.grooming_revenue); a.retail = Number(r.retail_revenue);
+    a.bookings = Number(r.bookings); a.noShows = Number(r.no_shows); a.rebooks = Number(r.rebooks); a.attached = Number(r.retail_attached);
+    a.calls = Number(r.calls_total); a.missed = Number(r.calls_missed);
+    a.visits = Number(r.web_visits); a.starts = Number(r.web_form_starts); a.completes = Number(r.web_form_completes); a.booked = Number(r.web_booked);
   }
   return acc;
 }
@@ -382,4 +380,106 @@ export async function getAgentActionsForStore(store: StoreId): Promise<AgentActi
   return (await loadActions())
     .filter((a) => a.store_id === store || a.store_label === "All stores" || a.store_label.includes(name) || name.startsWith(a.store_label.split(" · ")[0]))
     .map(toAction);
+}
+
+// ── public: time series for the trend charts (Performance, Home) ─────────────
+// Granularity follows the month filter: "all" → one point per calendar month,
+// a specific month → one point per day. Labels are generated from the data, so
+// they always match the series length.
+const MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+type SeriesBucket = { bucket: string; revenue: number; calls_total: number; calls_missed: number; web_visits: number; web_booked: number };
+
+export async function getSeries(scope: Scope, month: MonthValue) {
+  const supabase = await createClient();
+  const range = monthRange(month);
+  const monthly = month === "all";
+  // Bucketed + summed in the DB (≤12 months or ≤31 days) — avoids the row cap.
+  const { data, error } = await supabase.rpc("metrics_series", {
+    p_store_ids: scopeIds(scope),
+    p_start: range?.start ?? null,
+    p_end: range?.end ?? null,
+    p_monthly: monthly,
+  });
+  if (error) throw new Error(`metrics_series failed: ${error.message}`);
+  const rows = (data ?? []) as unknown as SeriesBucket[];
+  return {
+    labels: rows.map((r) => (monthly ? MONTH_ABBR[Number(r.bucket.slice(5, 7)) - 1] : String(Number(r.bucket.slice(8, 10))))),
+    revenue: rows.map((r) => Math.round(Number(r.revenue))),
+    callsTotal: rows.map((r) => Number(r.calls_total)),
+    callsMissed: rows.map((r) => Number(r.calls_missed)),
+    webVisits: rows.map((r) => Number(r.web_visits)),
+    webBookings: rows.map((r) => Number(r.web_booked)),
+  };
+}
+
+// ── public: conversion funnel (Performance) ─────────────────────────────────
+export async function getFunnel(scope: Scope, month: MonthValue): Promise<FunnelStep[]> {
+  const a = sumScope(await loadDaily(month), scopeIds(scope));
+  const raw = [
+    { stage: "Visited site", value: a.visits },
+    { stage: "Started booking", value: a.starts },
+    { stage: "Completed form", value: a.completes },
+    { stage: "Booked", value: a.booked },
+  ];
+  return raw.map((r, i) => {
+    const stepConv = i === 0 ? 1 : r.value / (raw[i - 1].value || 1);
+    return { ...r, pct: r.value / (a.visits || 1), stepConv, leak: i > 0 && stepConv < 0.45 };
+  });
+}
+
+// ── public: intraday call profile (Performance) ─────────────────────────────
+// The hourly shape is a fixed profile scaled by the real average daily call
+// volume from metrics_daily (intraday timing arrives for real with Twilio).
+const HOURLY = [4, 9, 14, 16, 15, 12, 13, 15, 14, 11, 9, 7, 5, 4];
+const MISSED_HOURLY = [1, 2, 3, 4, 3, 2, 3, 5, 5, 4, 4, 5, 4, 3];
+export async function getCallsHourly(scope: Scope, month: MonthValue) {
+  const a = sumScope(await loadDaily(month), scopeIds(scope));
+  const days = month === "all" ? 365 : 30;
+  const hSum = HOURLY.reduce((x, y) => x + y, 0);
+  const mSum = MISSED_HOURLY.reduce((x, y) => x + y, 0);
+  const hourly = HOURLY.map((h) => Math.round(((a.calls / days) * h) / hSum));
+  const missedHourly = MISSED_HOURLY.map((h, i) => Math.min(hourly[i], Math.round(((a.missed / days) * h) / mSum)));
+  return { hourly, missedHourly, startHour: 8, closeHour: 19 };
+}
+
+// ── public: groomer roster (Team page) ──────────────────────────────────────
+export async function getGroomers(scope: Scope): Promise<Groomer[]> {
+  const all = await loadGroomers();
+  return scope === "all" ? all : all.filter((g) => g.store === fullName(scope));
+}
+
+// ── public: Home "one action item" (the highest-scoring leak in scope) ───────
+export async function getTopAction(scope: Scope, month: MonthValue) {
+  const [byStore, listings] = await Promise.all([loadDaily(month), loadListings()]);
+  const cs = computeCalls(scope, byStore);
+  const ws = computeWeb(scope, byStore);
+  const m = computeMetrics(scope, byStore, listings);
+  const here = scope === "all" ? "across the four stores" : `at ${scopeLabel(scope)}`;
+  const candidates = [
+    {
+      score: 2 + cs.missedPct,
+      planKey: "call-capture",
+      title: "Missed calls aren't being followed up fast enough",
+      detail: `${pctStr(cs.missedPct)} of inbound calls ${here} go unanswered, and nothing texts those callers back. Each one is usually a booking that goes to whoever picks up next. Urso recommends a Twilio line that logs every missed call and has the AI text back a booking link within seconds.`,
+      metric: `${pctStr(cs.missedPct)} of calls missed`,
+      pending: true,
+    },
+    {
+      score: 1 - m.rebook,
+      planKey: "rebook-coach",
+      title: "Rebooking is below the level where recurring revenue holds",
+      detail: `Only ${pctStr(m.rebook)} of grooming customers ${here} rebook before leaving. Grooming is recurring revenue, so this is the most durable lever on long-term performance.`,
+      metric: `${pctStr(m.rebook)} rebook rate`,
+      pending: false,
+    },
+    {
+      score: 1 - ws.convRate * 3.5,
+      planKey: "booking-form",
+      title: "Online booking abandonment is suppressing new bookings",
+      detail: `${pctStr(1 - ws.convRate)} of website visitors ${here} leave without booking. The drop is concentrated in the booking form — a shorter, mobile-first form recovers most of it.`,
+      metric: `${pctStr(ws.convRate, 1)} book online`,
+      pending: true,
+    },
+  ];
+  return candidates.sort((a, b) => b.score - a.score)[0];
 }

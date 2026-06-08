@@ -5,8 +5,10 @@
 -- Gang figures. The shape (per store, per day) is exactly what the FranPOS cron
 -- will produce, so swapping the source later changes nothing downstream.
 --
--- Seeds ~180 days for the 4 stores, with a gentle upward trend + daily noise so
--- the charts look organic. Re-runnable (on conflict do nothing).
+-- Seeds ~365 days for the 4 stores, with a gentle upward trend + daily noise so
+-- the charts look organic. Re-runnable (on conflict do nothing) — but if you
+-- previously seeded 180 days, run `delete from metrics_daily;` first for a clean
+-- 12-month series.
 --
 -- DELETE this once the FranPOS cron is live:  delete from metrics_daily;
 
@@ -19,8 +21,8 @@ with params (store_id, rev, gpct, ticket, noshow, rebook, attach, calls, miss, v
 ),
 days as (
   select (current_date - g.n)      as date,
-         (180 - g.n)::numeric / 180 as t   -- 0 (oldest) .. 1 (today): the growth fraction
-  from generate_series(0, 180) as g(n)
+         (364 - g.n)::numeric / 364 as t   -- 0 (oldest) .. 1 (today): the growth fraction
+  from generate_series(0, 364) as g(n)
 )
 insert into metrics_daily (
   client_id, store_id, date,

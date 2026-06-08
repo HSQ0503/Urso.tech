@@ -24,40 +24,35 @@ if (!url || !key) {
 const supabase = createClient(url, key);
 const NAMES = { wp: "Winter Park", wg: "Winter Garden", lv: "Lakeside Village", wm: "Windermere" };
 
-const { data, error } = await supabase.from("metrics_daily").select("store_id, revenue, bookings");
+const { count } = await supabase.from("metrics_daily").select("*", { count: "exact", head: true });
+// Aggregate in the DB (avoids the 1,000-row response cap on raw selects).
+const { data, error } = await supabase.rpc("metrics_by_store");
 if (error) {
-  console.error("✖ Query failed:", error.message);
+  console.error("✖ metrics_by_store failed:", error.message, "\n  (run supabase/migrations/0003_aggregate_functions.sql)");
   process.exit(1);
 }
-if (!data.length) {
+if (!data || !data.length) {
   console.log("\n⚠ Connected fine, but metrics_daily is EMPTY — run supabase/seed_metrics_sample.sql first.\n");
   process.exit(0);
 }
 
-const agg = {};
-for (const r of data) {
-  (agg[r.store_id] ??= { days: 0, revenue: 0, bookings: 0 });
-  agg[r.store_id].days += 1;
-  agg[r.store_id].revenue += Number(r.revenue);
-  agg[r.store_id].bookings += r.bookings;
-}
-
-console.log(`\n✓ Connected to Supabase — read ${data.length} rows from metrics_daily\n`);
+const byId = Object.fromEntries(data.map((r) => [r.store_id, r]));
+console.log(`\n✓ Connected to Supabase — metrics_daily has ${count} rows (aggregated in-DB)\n`);
 for (const id of ["wp", "wg", "lv", "wm"]) {
-  const a = agg[id];
-  if (!a) {
+  const r = byId[id];
+  if (!r) {
     console.log(`  ${NAMES[id]}: no rows`);
     continue;
   }
   console.log(
-    `  ${NAMES[id].padEnd(18)} ${String(a.days).padStart(3)} days   ` +
-      `$${Math.round(a.revenue).toLocaleString().padStart(9)} revenue   ` +
-      `${a.bookings.toLocaleString().padStart(6)} bookings`,
+    `  ${NAMES[id].padEnd(18)} ` +
+      `$${Math.round(Number(r.revenue)).toLocaleString().padStart(9)} revenue   ` +
+      `${Number(r.bookings).toLocaleString().padStart(6)} bookings`,
   );
 }
 // Entity tables (seeded by seed_entities.sql)
 console.log("");
-for (const t of ["groomers", "customers", "store_listings", "agent_actions"]) {
+for (const t of ["groomers", "customers", "store_listings", "agent_actions", "reviews"]) {
   const { count, error: e } = await supabase.from(t).select("*", { count: "exact", head: true });
   console.log(`  ${t.padEnd(16)} ${e ? "✖ " + e.message : (count ?? 0) + " rows"}`);
 }

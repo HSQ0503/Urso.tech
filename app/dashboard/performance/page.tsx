@@ -1,18 +1,18 @@
 import {
-  calls,
-  metrics,
-  callStats,
-  webStats,
-  funnelData,
-  crossSell,
-  getSeries,
-  seriesLabels,
   parseScope,
   parseMonth,
   scopeLabel,
   monthLabel,
-  type Granularity,
 } from "@/components/dashboard/data";
+import {
+  getMetrics,
+  getCallStats,
+  getWebStats,
+  getFunnel,
+  getCrossSell,
+  getSeries,
+  getCallsHourly,
+} from "@/components/dashboard/data.server";
 import {
   Card,
   PageHeader,
@@ -49,15 +49,14 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
   const sp = await searchParams;
   const scope = parseScope(sp.store);
   const month = parseMonth(sp.month);
-  const gran: Granularity = month === "all" ? "monthly" : "daily";
-  const labels = seriesLabels(month, gran);
-
-  const m = metrics(scope, month);
-  const cs = callStats(scope, month);
-  const ws = webStats(scope, month);
-  const series = getSeries(scope, month);
-  const funnel = funnelData(scope, month);
-  const xs = crossSell(scope, month);
+  const m = await getMetrics(scope, month);
+  const cs = await getCallStats(scope, month);
+  const ws = await getWebStats(scope, month);
+  const series = await getSeries(scope, month);
+  const labels = series.labels;
+  const funnel = await getFunnel(scope, month);
+  const xs = await getCrossSell(scope, month);
+  const hourly = await getCallsHourly(scope, month);
   const here = scope === "all" ? "across the four stores" : `at ${scopeLabel(scope)}`;
   const period = month === "all" ? "Last 12 months" : monthLabel(month);
 
@@ -128,7 +127,7 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
 
         <Card className="mt-5">
           <SubHead eyebrow="When calls are missed" title="Calls by hour, with after-hours band" />
-          <CallsChart hourly={calls.hourly} missedHourly={calls.missedHourly} startHour={calls.startHour} closeHour={calls.closeHour} height={180} />
+          <CallsChart hourly={hourly.hourly} missedHourly={hourly.missedHourly} startHour={hourly.startHour} closeHour={hourly.closeHour} height={180} />
           <p className="mt-3 text-[13px] text-ink-dim">
             Misses cluster in the busy midday desk hours and after closing (shaded). After-hours calls are the clearest case for instant text-back.
           </p>
@@ -213,7 +212,7 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
               </div>
               <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-dimmer">{period}</span>
             </div>
-            <AreaChart data={series.revenue[gran]} labels={labels} format="moneyK" height={224} />
+            <AreaChart data={series.revenue} labels={labels} format="moneyK" height={224} />
           </Card>
 
           <Card className="flex flex-col gap-5">
