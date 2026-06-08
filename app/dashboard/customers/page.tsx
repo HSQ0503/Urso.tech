@@ -1,15 +1,18 @@
 import {
-  retention,
-  metrics,
-  crossSell,
-  customerSegments,
-  customersByValue,
-  customerIntel,
   parseScope,
   parseMonth,
   scopeLabel,
   monthLabel,
 } from "@/components/dashboard/data";
+import {
+  getMetrics,
+  getCrossSell,
+  getCustomerSegments,
+  getCustomersByValue,
+  getCustomerIntel,
+  getRetention,
+  getWinbackList,
+} from "@/components/dashboard/data.server";
 import {
   Card,
   PageHeader,
@@ -23,26 +26,19 @@ import {
 } from "@/components/dashboard/ui";
 import { WinbackCard } from "@/components/dashboard/winback-card";
 
-const inactive = [
-  { name: "Bella — Goldendoodle", store: "Winter Park", last: "63 days ago", visits: 11 },
-  { name: "Max — Schnauzer", store: "Windermere", last: "71 days ago", visits: 8 },
-  { name: "Luna — Cavapoo", store: "Winter Garden", last: "58 days ago", visits: 14 },
-  { name: "Cooper — Labrador", store: "Lakeside Village", last: "82 days ago", visits: 7 },
-  { name: "Daisy — Poodle", store: "Winter Park", last: "66 days ago", visits: 16 },
-];
-
 export default async function CustomersPage({ searchParams }: { searchParams: Promise<{ store?: string; month?: string }> }) {
   const sp = await searchParams;
   const scope = parseScope(sp.store);
   const month = parseMonth(sp.month);
   const period = month === "all" ? "Last 12 months" : monthLabel(month);
 
-  const m = metrics(scope, month);
-  const xs = crossSell(scope, month);
-  const segments = customerSegments(scope);
-  const topCustomers = customersByValue(scope);
-  const intel = customerIntel(scope);
-  const list = scope === "all" ? inactive : inactive.filter((c) => c.store === scopeLabel(scope) || scopeLabel(scope).startsWith(c.store.split(" ")[0]));
+  const m = await getMetrics(scope, month);
+  const xs = await getCrossSell(scope, month);
+  const segments = await getCustomerSegments(scope);
+  const topCustomers = await getCustomersByValue(scope);
+  const intel = await getCustomerIntel(scope);
+  const retention = await getRetention(scope, month);
+  const winback = await getWinbackList(scope);
 
   return (
     <div className="animate-stage-in">
@@ -154,7 +150,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
         </Card>
       </section>
 
-      <WinbackCard list={list} winbackCount={retention.winbackCount} />
+      <WinbackCard list={winback.list} winbackCount={winback.count} />
     </div>
   );
 }

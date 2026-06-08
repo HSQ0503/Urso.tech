@@ -1,13 +1,11 @@
 import {
   stores,
-  metrics,
-  callStats,
-  storeScores,
   parseScope,
   parseMonth,
   scopeLabel,
   monthLabel,
 } from "@/components/dashboard/data";
+import { storeComparison, getStoreScores } from "@/components/dashboard/data.server";
 import {
   Card,
   PageHeader,
@@ -28,11 +26,12 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
   const month = parseMonth(sp.month);
   const period = month === "all" ? "Last 12 months" : monthLabel(month);
 
-  const rows = stores.map((s) => {
-    const m = metrics(s.id, month);
-    const cs = callStats(s.id, month);
-    return { s, m, missed: cs.missedPct };
-  });
+  // Real data, all from Supabase: per-store metrics aggregated from the
+  // metrics_daily rollup, plus the composite scoreboard scores (which fold in
+  // the store rating from store_listings). Same shapes as the old mock.
+  const db = await storeComparison(month);
+  const scores = await getStoreScores(month);
+  const rows = stores.map((s) => ({ s, m: db[s.id], missed: db[s.id].missedPct }));
 
   const rank = (sel: (r: (typeof rows)[number]) => number) =>
     [...rows]
@@ -48,7 +47,7 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
       />
 
       {/* Scoreboard */}
-      <StoreScoreboard rows={storeScores(month)} highlightId={scope === "all" ? null : scope} variant="owner" />
+      <StoreScoreboard rows={scores} highlightId={scope === "all" ? null : scope} variant="owner" />
 
       {/* Comparison table */}
       <Card pad={false}>

@@ -182,7 +182,7 @@ export function OwnerHome({ searchParams, userName, streak }: { searchParams: Pr
           <CallsBars labels={labels} total={series.callsTotal} missed={series.callsMissed} />
           <div className="mt-3 flex items-center justify-between">
             <Legend items={[{ label: "Answered", color: "rgba(255,255,255,0.3)" }, { label: "Missed", color: "#fe5100" }]} />
-            <Tag tone="orange">Call tracking pending</Tag>
+            <Tag tone="muted">Call tracking pending</Tag>
           </div>
         </Card>
 
@@ -209,9 +209,8 @@ export function OwnerHome({ searchParams, userName, streak }: { searchParams: Pr
           <TrafficChart labels={labels} visits={series.webVisits} bookings={series.webBookings} />
           <div className="mt-3 flex items-center justify-between gap-3">
             <Legend items={[{ label: "Visits", color: "rgba(255,255,255,0.3)" }, { label: "Became bookings", color: "#fe5100" }]} />
-            <Tag tone="orange">Analytics pending</Tag>
+            <Tag tone="muted">Analytics pending</Tag>
           </div>
-          <p className="mt-2.5 text-[12px] leading-[1.5] text-ink-dimmer">The gap between the bars and the line is the booking demand leaving without an appointment.</p>
         </Card>
       </section>
 

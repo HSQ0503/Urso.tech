@@ -49,7 +49,7 @@ select
 from clients c
 cross join params p
 cross join days dy
-cross join lateral (select round(p.rev * (0.88 + 0.24 * dy.t) * (0.9 + random() * 0.2), 2) as revenue) rev
+cross join lateral (select round((p.rev * (0.88 + 0.24 * dy.t) * (0.9 + random() * 0.2))::numeric, 2) as revenue) rev
 cross join lateral (select greatest(1, round(rev.revenue / p.ticket))::int as bookings) bk
 cross join lateral (select greatest(0, round(p.calls * (0.85 + random() * 0.3)))::int as calls_total) ct
 cross join lateral (select greatest(0, round(p.visits * (0.85 + random() * 0.3)))::int as web_visits) wv

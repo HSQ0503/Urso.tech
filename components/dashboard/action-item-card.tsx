@@ -1,8 +1,9 @@
 "use client";
 
 // The "what to fix first" card — clickable (opens the full problem + proposed
-// solution), shaded orange, with a "Talk to Urso" CTA. Shared by the owner Home
-// and the manager Home so both behave the same.
+// solution), shaded orange, with a "Talk to Urso" CTA (the human team — distinct
+// from urso.ai, the AI that generated the recommendation). Shared by the owner
+// Home and the manager Home so both behave the same.
 
 import { useState } from "react";
 import { Micro, Tag } from "./ui";
@@ -50,36 +51,38 @@ export function ActionItemCard({
             setOpen(true);
           }
         }}
-        className="group relative flex cursor-pointer flex-col overflow-hidden rounded-2xl border border-[rgba(254,81,0,0.28)] p-5 transition-colors hover:border-[rgba(254,81,0,0.5)] focus:outline-none focus-visible:ring-2 focus-visible:ring-orange/60"
-        style={{ background: "linear-gradient(155deg, rgba(254,81,0,0.13), rgba(254,81,0,0.035) 55%, rgba(255,255,255,0.02))" }}
+        className="group relative flex cursor-pointer flex-col justify-center overflow-hidden rounded-2xl border border-[rgba(254,81,0,0.28)] p-6 transition-colors hover:border-[rgba(254,81,0,0.45)] focus:outline-none focus-visible:ring-2 focus-visible:ring-orange/50"
+        style={{ background: "linear-gradient(158deg, rgba(254,81,0,0.12) 0%, rgba(254,81,0,0.035) 48%, rgba(254,81,0,0) 100%)" }}
       >
-        <div aria-hidden className="pointer-events-none absolute -right-16 -top-16 h-44 w-44 rounded-full opacity-70 blur-3xl" style={{ background: "radial-gradient(circle, rgba(254,81,0,0.3), transparent 70%)" }} />
-        <div className="relative flex items-center justify-between gap-2">
+        <div aria-hidden className="pointer-events-none absolute -right-20 -top-20 h-48 w-48 rounded-full opacity-60 blur-3xl" style={{ background: "radial-gradient(circle, rgba(254,81,0,0.22), transparent 70%)" }} />
+
+        <div className="relative flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <span className="size-2 rounded-full bg-orange" />
             <Micro className="!text-orange">{eyebrow}</Micro>
           </div>
-          <span className="inline-flex items-center gap-1 font-mono text-[9.5px] uppercase tracking-[0.12em] text-orange/80">
-            <Spark /> Urso AI
+          <span className="inline-flex items-center gap-1 font-mono text-[9.5px] uppercase tracking-[0.12em] text-orange/70">
+            <Spark /> urso.ai
           </span>
         </div>
-        <h2 className="relative mt-3 text-[19px] font-medium leading-[1.25] tracking-[-0.01em]">{title}</h2>
-        <p className="relative mt-2.5 max-w-[680px] text-[13.5px] leading-[1.6] text-ink-dim">{detail}</p>
-        <div className="relative mt-auto flex flex-wrap items-center justify-between gap-3 pt-5">
-          <div className="flex items-center gap-2">
-            <Tag tone="orange">{metric}</Tag>
-            {pending && <Tag tone="muted">Pending data</Tag>}
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-dimmer transition-colors group-hover:text-ink-dim">See breakdown →</span>
-            <a
-              href={MAILTO}
-              onClick={(e) => e.stopPropagation()}
-              className="shrink-0 rounded-lg bg-orange px-4 py-2 text-[13px] font-medium text-white transition hover:brightness-110"
-            >
-              Talk to Urso
-            </a>
-          </div>
+
+        <h2 className="relative mt-4 text-[20px] font-medium leading-[1.2] tracking-[-0.015em]">{title}</h2>
+        <p className="relative mt-3 max-w-[640px] text-[13.5px] leading-[1.6] text-ink-dim">{detail}</p>
+
+        <div className="relative mt-5 flex flex-wrap items-center gap-2">
+          <Tag tone="orange">{metric}</Tag>
+          {pending && <Tag tone="muted">Pending data</Tag>}
+        </div>
+
+        <div className="relative mt-6 flex flex-wrap items-center gap-x-4 gap-y-2">
+          <a
+            href={MAILTO}
+            onClick={(e) => e.stopPropagation()}
+            className="rounded-lg bg-orange px-4 py-2 text-[13px] font-medium text-white transition hover:brightness-110"
+          >
+            Talk to Urso
+          </a>
+          <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-dimmer transition-colors group-hover:text-ink-dim">See breakdown →</span>
         </div>
       </div>
 

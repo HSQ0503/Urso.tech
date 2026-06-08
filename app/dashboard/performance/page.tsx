@@ -83,7 +83,7 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
                 points={["Every missed call is usually a booking that goes to a competitor.", "Call tracking isn't live yet — shaped like the Twilio feed."]}
                 recommendation="Stand up the Twilio missed-call line so every unanswered call gets an instant text-back with a booking link."
               />
-              <Tag tone="orange">Call tracking pending</Tag>
+              <Tag tone="muted">Call tracking pending</Tag>
             </div>
           }
         />
@@ -149,7 +149,7 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
                 points={["The biggest single drop is between starting and completing the form.", "Web analytics aren't wired yet — shaped like the GA4 feed."]}
                 recommendation="Ship a shorter, mobile-first booking form and A/B test it against the current one."
               />
-              <Tag tone="orange">Analytics pending</Tag>
+              <Tag tone="muted">Analytics pending</Tag>
             </div>
           }
         />
@@ -183,7 +183,6 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
             <div className="mt-3">
               <Legend items={[{ label: "Visits", color: "rgba(255,255,255,0.3)" }, { label: "Became bookings", color: "#fe5100" }]} />
             </div>
-            <p className="mt-2.5 text-[12px] leading-[1.5] text-ink-dimmer">Bars are site visits; the line is how many became bookings. The gap between them is demand leaving without an appointment.</p>
           </Card>
         </div>
       </section>

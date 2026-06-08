@@ -131,9 +131,15 @@ export function Delta({ value, invert = false }: { value: number; invert?: boole
   const up = value >= 0;
   const good = invert ? !up : up;
   const color = good ? "#46d18a" : ORANGE;
+  const bg = good ? "rgba(70,209,138,0.12)" : "rgba(254,81,0,0.12)";
   return (
-    <span className="inline-flex items-center gap-1 font-mono text-[11px]" style={{ color }}>
-      <span>{up ? "▲" : "▼"}</span>
+    <span
+      className="inline-flex items-center gap-1 rounded-full px-1.5 py-[2.5px] font-mono text-[10.5px] leading-none tabular-nums"
+      style={{ color, background: bg }}
+    >
+      <svg width="7.5" height="7.5" viewBox="0 0 10 10" fill="currentColor" aria-hidden className={up ? "" : "rotate-180"}>
+        <path d="M5 1.5 9 8.5 1 8.5Z" />
+      </svg>
       {Math.abs(value * 100).toFixed(0)}%
     </span>
   );

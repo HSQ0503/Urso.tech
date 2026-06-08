@@ -1,14 +1,16 @@
 import {
-  metrics,
-  revenueByLocation,
-  revenueByService,
-  revenueByGroomer,
-  revenueNewVsRepeat,
   parseScope,
   parseMonth,
   scopeLabel,
   monthLabel,
 } from "@/components/dashboard/data";
+import {
+  getMetrics,
+  getRevenueByLocation,
+  getRevenueByService,
+  getRevenueByGroomer,
+  getRevenueNewVsRepeat,
+} from "@/components/dashboard/data.server";
 import {
   Card,
   PageHeader,
@@ -27,11 +29,11 @@ export default async function RevenueMapPage({ searchParams }: { searchParams: P
   const month = parseMonth(sp.month);
   const period = month === "all" ? "Last 12 months" : monthLabel(month);
 
-  const m = metrics(scope, month);
-  const byLocation = revenueByLocation(month).map((r) => ({ name: r.name.replace("Village", "").trim(), value: r.value, highlight: scope === r.id }));
-  const byService = revenueByService(scope, month);
-  const byGroomer = revenueByGroomer(scope, month).slice(0, 6).map((g) => ({ name: g.name, value: g.value }));
-  const nvr = revenueNewVsRepeat(scope, month);
+  const m = await getMetrics(scope, month);
+  const byLocation = (await getRevenueByLocation(month)).map((r) => ({ name: r.name.replace("Village", "").trim(), value: r.value, highlight: scope === r.id }));
+  const byService = await getRevenueByService(scope, month);
+  const byGroomer = (await getRevenueByGroomer(scope, month)).slice(0, 6).map((g) => ({ name: g.name, value: g.value }));
+  const nvr = await getRevenueNewVsRepeat(scope, month);
   const repeatShare = nvr.repeat / (nvr.repeat + nvr.fresh);
 
   return (

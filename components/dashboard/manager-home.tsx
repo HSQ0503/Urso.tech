@@ -1,18 +1,20 @@
 import {
   scopeLabel,
   monthLabel,
-  managerFocus,
-  managerScorecard,
-  storeRanking,
-  storeScores,
-  agentActionsForStore,
-  groomersForStore,
-  customersNeedingAttention,
   actionStatusLabel,
   type ActionStatus,
   type StoreId,
   type MonthValue,
 } from "@/components/dashboard/data";
+import {
+  getManagerFocus,
+  getManagerScorecard,
+  getStoreRanking,
+  getStoreScores,
+  getAgentActionsForStore,
+  getGroomersForStore,
+  getCustomersNeedingAttention,
+} from "@/components/dashboard/data.server";
 import { Card, Micro, Tag, Delta, Meter, BarRanking, WelcomeBanner, fmtMoney, pct } from "@/components/dashboard/ui";
 import { ActionItemCard } from "@/components/dashboard/action-item-card";
 import { StoreScoreboard } from "@/components/dashboard/store-scoreboard";
@@ -31,17 +33,19 @@ const statusTone: Record<ActionStatus, "muted" | "orange" | "good" | "warn"> = {
 
 const shorten = (name: string) => name.replace(" Village", "");
 
-export function ManagerHome({ store, month, userName, streak }: { store: StoreId; month: MonthValue; userName: string; streak: number }) {
+export async function ManagerHome({ store, month, userName, streak }: { store: StoreId; month: MonthValue; userName: string; streak: number }) {
   const storeName = scopeLabel(store);
   const period = month === "all" ? "Last 12 months" : monthLabel(month);
-  const focus = managerFocus(store, month);
-  const scorecard = managerScorecard(store, month);
-  const rebookRank = storeRanking("rebook", month);
-  const answeredRank = storeRanking("answered", month);
-  const scores = storeScores(month);
-  const actions = agentActionsForStore(store);
-  const team = groomersForStore(store);
-  const watch = customersNeedingAttention(store);
+  const [focus, scorecard, rebookRank, answeredRank, scores, actions, team, watch] = await Promise.all([
+    getManagerFocus(store, month),
+    getManagerScorecard(store, month),
+    getStoreRanking("rebook", month),
+    getStoreRanking("answered", month),
+    getStoreScores(month),
+    getAgentActionsForStore(store),
+    getGroomersForStore(store),
+    getCustomersNeedingAttention(store),
+  ]);
 
   return (
     <div className="animate-stage-in space-y-10">

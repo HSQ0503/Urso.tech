@@ -1,9 +1,10 @@
 "use client";
 
-// "Ask AI" affordance that sits next to a chart/metric. Click → a modal with a
-// plain-English reading of that data and a recommended action. The analysis is
-// passed in as serializable props (deterministic mock; a real model fills these
-// once the feeds are live) so it can be rendered from server pages.
+// "Ask urso.ai" — the in-dashboard AI assistant. Click → a clean modal with a
+// plain-English reading of that data and a recommended action. This is the AI
+// product (urso.ai), distinct from "Talk to Urso" (the human team), so it has no
+// human-contact CTA. Analysis is passed in as serializable props (deterministic
+// mock; a real model fills these once the feeds are live).
 
 import { useState } from "react";
 import { Modal } from "./modal";
@@ -22,7 +23,7 @@ export function AskAi({
   points = [],
   recommendation,
   pending = false,
-  label = "Ask AI",
+  label = "Ask urso.ai",
 }: {
   topic: string;
   read: string;
@@ -36,45 +37,38 @@ export function AskAi({
     <>
       <button
         onClick={() => setOpen(true)}
-        className="inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-full border border-[rgba(254,81,0,0.35)] bg-orange-soft px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-orange transition-colors hover:bg-[rgba(254,81,0,0.18)]"
+        title={label}
+        aria-label={label}
+        className="inline-grid size-6 shrink-0 cursor-pointer place-items-center rounded-full border border-edge text-ink-dimmer transition-colors hover:border-[rgba(254,81,0,0.45)] hover:bg-orange-soft hover:text-orange"
       >
         <Spark />
-        {label}
       </button>
 
-      <Modal open={open} onClose={() => setOpen(false)} eyebrow="Urso AI" title={topic} maxWidth={520}>
+      <Modal open={open} onClose={() => setOpen(false)} eyebrow="urso.ai" title={topic} maxWidth={500}>
         <div className="space-y-5">
-          <div>
-            <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-dimmer">What this is telling you</div>
-            <p className="mt-2 text-[13.5px] leading-[1.6] text-ink-dim">{read}</p>
-          </div>
+          <p className="text-[14px] leading-[1.65] text-ink">{read}</p>
 
           {points.length > 0 && (
-            <ul className="space-y-2">
+            <ul className="space-y-2.5 border-t border-edge pt-4">
               {points.map((p, i) => (
                 <li key={i} className="flex gap-2.5 text-[13px] leading-[1.55] text-ink-dim">
-                  <span className="mt-[7px] size-1.5 shrink-0 rounded-full bg-orange" />
+                  <span className="mt-[7px] size-1 shrink-0 rounded-full bg-ink-dimmer" />
                   {p}
                 </li>
               ))}
             </ul>
           )}
 
-          <div className="rounded-xl border border-[rgba(254,81,0,0.3)] bg-orange-wash p-4">
+          <div className="rounded-xl border border-[rgba(254,81,0,0.28)] bg-orange-wash p-4">
             <div className="flex items-center gap-2">
-              <span className="text-orange"><Spark /></span>
+              <span className="text-orange">
+                <Spark />
+              </span>
               <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-orange">Recommended action</span>
               {pending && <span className="rounded-full border border-edge px-2 py-[2px] font-mono text-[9px] uppercase tracking-[0.12em] text-ink-dim">Pending data</span>}
             </div>
             <p className="mt-2 text-[13.5px] leading-[1.6] text-ink">{recommendation}</p>
           </div>
-
-          <a
-            href="mailto:han@urso.tech?subject=Urso%20—%20follow%20up"
-            className="inline-flex w-full items-center justify-center rounded-lg bg-orange px-4 py-2.5 text-[13px] font-medium text-white transition hover:brightness-110"
-          >
-            Talk to Urso about this →
-          </a>
         </div>
       </Modal>
     </>

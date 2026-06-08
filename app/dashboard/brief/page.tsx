@@ -1,12 +1,12 @@
 import Link from "next/link";
 import {
-  weeklyBrief,
   parseScope,
   parseMonth,
   scopeLabel,
   monthLabel,
   type BriefChange,
 } from "@/components/dashboard/data";
+import { getWeeklyBrief } from "@/components/dashboard/data.server";
 import { Card, PageHeader, Micro, Tag, Delta } from "@/components/dashboard/ui";
 
 // Delta colors green when good — map our precomputed `good` onto its invert flag.
@@ -17,7 +17,7 @@ export default async function BriefPage({ searchParams }: { searchParams: Promis
   const scope = parseScope(sp.store);
   const month = parseMonth(sp.month);
   const period = month === "all" ? "This week" : monthLabel(month);
-  const b = weeklyBrief(scope, month);
+  const b = await getWeeklyBrief(scope, month);
 
   return (
     <div className="animate-stage-in space-y-8">
