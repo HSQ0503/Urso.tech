@@ -1,8 +1,8 @@
 "use client";
 
 // The comprehensive breakdown shown inside an approval / overview modal:
-// the problem, what Urso proposes, what the dashboard does, and what the owner
-// does. Shared by the Home action item and the AI-actions approval workflow.
+// the problem, Urso's fix, what Urso does, and the owner's minimal part. Shared
+// by the Home action item and the AI-actions approval workflow.
 
 import type { ActionPlan } from "./data";
 
@@ -46,14 +46,14 @@ export function ActionPlanBody({ plan, metric }: { plan: ActionPlan; metric?: st
       </div>
 
       <div className="rounded-xl border border-[rgba(254,81,0,0.3)] bg-orange-wash p-4">
-        <SectionLabel className="!text-orange">What Urso proposes</SectionLabel>
+        <SectionLabel className="!text-orange">Urso&apos;s fix</SectionLabel>
         <div className="mt-2 text-[13.5px] font-medium text-ink">{plan.system}</div>
         <p className="mt-1.5 text-[13px] leading-[1.55] text-ink-dim">{plan.proposal}</p>
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <PlanList title="What the dashboard does" items={plan.how} accent />
-        <PlanList title="What you do" items={plan.your} />
+        <PlanList title="What Urso does" items={plan.how} accent />
+        <PlanList title="All you do" items={plan.your} />
       </div>
     </div>
   );

@@ -1,9 +1,9 @@
 "use client";
 
 // The "what to fix first" card — clickable (opens the full problem + proposed
-// solution), shaded orange, with a "Talk to Urso" CTA (the human team — distinct
-// from urso.ai, the AI that generated the recommendation). Shared by the owner
-// Home and the manager Home so both behave the same.
+// solution), shaded orange, with a "Have Urso fix this" CTA (the human team —
+// distinct from urso.ai, the AI that generated the recommendation). Shared by the
+// owner and manager Home; the CTA label is overridable via `cta`.
 
 import { useState } from "react";
 import { Micro, Tag } from "./ui";
@@ -28,6 +28,7 @@ export function ActionItemCard({
   metric,
   pending,
   planKey,
+  cta = "Have Urso fix this",
 }: {
   eyebrow: string;
   title: string;
@@ -35,6 +36,7 @@ export function ActionItemCard({
   metric: string;
   pending?: boolean;
   planKey: string;
+  cta?: string;
 }) {
   const [open, setOpen] = useState(false);
   const plan = actionPlans[planKey] ?? actionPlans["call-capture"];
@@ -80,7 +82,7 @@ export function ActionItemCard({
             onClick={(e) => e.stopPropagation()}
             className="rounded-lg bg-orange px-4 py-2 text-[13px] font-medium text-white transition hover:brightness-110"
           >
-            Talk to Urso
+            {cta}
           </a>
           <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-dimmer transition-colors group-hover:text-ink-dim">See breakdown →</span>
         </div>
@@ -93,7 +95,7 @@ export function ActionItemCard({
         title={title}
         footer={
           <a href={MAILTO} className="flex w-full items-center justify-center rounded-lg bg-orange px-4 py-2.5 text-[13px] font-medium text-white transition hover:brightness-110">
-            Talk to Urso about this →
+            {cta} →
           </a>
         }
       >

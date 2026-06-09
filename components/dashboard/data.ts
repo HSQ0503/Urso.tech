@@ -727,10 +727,10 @@ export const agentActions: AgentAction[] = [
 // workflow. A real model assembles these from the live feeds; deterministic here.
 export type ActionPlan = {
   problem: string;
-  system: string; // the system / tool we recommend
+  system: string; // the system / tool Urso sets up
   proposal: string; // one-line summary of the fix
-  how: string[]; // what the dashboard / AI does
-  your: string[]; // what the owner does
+  how: string[]; // what Urso does
+  your: string[]; // the owner's minimal part
 };
 
 export const actionPlans: Record<string, ActionPlan> = {
@@ -738,16 +738,16 @@ export const actionPlans: Record<string, ActionPlan> = {
     problem:
       "Calls that go unanswered — especially after closing — are the largest source of lost bookings. With no system catching them, a missed call is simply a customer who books with whoever picks up next.",
     system: "Twilio missed-call capture + instant AI text-back",
-    proposal: "Put a Twilio number behind your existing line so every unanswered call is logged, then text the caller back within seconds with a booking link.",
+    proposal: "Urso puts a Twilio number behind your existing line so every unanswered call is logged, then texts the caller back within seconds with a booking link.",
     how: [
-      "Forward-on-no-answer routes every missed call to a backend Twilio number — your published number never changes and customers never dial it.",
-      "The AI reads each missed call (time, after-hours or busy) and drafts a personal text inviting them to book online or request a morning callback.",
-      "The message sends within seconds, and the booking link is tracked so recovered appointments show up right here.",
+      "Urso routes every missed call to a backend Twilio number — your published number never changes and customers never dial it.",
+      "Urso's AI reads each missed call (time, after-hours or busy) and drafts a personal text inviting them to book online or request a morning callback.",
+      "Urso sends the text within seconds and tracks the booking link, so recovered appointments show up right here.",
     ],
     your: [
       "Approve the message wording and tone once.",
       "Choose the after-hours callback window.",
-      "Nothing day-to-day — it runs automatically and reports the bookings it recovers.",
+      "Nothing day-to-day — Urso runs it and reports the bookings it recovers.",
     ],
   },
   reviews: {

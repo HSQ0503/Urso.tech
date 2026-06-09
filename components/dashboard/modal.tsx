@@ -41,7 +41,7 @@ export function Modal({
   if (!open || typeof document === "undefined") return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[70] flex items-end justify-center sm:items-center" role="dialog" aria-modal="true">
+    <div className="theme-scope fixed inset-0 z-[70] flex items-end justify-center sm:items-center" role="dialog" aria-modal="true">
       <button aria-label="Close" className="absolute inset-0 cursor-default bg-black/70 backdrop-blur-sm" onClick={onClose} />
       <div
         className="no-scrollbar animate-stage-in relative z-10 max-h-[88vh] w-full overflow-y-auto rounded-t-2xl border border-edge bg-surface shadow-[0_24px_64px_-24px_rgba(0,0,0,0.85)] sm:rounded-2xl"

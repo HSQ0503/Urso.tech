@@ -10,7 +10,7 @@ export function InfoTip({ text, className = "", align = "center" }: { text: Reac
         tabIndex={0}
         role="button"
         aria-label="What this means"
-        className="grid size-[15px] cursor-help select-none place-items-center rounded-full border border-edge-strong font-mono text-[9px] font-medium normal-case leading-none tracking-normal text-ink-dimmer transition-colors hover:border-orange hover:text-orange focus:outline-none focus-visible:border-orange focus-visible:text-orange"
+        className="grid size-6 cursor-help select-none place-items-center rounded-full border border-edge-strong font-mono text-[13px] font-medium normal-case leading-none tracking-normal text-ink-dimmer transition-colors hover:border-orange hover:text-orange focus:outline-none focus-visible:border-orange focus-visible:text-orange"
       >
         i
       </span>

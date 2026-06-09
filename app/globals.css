@@ -26,7 +26,7 @@
   --color-axis: rgba(255, 255, 255, 0.4);
   --color-grid: rgba(255, 255, 255, 0.07);
   --color-good: #46d18a;
-  --color-star: #f5a623;
+  --color-star: #fe5100;
 
   --font-sans: var(--font-geist-sans), "Geist", system-ui, -apple-system, sans-serif;
   --font-mono: var(--font-geist-mono), "Geist Mono", ui-monospace, monospace;
@@ -80,7 +80,9 @@
    keeping orange as the accent. Components reference tokens, so this is the only
    place the palette lives — retune the light values here without touching JSX. */
 :root { color-scheme: dark; }
-:root[data-theme="light"] {
+/* Light mode is scoped to the dashboard (.theme-scope) — the marketing site
+   stays dark even when the user has light mode turned on. */
+:root[data-theme="light"] .theme-scope {
   color-scheme: light;
   --color-bg: #eceef1;
   --color-panel: #ffffff;
@@ -101,7 +103,7 @@
   --color-axis: rgba(20, 23, 28, 0.5);
   --color-grid: rgba(20, 23, 28, 0.08);
   --color-good: #11935a;
-  --color-star: #e0890a;
+  --color-star: #fe5100;
   --color-orange-soft: rgba(254, 81, 0, 0.1);
   --color-orange-wash: rgba(254, 81, 0, 0.05);
 }

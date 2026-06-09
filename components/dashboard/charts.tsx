@@ -417,12 +417,29 @@ export function BarRanking({
 // ---- 100% stacked share bar (part-to-whole) --------------------------------
 export function StackedShareBar({ segments }: { segments: { label: string; value: number; color: string }[] }) {
   const total = segments.reduce((a, s) => a + s.value, 0) || 1;
+  const last = segments.length - 1;
   return (
     <div className="space-y-3.5">
-      <div className="flex h-9 w-full overflow-hidden rounded-lg">
-        {segments.map((s, i) => (
-          <div key={i} className="min-w-[2px] transition-[width]" style={{ width: `${(s.value / total) * 100}%`, background: s.color }} />
-        ))}
+      {/* No overflow-hidden so the hover tooltip can escape; ends are rounded instead. */}
+      <div className="flex h-9 w-full">
+        {segments.map((s, i) => {
+          const share = Math.round((s.value / total) * 100);
+          return (
+            <div
+              key={i}
+              className={`group/seg relative min-w-[2px] cursor-default transition-[width,filter] hover:brightness-110 ${i === 0 ? "rounded-l-lg" : ""} ${i === last ? "rounded-r-lg" : ""}`}
+              style={{ width: `${(s.value / total) * 100}%`, background: s.color }}
+            >
+              <span className="pointer-events-none absolute bottom-[calc(100%+8px)] left-1/2 z-20 -translate-x-1/2 whitespace-nowrap rounded-lg border border-edge bg-surface px-3 py-2 opacity-0 shadow-[0_12px_32px_-12px_rgba(0,0,0,0.6)] transition-opacity duration-150 group-hover/seg:opacity-100">
+                <span className="flex items-center gap-2 text-[11.5px]">
+                  <span className="size-2 rounded-[2px]" style={{ background: s.color }} />
+                  <span className="text-ink-dim">{s.label}</span>
+                  <span className="font-mono tabular-nums text-ink">{share}%</span>
+                </span>
+              </span>
+            </div>
+          );
+        })}
       </div>
       <div className="flex flex-wrap gap-x-5 gap-y-2">
         {segments.map((s, i) => (

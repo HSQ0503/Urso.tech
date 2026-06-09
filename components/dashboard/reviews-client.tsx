@@ -234,7 +234,7 @@ export function ReviewsClient({
         title={plan?.title ?? ""}
         footer={
           <a href="mailto:han@urso.tech?subject=Urso%20%E2%80%94%20reviews" className="flex w-full items-center justify-center rounded-lg bg-orange px-4 py-2.5 text-[13px] font-medium text-white transition hover:brightness-110">
-            Talk to Urso about this →
+            Have Urso fix this →
           </a>
         }
       >

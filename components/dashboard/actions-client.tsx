@@ -257,7 +257,7 @@ function ActionCard({ action: a, onApprove, onDismiss }: { action: ActionWithPla
             </div>
           ) : (
             <a href="mailto:han@urso.tech?subject=Urso%20%E2%80%94%20action" className="flex w-full items-center justify-center rounded-lg border border-edge-strong px-4 py-2.5 text-[13px] text-ink transition-colors hover:bg-raise">
-              Talk to Urso about this →
+              Have Urso fix this →
             </a>
           )
         }

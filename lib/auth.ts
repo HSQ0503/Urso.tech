@@ -26,11 +26,11 @@ export const SESSION_COOKIE = "urso_session";
 // session + `users` membership and returns this same shape.
 export const MOCK_USERS: Record<string, SessionUser> = {
   urso: { id: "urso", name: "Han · Urso", email: "han@urso.tech", role: "urso_admin", clientId: "*", clientName: "Urso", storeId: null, streak: 21, memberSince: "May 2026" },
-  owner: { id: "owner", name: "Rubens Campos", email: "rubens@woofgangbakery.com", role: "owner", clientId: "woof-gang", clientName: "Woof Gang", storeId: null, streak: 9, memberSince: "May 2026" },
-  "mgr-wp": { id: "mgr-wp", name: "Winter Park manager", email: "winterpark@woofgangbakery.com", role: "manager", clientId: "woof-gang", clientName: "Woof Gang", storeId: "wp", streak: 14, memberSince: "May 2026" },
-  "mgr-wg": { id: "mgr-wg", name: "Winter Garden manager", email: "wintergarden@woofgangbakery.com", role: "manager", clientId: "woof-gang", clientName: "Woof Gang", storeId: "wg", streak: 8, memberSince: "May 2026" },
-  "mgr-lv": { id: "mgr-lv", name: "Lakeside manager", email: "lakeside@woofgangbakery.com", role: "manager", clientId: "woof-gang", clientName: "Woof Gang", storeId: "lv", streak: 5, memberSince: "Jun 2026" },
-  "mgr-wm": { id: "mgr-wm", name: "Windermere manager", email: "windermere@woofgangbakery.com", role: "manager", clientId: "woof-gang", clientName: "Woof Gang", storeId: "wm", streak: 6, memberSince: "Jun 2026" },
+  owner: { id: "owner", name: "Rubens Campos", email: "rubens@woofgangbakery.com", role: "owner", clientId: "woof-gang", clientName: "Woof Gang Investments", storeId: null, streak: 9, memberSince: "May 2026" },
+  "mgr-wp": { id: "mgr-wp", name: "Winter Park manager", email: "winterpark@woofgangbakery.com", role: "manager", clientId: "woof-gang", clientName: "Woof Gang Investments", storeId: "wp", streak: 14, memberSince: "May 2026" },
+  "mgr-wg": { id: "mgr-wg", name: "Winter Garden manager", email: "wintergarden@woofgangbakery.com", role: "manager", clientId: "woof-gang", clientName: "Woof Gang Investments", storeId: "wg", streak: 8, memberSince: "May 2026" },
+  "mgr-lv": { id: "mgr-lv", name: "Lakeside manager", email: "lakeside@woofgangbakery.com", role: "manager", clientId: "woof-gang", clientName: "Woof Gang Investments", storeId: "lv", streak: 5, memberSince: "Jun 2026" },
+  "mgr-wm": { id: "mgr-wm", name: "Windermere manager", email: "windermere@woofgangbakery.com", role: "manager", clientId: "woof-gang", clientName: "Woof Gang Investments", storeId: "wm", streak: 6, memberSince: "Jun 2026" },
 };
 
 export async function getSession(): Promise<SessionUser | null> {

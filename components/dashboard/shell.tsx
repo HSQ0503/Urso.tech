@@ -2,6 +2,7 @@
 
 import { Suspense, useState, type ReactNode } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   STORE_OPTIONS,
@@ -117,30 +118,20 @@ function ShellChrome({ qs, role, storeId, clientName, userName, email, streak, m
   const current = flatNav.find((n) => isActive(pathname, n.href))?.label ?? "Home";
   const withQs = (href: string) => (qs ? `${href}?${qs}` : href);
 
-  const storeName = lockedStore ? scopeLabel(lockedStore) : null;
-  const orgSub = lockedStore ? `${storeName} · store manager` : "4 stores · Orlando";
-  const orgBadge = lockedStore ? lockedStore.toUpperCase() : "WG";
+  const orgInitials = clientName.replace(/[^a-zA-Z ]/g, "").split(" ").filter(Boolean).slice(0, 2).map((p) => p[0]).join("").toUpperCase() || "WG";
 
   return (
-    <div className="min-h-screen bg-bg text-ink lg:flex">
+    <div className="theme-scope min-h-screen bg-bg text-ink lg:flex">
       {/* Sidebar — sticky so it stays pinned while the page scrolls. (Can't use
           `fixed` here: the .wipe-page-wrap ancestor sets will-change:transform,
           which makes a fixed element resolve against the wrapper, not the viewport.) */}
       <aside className="sticky top-0 z-30 hidden h-screen w-[228px] shrink-0 flex-col overflow-y-auto border-r border-edge bg-sidebar px-4 py-5 lg:flex">
-        <Link href={withQs("/dashboard")} className="flex items-center gap-2 px-2">
-          <span className="text-[21px] font-medium tracking-[-0.02em] text-ink">Urso</span>
-          <span className="size-1.5 rounded-full bg-orange" />
+        <Link href={withQs("/dashboard")} className="flex items-center gap-2.5 px-1">
+          <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-orange-soft font-mono text-[12px] font-medium text-orange">{orgInitials}</span>
+          <span className="text-[15px] font-medium leading-[1.15] tracking-[-0.01em] text-ink">{clientName}</span>
         </Link>
 
-        <div className="mt-7 flex items-center gap-2.5 rounded-xl border border-edge bg-raise px-3 py-2.5">
-          <span className="grid size-8 place-items-center rounded-lg bg-orange-soft font-mono text-[12px] text-orange">{orgBadge}</span>
-          <div className="min-w-0">
-            <div className="truncate text-[13px] text-ink">{clientName}</div>
-            <div className="truncate font-mono text-[10px] uppercase tracking-[0.12em] text-ink-dimmer">{orgSub}</div>
-          </div>
-        </div>
-
-        <nav className="mt-6 flex flex-col gap-5">
+        <nav className="mt-8 flex flex-col gap-5">
           {groups.map((g) => (
             <div key={g.group} className="flex flex-col gap-1">
               <div className="px-3 pb-1 font-mono text-[9.5px] uppercase tracking-[0.16em] text-ink-dimmer">{g.group}</div>
@@ -188,6 +179,13 @@ function ShellChrome({ qs, role, storeId, clientName, userName, email, streak, m
             <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-dimmer">Pilot · mock data</div>
             <p className="mt-1.5 text-[11.5px] leading-[1.45] text-ink-dim">Shaped like the live FranPOS, Twilio &amp; Google feeds.</p>
           </div>
+          <div className="flex items-center gap-2.5 border-t border-edge px-1 pt-4">
+            <Image src="/urso-mark.png" alt="Urso" width={20} height={20} className="shrink-0" />
+            <div className="leading-tight">
+              <div className="font-mono text-[8.5px] uppercase tracking-[0.16em] text-ink-dimmer">Powered by</div>
+              <div className="text-[12px] font-medium tracking-[-0.01em] text-ink-dim">Urso Systems</div>
+            </div>
+          </div>
         </div>
       </aside>
 
@@ -195,7 +193,7 @@ function ShellChrome({ qs, role, storeId, clientName, userName, email, streak, m
         {/* Top bar */}
         <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-edge bg-bg/75 px-5 py-3 backdrop-blur-md md:px-8">
           <div className="flex min-w-0 items-center gap-2 font-mono text-[11px] uppercase tracking-[0.14em] text-ink-dimmer">
-            <span className="text-[15px] font-medium normal-case tracking-normal text-ink lg:hidden">Urso</span>
+            <span className="truncate text-[14px] font-medium normal-case tracking-normal text-ink sm:hidden">{clientName}</span>
             <span className="hidden sm:inline">{clientName}</span>
             <span className="hidden text-edge-strong sm:inline">/</span>
             <span className="truncate text-ink-dim">{current}</span>

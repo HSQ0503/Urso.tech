@@ -68,6 +68,7 @@ export async function ManagerHome({ store, month, userName, streak }: { store: S
         metric={focus.metric}
         pending={focus.pending}
         planKey={focus.planKey}
+        cta="Talk to Urso"
       />
 
       {/* 2 — Where you stand */}
