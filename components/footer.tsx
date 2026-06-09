@@ -18,6 +18,7 @@ const columns: Array<readonly [string, ReadonlyArray<FooterLink>]> = [
     [
       { label: "About", href: "/about" },
       { label: "Book a diagnostic", href: "/book-a-diagnostic" },
+      { label: "Privacy", href: "/privacy" },
     ],
   ],
   [
