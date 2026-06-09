@@ -1,9 +1,7 @@
 import Link from "next/link";
 import {
   parseScope,
-  parseMonth,
   scopeLabel,
-  monthLabel,
   type BriefChange,
 } from "@/components/dashboard/data";
 import { getWeeklyBrief } from "@/components/dashboard/data.server";
@@ -15,9 +13,8 @@ const deltaInvert = (c: BriefChange) => (c.delta >= 0) !== c.good;
 export default async function BriefPage({ searchParams }: { searchParams: Promise<{ store?: string; month?: string }> }) {
   const sp = await searchParams;
   const scope = parseScope(sp.store);
-  const month = parseMonth(sp.month);
-  const period = month === "all" ? "This week" : monthLabel(month);
-  const b = await getWeeklyBrief(scope, month);
+  const period = "This week";
+  const b = await getWeeklyBrief(scope);
 
   return (
     <div className="animate-stage-in space-y-8">

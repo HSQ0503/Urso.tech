@@ -12,7 +12,7 @@ import { Modal } from "./modal";
 function Spark() {
   return (
     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" aria-hidden>
-      <path d="M12 3l1.7 4.8L18 9.5l-4.3 1.7L12 16l-1.7-4.8L6 9.5l4.3-1.7L12 3Z" />
+      <path d="M12 5.5l1.7 4.8L18 12l-4.3 1.7L12 18.5l-1.7-4.8L6 12l4.3-1.7L12 5.5Z" />
     </svg>
   );
 }
@@ -39,7 +39,7 @@ export function AskAi({
         onClick={() => setOpen(true)}
         title={label}
         aria-label={label}
-        className="inline-grid size-6 shrink-0 cursor-pointer place-items-center rounded-full border border-edge text-ink-dimmer transition-colors hover:border-[rgba(254,81,0,0.45)] hover:bg-orange-soft hover:text-orange"
+        className="inline-grid size-6 shrink-0 cursor-pointer place-items-center rounded-full border border-[rgba(254,81,0,0.35)] bg-orange-soft text-orange transition-colors hover:border-[rgba(254,81,0,0.55)] hover:bg-[rgba(254,81,0,0.18)]"
       >
         <Spark />
       </button>

@@ -8,6 +8,7 @@
 import { useState } from "react";
 import { actionPlans, type Review, type ActionPlan } from "@/components/dashboard/data";
 import { Card, PageHeader, Display, Micro, Tag, Meter, RatingBars, Segmented, pct } from "@/components/dashboard/ui";
+import { ChartInfo } from "@/components/dashboard/chart-info";
 import { Modal } from "@/components/dashboard/modal";
 import { ActionPlanBody } from "@/components/dashboard/action-plan";
 
@@ -97,7 +98,7 @@ export function ReviewsClient({
               </div>
               <div className="flex items-end justify-between">
                 <div>
-                  <Display className="text-[30px] leading-none text-ink">{r.rating.toFixed(1)}★</Display>
+                  <Display className="text-[30px] leading-none text-ink">{r.rating.toFixed(1)}<span className="text-star">★</span></Display>
                   <Micro className="mt-1.5">{r.volume} reviews</Micro>
                 </div>
                 <div className="text-right">
@@ -123,9 +124,12 @@ export function ReviewsClient({
       <section className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[1fr_1.6fr]">
         <Card className="flex h-fit flex-col gap-5 lg:sticky lg:top-[84px]">
           <div>
-            <Micro>Distribution</Micro>
+            <div className="flex items-center gap-1.5">
+              <Micro>Distribution</Micro>
+              <ChartInfo id="ratingDistribution" />
+            </div>
             <div className="mt-2 flex items-baseline gap-2.5">
-              <span className="text-[30px] font-medium leading-none tracking-[-0.02em]">{dist.rating.toFixed(1)}★</span>
+              <span className="text-[30px] font-medium leading-none tracking-[-0.02em]">{dist.rating.toFixed(1)}<span className="text-star">★</span></span>
               <span className="text-[12.5px] text-ink-dim">{dist.total} reviews</span>
             </div>
           </div>
@@ -154,7 +158,7 @@ export function ReviewsClient({
                 <div key={i} className="border-t border-edge px-5 py-4">
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2.5">
-                      <span className="font-mono text-[13px] text-ink" style={{ color: rev.rating <= 2 ? "#fe5100" : undefined }}>
+                      <span className="font-mono text-[13px]" style={{ color: rev.rating <= 2 ? "#fe5100" : "var(--color-star)" }}>
                         {"★".repeat(rev.rating)}<span className="text-ink-dimmer">{"★".repeat(5 - rev.rating)}</span>
                       </span>
                       <span className="text-[13.5px] text-ink-dim">{rev.author}</span>

@@ -25,13 +25,12 @@ import {
   TrafficChart,
   ConversionFunnel,
   RadialGauge,
-  DonutSplit,
-  StackedShareBar,
+  Donut,
   fmtMoney,
   pct,
 } from "@/components/dashboard/ui";
 import { AskAi } from "@/components/dashboard/ask-ai";
-import { InfoTip } from "@/components/dashboard/info-tip";
+import { ChartInfo } from "@/components/dashboard/chart-info";
 
 function SubHead({ eyebrow, title, right }: { eyebrow: string; title: string; right?: React.ReactNode }) {
   return (
@@ -90,7 +89,10 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
           <Card>
             <div className="mb-4 flex items-start justify-between">
               <div>
-                <Micro>Answered vs missed</Micro>
+                <div className="flex items-center gap-1.5">
+                  <Micro>Answered vs missed</Micro>
+                  <ChartInfo id="callsAnsweredMissed" />
+                </div>
                 <div className="mt-1.5 text-[22px] font-medium tracking-[-0.01em]">{cs.total.toLocaleString()} <span className="text-[13px] text-ink-dim">calls</span></div>
               </div>
               <div className="text-right">
@@ -105,7 +107,10 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
           </Card>
 
           <Card className="flex flex-col">
-            <Micro>Calls answered</Micro>
+            <div className="flex items-center gap-1.5">
+              <Micro>Calls answered</Micro>
+              <ChartInfo id="callsAnsweredGauge" />
+            </div>
             <div className="mt-1 grid place-items-center">
               <RadialGauge value={cs.answeredPct} caption="answered" />
             </div>
@@ -126,7 +131,7 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
         </div>
 
         <Card className="mt-5">
-          <SubHead eyebrow="When calls are missed" title="Calls by hour, with after-hours band" />
+          <SubHead eyebrow="When calls are missed" title="Calls by hour, with after-hours band" right={<ChartInfo id="callsByHour" align="right" />} />
           <CallsChart hourly={hourly.hourly} missedHourly={hourly.missedHourly} startHour={hourly.startHour} closeHour={hourly.closeHour} height={180} />
           <p className="mt-3 text-[13px] text-ink-dim">
             Misses cluster in the busy midday desk hours and after closing (shaded). After-hours calls are the clearest case for instant text-back.
@@ -156,7 +161,10 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
           <Card>
             <div className="mb-4 flex items-end justify-between">
               <div>
-                <Micro>Online booking funnel</Micro>
+                <div className="flex items-center gap-1.5">
+                  <Micro>Online booking funnel</Micro>
+                  <ChartInfo id="bookingFunnel" />
+                </div>
                 <div className="mt-1.5 text-[15px] text-ink-dim">From first visit to a booked appointment</div>
               </div>
               <div className="text-right">
@@ -170,7 +178,10 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
           <Card>
             <div className="mb-4 flex items-start justify-between">
               <div>
-                <Micro>Website traffic vs bookings</Micro>
+                <div className="flex items-center gap-1.5">
+                  <Micro>Website traffic vs bookings</Micro>
+                  <ChartInfo id="webTraffic" />
+                </div>
                 <div className="mt-1.5 text-[22px] font-medium tracking-[-0.01em]">{ws.visits.toLocaleString()} <span className="text-[13px] text-ink-dim">visits</span></div>
               </div>
               <div className="text-right">
@@ -207,7 +218,10 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
           <Card>
             <div className="mb-4 flex items-end justify-between">
               <div>
-                <Micro>Revenue</Micro>
+                <div className="flex items-center gap-1.5">
+                  <Micro>Revenue</Micro>
+                  <ChartInfo id="revenueTrend" />
+                </div>
                 <div className="mt-1.5 text-[22px] font-medium tracking-[-0.01em]">{fmtMoney(m.revenue)}</div>
               </div>
               <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-dimmer">{period}</span>
@@ -217,23 +231,19 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
 
           <Card className="flex flex-col gap-5">
             <div>
-              <Micro>Revenue by line</Micro>
+              <div className="flex items-center gap-1.5">
+                <Micro>Grooming &amp; retail mix</Micro>
+                <ChartInfo id="crossSellMix" />
+              </div>
               <div className="mt-4">
-                <DonutSplit a={m.grooming} b={m.retail} labelA="Grooming" labelB="Retail" />
+                <Donut
+                  segments={[
+                    { label: "Both", value: xs.both, color: "#fe5100" },
+                    { label: "Grooming only", value: xs.groomingOnly, color: "var(--color-series)" },
+                    { label: "Retail only", value: xs.retailOnly, color: "var(--color-series-soft)" },
+                  ]}
+                />
               </div>
-            </div>
-            <div className="border-t border-edge pt-5">
-              <div className="mb-3 flex items-center gap-1.5">
-                <Micro>Customer overlap</Micro>
-                <InfoTip text="Share of customers buying grooming, retail, or both. Customers who buy both spend materially more per visit, so the goal is moving grooming-only customers into 'both'." />
-              </div>
-              <StackedShareBar
-                segments={[
-                  { label: "Both", value: xs.both, color: "#fe5100" },
-                  { label: "Grooming only", value: xs.groomingOnly, color: "var(--color-series)" },
-                  { label: "Retail only", value: xs.retailOnly, color: "var(--color-series-soft)" },
-                ]}
-              />
             </div>
             <div className="grid grid-cols-2 gap-x-3 gap-y-4 border-t border-edge pt-5">
               <div>

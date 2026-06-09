@@ -19,6 +19,7 @@ import { Card, Micro, Tag, Delta, Meter, BarRanking, WelcomeBanner, fmtMoney, pc
 import { ActionItemCard } from "@/components/dashboard/action-item-card";
 import { StoreScoreboard } from "@/components/dashboard/store-scoreboard";
 import { InfoTip } from "@/components/dashboard/info-tip";
+import { ChartInfo } from "@/components/dashboard/chart-info";
 import { GROOMER_COL_HELP } from "@/components/dashboard/team-help";
 
 const GREEN = "var(--color-good)";
@@ -243,7 +244,10 @@ function RateRankCard({ title, ranking, storeId }: { title: string; ranking: { i
   return (
     <Card>
       <div className="mb-3 flex items-center justify-between gap-2">
-        <Micro>{title}</Micro>
+        <div className="flex items-center gap-1.5">
+          <Micro>{title}</Micro>
+          <ChartInfo id="managerRank" />
+        </div>
         <span className="font-mono text-[11px] text-ink-dim">
           #{pos} of {ranking.length}
           {pos > 1 ? ` · ${gap} pts behind ${shorten(leader.name)}` : " · leading"}

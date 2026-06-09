@@ -25,6 +25,7 @@ import {
   pct,
 } from "@/components/dashboard/ui";
 import { WinbackCard } from "@/components/dashboard/winback-card";
+import { ChartInfo } from "@/components/dashboard/chart-info";
 
 export default async function CustomersPage({ searchParams }: { searchParams: Promise<{ store?: string; month?: string }> }) {
   const sp = await searchParams;
@@ -58,13 +59,19 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
       <div className="mt-8 grid grid-cols-1 gap-5 lg:grid-cols-2">
         <Card className="flex flex-col gap-6">
           <div>
-            <Micro>New vs returning</Micro>
+            <div className="flex items-center gap-1.5">
+              <Micro>New vs returning</Micro>
+              <ChartInfo id="returningVsNew" />
+            </div>
             <div className="mt-3">
               <DonutSplit a={retention.returningPct} b={retention.newPct} labelA="Returning" labelB="New" />
             </div>
           </div>
           <div className="border-t border-edge pt-5">
-            <Micro className="mb-3">Cohort retention — share of each month&rsquo;s new customers still active</Micro>
+            <div className="mb-3 flex items-center gap-1.5">
+              <Micro>Cohort retention — share of each month&rsquo;s new customers still active</Micro>
+              <ChartInfo id="cohortRetention" />
+            </div>
             <CohortCurve data={retention.cohort} />
             <p className="mt-3 text-[13px] leading-[1.55] text-ink-dim">
               Just over half of new customers remain active after a year. Improving this curve is the most durable driver of recurring revenue.
@@ -74,7 +81,10 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
 
         <Card className="flex flex-col gap-6">
           <div>
-            <Micro>Cross-sell</Micro>
+            <div className="flex items-center gap-1.5">
+              <Micro>Cross-sell</Micro>
+              <ChartInfo id="crossSellMix" />
+            </div>
             <h2 className="mt-1.5 text-[18px] font-medium tracking-[-0.01em]">Retail &amp; grooming overlap</h2>
             <p className="mt-2 text-[13px] leading-[1.55] text-ink-dim">
               Customers who buy both spend materially more per visit. The largest opportunity is converting grooming-only customers into retail buyers at checkout.

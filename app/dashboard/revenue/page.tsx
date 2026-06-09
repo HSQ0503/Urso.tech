@@ -22,6 +22,7 @@ import {
   fmtMoney,
   pct,
 } from "@/components/dashboard/ui";
+import { ChartInfo } from "@/components/dashboard/chart-info";
 
 export default async function RevenueMapPage({ searchParams }: { searchParams: Promise<{ store?: string; month?: string }> }) {
   const sp = await searchParams;
@@ -56,13 +57,19 @@ export default async function RevenueMapPage({ searchParams }: { searchParams: P
       {/* Location + line */}
       <section className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <Card>
-          <Micro>By location</Micro>
+          <div className="flex items-center gap-1.5">
+            <Micro>By location</Micro>
+            <ChartInfo id="revenueByLocation" />
+          </div>
           <h2 className="mb-4 mt-1.5 text-[17px] font-medium tracking-[-0.01em]">Revenue by store</h2>
           <BarRanking data={byLocation} format="moneyK" labelWidth={104} valueLabel="Revenue" />
         </Card>
         <Card className="flex flex-col gap-6">
           <div>
-            <Micro>By line · customer overlap</Micro>
+            <div className="flex items-center gap-1.5">
+              <Micro>By line · customer overlap</Micro>
+              <ChartInfo id="crossSellMix" />
+            </div>
             <h2 className="mt-1.5 text-[17px] font-medium tracking-[-0.01em]">Grooming vs retail</h2>
             <div className="mt-4">
               <StackedShareBar
@@ -75,7 +82,10 @@ export default async function RevenueMapPage({ searchParams }: { searchParams: P
             </div>
           </div>
           <div className="border-t border-edge pt-5">
-            <Micro className="mb-3">New vs repeat revenue</Micro>
+            <div className="mb-3 flex items-center gap-1.5">
+              <Micro>New vs repeat revenue</Micro>
+              <ChartInfo id="newVsRepeat" />
+            </div>
             <StackedShareBar
               segments={[
                 { label: "Repeat customers", value: nvr.repeat, color: "#fe5100" },
@@ -104,7 +114,10 @@ export default async function RevenueMapPage({ searchParams }: { searchParams: P
           </div>
         </Card>
         <Card>
-          <Micro>By groomer</Micro>
+          <div className="flex items-center gap-1.5">
+            <Micro>By groomer</Micro>
+            <ChartInfo id="revenueByGroomer" />
+          </div>
           <h2 className="mb-4 mt-1.5 text-[17px] font-medium tracking-[-0.01em]">Revenue handled</h2>
           <BarRanking data={byGroomer} format="moneyK" labelWidth={130} valueLabel="Revenue handled" />
         </Card>

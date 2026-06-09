@@ -6,6 +6,7 @@
 import { useState } from "react";
 import { type Groomer } from "@/components/dashboard/data";
 import { Card, PageHeader, Micro, Tag, BarRanking, CohortCurve, fmtMoney, pct } from "@/components/dashboard/ui";
+import { ChartInfo } from "@/components/dashboard/chart-info";
 import { InfoTip } from "@/components/dashboard/info-tip";
 import { GROOMER_COL_HELP } from "@/components/dashboard/team-help";
 
@@ -57,7 +58,10 @@ export function TeamClient({ roster, scopeName, period }: { roster: Groomer[]; s
       <Card>
         <div className="mb-4 flex items-end justify-between">
           <div>
-            <Micro>Productivity</Micro>
+            <div className="flex items-center gap-1.5">
+              <Micro>Productivity</Micro>
+              <ChartInfo id="productivityRank" />
+            </div>
             <h2 className="mt-1.5 text-[17px] font-medium tracking-[-0.01em]">Revenue per labour hour</h2>
           </div>
           <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-dimmer">{roster.length} groomers</span>
@@ -144,7 +148,10 @@ export function TeamClient({ roster, scopeName, period }: { roster: Groomer[]; s
           </div>
 
           <div className="border-t border-edge pt-4">
-            <Micro className="mb-3">Their client retention — % still active</Micro>
+            <div className="mb-3 flex items-center gap-1.5">
+              <Micro>Their client retention — % still active</Micro>
+              <ChartInfo id="groomerRetention" />
+            </div>
             <CohortCurve data={p.cohort} />
           </div>
 

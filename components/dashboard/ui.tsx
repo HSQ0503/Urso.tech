@@ -14,6 +14,7 @@ export {
   CallsChart,
   StackedArea,
   DonutSplit,
+  Donut,
   CohortCurve,
   ConversionFunnel,
   RadialGauge,

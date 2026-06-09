@@ -1,0 +1,179 @@
+// Per-chart "how to read this" content for the dashboard's info/legend popovers.
+// Pure data (no JSX) so this module stays server-safe and importable anywhere.
+// Rendered by <ChartInfo id="..." />. Voice is plain and second-person; describe
+// what's observed, never promise recovered dollars (see vault: "How I Work").
+
+export type GuideLegendItem = {
+  color: string; // matches the series colour in the chart (hex or CSS var)
+  label: string;
+  note?: string;
+  shape?: "square" | "line" | "dot";
+};
+
+export type ChartGuide = {
+  summary: string; // what the graph shows
+  read: string; // how to read it — axes and direction
+  legend?: GuideLegendItem[];
+  source?: string; // which feed fills it / honesty tag
+};
+
+const ORANGE = "#fe5100";
+const SERIES = "var(--color-series)";
+const SERIES_SOFT = "var(--color-series-soft)";
+const TRACK = "var(--color-track)";
+
+const FRANPOS = "FranPOS · measurable now";
+const TWILIO = "Twilio · sample data until call tracking is live";
+const GA4 = "Google Analytics · sample data until web tracking is live";
+const GBP = "Google Business Profile · sample data until reviews are live";
+
+export const CHART_GUIDES = {
+  revenueTrend: {
+    summary: "Total revenue over time, summed across whatever the store and month filters are set to.",
+    read: "Left to right is time; the height of the line is dollars. Read the slope — a rising line means revenue is growing. Hover any point for that period's exact figure.",
+    legend: [{ color: ORANGE, label: "Revenue", shape: "line" }],
+    source: FRANPOS,
+  },
+  callsAnsweredMissed: {
+    summary: "Inbound calls each period, split into the ones answered and the ones missed.",
+    read: "Each bar is one period's total calls. The muted lower part is answered; the orange upper part is missed. More orange means more booking demand reaching no one.",
+    legend: [
+      { color: SERIES, label: "Answered" },
+      { color: ORANGE, label: "Missed", note: "usually a booking that goes to a competitor" },
+    ],
+    source: TWILIO,
+  },
+  webTraffic: {
+    summary: "Website visits set against how many of those visits turned into an online booking.",
+    read: "The bars are visits (left axis); the line is bookings that resulted (right axis). The gap between the two is demand leaving the site without an appointment.",
+    legend: [
+      { color: SERIES, label: "Visits", shape: "square" },
+      { color: ORANGE, label: "Became bookings", shape: "line" },
+    ],
+    source: GA4,
+  },
+  callsAnsweredGauge: {
+    summary: "The share of inbound calls that reached someone, shown as a single rate.",
+    read: "The dial fills from 0% to 100% and the centre shows the rate. Higher is better — it's the percent of callers you answered.",
+    legend: [{ color: ORANGE, label: "Answered", note: "the filled portion of the dial" }],
+    source: TWILIO,
+  },
+  callsByHour: {
+    summary: "When calls arrive across the day, and when they go unanswered — hour by hour.",
+    read: "The X axis is the hour, morning to night. Each bar splits answered from missed. The shaded band is after closing, when no one is at the desk — the clearest case for instant text-back.",
+    legend: [
+      { color: SERIES, label: "Answered" },
+      { color: ORANGE, label: "Missed" },
+      { color: "rgba(254,81,0,0.2)", label: "After hours", note: "store is closed" },
+    ],
+    source: TWILIO,
+  },
+  bookingFunnel: {
+    summary: "The online booking journey from first visit to a booked appointment, stage by stage.",
+    read: "Each bar is a stage; its width is how many people reach it. The percent below a bar is how many continued from the stage above. The widest drop — marked 'leak' in orange — is where the most bookings are lost.",
+    legend: [
+      { color: SERIES_SOFT, label: "Stage volume" },
+      { color: "rgba(254,81,0,0.55)", label: "Leak stage", note: "the largest drop-off" },
+    ],
+    source: GA4,
+  },
+  crossSellMix: {
+    summary: "How customers divide across buying grooming, retail, or both.",
+    read: "The segments are shares of customers and add to 100%. Customers who buy both spend materially more per visit, so the aim is moving 'grooming only' into 'both'.",
+    legend: [
+      { color: ORANGE, label: "Both" },
+      { color: SERIES, label: "Grooming only" },
+      { color: SERIES_SOFT, label: "Retail only" },
+    ],
+    source: FRANPOS,
+  },
+  revenueByLocation: {
+    summary: "Revenue handled by each of the four stores, ranked highest to lowest.",
+    read: "Each bar is one store; longer is more revenue. The highlighted bar is the store your filter is on. Revenue is defined the same way across all four, so the comparison is fair.",
+    legend: [
+      { color: TRACK, label: "Store" },
+      { color: ORANGE, label: "Selected store", note: "set by the store filter" },
+    ],
+    source: FRANPOS,
+  },
+  newVsRepeat: {
+    summary: "How much revenue comes from repeat customers versus first-time ones.",
+    read: "The bar is 100% of revenue, split by customer type. A larger repeat share means a stickier base — grooming is recurring, so repeat revenue is the durable kind.",
+    legend: [
+      { color: ORANGE, label: "Repeat customers" },
+      { color: SERIES, label: "New customers" },
+    ],
+    source: FRANPOS,
+  },
+  revenueByGroomer: {
+    summary: "Revenue handled by each groomer, ranked highest to lowest.",
+    read: "Each bar is one groomer; longer is more revenue passing through their chair. Read it as workload and contribution, not a verdict — pair it with rebooking and attach.",
+    legend: [{ color: TRACK, label: "Groomer" }],
+    source: FRANPOS,
+  },
+  storeRankRebook: {
+    summary: "Rebook rate by store — the share of visits where the customer books their next appointment before leaving.",
+    read: "Each bar is one store; longer is a higher rebook rate. Rebooking at checkout is the cheapest retention lever, so leaders here defend recurring revenue best.",
+    legend: [
+      { color: TRACK, label: "Store" },
+      { color: ORANGE, label: "Selected store" },
+    ],
+    source: FRANPOS,
+  },
+  storeRankMissed: {
+    summary: "Missed-call rate by store — the share of inbound calls that went unanswered.",
+    read: "Each bar is one store, but here longer is worse — more booking demand lost. The newer stores tend to trail on this.",
+    legend: [
+      { color: TRACK, label: "Store" },
+      { color: ORANGE, label: "Selected store" },
+    ],
+    source: TWILIO,
+  },
+  managerRank: {
+    summary: "Where your store stands against the other three on this metric.",
+    read: "Each bar is a store and yours is highlighted; the caption shows your rank and the gap to the leader. It's a relative-standing view only — never another store's customers or revenue.",
+    legend: [
+      { color: TRACK, label: "Other stores" },
+      { color: ORANGE, label: "Your store" },
+    ],
+    source: "Same metric definition across all four stores",
+  },
+  returningVsNew: {
+    summary: "The split between repeat customers and first-time customers in this period's visits.",
+    read: "The ring is 100% of visits. A larger returning slice means more of the business is people coming back — the goal for recurring grooming revenue.",
+    legend: [
+      { color: ORANGE, label: "Returning" },
+      { color: SERIES, label: "New" },
+    ],
+    source: FRANPOS,
+  },
+  cohortRetention: {
+    summary: "Of the customers who started in a given month, how many are still active as time passes.",
+    read: "The X axis is months since a customer's first visit; the Y axis is the percent still coming back. A curve that stays high means customers stick — the flatter the decline, the more durable the revenue.",
+    legend: [{ color: ORANGE, label: "Still active", shape: "line" }],
+    source: "FranPOS · modelled until the cohort pipeline runs on real history",
+  },
+  ratingDistribution: {
+    summary: "How this store's reviews break down across one to five stars.",
+    read: "Each row is a star level and the bar is how many reviews sit there. A healthy profile is heavy on 4–5★ with few 1–2★. A cluster of 1★ with no matching customer is a sign of fakes.",
+    legend: [
+      { color: SERIES, label: "4–5★", note: "healthy" },
+      { color: ORANGE, label: "1–3★", note: "watch for fakes" },
+    ],
+    source: GBP,
+  },
+  productivityRank: {
+    summary: "Groomers ranked by revenue per labour hour — the team's productivity view.",
+    read: "Each bar is one groomer; longer is more revenue produced per hour worked. It's a coaching lens, not a leaderboard — read it next to rebooking and retention, never on its own.",
+    legend: [{ color: TRACK, label: "Groomer" }],
+    source: FRANPOS,
+  },
+  groomerRetention: {
+    summary: "For the selected groomer, how many of their clients keep coming back over time.",
+    read: "The X axis is months since a client's first visit with them; the Y axis is the percent still active. A higher, flatter curve means this groomer builds loyalty.",
+    legend: [{ color: ORANGE, label: "Still active", shape: "line" }],
+    source: FRANPOS,
+  },
+} satisfies Record<string, ChartGuide>;
+
+export type GuideId = keyof typeof CHART_GUIDES;

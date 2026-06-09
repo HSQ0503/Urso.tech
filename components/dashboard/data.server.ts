@@ -55,11 +55,10 @@ type DailyRow = {
   web_visits: number; web_form_starts: number; web_form_completes: number; web_booked: number;
 };
 
-async function loadDaily(month: MonthValue): Promise<Record<StoreId, Agg>> {
+async function loadDailyRange(start: string | null, end: string | null): Promise<Record<StoreId, Agg>> {
   const supabase = await createClient();
-  const range = monthRange(month);
   // Aggregate in the DB (returns ≤4 rows) — avoids PostgREST's 1,000-row cap.
-  const { data, error } = await supabase.rpc("metrics_by_store", { p_start: range?.start ?? null, p_end: range?.end ?? null });
+  const { data, error } = await supabase.rpc("metrics_by_store", { p_start: start, p_end: end });
   if (error) throw new Error(`metrics_by_store failed: ${error.message}`);
 
   const acc = {} as Record<StoreId, Agg>;
@@ -73,6 +72,11 @@ async function loadDaily(month: MonthValue): Promise<Record<StoreId, Agg>> {
     a.visits = Number(r.web_visits); a.starts = Number(r.web_form_starts); a.completes = Number(r.web_form_completes); a.booked = Number(r.web_booked);
   }
   return acc;
+}
+
+async function loadDaily(month: MonthValue): Promise<Record<StoreId, Agg>> {
+  const range = monthRange(month);
+  return loadDailyRange(range?.start ?? null, range?.end ?? null);
 }
 
 type Listing = { rating: number; reviewCount: number; responseRate: number; responseHours: number; localRank: number; hasBook: boolean; listing: number };
@@ -290,8 +294,14 @@ export async function getRetention(scope: Scope, month: MonthValue) {
 }
 
 // ── public: weekly brief ────────────────────────────────────────────────────
-export async function getWeeklyBrief(scope: Scope, month: MonthValue): Promise<WeeklyBrief> {
-  const [byStore, listings] = await Promise.all([loadDaily(month), loadListings()]);
+export async function getWeeklyBrief(scope: Scope): Promise<WeeklyBrief> {
+  // The brief is always "this week" — the last 7 days of data, regardless of the
+  // month filter (a digest generated every Monday is inherently the current week).
+  const now = new Date();
+  const endExclusive = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1));
+  const weekStart = new Date(endExclusive.getTime() - 7 * 86400000).toISOString().slice(0, 10);
+  const weekEnd = endExclusive.toISOString().slice(0, 10);
+  const [byStore, listings] = await Promise.all([loadDailyRange(weekStart, weekEnd), loadListings()]);
   const m = computeMetrics(scope, byStore, listings);
   const cs = computeCalls(scope, byStore);
   const ws = computeWeb(scope, byStore);

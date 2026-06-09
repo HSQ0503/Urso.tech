@@ -17,6 +17,7 @@ import {
   pct,
 } from "@/components/dashboard/ui";
 import { StoreScoreboard } from "@/components/dashboard/store-scoreboard";
+import { ChartInfo } from "@/components/dashboard/chart-info";
 
 const COLS = ["Location", "Revenue", "Bookings", "Avg ticket", "No-show", "Rebook", "Attach", "Calls missed", "Rating"];
 
@@ -101,17 +102,26 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
       {/* Ranked comparisons */}
       <section className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         <Card>
-          <Micro>Revenue</Micro>
+          <div className="flex items-center gap-1.5">
+            <Micro>Revenue</Micro>
+            <ChartInfo id="revenueByLocation" />
+          </div>
           <h2 className="mt-1.5 mb-4 text-[16px] font-medium tracking-[-0.01em]">By location</h2>
           <BarRanking data={rank((r) => r.m.revenue)} format="moneyK" labelWidth={104} valueLabel="Revenue" />
         </Card>
         <Card>
-          <Micro>Rebook rate</Micro>
+          <div className="flex items-center gap-1.5">
+            <Micro>Rebook rate</Micro>
+            <ChartInfo id="storeRankRebook" />
+          </div>
           <h2 className="mt-1.5 mb-4 text-[16px] font-medium tracking-[-0.01em]">By location</h2>
           <BarRanking data={rank((r) => Math.round(r.m.rebook * 100))} format="pct" labelWidth={104} valueLabel="Rebook rate" />
         </Card>
         <Card>
-          <Micro>Calls missed</Micro>
+          <div className="flex items-center gap-1.5">
+            <Micro>Calls missed</Micro>
+            <ChartInfo id="storeRankMissed" />
+          </div>
           <h2 className="mt-1.5 mb-4 text-[16px] font-medium tracking-[-0.01em]">By location</h2>
           <BarRanking data={rank((r) => Math.round(r.missed * 100))} format="pct" labelWidth={104} valueLabel="Calls missed" />
         </Card>

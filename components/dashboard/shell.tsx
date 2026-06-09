@@ -60,9 +60,9 @@ const navGroups: NavGroup[] = [
     items: [
       { href: "/dashboard/performance", label: "Performance", icon: "activity", roles: ["owner"] },
       { href: "/dashboard/revenue", label: "Revenue map", icon: "money", roles: ["owner"] },
+      { href: "/dashboard/actions", label: "AI actions", icon: "spark", roles: ["owner"] },
     ],
   },
-  { group: "Next moves", items: [{ href: "/dashboard/actions", label: "AI actions", icon: "spark", roles: ["owner"] }] },
   {
     group: "Operations",
     items: [

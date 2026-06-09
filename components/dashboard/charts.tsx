@@ -32,6 +32,10 @@ const MUTED = "var(--color-series)";
 const fmtPct = (n: number) => `${Math.round(n * 100)}%`;
 const fmtHour = (h: number) => `${h > 12 ? h - 12 : h}${h >= 12 ? "p" : "a"}`;
 
+// Evenly-spaced X ticks: aim for ~7 so a 31-day axis reads 1·6·11·16·21·26·31
+// (consistent steps) instead of Recharts' uneven minTickGap auto-thinning.
+const tickEvery = (len: number) => (len <= 9 ? 0 : Math.ceil(len / 7) - 1);
+
 // Serializable formatter tokens — so server components can pick a number
 // format without passing a function across the server/client boundary.
 export type ValueFormat = "number" | "money" | "moneyK" | "pct";
@@ -78,7 +82,7 @@ export function AreaChart({
           </linearGradient>
         </defs>
         <CartesianGrid vertical={false} />
-        <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} minTickGap={24} />
+        <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} interval={tickEvery(labels.length)} />
         <YAxis tickLine={false} axisLine={false} width={42} tickFormatter={fmt} />
         <ChartTooltip cursor={{ strokeDasharray: "3 3" }} content={<ChartTooltipContent valueFormatter={(v) => fmt(v)} />} />
         <Area dataKey="value" type="monotone" stroke="var(--color-value)" strokeWidth={2} fill={`url(#${gid})`} dot={false} activeDot={{ r: 3 }} />
@@ -110,7 +114,7 @@ export function CallsBars({
     <ChartContainer config={config} style={{ height }}>
       <BarChart data={chartData} margin={{ left: 4, right: 8, top: 8, bottom: 0 }}>
         <CartesianGrid vertical={false} />
-        <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} minTickGap={18} />
+        <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} interval={tickEvery(labels.length)} />
         <YAxis tickLine={false} axisLine={false} width={30} />
         <ChartTooltip content={<ChartTooltipContent />} />
         <Bar dataKey="answered" stackId="a" fill="var(--color-answered)" radius={[0, 0, 2, 2]} />
@@ -143,7 +147,7 @@ export function TrafficChart({
     <ChartContainer config={config} style={{ height }}>
       <ComposedChart data={chartData} margin={{ left: 4, right: 6, top: 8, bottom: 0 }}>
         <CartesianGrid vertical={false} />
-        <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} minTickGap={18} />
+        <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} interval={tickEvery(labels.length)} />
         <YAxis yAxisId="left" tickLine={false} axisLine={false} width={34} />
         <YAxis yAxisId="right" orientation="right" tickLine={false} axisLine={false} width={26} />
         <ChartTooltip content={<ChartTooltipContent />} />
@@ -259,6 +263,34 @@ function LegendRow({ color, label, value }: { color: string; label: string; valu
   );
 }
 
+// ---- Donut (N segments) — e.g. the customer mix incl. a "both" slice --------
+export function Donut({ segments }: { segments: { label: string; value: number; color: string }[] }) {
+  const total = segments.reduce((a, s) => a + s.value, 0) || 1;
+  const data = segments.map((s, i) => ({ name: `s${i}`, value: s.value }));
+  const config = Object.fromEntries(
+    segments.map((s, i) => [`s${i}`, { label: s.label, color: s.color }] as [string, { label: string; color: string }]),
+  ) satisfies ChartConfig;
+  return (
+    <div className="flex items-center gap-4">
+      <ChartContainer config={config} className="shrink-0" style={{ height: 96, width: 96 }}>
+        <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
+          <ChartTooltip content={<ChartTooltipContent hideLabel valueFormatter={(v) => fmtPct(v / total)} />} />
+          <Pie data={data} dataKey="value" nameKey="name" innerRadius={28} outerRadius={46} strokeWidth={0} paddingAngle={2}>
+            {segments.map((s, i) => (
+              <Cell key={i} fill={s.color} />
+            ))}
+          </Pie>
+        </PieChart>
+      </ChartContainer>
+      <div className="space-y-1.5">
+        {segments.map((s, i) => (
+          <LegendRow key={i} color={s.color} label={s.label} value={fmtPct(s.value / total)} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ---- Cohort retention curve ------------------------------------------------
 export function CohortCurve({ data, label = "months since first visit" }: { data: number[]; label?: string }) {
   const gid = "co-" + useId().replace(/:/g, "");
@@ -326,7 +358,7 @@ export function RadialGauge({ value, caption, color = ORANGE, height = 168 }: { 
   const data = [{ name: "v", value: pctVal }];
   const config = { value: { label: caption ?? "", color } } satisfies ChartConfig;
   return (
-    <div className="relative" style={{ height }}>
+    <div className="relative mx-auto" style={{ height, width: height }}>
       <ChartContainer config={config} style={{ height }}>
         <RadialBarChart data={data} startAngle={220} endAngle={-40} innerRadius="74%" outerRadius="100%">
           <PolarAngleAxis type="number" domain={[0, 100]} angleAxisId={0} tick={false} />

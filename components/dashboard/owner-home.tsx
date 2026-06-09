@@ -30,6 +30,7 @@ import {
 } from "@/components/dashboard/ui";
 import { AskAi } from "@/components/dashboard/ask-ai";
 import { ActionItemCard } from "@/components/dashboard/action-item-card";
+import { ChartInfo } from "@/components/dashboard/chart-info";
 
 export async function OwnerHome({ searchParams, userName, streak }: { searchParams: Promise<{ store?: string; month?: string }>; userName: string; streak: number }) {
   const sp = await searchParams;
@@ -96,6 +97,7 @@ export async function OwnerHome({ searchParams, userName, streak }: { searchPara
                   ]}
                   recommendation="Don't chase more traffic yet — close the call-capture and rebooking leaks first. They convert demand you already have."
                 />
+                <ChartInfo id="revenueTrend" />
               </div>
               <div className="mt-1.5 flex items-baseline gap-2.5">
                 <span className="text-[22px] font-medium tracking-[-0.01em]">{fmtMoney(m.revenue)}</span>
@@ -122,6 +124,7 @@ export async function OwnerHome({ searchParams, userName, streak }: { searchPara
                   points={["An unanswered call is usually a booking that goes to a competitor.", "Call tracking isn't live yet — this is shaped like the Twilio feed."]}
                   recommendation="Stand up the Twilio missed-call line so every unanswered call gets an instant text-back with a booking link."
                 />
+                <ChartInfo id="callsAnsweredMissed" />
               </div>
               <div className="mt-1.5 text-[22px] font-medium tracking-[-0.01em]">{cs.total.toLocaleString()} <span className="text-[13px] text-ink-dim">calls</span></div>
             </div>
@@ -149,6 +152,7 @@ export async function OwnerHome({ searchParams, userName, streak }: { searchPara
                   points={["Most of the drop happens inside the booking form itself.", "Web analytics aren't wired yet — shaped like the GA4 feed."]}
                   recommendation="Test a shorter, mobile-first booking form to recover the visitors abandoning mid-form."
                 />
+                <ChartInfo id="webTraffic" />
               </div>
               <div className="mt-1.5 text-[22px] font-medium tracking-[-0.01em]">{ws.visits.toLocaleString()} <span className="text-[13px] text-ink-dim">visits</span></div>
             </div>
