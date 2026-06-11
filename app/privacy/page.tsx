@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 
 const EFFECTIVE = "June 9, 2026";
 
-const intro = `This Privacy Policy explains how Urso ("Urso", "we", "us", or "our") — a data and analytics agency based in Orlando, Florida — collects, uses, and protects information in connection with our website at urso.tech and the dashboards and services we provide to our business clients (the "Services"). By using our Services or authorizing Urso to connect to your accounts, you agree to this Policy.`;
+const intro = `This Privacy Policy explains how Urso ("Urso", "we", "us", or "our") — a data and analytics agency based in Orlando, Florida — collects, uses, and protects information in connection with our website at urso.ws and the dashboards and services we provide to our business clients (the "Services"). By using our Services or authorizing Urso to connect to your accounts, you agree to this Policy.`;
 
 type Block = { h: string; p?: string[]; list?: string[]; note?: string };
 
@@ -28,7 +28,7 @@ const sections: Block[] = [
     list: [
       `Information you give us — your name, email, business name, and anything you send when you contact us or request a diagnostic.`,
       `Data from services you connect — when a Client authorizes a connection, we access business data from the platforms below, strictly to power their dashboard: Google Business Profile (listing details, reviews, ratings, replies, and performance insights for locations you manage); QuickBooks Online (financial reports, expenses, vendor bills, and accounting records); FranPOS (point-of-sale orders, products, customers, appointments, and staff records); and Twilio (call metadata such as time, answered/missed status and duration, and SMS delivery status).`,
-      `Information collected automatically — basic usage and device information, and cookies, when you visit urso.tech, used to operate and improve the site.`,
+      `Information collected automatically — basic usage and device information, and cookies, when you visit urso.ws, used to operate and improve the site.`,
     ],
   },
   {
@@ -107,7 +107,7 @@ const sections: Block[] = [
   {
     h: "Contact us",
     p: [
-      `Questions about this Policy or your data? Email us at han@urso.tech. Urso is based in Orlando, Florida, USA.`,
+      `Questions about this Policy or your data? Email us at han@urso.ws. Urso is based in Orlando, Florida, USA.`,
     ],
   },
 ];
