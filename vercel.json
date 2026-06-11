@@ -1,0 +1,6 @@
+{
+  "crons": [
+    { "path": "/api/franpos/sync", "schedule": "0 17 * * *" },
+    { "path": "/api/franpos/sync", "schedule": "5 23 * * *" }
+  ]
+}
