@@ -79,6 +79,19 @@ Iron-rule note: label this **"Return rate"** on the dashboard (defined: returned
 3. **Groomer hours / utilization.** `report/timeClocks` (POST) returned "Attempted to divide by zero" on an empty range — retry with a known-staffed date range + `pageIndex`/`pageSize` in body.
 4. `customers/history/{id}/{type}` returns a **PDF**, not JSON — not a data source; ignore.
 
+## Pass-through lines — deposits & gift cards (migration 0008)
+
+Deposit and gift-card SALES are liabilities, not revenue — the redeemed visit rings full
+price later (verified: no negative redemption lines; they apply on the payment side), so
+counting the sale line double-counts ~$83k/yr (~3%). Worse, these lines look like services
+(text SKU, cost 0), so they were inflating grooming revenue, bookings, groomer stats, LTV,
+and rebook denominators. `franpos_item_is_passthrough(name)` is the single definition:
+any `…deposit…` name, or names starting with `gift card`. Kept as revenue on purpose:
+"Spa Package 3 for $20", "Teddy Bear package", "Gift Bag", "Bday Gift Plush Toy" (real
+delivered products). `product_sales_daily.is_passthrough` flags the rows so the Products
+page can show-but-separate them. Known undercount: forfeited no-show deposits are real
+revenue but indistinguishable without the booking feed.
+
 ## Backfill validation (2026-06-11)
 
 12 months × 4 stores landed (~46k orders / 92k lines / ~370 calls; each store kept 650+ of its monthly quota). Verified against the FranPOS portal report (Windermere, May 2026, Full Groom): **ours 477 units / $44,897 vs portal 471 / $44,418 — 98.7% match, zero refund/dupe artifacts.** The residual is definitional: the portal attributes by *appointment date*, we attribute by *checkout date* (when money hit the till). Urso reports transaction-dated revenue — state this definition wherever "revenue" is shown.

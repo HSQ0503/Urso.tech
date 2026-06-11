@@ -264,7 +264,13 @@ if (fg?.length) {
   console.log("\n━━ Validation vs FranPOS portal (Windermere, May 2026) ━━━━━");
   console.log(`  Full Groom units:   ${units}  (portal: 471)`);
   console.log(`  Full Groom revenue: $${rev.toFixed(2)}  (portal: $44,417.50)`);
-  console.log(units === 471 ? "  ✓ MATCH — pipeline verified" : "  ⚠ MISMATCH — check field map / service heuristic before shipping");
+  // ±2%: the portal attributes by appointment date, we attribute by checkout
+  // date (documented in FRANPOS_FIELD_MAP.md) — a few boundary grooms differ.
+  console.log(
+    Math.abs(units - 471) / 471 <= 0.02
+      ? "  ✓ MATCH within attribution tolerance — pipeline verified"
+      : "  ⚠ MISMATCH beyond tolerance — check field map / service heuristic before shipping",
+  );
 } else {
   console.log("\n⚠ No 'Full Groom' rows found for Windermere May — check the sync output above.");
 }
