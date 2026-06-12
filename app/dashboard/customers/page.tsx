@@ -50,10 +50,10 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
       />
 
       <section className="grid grid-cols-2 gap-x-8 gap-y-6 border-y border-edge py-7 md:grid-cols-4">
-        <Stat label="Returning" value={pct(retention.returningPct)} sub="of visits are repeat customers" />
-        <Stat label="Rebook rate" value={pct(m.rebook)} sub="rebook before leaving" />
-        <Stat label="Average cadence" value={`${retention.cadenceDays} days`} sub="between grooms" />
-        <Stat label="Single-visit" value={String(retention.oneAndDone)} sub="came once, did not return" accent />
+        <Stat label="Returning" value={pct(retention.returningPct)} sub="of customers come back after their first visit" />
+        <Stat label="Return rate" value={pct(m.rebook)} sub="of profiled visits are 90-day returns" />
+        <Stat label="Average cadence" value={`${retention.cadenceDays} days`} sub="between visits, across full history" />
+        <Stat label="Single-visit" value={retention.oneAndDone.toLocaleString()} sub="came once, no return in 90+ days" accent />
       </section>
 
       <div className="mt-8 grid grid-cols-1 gap-5 lg:grid-cols-2">
@@ -69,12 +69,12 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
           </div>
           <div className="border-t border-edge pt-5">
             <div className="mb-3 flex items-center gap-1.5">
-              <Micro>Cohort retention — share of each month&rsquo;s new customers still active</Micro>
+              <Micro>Cohort retention — share of new customers still active, by months since first visit</Micro>
               <ChartInfo id="cohortRetention" />
             </div>
             <CohortCurve data={retention.cohort} />
             <p className="mt-3 text-[13px] leading-[1.55] text-ink-dim">
-              Just over half of new customers remain active after a year. Improving this curve is the most durable driver of recurring revenue.
+              {pct(retention.cohort[retention.cohort.length - 1] / 100)} of new customers are still returning {retention.cohort.length - 1} months after their first visit. The curve deepens as history accumulates; improving it is the most durable driver of recurring revenue.
             </p>
           </div>
         </Card>

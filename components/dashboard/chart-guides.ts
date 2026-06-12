@@ -78,8 +78,8 @@ export const CHART_GUIDES = {
     source: GA4,
   },
   crossSellMix: {
-    summary: "How customers divide across buying grooming, retail, or both.",
-    read: "The segments are shares of customers and add to 100%. Customers who buy both spend materially more per visit, so the aim is moving 'grooming only' into 'both'.",
+    summary: "How tickets divide across grooming, retail, or both on the same visit.",
+    read: "The segments are shares of all tickets in the period and add to 100%. 'Both' means a grooming service and a retail item rang on the same ticket — the aim is moving 'grooming only' into 'both'.",
     legend: [
       { color: ORANGE, label: "Both" },
       { color: SERIES, label: "Grooming only" },
@@ -98,10 +98,11 @@ export const CHART_GUIDES = {
   },
   newVsRepeat: {
     summary: "How much revenue comes from repeat customers versus first-time ones.",
-    read: "The bar is 100% of revenue, split by customer type. A larger repeat share means a stickier base — grooming is recurring, so repeat revenue is the durable kind.",
+    read: "The bar is 100% of revenue, split by customer type. 'New' means the customer's first visit in our recorded history (from June 2025); 'Walk-in' is revenue rung on the store's house account with no customer profile attached. A larger repeat share means a stickier base — grooming is recurring, so repeat revenue is the durable kind.",
     legend: [
       { color: ORANGE, label: "Repeat customers" },
       { color: SERIES, label: "New customers" },
+      { color: SERIES_SOFT, label: "Walk-in (no profile)" },
     ],
     source: FRANPOS,
   },
@@ -112,7 +113,7 @@ export const CHART_GUIDES = {
     source: FRANPOS,
   },
   storeRankRebook: {
-    summary: "Return rate by store — the share of grooming visits made by customers returning within 90 days of their previous visit.",
+    summary: "Return rate by store — of grooming visits rung with a customer profile, the share made by customers returning within 90 days of their previous visit.",
     read: "Each bar is one store; longer means more visits come from regulars on cadence. Rebooking at checkout is the cheapest way to push this up, and leaders here defend recurring revenue best.",
     legend: [
       { color: TRACK, label: "Store" },
@@ -129,6 +130,15 @@ export const CHART_GUIDES = {
     ],
     source: TWILIO,
   },
+  storeRankAttach: {
+    summary: "Retail attach by store — the share of grooming visits that also bought a retail item.",
+    read: "Each bar is one store; longer means more grooming customers leave with product in hand. It's the simplest add-on revenue, so leaders here monetise visits they already have.",
+    legend: [
+      { color: TRACK, label: "Store" },
+      { color: ORANGE, label: "Selected store" },
+    ],
+    source: FRANPOS,
+  },
   managerRank: {
     summary: "Where your store stands against the other three on this metric.",
     read: "Each bar is a store and yours is highlighted; the caption shows your rank and the gap to the leader. It's a relative-standing view only — never another store's customers or revenue.",
@@ -139,8 +149,8 @@ export const CHART_GUIDES = {
     source: "Same metric definition across all four stores",
   },
   returningVsNew: {
-    summary: "The split between repeat customers and first-time customers in this period's visits.",
-    read: "The ring is 100% of visits. A larger returning slice means more of the business is people coming back — the goal for recurring grooming revenue.",
+    summary: "The share of customers who came back after their first visit.",
+    read: "The ring is 100% of customers who have had at least 90 days since their first visit — enough time for a return to be possible. A larger returning slice means more of the base actually comes back.",
     legend: [
       { color: ORANGE, label: "Returning" },
       { color: SERIES, label: "New" },
@@ -149,9 +159,9 @@ export const CHART_GUIDES = {
   },
   cohortRetention: {
     summary: "Of the customers who started in a given month, how many are still active as time passes.",
-    read: "The X axis is months since a customer's first visit; the Y axis is the percent still coming back. A curve that stays high means customers stick — the flatter the decline, the more durable the revenue.",
+    read: "The X axis is months since a customer's first visit; the Y axis is the percent whose visits continued at least that long. Only genuinely new customers count (first seen after the first 90 days of our history, so pre-existing regulars don't pollute the curve). A flatter decline means more durable revenue.",
     legend: [{ color: ORANGE, label: "Still active", shape: "line" }],
-    source: "FranPOS · modelled until the cohort pipeline runs on real history",
+    source: "FranPOS order history, June 2025 onward",
   },
   ratingDistribution: {
     summary: "How this store's reviews break down across one to five stars.",

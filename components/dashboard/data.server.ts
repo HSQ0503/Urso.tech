@@ -26,8 +26,6 @@ import {
 } from "./data";
 
 // ── small helpers (kept local so this module stays self-contained) ──────────
-const wave = (seed: number, i: number) =>
-  Math.sin(seed * 12.9 + i * 2.3) * 0.5 + Math.sin(seed * 7.1 + i * 0.7) * 0.3 + Math.sin(seed * 3.7 + i * 1.9) * 0.2;
 const money = (n: number) => (Math.abs(n) >= 1000 ? `$${(n / 1000).toFixed(n % 1000 === 0 ? 0 : 1)}k` : `$${n.toLocaleString("en-US")}`);
 const pctStr = (n: number, d = 0) => `${(n * 100).toFixed(d)}%`;
 const fullName = (id: StoreId) => STORE_OPTIONS.find((o) => o.value === id)!.label;
@@ -44,13 +42,15 @@ function monthRange(month: MonthValue): { start: string; end: string } | null {
 
 // ── raw loaders ─────────────────────────────────────────────────────────────
 type Agg = {
-  rev: number; groom: number; retail: number; bookingRev: number; bookings: number; noShows: number; rebooks: number;
+  rev: number; groom: number; retail: number; bookingRev: number; newRev: number; repeatRev: number; tickets: number;
+  bookings: number; identified: number; noShows: number; rebooks: number;
   attached: number; calls: number; missed: number; visits: number; starts: number; completes: number; booked: number;
 };
-const emptyAgg = (): Agg => ({ rev: 0, groom: 0, retail: 0, bookingRev: 0, bookings: 0, noShows: 0, rebooks: 0, attached: 0, calls: 0, missed: 0, visits: 0, starts: 0, completes: 0, booked: 0 });
+const emptyAgg = (): Agg => ({ rev: 0, groom: 0, retail: 0, bookingRev: 0, newRev: 0, repeatRev: 0, tickets: 0, bookings: 0, identified: 0, noShows: 0, rebooks: 0, attached: 0, calls: 0, missed: 0, visits: 0, starts: 0, completes: 0, booked: 0 });
 
 type DailyRow = {
   store_id: StoreId; revenue: number; grooming_revenue: number; retail_revenue: number; booking_revenue: number;
+  new_revenue: number; repeat_revenue: number; tickets_total: number; identified_bookings: number;
   bookings: number; no_shows: number; rebooks: number; retail_attached: number; calls_total: number; calls_missed: number;
   web_visits: number; web_form_starts: number; web_form_completes: number; web_booked: number;
 };
@@ -68,6 +68,8 @@ async function loadDailyRange(start: string | null, end: string | null): Promise
     if (!a) continue;
     a.rev = Number(r.revenue); a.groom = Number(r.grooming_revenue); a.retail = Number(r.retail_revenue);
     a.bookingRev = Number(r.booking_revenue);
+    a.newRev = Number(r.new_revenue); a.repeatRev = Number(r.repeat_revenue); a.tickets = Number(r.tickets_total);
+    a.identified = Number(r.identified_bookings);
     a.bookings = Number(r.bookings); a.noShows = Number(r.no_shows); a.rebooks = Number(r.rebooks); a.attached = Number(r.retail_attached);
     a.calls = Number(r.calls_total); a.missed = Number(r.calls_missed);
     a.visits = Number(r.web_visits); a.starts = Number(r.web_form_starts); a.completes = Number(r.web_form_completes); a.booked = Number(r.web_booked);
@@ -116,19 +118,24 @@ async function loadGroomers(): Promise<Groomer[]> {
 const NEXT_ACTION: Record<CustomerSegment, string> = {
   VIP: "Offer standing appointment", Loyal: "Confirm next groom", "At risk": "Send rebooking link", Lapsed: "Reactivation offer",
 };
-async function loadCustomers(): Promise<CustomerRow[]> {
+// The customers table holds ~35k rows (incl. identity-only rows with no orders
+// in our history), far past PostgREST's 1,000-row cap — so customer reads must
+// either aggregate in the DB (RPCs) or be filtered + limited. Never .select()
+// the whole table. visits >= 1 keeps identity-only rows out everywhere.
+const CUSTOMER_COLS = "store_id, name, pet, visits, ltv, segment, last_visit_at";
+type CustRow = { store_id: StoreId; name: string; pet: string | null; visits: number; ltv: number; segment: CustomerSegment; last_visit_at: string };
+const toCustomerRow = (c: CustRow): CustomerRow => ({
+  name: c.name, pet: c.pet ?? "—", store: fullName(c.store_id), storeId: c.store_id, visits: c.visits, ltv: Number(c.ltv),
+  lastVisit: Math.max(0, Math.round((Date.now() - new Date(`${c.last_visit_at}T00:00:00Z`).getTime()) / 86400000)),
+  segment: c.segment, next: NEXT_ACTION[c.segment],
+});
+
+type SegCount = { segment: CustomerSegment; customers: number; ltv_sum: number };
+async function loadSegmentCounts(scope: Scope): Promise<SegCount[]> {
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("customers")
-    .select("id, store_id, name, pet, visits, ltv, segment, last_visit_at");
-  if (error) throw new Error(`customers read failed: ${error.message}`);
-  type CRow = { store_id: StoreId; name: string; pet: string; visits: number; ltv: number; segment: CustomerSegment; last_visit_at: string };
-  const now = Date.now();
-  return ((data ?? []) as unknown as CRow[]).map((c) => ({
-    name: c.name, pet: c.pet, store: fullName(c.store_id), storeId: c.store_id, visits: c.visits, ltv: Number(c.ltv),
-    lastVisit: Math.max(0, Math.round((now - new Date(`${c.last_visit_at}T00:00:00Z`).getTime()) / 86400000)),
-    segment: c.segment, next: NEXT_ACTION[c.segment],
-  }));
+  const { data, error } = await supabase.rpc("customer_segment_counts", { p_store_ids: scopeIds(scope) });
+  if (error) throw new Error(`customer_segment_counts failed: ${error.message}`);
+  return (data ?? []) as unknown as SegCount[];
 }
 
 type RawAction = { id: string; store_id: StoreId | null; store_label: string; agent: string; title: string; detail: string; metric: string; status: AgentAction["status"]; result: string | null; pending: boolean };
@@ -169,7 +176,11 @@ function computeMetrics(scope: Scope, byStore: Record<StoreId, Agg>, listings: R
     // Revenue on grooming tickets ÷ grooming tickets — NOT all revenue, which
     // would mix retail-only purchases into the numerator (showed $134 vs $95).
     avgTicket: a.bookings ? Math.round(a.bookingRev / a.bookings) : 0,
-    rebook: a.rebooks / denom, noShow: a.noShows / denom, attach: a.attached / denom, rating,
+    // Return rate over IDENTIFIED grooming visits — anonymous walk-in tickets
+    // (~10% of bookings) can never register a return, so leaving them in the
+    // denominator would bias the rate down.
+    rebook: a.identified ? a.rebooks / a.identified : 0,
+    noShow: a.noShows / denom, attach: a.attached / denom, rating,
   };
 }
 function computeCalls(scope: Scope, byStore: Record<StoreId, Agg>) {
@@ -192,12 +203,74 @@ export async function getCallStats(scope: Scope, month: MonthValue) {
 export async function getWebStats(scope: Scope, month: MonthValue) {
   return computeWeb(scope, await loadDaily(month));
 }
+// Real ticket mix: shares of ALL tickets in scope (not just grooming tickets).
+// both = tickets with a grooming service AND a retail item; grooming-only =
+// service tickets without retail; retail-only = everything else.
 export async function getCrossSell(scope: Scope, month: MonthValue) {
-  const m = computeMetrics(scope, await loadDaily(month), {} as Record<StoreId, Listing>);
-  const both = clamp01(m.attach);
-  const groomingOnly = clamp01((1 - both) * 0.62);
-  const retailOnly = clamp01(1 - both - groomingOnly);
-  return { both, groomingOnly, retailOnly };
+  const a = sumScope(await loadDaily(month), scopeIds(scope));
+  const t = a.tickets || 1;
+  return {
+    both: clamp01(a.attached / t),
+    groomingOnly: clamp01((a.bookings - a.attached) / t),
+    retailOnly: clamp01((a.tickets - a.bookings) / t),
+  };
+}
+
+// ── public: real period-over-period deltas ──────────────────────────────────
+// FranPOS history starts 2025-06-16, so June 2025 is a partial month — deltas
+// against it (or against nothing) would mislead. The backward-90-day return
+// rate is only mature once a full 90 days of history sit behind the comparison
+// month. A null delta means "no honest prior period" and the chip is hidden.
+const FIRST_FULL_MONTH = "2025-07-01";
+const RETURN_RATE_MATURE = "2025-10-01";
+
+export type KpiDeltas = {
+  revenue: number | null; bookings: number | null; avgTicket: number | null;
+  rebook: number | null; attach: number | null; groomingShare: number | null;
+};
+const NULL_DELTAS: KpiDeltas = { revenue: null, bookings: null, avgTicket: null, rebook: null, attach: null, groomingShare: null };
+
+const nyToday = () => new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
+const addDays = (iso: string, n: number) => new Date(Date.parse(`${iso}T00:00:00Z`) + n * 86400000).toISOString().slice(0, 10);
+
+export async function getKpiDeltas(scope: Scope, month: MonthValue): Promise<KpiDeltas> {
+  // "Last 12 months" has no prior 12-month window in our history — no chips.
+  if (month === "all") return NULL_DELTAS;
+  const [y, m] = month.split("-").map(Number);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const prevStart = m === 1 ? `${y - 1}-12-01` : `${y}-${pad(m - 1)}-01`;
+  if (prevStart < FIRST_FULL_MONTH) return NULL_DELTAS;
+
+  const curStart = `${y}-${pad(m)}-01`;
+  const today = nyToday();
+  let curEnd: string, prevEnd: string;
+  if (today.slice(0, 7) === month) {
+    // Current month is partial: compare completed days only, like-for-like
+    // (Jun 1–11 vs May 1–11) — never a part-month against a full month.
+    const completedDays = Number(today.slice(8, 10)) - 1;
+    if (completedDays < 1) return NULL_DELTAS;
+    curEnd = addDays(curStart, completedDays);
+    prevEnd = addDays(prevStart, completedDays);
+  } else {
+    curEnd = monthRange(month)!.end;
+    prevEnd = curStart;
+  }
+
+  const [curBy, prevBy] = await Promise.all([loadDailyRange(curStart, curEnd), loadDailyRange(prevStart, prevEnd)]);
+  const a = sumScope(curBy, scopeIds(scope));
+  const b = sumScope(prevBy, scopeIds(scope));
+  if (b.rev === 0 && b.bookings === 0) return NULL_DELTAS;
+  const d = (cur: number, prev: number) => (prev > 0 ? (cur - prev) / prev : null);
+  const rebookRate = (x: Agg) => (x.identified ? x.rebooks / x.identified : 0);
+  const attachRate = (x: Agg) => (x.bookings ? x.attached / x.bookings : 0);
+  return {
+    revenue: d(a.rev, b.rev),
+    bookings: d(a.bookings, b.bookings),
+    avgTicket: d(a.bookings ? a.bookingRev / a.bookings : 0, b.bookings ? b.bookingRev / b.bookings : 0),
+    rebook: prevStart < RETURN_RATE_MATURE ? null : d(rebookRate(a), rebookRate(b)),
+    attach: d(attachRate(a), attachRate(b)),
+    groomingShare: d(a.groom + a.retail ? a.groom / (a.groom + a.retail) : 0, b.groom + b.retail ? b.groom / (b.groom + b.retail) : 0),
+  };
 }
 
 // ── public: stores comparison + scoreboard ──────────────────────────────────
@@ -211,13 +284,15 @@ export async function storeComparison(month: MonthValue): Promise<Record<StoreId
   return out;
 }
 
+// Composite score from the two live, store-controllable metrics (the weights
+// are published in SCORE_WEIGHTS — keep both in sync). Calls answered, review
+// rating, and no-show rejoin the formula when their feeds go live; scoring
+// dead-source zeros or seeded ratings would make the ranking dishonest.
 export async function getStoreScores(month: MonthValue): Promise<StoreScore[]> {
-  const [byStore, listings] = await Promise.all([loadDaily(month), loadListings()]);
+  const byStore = await loadDaily(month);
   const rows = stores.map((s) => {
-    const m = computeMetrics(s.id, byStore, listings);
-    const cs = computeCalls(s.id, byStore);
-    const ratingN = (m.rating - 4) / 1;
-    const raw = cs.answeredPct * 0.25 + m.rebook * 0.25 + ratingN * 0.2 + m.attach * 0.15 + (1 - m.noShow) * 0.15;
+    const m = computeMetrics(s.id, byStore, {} as Record<StoreId, Listing>);
+    const raw = m.rebook * 0.6 + m.attach * 0.4;
     return { id: s.id, name: s.name, score: Math.round(Math.min(99, Math.max(40, 50 + raw * 70))) };
   });
   return rows.sort((a, b) => b.score - a.score).map((r, i) => ({ ...r, rank: i + 1 }));
@@ -239,100 +314,194 @@ export async function getRevenueByLocation(month: MonthValue) {
   const byStore = await loadDaily(month);
   return stores.map((s) => ({ id: s.id, name: s.name, value: Math.round(byStore[s.id].rev) })).sort((a, b) => b.value - a.value);
 }
+// Real items from product_sales_daily (RPC aggregates by name in the DB).
+// Top 5 per line so retail's long tail doesn't vanish under grooming.
 export async function getRevenueByService(scope: Scope, month: MonthValue): Promise<{ name: string; value: number; line: ServiceLine }[]> {
-  const m = await getMetrics(scope, month);
-  const grooming = [
-    { name: "Full groom", w: 0.54 }, { name: "Bath & brush", w: 0.24 }, { name: "Nail & add-ons", w: 0.13 }, { name: "De-shed", w: 0.09 },
-  ];
-  const retail = [
-    { name: "Food & treats", w: 0.47 }, { name: "Accessories", w: 0.31 }, { name: "Health & wellness", w: 0.22 },
-  ];
-  return [
-    ...grooming.map((s) => ({ name: s.name, value: Math.round(m.grooming * s.w), line: "Grooming" as const })),
-    ...retail.map((s) => ({ name: s.name, value: Math.round(m.retail * s.w), line: "Retail" as const })),
-  ].sort((a, b) => b.value - a.value);
+  const supabase = await createClient();
+  const range = monthRange(month);
+  const { data, error } = await supabase.rpc("product_revenue_by_name", {
+    p_store_ids: scopeIds(scope), p_start: range?.start ?? null, p_end: range?.end ?? null,
+  });
+  if (error) throw new Error(`product_revenue_by_name failed: ${error.message}`);
+  type Row = { name: string; is_service: boolean; revenue: number; units: number };
+  const rows = ((data ?? []) as unknown as Row[]).map((r) => ({
+    name: r.name, value: Math.round(Number(r.revenue)), line: (r.is_service ? "Grooming" : "Retail") as ServiceLine,
+  }));
+  const top = (line: ServiceLine) => rows.filter((r) => r.line === line).sort((a, b) => b.value - a.value).slice(0, 5);
+  return [...top("Grooming"), ...top("Retail")].sort((a, b) => b.value - a.value);
 }
+// True service revenue per groomer over the period (groomer_sales_daily),
+// replacing the old appts×avg_ticket×months approximation — appts was already
+// an all-time count, so ×12 inflated the 12-month view ~12×.
 export async function getRevenueByGroomer(scope: Scope, month: MonthValue) {
-  const groomers = await loadGroomers();
-  const name = scope === "all" ? null : fullName(scope);
-  const set = scope === "all" ? groomers : groomers.filter((g) => g.store === name);
-  const months = month === "all" ? 12 : 1;
-  return set.map((g) => ({ name: g.name, store: g.store, value: g.appts * g.avgTicket * months })).sort((a, b) => b.value - a.value);
+  const supabase = await createClient();
+  const range = monthRange(month);
+  const { data, error } = await supabase.rpc("groomer_revenue", {
+    p_store_ids: scopeIds(scope), p_start: range?.start ?? null, p_end: range?.end ?? null,
+  });
+  if (error) throw new Error(`groomer_revenue failed: ${error.message}`);
+  type Row = { store_id: StoreId; name: string; revenue: number; appts: number };
+  return ((data ?? []) as unknown as Row[])
+    .map((r) => ({ name: r.name, store: fullName(r.store_id), value: Math.round(Number(r.revenue)) }))
+    .sort((a, b) => b.value - a.value);
 }
+// Real split from metrics_daily. "New" = the customer's first visit day in our
+// recorded history (starts 2025-06-16). walkIn = revenue on the stores' house
+// walk-in accounts — real sales, but not attributable to a known customer.
 export async function getRevenueNewVsRepeat(scope: Scope, month: MonthValue) {
-  const m = await getMetrics(scope, month);
-  return { repeat: Math.round(m.revenue * 0.66), fresh: Math.round(m.revenue * 0.34) };
+  const a = sumScope(await loadDaily(month), scopeIds(scope));
+  return {
+    repeat: Math.round(a.repeatRev),
+    fresh: Math.round(a.newRev),
+    walkIn: Math.max(0, Math.round(a.rev - a.newRev - a.repeatRev)),
+  };
 }
 
 // ── public: customers ───────────────────────────────────────────────────────
-const inScope = (rows: CustomerRow[], scope: Scope) => (scope === "all" ? rows : rows.filter((c) => c.storeId === scope));
 export async function getCustomersByValue(scope: Scope): Promise<CustomerRow[]> {
-  return inScope(await loadCustomers(), scope).sort((a, b) => b.ltv - a.ltv).slice(0, 12);
+  const supabase = await createClient();
+  let q = supabase.from("customers").select(CUSTOMER_COLS).gte("visits", 1).order("ltv", { ascending: false }).limit(12);
+  if (scope !== "all") q = q.eq("store_id", scope);
+  const { data, error } = await q;
+  if (error) throw new Error(`customers read failed: ${error.message}`);
+  return ((data ?? []) as unknown as CustRow[]).map(toCustomerRow);
 }
 export async function getCustomerSegments(scope: Scope) {
-  const set = inScope(await loadCustomers(), scope);
+  const counts = await loadSegmentCounts(scope);
   const order: CustomerSegment[] = ["VIP", "Loyal", "At risk", "Lapsed"];
-  return order.map((segment) => ({ segment, count: set.filter((c) => c.segment === segment).length }));
+  return order.map((segment) => ({ segment, count: Number(counts.find((c) => c.segment === segment)?.customers ?? 0) }));
 }
 export async function getCustomerIntel(scope: Scope) {
-  const set = inScope(await loadCustomers(), scope);
-  const avgLtv = set.length ? Math.round(set.reduce((a, c) => a + c.ltv, 0) / set.length) : 0;
-  const atRisk = set.filter((c) => c.segment === "At risk" || c.segment === "Lapsed").length;
-  return { avgLtv, atRisk, count: set.length };
+  const counts = await loadSegmentCounts(scope);
+  const count = counts.reduce((a, c) => a + Number(c.customers), 0);
+  const ltv = counts.reduce((a, c) => a + Number(c.ltv_sum), 0);
+  const atRisk = counts.filter((c) => c.segment === "At risk" || c.segment === "Lapsed").reduce((a, c) => a + Number(c.customers), 0);
+  return { avgLtv: count ? Math.round(ltv / count) : 0, atRisk, count };
 }
-// Win-back list shape for the Customers page WinbackCard.
+// Win-back list shape for the Customers page WinbackCard. The count is exact
+// (DB count); the displayed list is the 60 most-lapsed.
 export async function getWinbackList(scope: Scope) {
-  const set = inScope(await loadCustomers(), scope).filter((c) => c.segment === "At risk" || c.segment === "Lapsed").sort((a, b) => b.lastVisit - a.lastVisit);
-  return { list: set.map((c) => ({ name: c.name, store: c.store, last: `${c.lastVisit} days ago`, visits: c.visits })), count: set.length };
+  const supabase = await createClient();
+  let countQ = supabase.from("customers").select("*", { count: "exact", head: true }).gte("visits", 1).in("segment", ["At risk", "Lapsed"]);
+  let listQ = supabase.from("customers").select(CUSTOMER_COLS).gte("visits", 1).in("segment", ["At risk", "Lapsed"]).order("last_visit_at", { ascending: true }).limit(60);
+  if (scope !== "all") {
+    countQ = countQ.eq("store_id", scope);
+    listQ = listQ.eq("store_id", scope);
+  }
+  const [{ count, error: countErr }, { data, error: listErr }] = await Promise.all([countQ, listQ]);
+  if (countErr || listErr) throw new Error(`winback read failed: ${(countErr ?? listErr)!.message}`);
+  const rows = ((data ?? []) as unknown as CustRow[]).map(toCustomerRow);
+  return { list: rows.map((c) => ({ name: c.name, store: c.store, last: `${c.lastVisit} days ago`, visits: c.visits })), count: count ?? rows.length };
 }
 export async function getCustomersNeedingAttention(store: StoreId): Promise<CustomerRow[]> {
-  return (await loadCustomers()).filter((c) => c.storeId === store && (c.segment === "At risk" || c.segment === "Lapsed")).sort((a, b) => b.lastVisit - a.lastVisit);
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("customers").select(CUSTOMER_COLS)
+    .eq("store_id", store).gte("visits", 1).in("segment", ["At risk", "Lapsed"])
+    .order("last_visit_at", { ascending: true }).limit(60);
+  if (error) throw new Error(`customers read failed: ${error.message}`);
+  return ((data ?? []) as unknown as CustRow[]).map(toCustomerRow);
 }
-// Retention aggregates: rebook + win-back count are real; cohort/cadence/mix are
-// modeled (they need a dedicated cohort pipeline even with real FranPOS data).
+// Retention aggregates — all real now. Cohort, cadence, returning share and
+// one-and-done are trailing measures over the full recorded history (history
+// starts 2025-06-16); the return rate honors the month filter like every other
+// metric. The 90-day guards in the SQL keep censoring honest: a customer only
+// counts as returning or one-and-done once they have had 90 days to come back.
 export async function getRetention(scope: Scope, month: MonthValue) {
-  const m = await getMetrics(scope, month);
-  const wb = await getWinbackList(scope);
-  return { returningPct: 0.66, newPct: 0.34, rebook: m.rebook, cadenceDays: 47, oneAndDone: 88, winbackCount: wb.count, cohort: [100, 82, 71, 63, 58, 54, 51, 49] };
+  const supabase = await createClient();
+  const ids = scopeIds(scope);
+  const [m, summary, cohortRows, wb] = await Promise.all([
+    getMetrics(scope, month),
+    supabase.rpc("retention_summary", { p_store_ids: ids }),
+    supabase.from("cohort_monthly").select("month_offset, eligible, retained").in("store_id", ids),
+    getWinbackList(scope),
+  ]);
+  if (summary.error) throw new Error(`retention_summary failed: ${summary.error.message}`);
+  if (cohortRows.error) throw new Error(`cohort_monthly read failed: ${cohortRows.error.message}`);
+  type S = { total_customers: number; eligible90: number; returning90: number; one_and_done90: number; avg_cadence_days: number };
+  const s = ((summary.data ?? []) as unknown as S[])[0];
+  const eligible = Number(s?.eligible90 ?? 0);
+  const returningPct = eligible ? Number(s.returning90) / eligible : 0;
+
+  // Survival curve: sum per-store rows, keep offsets contiguous from 0 and
+  // backed by a meaningful sample (≥50 eligible customers).
+  type C = { month_offset: number; eligible: number; retained: number };
+  const byOffset = new Map<number, { e: number; r: number }>();
+  for (const r of (cohortRows.data ?? []) as unknown as C[]) {
+    const o = byOffset.get(Number(r.month_offset)) ?? { e: 0, r: 0 };
+    o.e += Number(r.eligible);
+    o.r += Number(r.retained);
+    byOffset.set(Number(r.month_offset), o);
+  }
+  const cohort: number[] = [];
+  for (let k = 0; byOffset.has(k); k++) {
+    const { e, r } = byOffset.get(k)!;
+    if (e < 50) break;
+    cohort.push(Math.round((r / e) * 100));
+  }
+
+  return {
+    returningPct,
+    newPct: 1 - returningPct,
+    rebook: m.rebook,
+    cadenceDays: Math.round(Number(s?.avg_cadence_days ?? 0)),
+    oneAndDone: Number(s?.one_and_done90 ?? 0),
+    winbackCount: wb.count,
+    cohort: cohort.length > 1 ? cohort : [100],
+  };
 }
 
 // ── public: weekly brief ────────────────────────────────────────────────────
 export async function getWeeklyBrief(scope: Scope): Promise<WeeklyBrief> {
-  // The brief is always "this week" — the last 7 days of data, regardless of the
-  // month filter (a digest generated every Monday is inherently the current week).
-  const now = new Date();
-  const endExclusive = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1));
-  const weekStart = new Date(endExclusive.getTime() - 7 * 86400000).toISOString().slice(0, 10);
-  const weekEnd = endExclusive.toISOString().slice(0, 10);
-  const [byStore, listings] = await Promise.all([loadDailyRange(weekStart, weekEnd), loadListings()]);
-  const m = computeMetrics(scope, byStore, listings);
-  const cs = computeCalls(scope, byStore);
-  const ws = computeWeb(scope, byStore);
-  const actions = await loadActions();
+  // The brief is always "this week" — the last 7 complete days vs the 7 days
+  // before them, both real windows from metrics_daily. Calls and rating rows
+  // return when Twilio / GBP land; showing dead zeros with a delta would lie.
+  const today = nyToday();
+  const weekStart = addDays(today, -7);
+  const prevStart = addDays(today, -14);
+  const [curBy, prevBy, actions] = await Promise.all([
+    loadDailyRange(weekStart, today),
+    loadDailyRange(prevStart, weekStart),
+    loadActions(),
+  ]);
+  const ids = scopeIds(scope);
+  const a = sumScope(curBy, ids);
+  const b = sumScope(prevBy, ids);
   const here = scope === "all" ? "across the four stores" : `at ${scopeLabel(scope)}`;
-  const seed = scope === "all" ? 0 : STORE_OPTIONS.findIndex((o) => o.value === scope);
-  const d = (n: number, span = 0.08) => Math.round(wave(seed + n, 4) * span * 1000) / 1000;
-  const [revD, bookD, missD, rebookD, ratingD] = [d(1), d(2, 0.06), d(3, 0.05), d(4, 0.05), d(5, 0.02)];
+
+  const d = (cur: number, prev: number) => (prev > 0 ? Math.round(((cur - prev) / prev) * 1000) / 1000 : 0);
+  const avgVisit = (x: Agg) => (x.bookings ? x.bookingRev / x.bookings : 0);
+  const rebookRate = (x: Agg) => (x.identified ? x.rebooks / x.identified : 0);
+  const rebook = rebookRate(a);
+  const attach = a.bookings ? a.attached / a.bookings : 0;
+  const [revD, bookD, avgD, rebookD] = [
+    d(a.rev, b.rev),
+    d(a.bookings, b.bookings),
+    d(avgVisit(a), avgVisit(b)),
+    d(rebookRate(a), rebookRate(b)),
+  ];
 
   const changes: BriefChange[] = [
-    { label: "Revenue", value: money(m.revenue), delta: revD, good: revD >= 0 },
-    { label: "Bookings", value: m.bookings.toLocaleString(), delta: bookD, good: bookD >= 0 },
-    { label: "Calls missed", value: pctStr(cs.missedPct), delta: missD, good: missD < 0 },
-    { label: "Return rate", value: pctStr(m.rebook), delta: rebookD, good: rebookD >= 0 },
-    { label: "Avg rating", value: m.rating.toFixed(1), delta: ratingD, good: ratingD >= 0 },
+    { label: "Revenue", value: money(Math.round(a.rev)), delta: revD, good: revD >= 0 },
+    { label: "Bookings", value: a.bookings.toLocaleString(), delta: bookD, good: bookD >= 0 },
+    { label: "Avg visit", value: money(Math.round(avgVisit(a))), delta: avgD, good: avgD >= 0 },
+    { label: "Return rate", value: pctStr(rebook), delta: rebookD, good: rebookD >= 0 },
   ];
   const dir = (n: number) => (n >= 0 ? "up" : "down");
-  const wins = changes.filter((c) => c.good && Math.abs(c.delta) >= 0.01).map((c) => `${c.label} ${dir(c.delta)} ${pctStr(Math.abs(c.delta))} ${here}.`);
-  const risks = changes.filter((c) => !c.good && Math.abs(c.delta) >= 0.01).map((c) => `${c.label} moved the wrong way (${dir(c.delta)} ${pctStr(Math.abs(c.delta))}) ${here}.`);
-  const opportunity =
-    cs.missedPct > 0.22
-      ? { title: "Call capture is the biggest lever", detail: `${pctStr(cs.missedPct)} of inbound calls went unanswered ${here}. Instant text-back is the fastest recovery.` }
-      : m.rebook < 0.5
-        ? { title: "Rebooking is the biggest lever", detail: `Only ${pctStr(m.rebook)} of grooming visits ${here} come from customers returning within 90 days. A rebooking prompt at checkout is the most durable fix.` }
-        : { title: "Online conversion is the biggest lever", detail: `${pctStr(1 - ws.convRate)} of website visitors leave without booking ${here}. The drop is concentrated in the booking form.` };
+  const wins = changes.filter((c) => c.good && Math.abs(c.delta) >= 0.01).map((c) => `${c.label} ${dir(c.delta)} ${pctStr(Math.abs(c.delta))} ${here} vs the week before.`);
+  const risks = changes.filter((c) => !c.good && Math.abs(c.delta) >= 0.01).map((c) => `${c.label} moved the wrong way (${dir(c.delta)} ${pctStr(Math.abs(c.delta))}) ${here} vs the week before.`);
+
+  // Opportunity selection considers live metrics only — calls and the web
+  // funnel join once their feeds exist.
+  const [lever, opportunity]: [string, { title: string; detail: string }] =
+    rebook < 0.5
+      ? ["rebooking", { title: "Rebooking is the biggest lever", detail: `Only ${pctStr(rebook)} of grooming visits ${here} come from customers returning within 90 days. A rebooking prompt at checkout is the most durable fix.` }]
+      : attach < 0.35
+        ? ["retail attach", { title: "Retail attach is the biggest lever", detail: `Only ${pctStr(attach)} of grooming visits ${here} add a retail item this week. A one-line suggestion at checkout is the simplest gain on visits already happening.` }]
+        : ["holding the current playbook", { title: "Hold the playbook — the next lever is call capture", detail: `Return rate and retail attach are both holding ${here}. The next measurable lever arrives when call tracking goes live.` }];
 
   return {
-    headline: `Revenue ${revD >= 0 ? "rose" : "eased"} to ${money(m.revenue)} ${here}, and ${opportunity.title.replace(" is the biggest lever", "")} is the clearest opportunity to act on.`,
+    headline: `Revenue ${revD >= 0 ? "rose" : "eased"} to ${money(Math.round(a.rev))} ${here} this week, and ${lever} is the clearest opportunity to act on.`,
     changes,
     wins: wins.length ? wins : ["Performance held steady across the headline metrics."],
     risks: risks.length ? risks : ["No metric moved materially in the wrong direction."],
@@ -344,44 +513,47 @@ export async function getWeeklyBrief(scope: Scope): Promise<WeeklyBrief> {
 }
 
 // ── public: manager dashboard ───────────────────────────────────────────────
-export async function getGroupAverages(month: MonthValue) {
-  const [byStore, listings] = await Promise.all([loadDaily(month), loadListings()]);
-  const m = computeMetrics("all", byStore, listings);
-  const cs = computeCalls("all", byStore);
-  return { answeredPct: cs.answeredPct, rebook: m.rebook, attach: m.attach, noShow: m.noShow, rating: m.rating };
-}
-
+// Scorecard rows are the live, manager-movable metrics only. Calls answered,
+// no-show, and review rating rejoin when their feeds (Twilio, bookings, GBP)
+// go live — showing dead zeros or seeded ratings as "your performance" would
+// be inaccurate. Deltas are real period-over-period (null = no prior period).
 export async function getManagerScorecard(store: StoreId, month: MonthValue): Promise<ScoreRow[]> {
-  const [byStore, listings] = await Promise.all([loadDaily(month), loadListings()]);
-  const m = computeMetrics(store, byStore, listings);
-  const cs = computeCalls(store, byStore);
-  const gm = computeMetrics("all", byStore, listings);
-  const gc = computeCalls("all", byStore);
-  const seed = STORE_OPTIONS.findIndex((o) => o.value === store);
-  const d = (n: number, span: number) => Math.round(wave(seed + n, 6) * span * 1000) / 1000;
-  const rows: { label: string; raw: number; avg: number; fmt: (n: number) => string; delta: number; invert?: boolean }[] = [
-    { label: "Calls answered", raw: cs.answeredPct, avg: gc.answeredPct, fmt: (n) => pctStr(n), delta: d(1, 0.05) },
-    { label: "Return rate", raw: m.rebook, avg: gm.rebook, fmt: (n) => pctStr(n), delta: d(2, 0.05) },
-    { label: "Retail attach", raw: m.attach, avg: gm.attach, fmt: (n) => pctStr(n), delta: d(3, 0.05) },
-    { label: "No-show rate", raw: m.noShow, avg: gm.noShow, fmt: (n) => pctStr(n), delta: d(4, 0.04), invert: true },
-    { label: "Avg rating", raw: m.rating, avg: gm.rating, fmt: (n) => n.toFixed(1), delta: d(5, 0.02) },
+  const [byStore, deltas] = await Promise.all([loadDaily(month), getKpiDeltas(store, month)]);
+  const none = {} as Record<StoreId, Listing>;
+  const m = computeMetrics(store, byStore, none);
+  const gm = computeMetrics("all", byStore, none);
+  const rows: { label: string; raw: number; avg: number; fmt: (n: number) => string; delta: number | null }[] = [
+    { label: "Return rate", raw: m.rebook, avg: gm.rebook, fmt: (n) => pctStr(n), delta: deltas.rebook },
+    { label: "Retail attach", raw: m.attach, avg: gm.attach, fmt: (n) => pctStr(n), delta: deltas.attach },
+    { label: "Avg visit", raw: m.avgTicket, avg: gm.avgTicket, fmt: (n) => money(n), delta: deltas.avgTicket },
   ];
   return rows.map((r) => ({
-    label: r.label, value: r.fmt(r.raw), raw: r.raw, avgLabel: r.fmt(r.avg), delta: r.delta, invert: !!r.invert,
-    beatsAvg: r.invert ? r.raw <= r.avg : r.raw >= r.avg,
+    label: r.label, value: r.fmt(r.raw), raw: r.raw, avgLabel: r.fmt(r.avg), delta: r.delta, invert: false,
+    beatsAvg: r.raw >= r.avg,
   }));
 }
 
 export async function getManagerFocus(store: StoreId, month: MonthValue) {
-  const [byStore, listings] = await Promise.all([loadDaily(month), loadListings()]);
+  const byStore = await loadDaily(month);
   const cs = computeCalls(store, byStore);
-  const m = computeMetrics(store, byStore, listings);
+  const m = computeMetrics(store, byStore, {} as Record<StoreId, Listing>);
   const here = `at ${scopeLabel(store)}`;
+  // Candidates are gated on their data source being live (calls) or the copy
+  // being truthful (the "Only X%" framings presume the metric is actually low).
   const candidates = [
-    { score: cs.missedPct, planKey: "call-capture", title: "Unanswered inbound calls are the biggest capture leak", detail: `${pctStr(cs.missedPct)} of inbound calls went unanswered ${here}. Each unanswered call is most often a booking that goes to a competitor instead.`, metric: `${pctStr(cs.missedPct)} of calls missed`, pending: true },
-    { score: 1 - m.rebook, planKey: "rebook-coach", title: "Rebooking at checkout is the most durable lever", detail: `Only ${pctStr(m.rebook)} of grooming visits ${here} come from customers returning within 90 days. A short rebooking prompt at checkout is the most reliable fix.`, metric: `${pctStr(m.rebook)} return rate`, pending: false },
-    { score: 1 - m.attach, planKey: "retail-attach", title: "Retail attachment on grooming visits is below the group", detail: `${pctStr(m.attach)} of grooming visits ${here} add a retail item. Suggesting food or accessories at checkout is the simplest add.`, metric: `${pctStr(m.attach)} retail attach`, pending: false },
+    ...(cs.total > 0
+      ? [{ score: cs.missedPct, planKey: "call-capture", title: "Unanswered inbound calls are the biggest capture leak", detail: `${pctStr(cs.missedPct)} of inbound calls went unanswered ${here}. Each unanswered call is most often a booking that goes to a competitor instead.`, metric: `${pctStr(cs.missedPct)} of calls missed`, pending: true }]
+      : []),
+    ...(m.rebook < 0.6
+      ? [{ score: 1 - m.rebook, planKey: "rebook-coach", title: "Rebooking at checkout is the most durable lever", detail: `Only ${pctStr(m.rebook)} of grooming visits ${here} come from customers returning within 90 days. A short rebooking prompt at checkout is the most reliable fix.`, metric: `${pctStr(m.rebook)} return rate`, pending: false }]
+      : []),
+    ...(m.attach < 0.5
+      ? [{ score: 1 - m.attach, planKey: "retail-attach", title: "Retail attachment on grooming visits is below the group", detail: `${pctStr(m.attach)} of grooming visits ${here} add a retail item. Suggesting food or accessories at checkout is the simplest add.`, metric: `${pctStr(m.attach)} retail attach`, pending: false }]
+      : []),
   ];
+  if (!candidates.length) {
+    return { score: 0, planKey: "rebook-coach", title: "Retention and attach are on track — hold the line", detail: `Return rate and retail attach ${here} are both at healthy levels. Keep the checkout habits consistent; the next measurable lever arrives with call tracking.`, metric: `${pctStr(m.rebook)} return rate`, pending: false };
+  }
   return candidates.sort((a, b) => b.score - a.score)[0];
 }
 
@@ -463,38 +635,68 @@ export async function getGroomers(scope: Scope): Promise<Groomer[]> {
 }
 
 // ── public: Home "one action item" (the highest-scoring leak in scope) ───────
+// Candidates are gated on live data: the call and web-funnel levers only enter
+// once Twilio / GA4 report real volume (recommending a fix for "0% missed
+// calls" would be acting on dead-source zeros), and the "Only X%" framings
+// only run when the metric is actually low.
 export async function getTopAction(scope: Scope, month: MonthValue) {
-  const [byStore, listings] = await Promise.all([loadDaily(month), loadListings()]);
+  const byStore = await loadDaily(month);
   const cs = computeCalls(scope, byStore);
   const ws = computeWeb(scope, byStore);
-  const m = computeMetrics(scope, byStore, listings);
+  const m = computeMetrics(scope, byStore, {} as Record<StoreId, Listing>);
   const here = scope === "all" ? "across the four stores" : `at ${scopeLabel(scope)}`;
   const candidates = [
-    {
-      score: 2 + cs.missedPct,
-      planKey: "call-capture",
-      title: "Missed calls aren't being followed up fast enough",
-      detail: `${pctStr(cs.missedPct)} of inbound calls ${here} go unanswered, and nothing texts those callers back. Each one is usually a booking that goes to whoever picks up next. Urso sets up a Twilio line that catches every missed call and texts the caller back a booking link within seconds — you approve the message once, then it runs.`,
-      metric: `${pctStr(cs.missedPct)} of calls missed`,
-      pending: true,
-    },
-    {
-      score: 1 - m.rebook,
+    ...(cs.total > 0
+      ? [{
+          score: 2 + cs.missedPct,
+          planKey: "call-capture",
+          title: "Missed calls aren't being followed up fast enough",
+          detail: `${pctStr(cs.missedPct)} of inbound calls ${here} go unanswered, and nothing texts those callers back. Each one is usually a booking that goes to whoever picks up next. Urso sets up a Twilio line that catches every missed call and texts the caller back a booking link within seconds — you approve the message once, then it runs.`,
+          metric: `${pctStr(cs.missedPct)} of calls missed`,
+          pending: true,
+        }]
+      : []),
+    ...(m.rebook < 0.6
+      ? [{
+          score: 1 - m.rebook,
+          planKey: "rebook-coach",
+          title: "Rebooking is below the level where recurring revenue holds",
+          detail: `Only ${pctStr(m.rebook)} of grooming visits ${here} come from customers returning within 90 days. Grooming is recurring revenue, so this is the most durable lever on long-term performance. Urso sets up a checkout rebooking prompt and tracks what it brings back.`,
+          metric: `${pctStr(m.rebook)} return rate`,
+          pending: false,
+        }]
+      : []),
+    ...(m.attach < 0.5
+      ? [{
+          score: 1 - m.attach,
+          planKey: "retail-attach",
+          title: "Retail attach on grooming visits is the clearest revenue lever",
+          detail: `Only ${pctStr(m.attach)} of grooming visits ${here} add a retail item, so most visits leave retail margin on the table. Urso sets up a checkout prompt and reorder reminders built from each pet's purchase history, and tracks attach per store and groomer.`,
+          metric: `${pctStr(m.attach)} retail attach`,
+          pending: false,
+        }]
+      : []),
+    ...(ws.visits > 0
+      ? [{
+          score: 1 - ws.convRate * 3.5,
+          planKey: "booking-form",
+          title: "Online booking abandonment is suppressing new bookings",
+          detail: `${pctStr(1 - ws.convRate)} of website visitors ${here} leave without booking. The drop is concentrated in the booking form — Urso builds and tests a shorter, mobile-first form and tracks the bookings it recovers.`,
+          metric: `${pctStr(ws.convRate, 1)} book online`,
+          pending: true,
+        }]
+      : []),
+  ];
+  if (!candidates.length) {
+    return {
+      score: 0,
       planKey: "rebook-coach",
-      title: "Rebooking is below the level where recurring revenue holds",
-      detail: `Only ${pctStr(m.rebook)} of grooming visits ${here} come from customers returning within 90 days. Grooming is recurring revenue, so this is the most durable lever on long-term performance. Urso sets up a checkout rebooking prompt and tracks what it brings back.`,
+      title: "Retention and attach are on track — hold the line",
+      detail: `Return rate and retail attach ${here} are both at healthy levels. Keep the checkout habits consistent; the next measurable lever arrives when call tracking goes live.`,
       metric: `${pctStr(m.rebook)} return rate`,
       pending: false,
-    },
-    {
-      score: 1 - ws.convRate * 3.5,
-      planKey: "booking-form",
-      title: "Online booking abandonment is suppressing new bookings",
-      detail: `${pctStr(1 - ws.convRate)} of website visitors ${here} leave without booking. The drop is concentrated in the booking form — Urso builds and tests a shorter, mobile-first form and tracks the bookings it recovers.`,
-      metric: `${pctStr(ws.convRate, 1)} book online`,
-      pending: true,
-    },
-  ];
+    };
+  }
   return candidates.sort((a, b) => b.score - a.score)[0];
 }
 

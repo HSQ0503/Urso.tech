@@ -90,6 +90,7 @@ export default async function RevenueMapPage({ searchParams }: { searchParams: P
               segments={[
                 { label: "Repeat customers", value: nvr.repeat, color: "#fe5100" },
                 { label: "New customers", value: nvr.fresh, color: "var(--color-series)" },
+                { label: "Walk-in (no profile)", value: nvr.walkIn, color: "var(--color-series-soft)" },
               ]}
             />
           </div>

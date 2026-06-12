@@ -39,7 +39,7 @@ export default async function BriefPage({ searchParams }: { searchParams: Promis
       {/* What changed */}
       <section>
         <Micro>What changed</Micro>
-        <div className="mt-3 grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-edge bg-edge md:grid-cols-5">
+        <div className="mt-3 grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-edge bg-edge md:grid-cols-4">
           {b.changes.map((c) => (
             <div key={c.label} className="bg-cell p-4">
               <Micro>{c.label}</Micro>

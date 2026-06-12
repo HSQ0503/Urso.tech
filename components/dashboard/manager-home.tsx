@@ -37,11 +37,11 @@ const shorten = (name: string) => name.replace(" Village", "");
 export async function ManagerHome({ store, month, userName, streak }: { store: StoreId; month: MonthValue; userName: string; streak: number }) {
   const storeName = scopeLabel(store);
   const period = month === "all" ? "Last 12 months" : monthLabel(month);
-  const [focus, scorecard, rebookRank, answeredRank, scores, actions, team, watch] = await Promise.all([
+  const [focus, scorecard, rebookRank, attachRank, scores, actions, team, watch] = await Promise.all([
     getManagerFocus(store, month),
     getManagerScorecard(store, month),
     getStoreRanking("rebook", month),
-    getStoreRanking("answered", month),
+    getStoreRanking("attach", month),
     getStoreScores(month),
     getAgentActionsForStore(store),
     getGroomersForStore(store),
@@ -82,7 +82,7 @@ export async function ManagerHome({ store, month, userName, streak }: { store: S
         </div>
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
           <RateRankCard title="Return rate" ranking={rebookRank} storeId={store} />
-          <RateRankCard title="Calls answered" ranking={answeredRank} storeId={store} />
+          <RateRankCard title="Retail attach" ranking={attachRank} storeId={store} />
         </div>
       </section>
 
@@ -92,12 +92,12 @@ export async function ManagerHome({ store, month, userName, streak }: { store: S
           <Micro>Your scorecard</Micro>
           <h2 className="mt-1.5 text-[18px] font-medium tracking-[-0.01em]">How you&apos;re doing — and versus the group average</h2>
         </div>
-        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-edge bg-edge md:grid-cols-3 xl:grid-cols-5">
+        <div className="grid grid-cols-1 gap-px overflow-hidden rounded-2xl border border-edge bg-edge md:grid-cols-3">
           {scorecard.map((s) => (
             <div key={s.label} className="bg-cell p-4">
               <div className="flex items-center justify-between gap-2">
                 <Micro>{s.label}</Micro>
-                <Delta value={s.delta} invert={s.invert} />
+                {s.delta != null && <Delta value={s.delta} invert={s.invert} />}
               </div>
               <div className="mt-2.5 text-[24px] font-medium leading-none tracking-[-0.02em]">{s.value}</div>
               <div className="mt-2.5 flex items-center justify-between gap-2 text-[11px]">

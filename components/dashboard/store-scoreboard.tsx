@@ -21,7 +21,7 @@ function Trophy({ className = "" }: { className?: string }) {
 const criteria = (
   <div>
     <div className="font-medium text-ink">How the score works</div>
-    <p className="mt-1.5">A 0–100 score from the things a store controls. Revenue and store size are excluded so newer stores compete fairly.</p>
+    <p className="mt-1.5">A 0–100 score from the things a store controls, measured from real POS data. Revenue and store size are excluded so newer stores compete fairly. Calls answered and review rating join the score when call tracking and Google go live.</p>
     <ul className="mt-2.5 space-y-1">
       {SCORE_WEIGHTS.map((w) => (
         <li key={w.key} className="flex items-center justify-between gap-4">

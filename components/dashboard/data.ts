@@ -991,7 +991,7 @@ export type ScoreRow = {
   value: string;
   raw: number;
   avgLabel: string;
-  delta: number; // deterministic period-over-period change
+  delta: number | null; // real period-over-period change; null = no prior period
   invert: boolean; // true when lower is better (no-show)
   beatsAvg: boolean; // true = at or better than the group average
 };
@@ -1039,9 +1039,10 @@ export function storeRanking(metric: RankMetric, month: MonthValue = "all") {
 }
 
 // Composite store score (0–100) for the scoreboard. Built only from things a
-// store can control — calls answered, rebook, retail attach, no-show, review
-// rating — so revenue and store size are deliberately excluded and the newer
-// stores compete fairly. Deterministic; the weights are the published criteria.
+// store can control AND that we measure for real today — return rate and
+// retail attach. Calls answered, review rating, and no-show join the score
+// when their feeds (Twilio, GBP, bookings) go live; scoring dead-source zeros
+// or seeded ratings would make the ranking dishonest.
 export type StoreScore = {
   id: StoreId;
   name: string;
@@ -1049,11 +1050,8 @@ export type StoreScore = {
   rank: number;
 };
 export const SCORE_WEIGHTS = [
-  { key: "answered", label: "Calls answered", weight: 25 },
-  { key: "rebook", label: "Rebook rate", weight: 25 },
-  { key: "rating", label: "Review rating", weight: 20 },
-  { key: "attach", label: "Retail attach", weight: 15 },
-  { key: "noShow", label: "No-show rate", weight: 15 },
+  { key: "rebook", label: "Return rate", weight: 60 },
+  { key: "attach", label: "Retail attach", weight: 40 },
 ] as const;
 
 export function storeScores(month: MonthValue = "all"): StoreScore[] {

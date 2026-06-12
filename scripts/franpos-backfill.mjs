@@ -221,7 +221,15 @@ for (const store of ROLLUP_ONLY ? [] : STORES) {
 }
 
 // ── rollup ───────────────────────────────────────────────────────────────────
-const start = orderWindows[0];
+// Re-roll from the OLDEST staged row, not today−360: staged items can predate
+// the first fetch window by a day or two, and a day the rollup never revisits
+// keeps whatever definitions were live when it was last written (this exact
+// gap left 2025-06-16 stale on pre-0009 numbers).
+let start = orderWindows[0];
+{
+  const { data: oldest } = await db.from("franpos_order_items").select("item_date").order("item_date").limit(1);
+  if (oldest?.[0]?.item_date && oldest[0].item_date < start) start = oldest[0].item_date;
+}
 const end = iso(new Date());
 console.log(`\n⟳ franpos_rollup('${start}', '${end}') …`);
 let { data: roll, error: rollErr } = await db.rpc("franpos_rollup", { p_start: start, p_end: end });
