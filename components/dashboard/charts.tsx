@@ -15,12 +15,14 @@ import {
   ComposedChart,
   LabelList,
   Line,
+  LineChart,
   Pie,
   PieChart,
   PolarAngleAxis,
   RadialBar,
   RadialBarChart,
   ReferenceArea,
+  ReferenceLine,
   XAxis,
   YAxis,
 } from "recharts";
@@ -473,5 +475,190 @@ export function RatingBars({ stars, counts }: { stars: number[]; counts: number[
         );
       })}
     </div>
+  );
+}
+
+// ---- Compare page: period-vs-period charts ----------------------------------
+
+// Category axes get one line per name: long product names ("ONLINE SERVICE
+// (#1) - DOG - Full Groom") otherwise wrap into a 3-line mess. Tooltips and
+// the exact-figures table keep the full name.
+const truncName = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s);
+
+// Grouped now-vs-before bars. layout="columns" (few entities, e.g. stores)
+// renders vertical columns; layout="rows" (many named entities, e.g. groomers)
+// renders horizontal paired bars with the names on the left.
+export function CompareBars({
+  data,
+  labelA,
+  labelB,
+  format = "number",
+  layout = "columns",
+  height,
+}: {
+  data: { name: string; a: number | null; b: number | null }[];
+  labelA: string;
+  labelB: string;
+  format?: ValueFormat;
+  layout?: "columns" | "rows";
+  height?: number;
+}) {
+  const fmt = formatFor(format);
+  // Keep nulls: "no activity that period" (new hire, departure) must read as
+  // absent, not $0. Recharts skips null bars; the tooltip shows an em dash.
+  const chartData = data.map((d) => ({ name: d.name, a: d.a, b: d.b }));
+  const fmtLabel = (v: unknown) => (v == null ? "" : fmt(Number(v)));
+  const config = {
+    a: { label: labelA, color: ORANGE },
+    b: { label: labelB, color: MUTED },
+  } satisfies ChartConfig;
+
+  if (layout === "rows") {
+    const h = height ?? Math.max(150, data.length * 52);
+    return (
+      <ChartContainer config={config} style={{ height: h }}>
+        <BarChart data={chartData} layout="vertical" margin={{ left: 4, right: 56, top: 2, bottom: 2 }} barCategoryGap={12} barGap={2}>
+          <CartesianGrid horizontal={false} />
+          <XAxis type="number" hide />
+          <YAxis type="category" dataKey="name" width={118} tickLine={false} axisLine={false} interval={0} tick={{ fontSize: 11 }} tickFormatter={(v) => truncName(String(v), 16)} />
+          <ChartTooltip cursor={{ fill: "var(--color-raise)" }} content={<ChartTooltipContent valueFormatter={(v) => fmt(v)} />} />
+          <Bar dataKey="b" fill="var(--color-b)" radius={[0, 3, 3, 0]} barSize={8} isAnimationActive={false} />
+          <Bar dataKey="a" fill="var(--color-a)" radius={[0, 3, 3, 0]} barSize={8} isAnimationActive={false}>
+            <LabelList dataKey="a" position="right" fill="var(--color-ink-dim)" fontSize={10.5} formatter={fmtLabel} />
+          </Bar>
+        </BarChart>
+      </ChartContainer>
+    );
+  }
+
+  return (
+    <ChartContainer config={config} style={{ height: height ?? 250 }}>
+      <BarChart data={chartData} margin={{ left: 4, right: 8, top: 20, bottom: 0 }} barCategoryGap="26%" barGap={5}>
+        <CartesianGrid vertical={false} />
+        <XAxis dataKey="name" tickLine={false} axisLine={false} tickMargin={8} interval={0} />
+        <YAxis tickLine={false} axisLine={false} width={46} tickFormatter={fmt} />
+        <ChartTooltip cursor={{ fill: "var(--color-raise)" }} content={<ChartTooltipContent valueFormatter={(v) => fmt(v)} />} />
+        <Bar dataKey="b" fill="var(--color-b)" radius={[3, 3, 0, 0]} isAnimationActive={false} />
+        <Bar dataKey="a" fill="var(--color-a)" radius={[3, 3, 0, 0]} isAnimationActive={false}>
+          <LabelList dataKey="a" position="top" fill="var(--color-ink-dim)" fontSize={10.5} formatter={fmtLabel} />
+        </Bar>
+      </BarChart>
+    </ChartContainer>
+  );
+}
+
+// Winners vs losers: the change between the two periods, diverging from zero.
+// Gainers grow right (green), decliners grow left (orange).
+export function CompareDiverging({
+  data,
+  format = "number",
+  height,
+}: {
+  data: { name: string; delta: number }[];
+  format?: ValueFormat;
+  height?: number;
+}) {
+  const fmt = formatFor(format);
+  const signed = (n: number) => `${n >= 0 ? "+" : "−"}${fmt(Math.abs(n))}`;
+  const config = { delta: { label: "Change", color: ORANGE } } satisfies ChartConfig;
+  const h = height ?? Math.max(150, data.length * 40);
+  return (
+    <ChartContainer config={config} style={{ height: h }}>
+      <BarChart data={data} layout="vertical" margin={{ left: 4, right: 56, top: 2, bottom: 2 }} barCategoryGap={10}>
+        {/* Pad the domain so the longest bar never reaches the edge — its value
+            label needs room and must never collide with the category name. */}
+        <XAxis type="number" hide domain={[(min: number) => Math.min(0, min) * 1.25, (max: number) => Math.max(0, max) * 1.25]} />
+        <YAxis type="category" dataKey="name" width={126} tickLine={false} axisLine={false} interval={0} tick={{ fontSize: 11 }} tickFormatter={(v) => truncName(String(v), 17)} />
+        <ReferenceLine x={0} stroke="var(--color-edge-strong)" />
+        <ChartTooltip cursor={{ fill: "var(--color-raise)" }} content={<ChartTooltipContent hideLabel valueFormatter={(v) => signed(v)} />} />
+        <Bar dataKey="delta" radius={3} isAnimationActive={false}>
+          {data.map((d, i) => (
+            <Cell key={i} fill={d.delta >= 0 ? "var(--color-good)" : ORANGE} />
+          ))}
+          <LabelList dataKey="delta" position="right" fill="var(--color-ink-dim)" fontSize={10.5} formatter={(v) => signed(Number(v))} />
+        </Bar>
+      </BarChart>
+    </ChartContainer>
+  );
+}
+
+// Two periods overlaid day by day as running totals — "is this period ahead of
+// or behind the last one at the same point?" Solid orange = focus period,
+// dashed grey = baseline.
+export function ComparePace({
+  a,
+  b,
+  labelA,
+  labelB,
+  format = "moneyK",
+  height = 230,
+}: {
+  a: number[];
+  b: number[];
+  labelA: string;
+  labelB: string;
+  format?: ValueFormat;
+  height?: number;
+}) {
+  const fmt = formatFor(format);
+  const len = Math.max(a.length, b.length);
+  const cumulative = (xs: number[]) => {
+    const out: number[] = [];
+    for (const v of xs) out.push((out[out.length - 1] ?? 0) + v);
+    return out;
+  };
+  const ca = cumulative(a);
+  const cb = cumulative(b);
+  const chartData = Array.from({ length: len }, (_, i) => ({
+    label: String(i + 1),
+    a: i < a.length ? ca[i] : null,
+    b: i < b.length ? cb[i] : null,
+  }));
+  const config = {
+    a: { label: labelA, color: ORANGE },
+    b: { label: labelB, color: MUTED },
+  } satisfies ChartConfig;
+  return (
+    <ChartContainer config={config} style={{ height }}>
+      <LineChart data={chartData} margin={{ left: 4, right: 12, top: 8, bottom: 0 }}>
+        <CartesianGrid vertical={false} />
+        <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} interval={tickEvery(len)} />
+        <YAxis tickLine={false} axisLine={false} width={44} tickFormatter={fmt} />
+        <ChartTooltip
+          cursor={{ strokeDasharray: "3 3" }}
+          content={<ChartTooltipContent labelFormatter={(l) => `Day ${l}`} valueFormatter={(v) => fmt(v)} />}
+        />
+        <Line dataKey="b" type="monotone" stroke="var(--color-b)" strokeWidth={1.75} strokeDasharray="5 4" dot={false} />
+        <Line dataKey="a" type="monotone" stroke="var(--color-a)" strokeWidth={2.25} dot={false} activeDot={{ r: 3 }} />
+      </LineChart>
+    </ChartContainer>
+  );
+}
+
+// ---- Simple share histogram (grooming cycle distribution) -------------------
+export function HistogramBars({
+  data,
+  height = 190,
+  color = ORANGE,
+  seriesLabel = "Share",
+}: {
+  data: { label: string; value: number }[]; // value = share 0..1
+  height?: number;
+  color?: string;
+  seriesLabel?: string;
+}) {
+  const config = { value: { label: seriesLabel, color } } satisfies ChartConfig;
+  return (
+    <ChartContainer config={config} style={{ height }}>
+      <BarChart data={data} margin={{ left: 0, right: 8, top: 20, bottom: 0 }} barCategoryGap="22%">
+        <CartesianGrid vertical={false} />
+        <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} interval={0} tick={{ fontSize: 11 }} />
+        <YAxis hide />
+        <ChartTooltip cursor={{ fill: "var(--color-raise)" }} content={<ChartTooltipContent valueFormatter={(v) => `${Math.round(v * 100)}%`} />} />
+        <Bar dataKey="value" fill="var(--color-value)" radius={[3, 3, 0, 0]} isAnimationActive={false}>
+          <LabelList dataKey="value" position="top" fill="var(--color-ink-dim)" fontSize={10.5} formatter={(v) => `${Math.round(Number(v) * 100)}%`} />
+        </Bar>
+      </BarChart>
+    </ChartContainer>
   );
 }

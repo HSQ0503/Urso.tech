@@ -17,7 +17,7 @@ import { signOut } from "@/app/login/actions";
 import { Modal } from "./modal";
 import { ThemeToggle } from "./theme-toggle";
 
-type IconName = "home" | "brief" | "activity" | "money" | "spark" | "store" | "users" | "scissors" | "star";
+type IconName = "home" | "brief" | "activity" | "money" | "spark" | "store" | "users" | "scissors" | "star" | "compare";
 
 function Icon({ name }: { name: IconName }) {
   const common = { width: 18, height: 18, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.75, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
@@ -40,6 +40,8 @@ function Icon({ name }: { name: IconName }) {
       return <svg {...common}><circle cx="6" cy="6.5" r="2.75" /><circle cx="6" cy="17.5" r="2.75" /><path d="M8.2 8.4 20 19.5" /><path d="M20 4.5 8.2 15.6" /><path d="M12 12h.01" /></svg>;
     case "star":
       return <svg {...common}><path d="M12 3.2l2.62 5.32 5.88.86-4.25 4.14 1 5.86L12 16.77 6.75 19.4l1-5.86L3.5 9.4l5.88-.86Z" /></svg>;
+    case "compare":
+      return <svg {...common}><path d="M3 6.5h13" /><path d="M13 3.5l3 3-3 3" /><path d="M21 17.5H8" /><path d="M11 14.5l-3 3 3 3" /></svg>;
   }
 }
 
@@ -61,6 +63,7 @@ const navGroups: NavGroup[] = [
     items: [
       { href: "/dashboard/performance", label: "Performance", icon: "activity", roles: ["owner"] },
       { href: "/dashboard/revenue", label: "Revenue map", icon: "money", roles: ["owner"] },
+      { href: "/dashboard/compare", label: "Compare", icon: "compare", roles: ["owner"] },
       { href: "/dashboard/actions", label: "AI actions", icon: "spark", roles: ["owner"] },
     ],
   },
@@ -239,10 +242,10 @@ function ShellChrome({ qs, role, storeId, clientName, userName, email, streak, m
             <AccountRow k="Client" v={clientName} />
             {lockedStore && <AccountRow k="Store" v={scopeLabel(lockedStore)} />}
             <AccountRow k="Member since" v={memberSince} />
-            <AccountRow k="Login streak" v={`${streak} days`} />
+            {streak > 0 && <AccountRow k="Login streak" v={`${streak} days`} />}
           </dl>
           <p className="text-[11.5px] leading-[1.5] text-ink-dimmer">
-            Pilot environment — profile editing and password changes arrive with Supabase auth.
+            Pilot environment — profile editing and password changes are handled by Urso for now.
           </p>
           <form action={signOut}>
             <button

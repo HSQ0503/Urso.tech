@@ -107,8 +107,8 @@ export const CHART_GUIDES = {
     source: FRANPOS,
   },
   revenueByGroomer: {
-    summary: "Revenue handled by each groomer, ranked highest to lowest.",
-    read: "Each bar is one groomer; longer is more revenue passing through their chair. Read it as workload and contribution, not a verdict — pair it with rebooking and attach.",
+    summary: "Service revenue performed by each groomer, ranked highest to lowest — grooming lines only, attributed to the FranPOS salesperson on each line.",
+    read: "Each bar is one groomer; longer is more service revenue from their chair. Retail sales and front-desk, vendor, and system accounts are excluded. Read it as workload and contribution, not a verdict — pair it with rebooking and attach.",
     legend: [{ color: TRACK, label: "Groomer" }],
     source: FRANPOS,
   },
@@ -139,6 +139,33 @@ export const CHART_GUIDES = {
     ],
     source: FRANPOS,
   },
+  compareTable: {
+    summary: "Side-by-side performance for any two periods you choose.",
+    read: "Each pair of bars is one store, groomer, or item. The orange bar is the focus period; the grey bar is the period it's compared against. 'Change' is (now − before) ÷ before — or percentage points for rate metrics. 'New' means it sold in the focus period but not in the comparison period.",
+    legend: [
+      { color: ORANGE, label: "This period" },
+      { color: SERIES, label: "Compared against" },
+    ],
+    source: FRANPOS,
+  },
+  comparePace: {
+    summary: "Both periods overlaid day by day as a running revenue total.",
+    read: "The X axis is the day number within each period; each line adds up revenue as the period progresses. Orange above the dashed line means this period is ahead of the comparison at the same point — a gap that widens late often means a strong final week, not a strong month.",
+    legend: [
+      { color: ORANGE, label: "This period" },
+      { color: SERIES, label: "Compared against" },
+    ],
+    source: FRANPOS,
+  },
+  compareDiverging: {
+    summary: "What moved between the two periods — gainers right, decliners left.",
+    read: "Each bar is the change for one item: green bars to the right sold more than in the comparison period, orange bars to the left sold less. Sorted biggest gain to biggest drop, so the top and bottom of the chart are the story.",
+    legend: [
+      { color: "var(--color-good)", label: "Gained" },
+      { color: ORANGE, label: "Declined" },
+    ],
+    source: FRANPOS,
+  },
   managerRank: {
     summary: "Where your store stands against the other three on this metric.",
     read: "Each bar is a store and yours is highlighted; the caption shows your rank and the gap to the leader. It's a relative-standing view only — never another store's customers or revenue.",
@@ -155,6 +182,12 @@ export const CHART_GUIDES = {
       { color: ORANGE, label: "Returning" },
       { color: SERIES, label: "New" },
     ],
+    source: FRANPOS,
+  },
+  groomingCycle: {
+    summary: "How many days pass between a customer's grooming visits.",
+    read: "Each bar is the share of all return gaps — the time between one groom and that customer's next. The peak is your natural cycle. Retail-only visits don't reset the clock, and anonymous walk-in tickets aren't counted. A 'recurring customer' holds a median cycle of 60 days or less.",
+    legend: [{ color: ORANGE, label: "Share of return gaps" }],
     source: FRANPOS,
   },
   cohortRetention: {

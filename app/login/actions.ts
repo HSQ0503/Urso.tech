@@ -1,22 +1,33 @@
 "use server";
 
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { MOCK_USERS, SESSION_COOKIE, homePathFor } from "@/lib/auth";
+import { createClient } from "@/lib/supabase/server";
+import { getSession, homePathFor } from "@/lib/auth";
 
-// Mock sign-in: pick an identity. Real auth validates a password / magic link
-// against Supabase, then sets the session the same way.
+// Real sign-in: validate the password against Supabase Auth, then require a
+// provisioned app_users membership before letting anyone through. Accounts are
+// created by Urso (scripts/provision-users.mjs) — there is no self-signup.
 export async function signIn(formData: FormData) {
-  const id = String(formData.get("id") ?? "");
-  const user = MOCK_USERS[id];
-  if (!user) return;
-  const store = await cookies();
-  store.set(SESSION_COOKIE, id, { httpOnly: true, sameSite: "lax", path: "/", maxAge: 60 * 60 * 24 * 7 });
-  redirect(homePathFor(user.role));
+  const email = String(formData.get("email") ?? "").trim();
+  const password = String(formData.get("password") ?? "");
+  if (!email || !password) redirect("/login?error=missing");
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) redirect("/login?error=invalid");
+
+  const session = await getSession();
+  if (!session) {
+    // Valid Supabase login but no membership row — not one of ours. Drop the
+    // session so the cookie doesn't linger half-authenticated.
+    await supabase.auth.signOut();
+    redirect("/login?error=unprovisioned");
+  }
+  redirect(homePathFor(session.role));
 }
 
 export async function signOut() {
-  const store = await cookies();
-  store.delete(SESSION_COOKIE);
+  const supabase = await createClient();
+  await supabase.auth.signOut();
   redirect("/login");
 }

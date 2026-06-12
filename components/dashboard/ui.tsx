@@ -21,6 +21,10 @@ export {
   BarRanking,
   StackedShareBar,
   RatingBars,
+  CompareBars,
+  CompareDiverging,
+  ComparePace,
+  HistogramBars,
 } from "./charts";
 
 export function fmtMoney(n: number, compact = false): string {
@@ -199,7 +203,9 @@ export function Segmented<T extends string>({ options, value, onChange }: { opti
 }
 
 // Consecutive-days-active counter — shown in the welcome row after sign-in.
+// Hidden until login history is actually tracked (real auth sends streak: 0).
 export function StreakPill({ streak }: { streak: number }) {
+  if (streak <= 0) return null;
   return (
     <span
       className="inline-flex items-center gap-1.5 rounded-full border border-[rgba(254,81,0,0.35)] bg-orange-soft px-2.5 py-1 font-mono text-[10.5px] uppercase tracking-[0.1em] text-orange"

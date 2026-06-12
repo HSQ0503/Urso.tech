@@ -21,6 +21,7 @@ import {
   DonutSplit,
   CohortCurve,
   StackedShareBar,
+  HistogramBars,
   fmtMoney,
   pct,
 } from "@/components/dashboard/ui";
@@ -52,7 +53,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
       <section className="grid grid-cols-2 gap-x-8 gap-y-6 border-y border-edge py-7 md:grid-cols-4">
         <Stat label="Returning" value={pct(retention.returningPct)} sub="of customers come back after their first visit" />
         <Stat label="Return rate" value={pct(m.rebook)} sub="of profiled visits are 90-day returns" />
-        <Stat label="Average cadence" value={`${retention.cadenceDays} days`} sub="between visits, across full history" />
+        <Stat label="Grooming cycle" value={retention.cycle.medianDays ? `${retention.cycle.medianDays} days` : "—"} sub="median time between grooms" />
         <Stat label="Single-visit" value={retention.oneAndDone.toLocaleString()} sub="came once, no return in 90+ days" accent />
       </section>
 
@@ -101,6 +102,28 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
           </div>
         </Card>
       </div>
+
+      {/* Grooming cycle */}
+      <Card className="mt-5">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-1.5">
+              <Micro>Grooming cycle · time between grooms</Micro>
+              <ChartInfo id="groomingCycle" />
+            </div>
+            <h2 className="mt-1.5 text-[18px] font-medium tracking-[-0.01em]">How often customers come back</h2>
+          </div>
+          <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-dimmer">
+            {retention.cycle.gapCount.toLocaleString()} return visits measured
+          </span>
+        </div>
+        <div className="mt-4">
+          <HistogramBars data={retention.cycle.histogram} seriesLabel="Share of return gaps" />
+        </div>
+        <p className="mt-3 max-w-[720px] text-[13px] leading-[1.55] text-ink-dim">
+          The median customer returns every {retention.cycle.medianDays} days, and {pct(retention.cycle.recurringPct)} of returning customers hold a recurring cycle of 60 days or less ({retention.cycle.recurringCount.toLocaleString()} of {retention.cycle.cycleCustomers.toLocaleString()}). Everything right of the 8-week bars is a customer drifting off cadence — the moment a rebooking nudge earns its keep. True checkout rebooking (booked the next visit before leaving) arrives with the FranPOS booking feed.
+        </p>
+      </Card>
 
       {/* Customer intelligence */}
       <section className="mt-8">

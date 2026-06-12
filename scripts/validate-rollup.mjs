@@ -205,28 +205,52 @@ await compare("Full window", null, null);
     console.log(`  ⚠ RPC missing (${error.message}) — apply migration 0010`);
     totalFails++;
   } else {
-    const byName = new Map();
+    // Mirror the rollup's grouping: product_sales_daily groups items per
+    // store/day by SKU (name when SKU is blank) with display name = max(name),
+    // so a product renamed in FranPOS merges under one daily row; the RPC then
+    // regroups those rows by lower(trim(name)).
+    const psd = new Map(); // store|date|skuKey -> daily row
     for (const i of live) {
-      const k = (i.name ?? "").trim().toLowerCase();
-      const e = byName.get(k) ?? { rev: 0, svcRev: 0 };
+      const skuKey = i.sku ? i.sku : i.name ?? "";
+      const k = `${i.store_id}|${i.item_date}|${skuKey}`;
+      const e = psd.get(k) ?? { rev: 0, cost: 0, svc: false, name: "" };
       e.rev += i.rev;
-      if (i.svc) e.svcRev += i.rev;
+      e.cost += num(i.cost) * num(i.quantity);
+      e.svc = e.svc || i.svc;
+      if ((i.name ?? "") > e.name) e.name = i.name ?? "";
+      psd.set(k, e);
+    }
+    const byName = new Map();
+    for (const r of psd.values()) {
+      const k = r.name.trim().toLowerCase();
+      const e = byName.get(k) ?? { rev: 0, svcRev: 0, cost: 0 };
+      e.rev += r.rev;
+      e.cost += r.cost;
+      if (r.svc) e.svcRev += r.rev;
       byName.set(k, e);
     }
     // The RPC returns the top 500 names by revenue (deterministic — PostgREST
-    // would otherwise truncate at 1,000 in arbitrary order). The db rows must
-    // therefore equal the JS top-|rows| by revenue.
+    // would otherwise truncate at 1,000 in arbitrary order). Same-name sums
+    // validate the rollup math; exact top-N membership is unstable at the cap
+    // when boundary revenues nearly tie, so the cap is checked separately.
     const jsSorted = [...byName.values()].sort((a, b) => b.rev - a.rev);
-    const jsTopSum = jsSorted.slice(0, data.length).reduce((a, e) => a + e.rev, 0);
+    const jsSameNames = data.reduce((a, r) => a + (byName.get((r.name ?? "").trim().toLowerCase())?.rev ?? 0), 0);
     const dbTotal = data.reduce((a, r) => a + num(r.revenue), 0);
-    check(`db rows = js top ${data.length} by revenue`, Math.abs(jsTopSum - dbTotal) <= 1, `js=${jsTopSum.toFixed(2)} db=${dbTotal.toFixed(2)}`);
+    // Tolerance scales with names: fractional ounce-priced quantities accrue
+    // float drift in JS that Postgres numeric does not (a real miss is ≥ $1.99).
+    check(`db rows = js sums for the same ${data.length} names`, Math.abs(jsSameNames - dbTotal) <= 0.01 * data.length, `js=${jsSameNames.toFixed(2)} db=${dbTotal.toFixed(2)}`);
+    const nextJs = jsSorted[data.length]?.rev ?? 0;
+    const dbMin = num(data[data.length - 1]?.revenue);
+    check("top-by-revenue cap", dbMin >= nextJs - 1, `db min $${dbMin.toFixed(2)} < first excluded js $${nextJs.toFixed(2)}`);
     check("ordered desc (top seller first)", num(data[0]?.revenue) >= num(data[1]?.revenue) && Math.abs(num(data[0]?.revenue) - jsSorted[0].rev) <= 1, `db#1=${data[0]?.name} $${Math.round(num(data[0]?.revenue)).toLocaleString()}`);
     for (const r of data.slice(0, 8)) {
       const e = byName.get((r.name ?? "").trim().toLowerCase());
       const okRev = e && Math.abs(e.rev - num(r.revenue)) <= 1;
       const okSvc = e && (e.svcRev >= e.rev - e.svcRev) === r.is_service;
-      check(`${r.name}`, !!(okRev && okSvc), `$${Math.round(num(r.revenue)).toLocaleString()} ${r.is_service ? "service" : "retail"}`);
+      const okCost = !("cost" in r) || (e && Math.abs(e.cost - num(r.cost)) <= 1); // cost lands with migration 0011
+      check(`${r.name}`, !!(okRev && okSvc && okCost), `$${Math.round(num(r.revenue)).toLocaleString()} ${r.is_service ? "service" : "retail"}`);
     }
+    if (data.length && !("cost" in data[0])) console.log("  ⚠ cost column missing — apply migration 0011 for Compare-page margins");
   }
 }
 
@@ -340,11 +364,83 @@ for (const i of live) {
   }
 }
 
+// ── grooming cycle (gap buckets + per-customer medians) ──────────────────────
+{
+  console.log("\n── grooming cycle ──");
+  const [{ data: buckets, error: be }, { data: ret, error: re }] = await Promise.all([
+    db.from("grooming_gap_buckets").select("store_id, bucket, gaps"),
+    db.rpc("retention_summary", { p_store_ids: ["wp", "wg", "lv", "wm"] }),
+  ]);
+  if (be || !buckets?.length || re || !("recurring60" in (ret?.[0] ?? {}))) {
+    console.log(`  ⚠ missing (${be?.message ?? re?.message ?? "no rows / old retention_summary"}) — apply migration 0012`);
+    totalFails++;
+  } else {
+    // JS replica: per (store, customer) grooming-visit gaps (svc, non-pass,
+    // walk-ins excluded) for buckets; global per-customer medians for recurring.
+    const perPair = new Map();
+    const perCust = new Map();
+    for (const i of live) {
+      if (!i.svc || i.customer_id == null || isWalkin(i.store_id, i.customer_id)) continue;
+      const pk = `${i.store_id}|${i.customer_id}`;
+      (perPair.get(pk) ?? perPair.set(pk, new Set()).get(pk)).add(i.item_date);
+      (perCust.get(i.customer_id) ?? perCust.set(i.customer_id, new Set()).get(i.customer_id)).add(i.item_date);
+    }
+    const gapsOf = (days) => {
+      const d = [...days].sort();
+      const out = [];
+      for (let j = 1; j < d.length; j++) out.push(daysBetween(d[j - 1], d[j]));
+      return out;
+    };
+    const jsBuckets = new Map(); // store|cappedGap -> count
+    let allGaps = [];
+    for (const [pk, days] of perPair) {
+      const store = pk.split("|")[0];
+      for (const g of gapsOf(days)) {
+        const k = `${store}|${Math.min(g, 127)}`;
+        jsBuckets.set(k, (jsBuckets.get(k) ?? 0) + 1);
+        allGaps.push(g);
+      }
+    }
+    const dbTotal = buckets.reduce((a, r) => a + num(r.gaps), 0);
+    check("total gaps", dbTotal === allGaps.length, `js=${allGaps.length} db=${dbTotal}`);
+    let bucketMismatch = 0;
+    for (const r of buckets) if (num(r.gaps) !== (jsBuckets.get(`${r.store_id}|${r.bucket}`) ?? 0)) bucketMismatch++;
+    check("per-store buckets", bucketMismatch === 0, `${bucketMismatch} buckets differ`);
+    allGaps = allGaps.sort((a, b) => a - b);
+    const jsMedian = allGaps[Math.floor(allGaps.length / 2)];
+    // db median from merged buckets
+    const byDay = new Map();
+    for (const r of buckets) byDay.set(num(r.bucket), (byDay.get(num(r.bucket)) ?? 0) + num(r.gaps));
+    let cum = 0, dbMedian = 0;
+    for (const d of [...byDay.keys()].sort((x, y) => x - y)) {
+      cum += byDay.get(d);
+      if (cum >= dbTotal / 2) { dbMedian = d; break; }
+    }
+    check("median gap", Math.abs(dbMedian - jsMedian) <= 1, `js=${jsMedian}d db=${dbMedian}d`);
+    // recurring customers (global median cycle <= 60)
+    let cycleCust = 0, recur = 0;
+    for (const days of perCust.values()) {
+      const g = gapsOf(days).sort((a, b) => a - b);
+      if (!g.length) continue;
+      cycleCust++;
+      // percentile_disc(0.5): lowest value with cumulative fraction >= 0.5
+      if (g[Math.ceil(g.length / 2) - 1] <= 60) recur++;
+    }
+    const s = ret[0];
+    check("cycle customers", num(s.cycle_customers) === cycleCust, `js=${cycleCust} db=${s.cycle_customers}`);
+    check("recurring (≤60d)", num(s.recurring60) === recur, `js=${recur} db=${s.recurring60}`);
+    console.log(`  → median cycle ${dbMedian}d · recurring ${(num(s.recurring60) / num(s.cycle_customers) * 100).toFixed(1)}% of ${num(s.cycle_customers).toLocaleString()} returning groomers`);
+  }
+}
+
 // ── customers table hygiene ──────────────────────────────────────────────────
 {
   console.log("\n── customers table ──");
-  const { count: giants } = await db.from("customers").select("*", { count: "exact", head: true }).gte("visits", 300);
-  check("walk-in accounts swept", (giants ?? 0) === 0, `${giants} rows with 300+ visits remain`);
+  // A house account that escaped the sweep shows visits ≈ trading days; real
+  // daily regulars sit well below the 80% bar however long the window grows.
+  const giantBar = Math.ceil(0.8 * Math.max(...[...tradingDays.values()].map((s) => s.size)));
+  const { count: giants } = await db.from("customers").select("*", { count: "exact", head: true }).gte("visits", giantBar);
+  check("walk-in accounts swept", (giants ?? 0) === 0, `${giants} rows with ${giantBar}+ visits remain`);
   const { count: active } = await db.from("customers").select("*", { count: "exact", head: true }).gte("visits", 1);
   console.log(`  active customers (visits ≥ 1): ${active?.toLocaleString()}`);
 }

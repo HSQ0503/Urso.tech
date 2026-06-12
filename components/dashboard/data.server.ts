@@ -8,6 +8,10 @@ import {
   stores,
   STORE_OPTIONS,
   scopeLabel,
+  COMPARE_METRICS,
+  type CompareMode,
+  type ComparePreset,
+  type CompareFormat,
   type StoreId,
   type Scope,
   type MonthValue,
@@ -31,10 +35,24 @@ const pctStr = (n: number, d = 0) => `${(n * 100).toFixed(d)}%`;
 const fullName = (id: StoreId) => STORE_OPTIONS.find((o) => o.value === id)!.label;
 const scopeIds = (scope: Scope): StoreId[] => (scope === "all" ? stores.map((s) => s.id) : [scope]);
 
+const isYear = (month: MonthValue) => /^\d{4}$/.test(month);
+
 function monthRange(month: MonthValue): { start: string; end: string } | null {
-  if (month === "all") return null;
-  const [y, m] = month.split("-").map(Number);
   const pad = (n: number) => String(n).padStart(2, "0");
+  if (month === "all") {
+    // "Last 12 months" = a trailing window, NOT all history — staging reaches
+    // back to 2024, so an unbounded read would overshoot the label.
+    const today = nyToday();
+    const [y, m] = today.split("-").map(Number);
+    const sy = m === 12 ? y : y - 1;
+    const sm = m === 12 ? 1 : m + 1;
+    return { start: `${sy}-${pad(sm)}-01`, end: addDays(today, 1) };
+  }
+  if (isYear(month)) {
+    const y = Number(month);
+    return { start: `${y}-01-01`, end: `${y + 1}-01-01` };
+  }
+  const [y, m] = month.split("-").map(Number);
   const ny = m === 12 ? y + 1 : y;
   const nm = m === 12 ? 1 : m + 1;
   return { start: `${y}-${pad(m)}-01`, end: `${ny}-${pad(nm)}-01` };
@@ -102,17 +120,38 @@ async function loadListings(): Promise<Record<StoreId, Listing>> {
 
 async function loadGroomers(): Promise<Groomer[]> {
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("groomers")
-    .select("id, store_id, name, flag, rev_per_hr, appts, rebook, attach, util, avg_ticket")
-    .order("rev_per_hr", { ascending: false });
+  const [{ data, error }, roles] = await Promise.all([
+    supabase
+      .from("groomers")
+      .select("id, store_id, name, flag, rev_per_hr, appts, rebook, attach, util, avg_ticket")
+      .order("rev_per_hr", { ascending: false }),
+    loadStaffRoles(),
+  ]);
   if (error) throw new Error(`groomers read failed: ${error.message}`);
   type GRow = { id: string; store_id: StoreId; name: string; flag: "star" | "coach" | null; rev_per_hr: number; appts: number; rebook: number; attach: number; util: number; avg_ticket: number };
-  return ((data ?? []) as unknown as GRow[]).map((g) => ({
-    id: g.id, name: g.name, store: fullName(g.store_id), revPerHr: Number(g.rev_per_hr), appts: g.appts,
-    rebook: Number(g.rebook), attach: Number(g.attach), avgTicket: Number(g.avg_ticket), util: Number(g.util),
-    flag: g.flag ?? undefined,
-  }));
+  return ((data ?? []) as unknown as GRow[])
+    .filter((g) => (roles.get(staffNameKey(g.name)) ?? "groomer") === "groomer")
+    .map((g) => ({
+      id: g.id, name: g.name, store: fullName(g.store_id), revPerHr: Number(g.rev_per_hr), appts: g.appts,
+      rebook: Number(g.rebook), attach: Number(g.attach), avgTicket: Number(g.avg_ticket), util: Number(g.util),
+      flag: g.flag ?? undefined,
+    }));
+}
+
+// Mirrors staff_name_key() in migration 0014.
+function staffNameKey(name: string): string {
+  return name.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+// FranPOS SalesPerson is free text — the staff table classifies each name as
+// groomer / front_desk / vendor / system so front desks ringing nail trims
+// don't rank as groomers. Unknown names default to groomer (new hires appear
+// without a deploy). Tolerant of the table not existing yet (pre-0014).
+async function loadStaffRoles(): Promise<Map<string, string>> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("staff").select("name_key, role");
+  if (error) return new Map();
+  return new Map((data ?? []).map((s: { name_key: string; role: string }) => [s.name_key, s.role]));
 }
 
 const NEXT_ACTION: Record<CustomerSegment, string> = {
@@ -217,12 +256,12 @@ export async function getCrossSell(scope: Scope, month: MonthValue) {
 }
 
 // ── public: real period-over-period deltas ──────────────────────────────────
-// FranPOS history starts 2025-06-16, so June 2025 is a partial month — deltas
-// against it (or against nothing) would mislead. The backward-90-day return
-// rate is only mature once a full 90 days of history sit behind the comparison
-// month. A null delta means "no honest prior period" and the chip is hidden.
-const FIRST_FULL_MONTH = "2025-07-01";
-const RETURN_RATE_MATURE = "2025-10-01";
+// FranPOS history starts 2024-01-01, so January 2024 has no honest prior
+// period. The backward-90-day return rate is only mature once a full 90 days
+// of history sit behind the comparison month. A null delta means "no honest
+// prior period" and the chip is hidden.
+const FIRST_FULL_MONTH = "2024-01-01";
+const RETURN_RATE_MATURE = "2024-04-01";
 
 export type KpiDeltas = {
   revenue: number | null; bookings: number | null; avgTicket: number | null;
@@ -233,27 +272,39 @@ const NULL_DELTAS: KpiDeltas = { revenue: null, bookings: null, avgTicket: null,
 const nyToday = () => new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
 const addDays = (iso: string, n: number) => new Date(Date.parse(`${iso}T00:00:00Z`) + n * 86400000).toISOString().slice(0, 10);
 
-export async function getKpiDeltas(scope: Scope, month: MonthValue): Promise<KpiDeltas> {
-  // "Last 12 months" has no prior 12-month window in our history — no chips.
-  if (month === "all") return NULL_DELTAS;
-  const [y, m] = month.split("-").map(Number);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  const prevStart = m === 1 ? `${y - 1}-12-01` : `${y}-${pad(m - 1)}-01`;
-  if (prevStart < FIRST_FULL_MONTH) return NULL_DELTAS;
+// Same date one year earlier (Feb 29 clamps to Feb 28).
+const yearBack = (iso: string) => {
+  const s = `${Number(iso.slice(0, 4)) - 1}${iso.slice(4)}`;
+  return s.endsWith("-02-29") ? `${s.slice(0, 8)}28` : s;
+};
 
-  const curStart = `${y}-${pad(m)}-01`;
+export async function getKpiDeltas(scope: Scope, month: MonthValue): Promise<KpiDeltas> {
+  const pad = (n: number) => String(n).padStart(2, "0");
   const today = nyToday();
-  let curEnd: string, prevEnd: string;
-  if (today.slice(0, 7) === month) {
-    // Current month is partial: compare completed days only, like-for-like
-    // (Jun 1–11 vs May 1–11) — never a part-month against a full month.
-    const completedDays = Number(today.slice(8, 10)) - 1;
-    if (completedDays < 1) return NULL_DELTAS;
-    curEnd = addDays(curStart, completedDays);
-    prevEnd = addDays(prevStart, completedDays);
+  let curStart: string, curEnd: string, prevStart: string, prevEnd: string;
+  if (month === "all" || isYear(month)) {
+    // Year-shaped periods compare against the same window one year earlier.
+    const range = monthRange(month)!;
+    curStart = range.start; curEnd = range.end;
+    prevStart = yearBack(curStart); prevEnd = yearBack(curEnd);
+    if (prevStart < FIRST_FULL_MONTH) return NULL_DELTAS;
   } else {
-    curEnd = monthRange(month)!.end;
-    prevEnd = curStart;
+    const [y, m] = month.split("-").map(Number);
+    prevStart = m === 1 ? `${y - 1}-12-01` : `${y}-${pad(m - 1)}-01`;
+    if (prevStart < FIRST_FULL_MONTH) return NULL_DELTAS;
+
+    curStart = `${y}-${pad(m)}-01`;
+    if (today.slice(0, 7) === month) {
+      // Current month is partial: compare completed days only, like-for-like
+      // (Jun 1–11 vs May 1–11) — never a part-month against a full month.
+      const completedDays = Number(today.slice(8, 10)) - 1;
+      if (completedDays < 1) return NULL_DELTAS;
+      curEnd = addDays(curStart, completedDays);
+      prevEnd = addDays(prevStart, completedDays);
+    } else {
+      curEnd = monthRange(month)!.end;
+      prevEnd = curStart;
+    }
   }
 
   const [curBy, prevBy] = await Promise.all([loadDailyRange(curStart, curEnd), loadDailyRange(prevStart, prevEnd)]);
@@ -346,7 +397,7 @@ export async function getRevenueByGroomer(scope: Scope, month: MonthValue) {
     .sort((a, b) => b.value - a.value);
 }
 // Real split from metrics_daily. "New" = the customer's first visit day in our
-// recorded history (starts 2025-06-16). walkIn = revenue on the stores' house
+// recorded history (starts 2024-01-01). walkIn = revenue on the stores' house
 // walk-in accounts — real sales, but not attributable to a known customer.
 export async function getRevenueNewVsRepeat(scope: Scope, month: MonthValue) {
   const a = sumScope(await loadDaily(month), scopeIds(scope));
@@ -404,24 +455,72 @@ export async function getCustomersNeedingAttention(store: StoreId): Promise<Cust
 }
 // Retention aggregates — all real now. Cohort, cadence, returning share and
 // one-and-done are trailing measures over the full recorded history (history
-// starts 2025-06-16); the return rate honors the month filter like every other
+// starts 2024-01-01); the return rate honors the month filter like every other
 // metric. The 90-day guards in the SQL keep censoring honest: a customer only
 // counts as returning or one-and-done once they have had 90 days to come back.
 export async function getRetention(scope: Scope, month: MonthValue) {
   const supabase = await createClient();
   const ids = scopeIds(scope);
-  const [m, summary, cohortRows, wb] = await Promise.all([
+  const [m, summary, cohortRows, gapRows, wb] = await Promise.all([
     getMetrics(scope, month),
     supabase.rpc("retention_summary", { p_store_ids: ids }),
     supabase.from("cohort_monthly").select("month_offset, eligible, retained").in("store_id", ids),
+    supabase.from("grooming_gap_buckets").select("bucket, gaps").in("store_id", ids),
     getWinbackList(scope),
   ]);
   if (summary.error) throw new Error(`retention_summary failed: ${summary.error.message}`);
   if (cohortRows.error) throw new Error(`cohort_monthly read failed: ${cohortRows.error.message}`);
-  type S = { total_customers: number; eligible90: number; returning90: number; one_and_done90: number; avg_cadence_days: number };
+  if (gapRows.error) throw new Error(`grooming_gap_buckets read failed: ${gapRows.error.message}`);
+  type S = { total_customers: number; eligible90: number; returning90: number; one_and_done90: number; avg_cadence_days: number; cycle_customers: number; recurring60: number };
   const s = ((summary.data ?? []) as unknown as S[])[0];
   const eligible = Number(s?.eligible90 ?? 0);
   const returningPct = eligible ? Number(s.returning90) / eligible : 0;
+
+  // Grooming cycle: 1-day gap buckets (capped at 127 = "18+ weeks") summed
+  // across the scope. Exact median below the cap; display buckets for the
+  // histogram. Cycle gaps are grooming-visit-to-grooming-visit — retail-only
+  // stops don't reset the clock.
+  type G = { bucket: number; gaps: number };
+  const byDay = new Map<number, number>();
+  for (const r of (gapRows.data ?? []) as unknown as G[]) {
+    byDay.set(Number(r.bucket), (byDay.get(Number(r.bucket)) ?? 0) + Number(r.gaps));
+  }
+  const totalGaps = [...byDay.values()].reduce((a, b) => a + b, 0);
+  let medianDays = 0;
+  {
+    let cum = 0;
+    for (const d of [...byDay.keys()].sort((x, y) => x - y)) {
+      cum += byDay.get(d)!;
+      if (cum >= totalGaps / 2) {
+        medianDays = d;
+        break;
+      }
+    }
+  }
+  const CYCLE_BUCKETS = [
+    { label: "≤2 wk", lo: 1, hi: 14 },
+    { label: "2–4 wk", lo: 15, hi: 28 },
+    { label: "4–6 wk", lo: 29, hi: 42 },
+    { label: "6–8 wk", lo: 43, hi: 56 },
+    { label: "8–10 wk", lo: 57, hi: 70 },
+    { label: "10–13 wk", lo: 71, hi: 90 },
+    { label: "13–18 wk", lo: 91, hi: 126 },
+    { label: "18+ wk", lo: 127, hi: 127 },
+  ];
+  const histogram = CYCLE_BUCKETS.map((bk) => {
+    let n = 0;
+    for (const [d, c] of byDay) if (d >= bk.lo && d <= bk.hi) n += c;
+    return { label: bk.label, value: totalGaps ? n / totalGaps : 0 };
+  });
+  const cycleCustomers = Number(s?.cycle_customers ?? 0);
+  const cycle = {
+    medianDays,
+    histogram,
+    gapCount: totalGaps,
+    recurringCount: Number(s?.recurring60 ?? 0),
+    recurringPct: cycleCustomers ? Number(s.recurring60) / cycleCustomers : 0,
+    cycleCustomers,
+  };
 
   // Survival curve: sum per-store rows, keep offsets contiguous from 0 and
   // backed by a meaningful sample (≥50 eligible customers).
@@ -448,6 +547,7 @@ export async function getRetention(scope: Scope, month: MonthValue) {
     oneAndDone: Number(s?.one_and_done90 ?? 0),
     winbackCount: wb.count,
     cohort: cohort.length > 1 ? cohort : [100],
+    cycle,
   };
 }
 
@@ -578,7 +678,7 @@ type SeriesBucket = { bucket: string; revenue: number; calls_total: number; call
 export async function getSeries(scope: Scope, month: MonthValue) {
   const supabase = await createClient();
   const range = monthRange(month);
-  const monthly = month === "all";
+  const monthly = month === "all" || isYear(month);
   // Bucketed + summed in the DB (≤12 months or ≤31 days) — avoids the row cap.
   const { data, error } = await supabase.rpc("metrics_series", {
     p_store_ids: scopeIds(scope),
@@ -620,7 +720,7 @@ const HOURLY = [4, 9, 14, 16, 15, 12, 13, 15, 14, 11, 9, 7, 5, 4];
 const MISSED_HOURLY = [1, 2, 3, 4, 3, 2, 3, 5, 5, 4, 4, 5, 4, 3];
 export async function getCallsHourly(scope: Scope, month: MonthValue) {
   const a = sumScope(await loadDaily(month), scopeIds(scope));
-  const days = month === "all" ? 365 : 30;
+  const days = month === "all" || isYear(month) ? 365 : 30;
   const hSum = HOURLY.reduce((x, y) => x + y, 0);
   const mSum = MISSED_HOURLY.reduce((x, y) => x + y, 0);
   const hourly = HOURLY.map((h) => Math.round(((a.calls / days) * h) / hSum));
@@ -740,6 +840,291 @@ export async function getReviewsData() {
     byStore,
     suspectedFakes: rows.filter((r) => r.flagged_fake).length,
     unanswered: rows.filter((r) => !r.replied && r.rating <= 3).length,
+  };
+}
+
+// ── public: comparison engine (Compare page) ─────────────────────────────────
+// One comparison = an entity set (stores | groomers | products) × one metric ×
+// period A vs period B. Ranges are INCLUSIVE calendar dates in the URL and UI;
+// queries convert to exclusive ends. Period A is the focus period, B is the
+// baseline — deltas read (A − B) / B (or percentage points for rate metrics).
+
+export const DATA_START = "2024-01-01"; // first day of FranPOS history
+
+// Date-picker bounds: recorded history through the last complete day.
+export const compareBounds = () => ({ min: DATA_START, max: addDays(nyToday(), -1) });
+
+export type CompareRange = { start: string; end: string }; // inclusive
+const exclusiveEnd = (r: CompareRange) => addDays(r.end, 1);
+const isoDays = (a: string, b: string) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86400000);
+const rangeDays = (r: CompareRange) => isoDays(r.start, r.end) + 1;
+const shiftYear = (iso: string, years: number) => {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCFullYear(d.getUTCFullYear() + years); // Feb 29 rolls to Mar 1 — acceptable
+  return d.toISOString().slice(0, 10);
+};
+
+function parseRangeParam(raw?: string | null): CompareRange | null {
+  const m = raw?.match(/^(\d{4}-\d{2}-\d{2})\.\.(\d{4}-\d{2}-\d{2})$/);
+  if (!m) return null;
+  if (Number.isNaN(Date.parse(m[1])) || Number.isNaN(Date.parse(m[2]))) return null;
+  return m[1] <= m[2] ? { start: m[1], end: m[2] } : { start: m[2], end: m[1] };
+}
+
+// Resolve a preset (or custom params) into two concrete ranges + honesty notes.
+// Completed days only: "this month" means the 1st through yesterday, compared
+// like-for-like against the same day-span — never a partial vs a full month.
+export function resolveCompareRanges(preset: ComparePreset, aRaw?: string, bRaw?: string): { a: CompareRange; b: CompareRange; warnings: string[] } {
+  const warnings: string[] = [];
+  const today = nyToday();
+  const yesterday = addDays(today, -1);
+  const monthStart = `${today.slice(0, 7)}-01`;
+  const prevMonthStart = `${addDays(monthStart, -1).slice(0, 7)}-01`;
+
+  let a: CompareRange;
+  let b: CompareRange;
+  if (preset === "custom") {
+    const pa = parseRangeParam(aRaw);
+    const pb = parseRangeParam(bRaw);
+    if (pa && pb) {
+      a = pa;
+      b = pb;
+    } else {
+      warnings.push("Custom dates were missing or invalid — showing this month vs last month instead.");
+      ({ a, b } = resolveCompareRanges("mom"));
+    }
+  } else if (preset === "30d") {
+    a = { start: addDays(yesterday, -29), end: yesterday };
+    b = { start: addDays(yesterday, -59), end: addDays(yesterday, -30) };
+  } else {
+    // mom / yoy share the same focus period: this month's completed days
+    // (or, on the 1st of a month, the whole previous month).
+    if (monthStart > yesterday) {
+      const prevEnd = addDays(monthStart, -1);
+      a = { start: prevMonthStart, end: prevEnd };
+      b =
+        preset === "yoy"
+          ? { start: shiftYear(prevMonthStart, -1), end: shiftYear(prevEnd, -1) }
+          : { start: `${addDays(prevMonthStart, -1).slice(0, 7)}-01`, end: addDays(prevMonthStart, -1) };
+    } else {
+      a = { start: monthStart, end: yesterday };
+      b =
+        preset === "yoy"
+          ? { start: shiftYear(monthStart, -1), end: shiftYear(yesterday, -1) }
+          : { start: prevMonthStart, end: addDays(prevMonthStart, rangeDays(a) - 1) };
+    }
+  }
+
+  if (a.start < DATA_START || b.start < DATA_START) {
+    warnings.push(`Recorded history starts Jun 16, 2025 — days before that count as zero, so totals for the clipped period under-report.`);
+  }
+  if (a.end > yesterday || b.end > yesterday) {
+    warnings.push("A period extends past the last complete day — today's sales land after the evening sync.");
+  }
+  if (rangeDays(a) !== rangeDays(b)) {
+    warnings.push(`The periods differ in length (${rangeDays(a)} vs ${rangeDays(b)} days) — totals aren't like-for-like; check the per-day figures.`);
+  }
+  return { a, b, warnings };
+}
+
+export type CompareRow = { key: string; name: string; tag?: string; a: number | null; b: number | null };
+export type CompareData = {
+  rows: CompareRow[];
+  format: CompareFormat;
+  metricLabel: string;
+  pointDelta: boolean; // rate metrics: deltas read as percentage points, not relative %
+  revenue: { a: number; b: number };
+  days: { a: number; b: number };
+  pace?: { a: number[]; b: number[] }; // daily revenue per period (stores mode) for the running-total overlay
+  movers?: { name: string; delta: number }[]; // products mode: biggest gains + drops across ALL items, noise filtered
+  insights: string[];
+  notes: string[];
+};
+
+const fmtVal = (n: number, format: CompareFormat) =>
+  format === "money" ? money(Math.round(n)) : format === "pct" ? pctStr(n) : Math.round(n).toLocaleString();
+
+// Plain-English takeaways, deterministic and guarded: movers must clear a
+// volume floor so a $40 item "up 600%" never headlines, and rate metrics are
+// described in percentage points.
+function buildInsights(rows: CompareRow[], format: CompareFormat, metricLabel: string, revenue: { a: number; b: number }, days: { a: number; b: number }): string[] {
+  const out: string[] = [];
+  if (revenue.b > 0) {
+    if (days.a === days.b) {
+      const d = (revenue.a - revenue.b) / revenue.b;
+      out.push(`Revenue is ${d >= 0 ? "up" : "down"} ${pctStr(Math.abs(d))} — ${money(Math.round(revenue.a))} vs ${money(Math.round(revenue.b))}.`);
+    } else {
+      const pa = revenue.a / days.a;
+      const pb = revenue.b / days.b;
+      const d = (pa - pb) / pb;
+      out.push(`Per day, revenue is ${d >= 0 ? "up" : "down"} ${pctStr(Math.abs(d))} — ${money(Math.round(pa))}/day vs ${money(Math.round(pb))}/day (periods differ in length).`);
+    }
+  }
+  const floor = format === "money" ? 250 : format === "number" ? 10 : 0;
+  const movers = rows
+    .filter((r) => r.a != null && r.b != null && r.b > 0 && (format === "pct" || (r.a ?? 0) + (r.b ?? 0) >= floor))
+    .map((r) => ({ ...r, d: format === "pct" ? (r.a! - r.b!) : (r.a! - r.b!) / r.b! }))
+    .sort((x, y) => y.d - x.d);
+  const describe = (r: { name: string; a: number | null; b: number | null; d: number }, dir: string) =>
+    format === "pct"
+      ? `${r.name} ${dir} the most on ${metricLabel.toLowerCase()}: ${pctStr(r.b!)} → ${pctStr(r.a!)} (${r.d >= 0 ? "+" : "−"}${Math.abs(r.d * 100).toFixed(0)} pts).`
+      : `${r.name} ${dir} the most: ${fmtVal(r.b!, format)} → ${fmtVal(r.a!, format)} (${r.d >= 0 ? "+" : "−"}${pctStr(Math.abs(r.d))}).`;
+  if (movers.length >= 2) {
+    const top = movers[0];
+    const bottom = movers[movers.length - 1];
+    if (top.d > 0.005) out.push(describe(top, format === "pct" ? "improved" : "grew"));
+    if (bottom.d < -0.005 && bottom.key !== top.key) out.push(describe(bottom, format === "pct" ? "slipped" : "declined"));
+  }
+  const fresh = rows.filter((r) => (r.b == null || r.b === 0) && (r.a ?? 0) >= floor).sort((x, y) => (y.a ?? 0) - (x.a ?? 0))[0];
+  if (fresh && format !== "pct") out.push(`${fresh.name} is new this period — ${fmtVal(fresh.a!, format)}, nothing in the comparison period.`);
+  return out.slice(0, 4);
+}
+
+export async function getCompareData(mode: CompareMode, metricKey: string, a: CompareRange, b: CompareRange, scope: Scope): Promise<CompareData> {
+  const metric = COMPARE_METRICS[mode].find((m) => m.key === metricKey) ?? COMPARE_METRICS[mode][0];
+  const days = { a: rangeDays(a), b: rangeDays(b) };
+  const notes: string[] = [];
+  let rows: CompareRow[] = [];
+  let movers: { name: string; delta: number }[] | undefined;
+
+  // The headline revenue strip always reads metrics_daily (the canonical,
+  // validated total) — never sums of the capped/attributed RPC rows.
+  const [byA, byB] = await Promise.all([
+    loadDailyRange(a.start, exclusiveEnd(a)),
+    loadDailyRange(b.start, exclusiveEnd(b)),
+  ]);
+  const revIds = scopeIds(mode === "stores" ? "all" : scope);
+  const revenue = { a: sumScope(byA, revIds).rev, b: sumScope(byB, revIds).rev };
+
+  // Stores mode also gets a day-by-day revenue overlay ("pace"). The series RPC
+  // only returns days with rows, so gaps are densified to zero to keep day
+  // indexes aligned between the two periods.
+  let pace: { a: number[]; b: number[] } | undefined;
+  if (mode === "stores") {
+    const supabase = await createClient();
+    const series = (r: CompareRange) =>
+      supabase.rpc("metrics_series", { p_store_ids: revIds, p_start: r.start, p_end: exclusiveEnd(r), p_monthly: false });
+    const [sa, sb] = await Promise.all([series(a), series(b)]);
+    if (!sa.error && !sb.error) {
+      type SRow = { bucket: string; revenue: number };
+      const dense = (r: CompareRange, rs: SRow[]) => {
+        const byDay = new Map(rs.map((x) => [x.bucket, Number(x.revenue)]));
+        const out: number[] = [];
+        for (let d = r.start; d <= r.end; d = addDays(d, 1)) out.push(byDay.get(d) ?? 0);
+        return out;
+      };
+      pace = { a: dense(a, (sa.data ?? []) as unknown as SRow[]), b: dense(b, (sb.data ?? []) as unknown as SRow[]) };
+    }
+  }
+
+  if (mode === "stores") {
+    const val = (x: Agg): number | null => {
+      switch (metric.key) {
+        case "revenue": return x.rev;
+        case "bookings": return x.bookings;
+        case "avgTicket": return x.bookings ? x.bookingRev / x.bookings : null;
+        case "rebook": return x.identified ? x.rebooks / x.identified : null;
+        case "attach": return x.bookings ? x.attached / x.bookings : null;
+        default: return x.groom + x.retail > 0 ? x.groom / (x.groom + x.retail) : null;
+      }
+    };
+    rows = stores.map((s) => ({ key: s.id, name: s.name, a: val(byA[s.id]), b: val(byB[s.id]) }));
+    if (metric.key === "rebook" && (a.start < RETURN_RATE_MATURE || b.start < RETURN_RATE_MATURE)) {
+      notes.push("Return rate needs 90 days of history behind it — periods before Oct 2025 read low by construction.");
+    }
+  } else if (mode === "groomers") {
+    const supabase = await createClient();
+    const ids = scopeIds(scope);
+    const call = (r: CompareRange) => supabase.rpc("groomer_revenue", { p_store_ids: ids, p_start: r.start, p_end: exclusiveEnd(r) });
+    const [ra, rb] = await Promise.all([call(a), call(b)]);
+    if (ra.error || rb.error) throw new Error(`groomer_revenue failed: ${(ra.error ?? rb.error)!.message}`);
+    type Row = { store_id: StoreId; name: string; revenue: number; appts: number };
+    const merged = new Map<string, { name: string; tag: string; a?: Row; b?: Row }>();
+    for (const [side, res] of [["a", ra], ["b", rb]] as const) {
+      for (const r of (res.data ?? []) as unknown as Row[]) {
+        const key = `${r.store_id}|${r.name}`;
+        const e = merged.get(key) ?? { name: r.name, tag: scopeLabel(r.store_id) };
+        e[side] = r;
+        merged.set(key, e);
+      }
+    }
+    const val = (r?: Row): number | null => {
+      if (!r) return null;
+      if (metric.key === "revenue") return Number(r.revenue);
+      if (metric.key === "appts") return Number(r.appts);
+      return Number(r.appts) ? Number(r.revenue) / Number(r.appts) : null;
+    };
+    const ranked = [...merged.entries()]
+      .map(([key, e]) => ({ key, e, vol: Number(e.a?.revenue ?? 0) + Number(e.b?.revenue ?? 0) }))
+      .sort((x, y) => y.vol - x.vol);
+    rows = ranked
+      .slice(0, 12)
+      .map(({ key, e }) => ({ key, name: e.name, tag: scope === "all" ? e.tag : undefined, a: val(e.a), b: val(e.b) }));
+    const cut = ranked.length > rows.length ? ` Showing top 12 of ${ranked.length} groomers active across the two periods.` : "";
+    notes.push(`Groomer figures are service-line revenue attributed by FranPOS salesperson — grooming only; front-desk, vendor, and system accounts excluded.${cut} A dash means no activity in that period (new hire or departure).`);
+  } else {
+    const supabase = await createClient();
+    const ids = scopeIds(scope);
+    const call = (r: CompareRange) => supabase.rpc("product_revenue_by_name", { p_store_ids: ids, p_start: r.start, p_end: exclusiveEnd(r) });
+    const [ra, rb] = await Promise.all([call(a), call(b)]);
+    if (ra.error || rb.error) throw new Error(`product_revenue_by_name failed: ${(ra.error ?? rb.error)!.message}`);
+    type Row = { name: string; is_service: boolean; revenue: number; units: number; cost: number };
+    const merged = new Map<string, { name: string; svc: boolean; a?: Row; b?: Row }>();
+    for (const [side, res] of [["a", ra], ["b", rb]] as const) {
+      for (const r of (res.data ?? []) as unknown as Row[]) {
+        const key = r.name.trim().toLowerCase();
+        const e = merged.get(key) ?? { name: r.name, svc: r.is_service };
+        e[side] = r;
+        merged.set(key, e);
+      }
+    }
+    const margin = (r?: Row): number | null =>
+      r && Number(r.revenue) > 0 && Number(r.cost) > 0 ? (Number(r.revenue) - Number(r.cost)) / Number(r.revenue) : null;
+    const val = (r?: Row): number | null => {
+      if (!r) return null;
+      if (metric.key === "revenue") return Number(r.revenue);
+      if (metric.key === "units") return Number(r.units);
+      return margin(r);
+    };
+    let entries = [...merged.entries()].map(([key, e]) => ({
+      key, name: e.name, tag: e.svc ? "Grooming" : "Retail", svc: e.svc,
+      a: val(e.a), b: val(e.b),
+      vol: Number(e.a?.revenue ?? 0) + Number(e.b?.revenue ?? 0),
+    }));
+    if (metric.key === "margin") {
+      // Margin only means something for retail (services carry no item cost),
+      // and tiny sellers produce noisy percentages — floor at $250 combined.
+      entries = entries.filter((e) => !e.svc && e.vol >= 250);
+      notes.push("Margin compares retail items only (services carry no item cost) with at least $250 of combined revenue.");
+    }
+    // Winners & losers: the biggest MOVES across every item (not the biggest
+    // sellers — a top seller that barely moved is not a story). Small changes
+    // are floored out so the chart never fills with −$5 noise rows.
+    const moveFloor = metric.key === "margin" ? 0.01 : metric.key === "units" ? 5 : 50;
+    const moved = entries
+      .map((e) => ({ name: e.name, delta: (e.a ?? 0) - (e.b ?? 0) }))
+      .filter((m) => Math.abs(m.delta) >= moveFloor)
+      .sort((x, y) => y.delta - x.delta);
+    movers = moved.length > 12 ? [...moved.slice(0, 6), ...moved.slice(-6)] : moved;
+    rows = entries
+      .sort((x, y) => y.vol - x.vol)
+      .slice(0, 12)
+      .map((e) => ({ key: e.key, name: e.name, tag: e.tag, a: e.a, b: e.b }));
+    notes.push("Table: top 12 items by volume. Deposits and gift cards are excluded (liabilities until redeemed); items merge by name.");
+  }
+
+  rows.sort((x, y) => (y.a ?? -1) - (x.a ?? -1));
+  return {
+    rows,
+    format: metric.format,
+    metricLabel: metric.label,
+    pointDelta: metric.format === "pct",
+    revenue,
+    days,
+    pace,
+    movers,
+    insights: buildInsights(rows, metric.format, metric.label, revenue, days),
+    notes,
   };
 }
 

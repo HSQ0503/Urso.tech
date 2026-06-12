@@ -1,11 +1,12 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-// Refreshes the Supabase auth session on each request and forwards the updated
-// cookies. This helper is ready but DORMANT until real auth (Phase 1): the
-// dashboard is still gated by the mock `urso_session` cookie via lib/auth.ts,
-// so there is no root middleware.ts wiring this up yet. Add the redirect/gating
-// logic here when we swap getSession() over to Supabase Auth.
+// Refreshes the Supabase auth session on each request, forwards the updated
+// cookies, and gates the authed surfaces: /dashboard and /console require a
+// signed-in user. Wired up by proxy.ts at the repo root (Next 16's rename of
+// middleware.ts). This is the optimistic edge check — the authoritative check
+// is getSession() in lib/auth.ts, which also requires an app_users membership
+// row, so an unprovisioned login still can't see anything.
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request });
 
@@ -26,9 +27,22 @@ export async function updateSession(request: NextRequest) {
     },
   );
 
-  // Touch the user so the session token stays fresh. No redirects here yet —
-  // mock auth still owns route gating until Phase 1.
-  await supabase.auth.getUser();
+  // IMPORTANT: getUser() also refreshes an expired token — keep this call even
+  // if the gating below changes.
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const path = request.nextUrl.pathname;
+  const needsAuth = path.startsWith("/dashboard") || path.startsWith("/console");
+  if (!user && needsAuth) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/login";
+    url.search = "";
+    return NextResponse.redirect(url);
+  }
+  // Signed-in visitors to /login are routed home by the login page itself —
+  // it knows the role (and membership), the edge doesn't.
 
   return response;
 }

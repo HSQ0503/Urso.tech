@@ -4,6 +4,11 @@
 // recompute metrics_daily / customers / groomers / product_sales_daily.
 //
 //   Run:  node scripts/franpos-backfill.mjs
+//         node scripts/franpos-backfill.mjs --from 2024-01-01 --to 2025-06-17
+//
+// --from/--to fetches ONLY that window (no seed wipe, no re-fetch of existing
+// staging) — use it to extend history backward; the rollup still recomputes
+// from the oldest staged row through today.
 //
 // Quota: ~110–150 successful calls per store (each store has its own
 // 1,000/month pool; failed calls and checkUsageLimit are free). Idempotent —
@@ -56,6 +61,13 @@ function windows(monthsBack) {
     from.setDate(from.getDate() - off);
     out.push(iso(from));
   }
+  return out;
+}
+
+// 30-day windows covering an explicit [from, to) range
+function windowsBetween(from, to) {
+  const out = [];
+  for (const d = new Date(`${from}T00:00:00Z`); iso(d) < to; d.setUTCDate(d.getUTCDate() + 30)) out.push(iso(d));
   return out;
 }
 
@@ -113,9 +125,15 @@ if (clientErr || !clientRow) {
 }
 const CLIENT_ID = clientRow.id;
 const ROLLUP_ONLY = process.argv.includes("--rollup-only"); // staging already filled — just recompute
+const argVal = (name) => {
+  const i = process.argv.indexOf(name);
+  return i >= 0 ? process.argv[i + 1] : null;
+};
+const FROM = argVal("--from"); // range mode: extend staging without wiping
+const TO = argVal("--to") ?? iso(new Date());
 
-console.log("\n━━ FranPOS 12-month backfill ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-if (!ROLLUP_ONLY) {
+console.log(`\n━━ FranPOS backfill ${FROM ? `(range ${FROM} → ${TO})` : "(last 12 months)"} ━━━━━━━━━━━━━━━━━━━━`);
+if (!ROLLUP_ONLY && !FROM) {
   console.log("⚠ Wiping FranPOS-sourced SEED data (metrics_daily, customers, groomers).");
   console.log("  Real rows replace them; calls/web columns go to 0 until Twilio/GA4 land.\n");
   for (const table of ["metrics_daily", "customers", "groomers"]) {
@@ -127,8 +145,8 @@ if (!ROLLUP_ONLY) {
   }
 }
 
-const orderWindows = windows(MONTHS_BACK);
-const customerWindows = windows(CUSTOMER_MONTHS);
+const orderWindows = FROM ? windowsBetween(FROM, TO) : windows(MONTHS_BACK);
+const customerWindows = FROM ? orderWindows : windows(CUSTOMER_MONTHS);
 
 for (const store of ROLLUP_ONLY ? [] : STORES) {
   if (!store.token) {

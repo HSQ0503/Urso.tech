@@ -1,9 +1,11 @@
-// Mock auth + tenancy layer. Identity-derived: the session carries the tenant,
-// role and (for managers) the store scope — the URL never does. Swapped for
-// Supabase Auth + RLS later behind these same shapes, so callers don't change.
+// Real auth + tenancy layer (Supabase). Identity-derived: the session carries
+// the tenant, role and (for managers) the store scope — the URL never does.
+// A Supabase login alone is not enough: access requires a provisioned row in
+// app_users (migration 0013, written by scripts/provision-users.mjs).
 // See vault: "Platform — Multi-Tenancy & Auth" and "Manager Dashboard & Auth — Build Plan".
 
-import { cookies } from "next/headers";
+import { cache } from "react";
+import { createClient } from "@/lib/supabase/server";
 import { parseScope, type Scope, type StoreId } from "@/components/dashboard/data";
 
 export type Role = "urso_admin" | "owner" | "manager";
@@ -13,31 +15,53 @@ export type SessionUser = {
   name: string;
   email: string;
   role: Role;
-  clientId: string; // tenant; "*" for urso_admin (spans all clients)
+  clientId: string; // tenant slug; "*" for urso_admin (spans all clients)
   clientName: string;
   storeId: StoreId | null; // set only for managers
-  streak: number; // consecutive days signed in (mock — real value comes from login history)
+  streak: number; // consecutive days signed in — 0 until login history is tracked (UI hides it)
   memberSince: string;
 };
 
-export const SESSION_COOKIE = "urso_session";
-
-// Mock directory. Real auth resolves the signed-in user from the Supabase
-// session + `users` membership and returns this same shape.
-export const MOCK_USERS: Record<string, SessionUser> = {
-  urso: { id: "urso", name: "Han · Urso", email: "han@urso.tech", role: "urso_admin", clientId: "*", clientName: "Urso", storeId: null, streak: 21, memberSince: "May 2026" },
-  owner: { id: "owner", name: "Rubens Campos", email: "rubens@woofgangbakery.com", role: "owner", clientId: "woof-gang", clientName: "Woof Gang Investments", storeId: null, streak: 9, memberSince: "May 2026" },
-  "mgr-wp": { id: "mgr-wp", name: "Winter Park manager", email: "winterpark@woofgangbakery.com", role: "manager", clientId: "woof-gang", clientName: "Woof Gang Investments", storeId: "wp", streak: 14, memberSince: "May 2026" },
-  "mgr-wg": { id: "mgr-wg", name: "Winter Garden manager", email: "wintergarden@woofgangbakery.com", role: "manager", clientId: "woof-gang", clientName: "Woof Gang Investments", storeId: "wg", streak: 8, memberSince: "May 2026" },
-  "mgr-lv": { id: "mgr-lv", name: "Lakeside manager", email: "lakeside@woofgangbakery.com", role: "manager", clientId: "woof-gang", clientName: "Woof Gang Investments", storeId: "lv", streak: 5, memberSince: "Jun 2026" },
-  "mgr-wm": { id: "mgr-wm", name: "Windermere manager", email: "windermere@woofgangbakery.com", role: "manager", clientId: "woof-gang", clientName: "Woof Gang Investments", storeId: "wm", streak: 6, memberSince: "Jun 2026" },
+type MembershipRow = {
+  name: string;
+  email: string;
+  role: Role;
+  store_id: StoreId | null;
+  created_at: string;
+  clients: { slug: string; name: string } | null;
 };
 
-export async function getSession(): Promise<SessionUser | null> {
-  const store = await cookies();
-  const id = store.get(SESSION_COOKIE)?.value;
-  return (id && MOCK_USERS[id]) || null;
-}
+// Resolves the signed-in user from the Supabase auth cookie + their app_users
+// membership. Cached per request — the layout and pages can both call it
+// without repeating the auth round-trip. Returns null for both "not signed in"
+// and "signed in but not provisioned"; callers redirect to /login either way.
+export const getSession = cache(async (): Promise<SessionUser | null> => {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const { data, error } = await supabase
+    .from("app_users")
+    .select("name, email, role, store_id, created_at, clients(slug, name)")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (error || !data) return null;
+
+  const m = data as unknown as MembershipRow;
+  return {
+    id: user.id,
+    name: m.name,
+    email: m.email,
+    role: m.role,
+    clientId: m.clients?.slug ?? "*",
+    clientName: m.clients?.name ?? "Urso",
+    storeId: m.role === "manager" ? m.store_id : null,
+    streak: 0,
+    memberSince: new Date(m.created_at).toLocaleDateString("en-US", { month: "short", year: "numeric" }),
+  };
+});
 
 // The scope a session may see. Owners / urso_admin → "all" (and can narrow via
 // the filter). Managers → pinned to their store, always.

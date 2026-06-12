@@ -119,8 +119,8 @@ export default async function RevenueMapPage({ searchParams }: { searchParams: P
             <Micro>By groomer</Micro>
             <ChartInfo id="revenueByGroomer" />
           </div>
-          <h2 className="mb-4 mt-1.5 text-[17px] font-medium tracking-[-0.01em]">Revenue handled</h2>
-          <BarRanking data={byGroomer} format="moneyK" labelWidth={130} valueLabel="Revenue handled" />
+          <h2 className="mb-4 mt-1.5 text-[17px] font-medium tracking-[-0.01em]">Service revenue performed</h2>
+          <BarRanking data={byGroomer} format="moneyK" labelWidth={130} valueLabel="Service revenue" />
         </Card>
       </section>
 

@@ -92,7 +92,9 @@ export function ChartTooltipContent({
           const key = String(item.dataKey ?? item.name ?? i);
           const cfg = config[key];
           const color = item.color || `var(--color-${key})`;
-          const value = Number(item.value ?? 0);
+          // null = no data for this series (e.g. groomer absent that period),
+          // which is different from a measured zero.
+          const value = item.value == null ? null : Number(item.value);
           return (
             <div key={i} className="flex items-center justify-between gap-4 text-[11.5px]">
               <span className="flex items-center gap-1.5 font-sans text-ink-dim">
@@ -100,7 +102,7 @@ export function ChartTooltipContent({
                 {cfg?.label ?? key}
               </span>
               <span className="font-mono tabular-nums text-ink">
-                {valueFormatter ? valueFormatter(value, key) : value.toLocaleString()}
+                {value == null ? "—" : valueFormatter ? valueFormatter(value, key) : value.toLocaleString()}
               </span>
             </div>
           );

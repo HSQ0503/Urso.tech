@@ -281,3 +281,22 @@ export function ReviewsSkeleton() {
     </div>
   );
 }
+
+export function CompareSkeleton() {
+  return (
+    <div>
+      <Header />
+      <SkeletonCard className="mb-6 space-y-3.5 p-5">
+        <Skeleton className="h-8 w-[55%] max-w-[420px]" />
+        <Skeleton className="h-8 w-[70%] max-w-[540px]" />
+        <Skeleton className="h-8 w-[45%] max-w-[360px]" />
+      </SkeletonCard>
+      <div className="mb-6 grid grid-cols-2 gap-8 md:grid-cols-3">
+        <StatBlock />
+        <StatBlock />
+        <StatBlock />
+      </div>
+      <ListCard rows={6} />
+    </div>
+  );
+}

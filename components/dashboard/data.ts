@@ -217,7 +217,7 @@ export const actions: ActionItem[] = [
 // Math.random / Date.now, so server and client render identically.
 
 export type Scope = "all" | StoreId;
-export type MonthValue = "all" | string; // "all" or "YYYY-MM"
+export type MonthValue = "all" | string; // "all", "YYYY" (full year), or "YYYY-MM"
 export type Granularity = "daily" | "weekly" | "monthly";
 
 const storesById: Record<StoreId, Store> = Object.fromEntries(stores.map((s) => [s.id, s])) as Record<StoreId, Store>;
@@ -236,16 +236,20 @@ const MONTH_NUMS = [7, 8, 9, 10, 11, 12, 1, 2, 3, 4, 5, 6];
 const MONTH_YEARS = [2025, 2025, 2025, 2025, 2025, 2025, 2026, 2026, 2026, 2026, 2026, 2026];
 export const MONTH_KEYS = MONTH_LABELS.map((_, i) => `${MONTH_YEARS[i]}-${String(MONTH_NUMS[i]).padStart(2, "0")}`);
 
+// Full calendar years with complete FranPOS history (data starts 2024-01-01).
+export const YEAR_KEYS = ["2025", "2024"];
+
 export const MONTH_OPTIONS: { value: MonthValue; label: string }[] = [
   { value: "all", label: "Last 12 months" },
   ...MONTH_KEYS.map((k, i) => ({ value: k as MonthValue, label: `${MONTH_LABELS[i]} ${MONTH_YEARS[i]}` })).reverse(),
+  ...YEAR_KEYS.map((y) => ({ value: y as MonthValue, label: `${y} · full year` })),
 ];
 
 export function parseScope(v?: string | null): Scope {
   return STORE_OPTIONS.some((o) => o.value === v) ? (v as Scope) : "all";
 }
 export function parseMonth(v?: string | null): MonthValue {
-  return v && MONTH_KEYS.includes(v) ? v : "all";
+  return v && (MONTH_KEYS.includes(v) || YEAR_KEYS.includes(v)) ? v : "all";
 }
 export function scopeLabel(s: Scope) {
   return STORE_OPTIONS.find((o) => o.value === s)!.short;
@@ -1116,4 +1120,58 @@ export function customersNeedingAttention(store: StoreId): CustomerRow[] {
   return customerBook
     .filter((c) => c.storeId === store && (c.segment === "At risk" || c.segment === "Lapsed"))
     .sort((a, b) => b.lastVisit - a.lastVisit);
+}
+
+// ============================================================================
+//  Compare page — shared, client-safe constants (the engine lives in
+//  data.server.ts; these drive the controls and URL parsing on both sides)
+// ============================================================================
+
+export type CompareMode = "stores" | "groomers" | "products";
+export type ComparePreset = "mom" | "yoy" | "30d" | "custom";
+export type CompareFormat = "money" | "number" | "pct";
+export type CompareMetricDef = { key: string; label: string; format: CompareFormat };
+
+export const COMPARE_MODES: { value: CompareMode; label: string }[] = [
+  { value: "stores", label: "Stores" },
+  { value: "groomers", label: "Groomers" },
+  { value: "products", label: "Products" },
+];
+
+export const COMPARE_PRESETS: { value: ComparePreset; label: string }[] = [
+  { value: "mom", label: "vs last month" },
+  { value: "yoy", label: "vs last year" },
+  { value: "30d", label: "Last 30 days" },
+  { value: "custom", label: "Custom dates" },
+];
+
+export const COMPARE_METRICS: Record<CompareMode, CompareMetricDef[]> = {
+  stores: [
+    { key: "revenue", label: "Revenue", format: "money" },
+    { key: "bookings", label: "Bookings", format: "number" },
+    { key: "avgTicket", label: "Avg visit", format: "money" },
+    { key: "rebook", label: "Return rate", format: "pct" },
+    { key: "attach", label: "Retail attach", format: "pct" },
+    { key: "groomingShare", label: "Grooming share", format: "pct" },
+  ],
+  groomers: [
+    { key: "revenue", label: "Service revenue", format: "money" },
+    { key: "appts", label: "Appointments", format: "number" },
+    { key: "avgTicket", label: "Avg service ticket", format: "money" },
+  ],
+  products: [
+    { key: "revenue", label: "Revenue", format: "money" },
+    { key: "units", label: "Units sold", format: "number" },
+    { key: "margin", label: "Margin (retail)", format: "pct" },
+  ],
+};
+
+export function parseCompareMode(v?: string | null): CompareMode {
+  return COMPARE_MODES.some((m) => m.value === v) ? (v as CompareMode) : "stores";
+}
+export function parseComparePreset(v?: string | null): ComparePreset {
+  return COMPARE_PRESETS.some((p) => p.value === v) ? (v as ComparePreset) : "mom";
+}
+export function parseCompareMetric(mode: CompareMode, v?: string | null): string {
+  return COMPARE_METRICS[mode].some((m) => m.key === v) ? (v as string) : COMPARE_METRICS[mode][0].key;
 }

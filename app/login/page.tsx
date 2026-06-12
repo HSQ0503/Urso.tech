@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { MOCK_USERS, type Role } from "@/lib/auth";
+import { redirect } from "next/navigation";
+import { getSession, homePathFor } from "@/lib/auth";
 import { signIn } from "./actions";
 
 export const metadata: Metadata = {
@@ -7,26 +8,24 @@ export const metadata: Metadata = {
   description: "Sign in to the Urso dashboard.",
 };
 
-const roleLabel: Record<Role, string> = {
-  urso_admin: "Platform",
-  owner: "Owner",
-  manager: "Store manager",
+const errorCopy: Record<string, string> = {
+  missing: "Enter your email and password.",
+  invalid: "Email or password is incorrect.",
+  unprovisioned: "This account isn't set up for a dashboard yet — ask Urso to provision it.",
 };
 
-const initials: Record<string, string> = {
-  urso: "UR", owner: "RC", "mgr-wp": "WP", "mgr-wg": "WG", "mgr-lv": "LV", "mgr-wm": "WM",
-};
+export default async function LoginPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
+  // Already signed in and provisioned → straight home. Unprovisioned sessions
+  // fall through to the form (getSession() is null for them), no redirect loop.
+  const session = await getSession();
+  if (session) redirect(homePathFor(session.role));
 
-const groups: { label: string; ids: string[] }[] = [
-  { label: "Urso — platform", ids: ["urso"] },
-  { label: "Woof Gang — owner", ids: ["owner"] },
-  { label: "Woof Gang — store managers", ids: ["mgr-wp", "mgr-wg", "mgr-lv", "mgr-wm"] },
-];
+  const sp = await searchParams;
+  const error = sp.error ? (errorCopy[sp.error] ?? errorCopy.invalid) : null;
 
-export default function LoginPage() {
   return (
     <main className="flex min-h-screen items-center justify-center px-5 py-12">
-      <div className="w-full max-w-[440px]">
+      <div className="w-full max-w-[400px]">
         <div className="mb-8 flex items-center gap-2">
           <span className="text-[22px] font-medium tracking-[-0.02em] text-ink">Urso</span>
           <span className="size-1.5 rounded-full bg-orange" />
@@ -34,47 +33,49 @@ export default function LoginPage() {
 
         <h1 className="text-[26px] font-medium tracking-[-0.02em]">Sign in</h1>
         <p className="mt-2 text-[13.5px] leading-[1.55] text-ink-dim">
-          Pilot environment — choose an identity to continue. Each one opens the dashboard scoped to that person.
+          Use the account Urso provisioned for you. One login per person — owners see every store, managers see theirs.
         </p>
 
-        <div className="mt-8 space-y-7">
-          {groups.map((g) => (
-            <section key={g.label}>
-              <div className="mb-2.5 font-mono text-[10px] uppercase tracking-[0.16em] text-ink-dimmer">{g.label}</div>
-              <div className="space-y-2">
-                {g.ids.map((id) => {
-                  const u = MOCK_USERS[id];
-                  return (
-                    <form key={id} action={signIn}>
-                      <input type="hidden" name="id" value={id} />
-                      <button
-                        type="submit"
-                        className="group flex w-full cursor-pointer items-center gap-3 rounded-xl border border-edge bg-panel px-4 py-3 text-left transition-colors hover:border-edge-strong hover:bg-white/[0.03] focus:outline-none focus-visible:ring-2 focus-visible:ring-orange/60"
-                      >
-                        <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-orange-soft font-mono text-[11px] text-orange">
-                          {initials[id]}
-                        </span>
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-[13.5px] text-ink">{u.name}</span>
-                          <span className="block truncate font-mono text-[10.5px] text-ink-dimmer">{u.email}</span>
-                        </span>
-                        <span className="shrink-0 rounded-full border border-edge px-2 py-[3px] font-mono text-[9.5px] uppercase tracking-[0.12em] text-ink-dim">
-                          {roleLabel[u.role]}
-                        </span>
-                        <span className="shrink-0 text-ink-dimmer transition-colors group-hover:text-orange" aria-hidden>
-                          →
-                        </span>
-                      </button>
-                    </form>
-                  );
-                })}
-              </div>
-            </section>
-          ))}
-        </div>
+        <form action={signIn} className="mt-8 space-y-4">
+          <label className="block">
+            <span className="mb-1.5 block font-mono text-[10px] uppercase tracking-[0.16em] text-ink-dimmer">Email</span>
+            <input
+              type="email"
+              name="email"
+              required
+              autoComplete="email"
+              placeholder="you@woofgangbakery.com"
+              className="w-full rounded-xl border border-edge bg-panel px-4 py-3 text-[13.5px] text-ink placeholder:text-ink-dimmer transition-colors focus:border-edge-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-orange/60"
+            />
+          </label>
+          <label className="block">
+            <span className="mb-1.5 block font-mono text-[10px] uppercase tracking-[0.16em] text-ink-dimmer">Password</span>
+            <input
+              type="password"
+              name="password"
+              required
+              autoComplete="current-password"
+              placeholder="••••••••••••"
+              className="w-full rounded-xl border border-edge bg-panel px-4 py-3 text-[13.5px] text-ink placeholder:text-ink-dimmer transition-colors focus:border-edge-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-orange/60"
+            />
+          </label>
+
+          {error && (
+            <p role="alert" className="rounded-lg border border-orange/30 bg-orange-soft px-3.5 py-2.5 text-[12.5px] leading-[1.5] text-orange">
+              {error}
+            </p>
+          )}
+
+          <button
+            type="submit"
+            className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-orange py-3 text-[13.5px] font-medium text-black transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange/60"
+          >
+            Sign in →
+          </button>
+        </form>
 
         <p className="mt-8 font-mono text-[10px] uppercase tracking-[0.14em] text-ink-dimmer">
-          Mock auth · no password yet · Supabase next
+          Accounts are provisioned by Urso · no self-signup
         </p>
       </div>
     </main>
