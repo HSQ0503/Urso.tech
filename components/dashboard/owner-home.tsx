@@ -66,9 +66,9 @@ export async function OwnerHome({ searchParams, userName, streak }: { searchPara
       <section className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-edge bg-edge md:grid-cols-3 xl:grid-cols-6">
         <Kpi label="Revenue" value={fmtMoney(m.revenue)} delta={0.06} />
         <Kpi label="Bookings" value={m.bookings.toLocaleString()} delta={0.03} />
-        <Kpi label="Avg ticket" value={fmtMoney(m.avgTicket)} delta={0.02} />
+        <Kpi label="Avg visit" value={fmtMoney(m.avgTicket)} delta={0.02} />
         <Kpi label="Calls answered" value={pct(cs.answeredPct)} delta={0.04} />
-        <Kpi label="Rebook rate" value={pct(m.rebook)} delta={0.05} />
+        <Kpi label="Return rate" value={pct(m.rebook)} delta={0.05} />
         <Kpi label="No-show rate" value={pct(m.noShow)} delta={-0.02} deltaInvert />
       </section>
 
@@ -196,7 +196,7 @@ export async function OwnerHome({ searchParams, userName, streak }: { searchPara
                 <div className="text-[27px] font-medium leading-none tracking-[-0.02em]">{fmtMoney(sm.revenue, true)}</div>
                 <div>
                   <div className="mb-1.5 flex items-center justify-between">
-                    <Micro>Rebook</Micro>
+                    <Micro>Return</Micro>
                     <span className="font-mono text-[11px] text-ink-dim">{pct(sm.rebook)}</span>
                   </div>
                   <Meter value={sm.rebook} />

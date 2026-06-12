@@ -19,7 +19,7 @@ import {
 import { StoreScoreboard } from "@/components/dashboard/store-scoreboard";
 import { ChartInfo } from "@/components/dashboard/chart-info";
 
-const COLS = ["Location", "Revenue", "Bookings", "Avg ticket", "No-show", "Rebook", "Attach", "Calls missed", "Rating"];
+const COLS = ["Location", "Revenue", "Bookings", "Avg visit", "No-show", "Return", "Attach", "Calls missed", "Rating"];
 
 export default async function StoresPage({ searchParams }: { searchParams: Promise<{ store?: string; month?: string }> }) {
   const sp = await searchParams;
@@ -111,11 +111,11 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
         </Card>
         <Card>
           <div className="flex items-center gap-1.5">
-            <Micro>Rebook rate</Micro>
+            <Micro>Return rate</Micro>
             <ChartInfo id="storeRankRebook" />
           </div>
           <h2 className="mt-1.5 mb-4 text-[16px] font-medium tracking-[-0.01em]">By location</h2>
-          <BarRanking data={rank((r) => Math.round(r.m.rebook * 100))} format="pct" labelWidth={104} valueLabel="Rebook rate" />
+          <BarRanking data={rank((r) => Math.round(r.m.rebook * 100))} format="pct" labelWidth={104} valueLabel="Return rate" />
         </Card>
         <Card>
           <div className="flex items-center gap-1.5">

@@ -44,14 +44,14 @@ function monthRange(month: MonthValue): { start: string; end: string } | null {
 
 // ── raw loaders ─────────────────────────────────────────────────────────────
 type Agg = {
-  rev: number; groom: number; retail: number; bookings: number; noShows: number; rebooks: number;
+  rev: number; groom: number; retail: number; bookingRev: number; bookings: number; noShows: number; rebooks: number;
   attached: number; calls: number; missed: number; visits: number; starts: number; completes: number; booked: number;
 };
-const emptyAgg = (): Agg => ({ rev: 0, groom: 0, retail: 0, bookings: 0, noShows: 0, rebooks: 0, attached: 0, calls: 0, missed: 0, visits: 0, starts: 0, completes: 0, booked: 0 });
+const emptyAgg = (): Agg => ({ rev: 0, groom: 0, retail: 0, bookingRev: 0, bookings: 0, noShows: 0, rebooks: 0, attached: 0, calls: 0, missed: 0, visits: 0, starts: 0, completes: 0, booked: 0 });
 
 type DailyRow = {
-  store_id: StoreId; revenue: number; grooming_revenue: number; retail_revenue: number; bookings: number;
-  no_shows: number; rebooks: number; retail_attached: number; calls_total: number; calls_missed: number;
+  store_id: StoreId; revenue: number; grooming_revenue: number; retail_revenue: number; booking_revenue: number;
+  bookings: number; no_shows: number; rebooks: number; retail_attached: number; calls_total: number; calls_missed: number;
   web_visits: number; web_form_starts: number; web_form_completes: number; web_booked: number;
 };
 
@@ -67,6 +67,7 @@ async function loadDailyRange(start: string | null, end: string | null): Promise
     const a = acc[r.store_id];
     if (!a) continue;
     a.rev = Number(r.revenue); a.groom = Number(r.grooming_revenue); a.retail = Number(r.retail_revenue);
+    a.bookingRev = Number(r.booking_revenue);
     a.bookings = Number(r.bookings); a.noShows = Number(r.no_shows); a.rebooks = Number(r.rebooks); a.attached = Number(r.retail_attached);
     a.calls = Number(r.calls_total); a.missed = Number(r.calls_missed);
     a.visits = Number(r.web_visits); a.starts = Number(r.web_form_starts); a.completes = Number(r.web_form_completes); a.booked = Number(r.web_booked);
@@ -165,7 +166,9 @@ function computeMetrics(scope: Scope, byStore: Record<StoreId, Agg>, listings: R
   return {
     revenue: Math.round(a.rev), bookings: a.bookings, grooming: Math.round(a.groom), retail: Math.round(a.retail),
     groomingShare: a.groom + a.retail > 0 ? a.groom / (a.groom + a.retail) : 0,
-    avgTicket: a.bookings ? Math.round(a.rev / a.bookings) : 0,
+    // Revenue on grooming tickets ÷ grooming tickets — NOT all revenue, which
+    // would mix retail-only purchases into the numerator (showed $134 vs $95).
+    avgTicket: a.bookings ? Math.round(a.bookingRev / a.bookings) : 0,
     rebook: a.rebooks / denom, noShow: a.noShows / denom, attach: a.attached / denom, rating,
   };
 }
@@ -315,7 +318,7 @@ export async function getWeeklyBrief(scope: Scope): Promise<WeeklyBrief> {
     { label: "Revenue", value: money(m.revenue), delta: revD, good: revD >= 0 },
     { label: "Bookings", value: m.bookings.toLocaleString(), delta: bookD, good: bookD >= 0 },
     { label: "Calls missed", value: pctStr(cs.missedPct), delta: missD, good: missD < 0 },
-    { label: "Rebook rate", value: pctStr(m.rebook), delta: rebookD, good: rebookD >= 0 },
+    { label: "Return rate", value: pctStr(m.rebook), delta: rebookD, good: rebookD >= 0 },
     { label: "Avg rating", value: m.rating.toFixed(1), delta: ratingD, good: ratingD >= 0 },
   ];
   const dir = (n: number) => (n >= 0 ? "up" : "down");
@@ -325,7 +328,7 @@ export async function getWeeklyBrief(scope: Scope): Promise<WeeklyBrief> {
     cs.missedPct > 0.22
       ? { title: "Call capture is the biggest lever", detail: `${pctStr(cs.missedPct)} of inbound calls went unanswered ${here}. Instant text-back is the fastest recovery.` }
       : m.rebook < 0.5
-        ? { title: "Rebooking is the biggest lever", detail: `Only ${pctStr(m.rebook)} of grooming customers rebook before leaving ${here}. A prompt at checkout is the most durable fix.` }
+        ? { title: "Rebooking is the biggest lever", detail: `Only ${pctStr(m.rebook)} of grooming visits ${here} come from customers returning within 90 days. A rebooking prompt at checkout is the most durable fix.` }
         : { title: "Online conversion is the biggest lever", detail: `${pctStr(1 - ws.convRate)} of website visitors leave without booking ${here}. The drop is concentrated in the booking form.` };
 
   return {
@@ -358,7 +361,7 @@ export async function getManagerScorecard(store: StoreId, month: MonthValue): Pr
   const d = (n: number, span: number) => Math.round(wave(seed + n, 6) * span * 1000) / 1000;
   const rows: { label: string; raw: number; avg: number; fmt: (n: number) => string; delta: number; invert?: boolean }[] = [
     { label: "Calls answered", raw: cs.answeredPct, avg: gc.answeredPct, fmt: (n) => pctStr(n), delta: d(1, 0.05) },
-    { label: "Rebook rate", raw: m.rebook, avg: gm.rebook, fmt: (n) => pctStr(n), delta: d(2, 0.05) },
+    { label: "Return rate", raw: m.rebook, avg: gm.rebook, fmt: (n) => pctStr(n), delta: d(2, 0.05) },
     { label: "Retail attach", raw: m.attach, avg: gm.attach, fmt: (n) => pctStr(n), delta: d(3, 0.05) },
     { label: "No-show rate", raw: m.noShow, avg: gm.noShow, fmt: (n) => pctStr(n), delta: d(4, 0.04), invert: true },
     { label: "Avg rating", raw: m.rating, avg: gm.rating, fmt: (n) => n.toFixed(1), delta: d(5, 0.02) },
@@ -376,7 +379,7 @@ export async function getManagerFocus(store: StoreId, month: MonthValue) {
   const here = `at ${scopeLabel(store)}`;
   const candidates = [
     { score: cs.missedPct, planKey: "call-capture", title: "Unanswered inbound calls are the biggest capture leak", detail: `${pctStr(cs.missedPct)} of inbound calls went unanswered ${here}. Each unanswered call is most often a booking that goes to a competitor instead.`, metric: `${pctStr(cs.missedPct)} of calls missed`, pending: true },
-    { score: 1 - m.rebook, planKey: "rebook-coach", title: "Rebooking at checkout is the most durable lever", detail: `Only ${pctStr(m.rebook)} of grooming customers rebook before leaving ${here}. A short prompt at checkout is the most reliable fix.`, metric: `${pctStr(m.rebook)} rebook rate`, pending: false },
+    { score: 1 - m.rebook, planKey: "rebook-coach", title: "Rebooking at checkout is the most durable lever", detail: `Only ${pctStr(m.rebook)} of grooming visits ${here} come from customers returning within 90 days. A short rebooking prompt at checkout is the most reliable fix.`, metric: `${pctStr(m.rebook)} return rate`, pending: false },
     { score: 1 - m.attach, planKey: "retail-attach", title: "Retail attachment on grooming visits is below the group", detail: `${pctStr(m.attach)} of grooming visits ${here} add a retail item. Suggesting food or accessories at checkout is the simplest add.`, metric: `${pctStr(m.attach)} retail attach`, pending: false },
   ];
   return candidates.sort((a, b) => b.score - a.score)[0];
@@ -479,8 +482,8 @@ export async function getTopAction(scope: Scope, month: MonthValue) {
       score: 1 - m.rebook,
       planKey: "rebook-coach",
       title: "Rebooking is below the level where recurring revenue holds",
-      detail: `Only ${pctStr(m.rebook)} of grooming customers ${here} rebook before leaving. Grooming is recurring revenue, so this is the most durable lever on long-term performance. Urso sets up a checkout rebooking prompt and tracks what it brings back.`,
-      metric: `${pctStr(m.rebook)} rebook rate`,
+      detail: `Only ${pctStr(m.rebook)} of grooming visits ${here} come from customers returning within 90 days. Grooming is recurring revenue, so this is the most durable lever on long-term performance. Urso sets up a checkout rebooking prompt and tracks what it brings back.`,
+      metric: `${pctStr(m.rebook)} return rate`,
       pending: false,
     },
     {

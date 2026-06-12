@@ -83,7 +83,7 @@ export function TeamClient({ roster, scopeName, period }: { roster: Groomer[]; s
             <table className="w-full min-w-[520px] border-collapse text-[13.5px]">
               <thead>
                 <tr className="border-t border-edge font-mono text-[10px] uppercase tracking-[0.1em] text-ink-dimmer">
-                  {["Groomer", "$/hr", "Appts", "Rebook", "Attach", "Util"].map((h, i) => (
+                  {["Groomer", "$/hr", "Appts", "Return", "Attach", "Util"].map((h, i) => (
                     <th key={h} className={`px-5 py-2.5 font-normal ${i === 0 ? "text-left" : "text-right"}`}>{h}</th>
                   ))}
                 </tr>
@@ -134,13 +134,13 @@ export function TeamClient({ roster, scopeName, period }: { roster: Groomer[]; s
           {selected.rebook < 0.45 && (
             <div className="flex items-center gap-2 rounded-xl border border-[rgba(254,81,0,0.35)] bg-orange-soft px-3.5 py-2.5">
               <span className="size-1.5 rounded-full bg-orange" />
-              <span className="text-[12.5px] text-ink">Rebook rate ({pct(selected.rebook)}) is below the team floor — the clearest single thing to address.</span>
+              <span className="text-[12.5px] text-ink">Return rate ({pct(selected.rebook)}) is below the team floor — the clearest single thing to address.</span>
             </div>
           )}
 
           <div className="grid grid-cols-3 gap-2.5">
             <Stat label="$/labour hr" value={fmtMoney(selected.revPerHr)} />
-            <Stat label="Rebook" value={pct(selected.rebook)} />
+            <Stat label="Return" value={pct(selected.rebook)} />
             <Stat label="Requests" value={pct(p.requestRate)} />
             <Stat label="Attach" value={pct(selected.attach)} />
             <Stat label="Client book" value={String(p.clientBook)} />

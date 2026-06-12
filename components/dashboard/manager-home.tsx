@@ -81,7 +81,7 @@ export async function ManagerHome({ store, month, userName, streak }: { store: S
           <StoreScoreboard rows={scores} highlightId={store} variant="manager" />
         </div>
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-          <RateRankCard title="Rebook rate" ranking={rebookRank} storeId={store} />
+          <RateRankCard title="Return rate" ranking={rebookRank} storeId={store} />
           <RateRankCard title="Calls answered" ranking={answeredRank} storeId={store} />
         </div>
       </section>
@@ -158,7 +158,7 @@ export async function ManagerHome({ store, month, userName, streak }: { store: S
             <table className="w-full min-w-[620px] border-collapse text-[13.5px]">
               <thead>
                 <tr className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-dimmer">
-                  {["Groomer", "Rev / hr", "Rebook", "Retail attach", "Utilization"].map((h, i) => (
+                  {["Groomer", "Rev / hr", "Return", "Retail attach", "Utilization"].map((h, i) => (
                     <th key={h} className={`px-5 py-3 font-normal ${i === 0 ? "text-left" : "text-right"}`}>{h}</th>
                   ))}
                 </tr>

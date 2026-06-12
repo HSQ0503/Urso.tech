@@ -112,8 +112,8 @@ export const CHART_GUIDES = {
     source: FRANPOS,
   },
   storeRankRebook: {
-    summary: "Rebook rate by store — the share of visits where the customer books their next appointment before leaving.",
-    read: "Each bar is one store; longer is a higher rebook rate. Rebooking at checkout is the cheapest retention lever, so leaders here defend recurring revenue best.",
+    summary: "Return rate by store — the share of grooming visits made by customers returning within 90 days of their previous visit.",
+    read: "Each bar is one store; longer means more visits come from regulars on cadence. Rebooking at checkout is the cheapest way to push this up, and leaders here defend recurring revenue best.",
     legend: [
       { color: TRACK, label: "Store" },
       { color: ORANGE, label: "Selected store" },
