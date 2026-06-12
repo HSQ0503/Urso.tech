@@ -92,6 +92,18 @@ delivered products). `product_sales_daily.is_passthrough` flags the rows so the 
 page can show-but-separate them. Known undercount: forfeited no-show deposits are real
 revenue but indistinguishable without the booking feed.
 
+## Independent validation — Winter Garden (2026-06-12)
+
+- **Payments stream vs our orders, May:** $55,725.58 vs $55,725.58 — exact.
+- **Portal "Sales by category", May:** net sales $46,245.48 vs dashboard $46,245.47 (1¢
+  rounding). The portal report **omits deposits/gift cards itself** — independently
+  confirms the pass-through exclusion. Grooming split within 0.06% ($31,379.49 portal
+  service categories vs $31,398.12 ours — residual ≈ one zero-cost text-SKU retail item).
+- **Cron verified:** staging written 23:05:37 UTC on schedule; one $30 ticket paid 26 min
+  after the close-run is scooped by the next run's 3-day overlap (evening cron moved to
+  00:30 UTC for safety). `CustomerAnalysisReport` does NOT reconcile to orders (appears
+  appointment-scoped, undocumented) — never anchor displayed numbers on it.
+
 ## Backfill validation (2026-06-11)
 
 12 months × 4 stores landed (~46k orders / 92k lines / ~370 calls; each store kept 650+ of its monthly quota). Verified against the FranPOS portal report (Windermere, May 2026, Full Groom): **ours 477 units / $44,897 vs portal 471 / $44,418 — 98.7% match, zero refund/dupe artifacts.** The residual is definitional: the portal attributes by *appointment date*, we attribute by *checkout date* (when money hit the till). Urso reports transaction-dated revenue — state this definition wherever "revenue" is shown.

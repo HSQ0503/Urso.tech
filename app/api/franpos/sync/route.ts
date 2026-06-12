@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { syncFranpos } from "@/lib/franpos";
 
 // FranPOS incremental sync, hit by Vercel cron twice a day (vercel.json):
-// 17:00 UTC = 1pm Orlando (midday pulse) and 23:05 UTC = 7:05pm (day close).
+// 17:00 UTC = 1pm Orlando (midday pulse) and 00:30 UTC = 8:30pm EDT / 7:30pm
+// EST (day close — stores close at 7pm and stragglers ring until ~7:30, so
+// this stays past close in both DST phases).
 // Vercel sends `Authorization: Bearer ${CRON_SECRET}` automatically when the
 // env var exists; manual runs can pass ?secret= instead.
 export const maxDuration = 60;
