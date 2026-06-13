@@ -15,6 +15,12 @@ import {
   getCustomerSegments,
   getCustomerIntel,
   getReturnRateTrend,
+  getRetention,
+  getWinbackList,
+  getCustomersByValue,
+  getRevenueNewVsRepeat,
+  getAllAgentActions,
+  getCrossSell,
 } from "@/components/dashboard/data.server";
 import { stores, type Scope, type StoreId, type MonthValue } from "@/components/dashboard/data";
 
@@ -22,6 +28,15 @@ const monthSchema = z
   .string()
   .regex(/^(all|\d{4}|\d{4}-\d{2})$/, 'use "YYYY-MM", "YYYY", or "all" (trailing 12 months)')
   .describe('Period: "YYYY-MM" for a month, "YYYY" for a year, "all" for the trailing 12 months');
+
+const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "use YYYY-MM-DD");
+
+const nyToday = () => new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
+function addDays(iso: string, days: number): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
 
 const r0 = (n: number) => Math.round(n);
 const r3 = (n: number) => Math.round(n * 1000) / 1000;
@@ -57,6 +72,31 @@ async function monthlySeries(allowed: Scope, fromMonth: string, toMonth: string)
       bookings: Number(r.bookings),
       avgVisit: Number(r.bookings) ? r0(Number(r.booking_revenue) / Number(r.bookings)) : 0,
       returnRate: Number(r.identified_bookings) ? r3(Number(r.rebooks) / Number(r.identified_bookings)) : null,
+    }));
+}
+
+// Per-store aggregates for an arbitrary [start, endExclusive) window via the
+// metrics_by_store RPC — the same rollup every dashboard page reads.
+async function rangeMetrics(allowed: Scope, start: string, endExclusive: string) {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("metrics_by_store", { p_start: start, p_end: endExclusive });
+  if (error) throw new Error(`metrics_by_store failed: ${error.message}`);
+  type Row = {
+    store_id: StoreId; revenue: number; grooming_revenue: number; retail_revenue: number; booking_revenue: number;
+    bookings: number; identified_bookings: number; rebooks: number; retail_attached: number;
+  };
+  const ids = new Set<string>(allowedIds(allowed));
+  return ((data ?? []) as unknown as Row[])
+    .filter((r) => ids.has(r.store_id))
+    .map((r) => ({
+      store: r.store_id,
+      revenue: r0(Number(r.revenue)),
+      grooming: r0(Number(r.grooming_revenue)),
+      retail: r0(Number(r.retail_revenue)),
+      bookings: Number(r.bookings),
+      avgVisit: Number(r.bookings) ? r0(Number(r.booking_revenue) / Number(r.bookings)) : 0,
+      returnRate: Number(r.identified_bookings) ? r3(Number(r.rebooks) / Number(r.identified_bookings)) : null,
+      retailAttach: Number(r.bookings) ? r3(Number(r.retail_attached) / Number(r.bookings)) : null,
     }));
 }
 
@@ -211,6 +251,110 @@ export function buildAnalystTools(allowed: Scope) {
           ),
           note: "Store contributions are measured. WHY a store/groomer/product moved is not in POS data — label causes as hypotheses.",
         };
+      },
+    }),
+
+    metrics_range: tool({
+      description:
+        "Per-store metrics for an ARBITRARY date window (both dates inclusive) — use for weeks, trailing 30 days, 'since the 5th', or any period that isn't a calendar month. Data starts 2024-01-01.",
+      inputSchema: z.object({
+        startDate: dateSchema.describe("first day included, YYYY-MM-DD"),
+        endDate: dateSchema.describe("last day included, YYYY-MM-DD"),
+      }),
+      execute: ({ startDate, endDate }) => rangeMetrics(allowed, startDate, addDays(endDate, 1)),
+    }),
+
+    month_pace: tool({
+      description:
+        "Is the CURRENT month on track? Month-to-date per store, with day-matched windows from the prior month and the same month last year (same number of days, so a partial month doesn't read as a dip). No inputs.",
+      inputSchema: z.object({}),
+      execute: async () => {
+        const today = nyToday();
+        const dayOfMonth = Number(today.slice(8, 10));
+        const monthStart = `${today.slice(0, 7)}-01`;
+        const prevMonthStart = `${addDays(monthStart, -1).slice(0, 7)}-01`;
+        const lastYearStart = `${Number(today.slice(0, 4)) - 1}${monthStart.slice(4)}`;
+        const [current, priorMonth, lastYear] = await Promise.all([
+          rangeMetrics(allowed, monthStart, addDays(today, 1)),
+          rangeMetrics(allowed, prevMonthStart, addDays(prevMonthStart, dayOfMonth)),
+          rangeMetrics(allowed, lastYearStart, addDays(lastYearStart, dayOfMonth)),
+        ]);
+        return { daysElapsed: dayOfMonth, monthToDate: current, sameDaysPriorMonth: priorMonth, sameDaysLastYear: lastYear };
+      },
+    }),
+
+    retention_detail: tool({
+      description:
+        "Deep retention picture over recorded history: returning share, average visit cadence, one-and-done count, cohort survival curve (% still active N months after first visit), grooming-cycle gap histogram with median days, and the win-back pool size.",
+      inputSchema: z.object({}),
+      execute: async () => {
+        const r = await getRetention(allowed, "all");
+        return {
+          returningShare: r3(r.returningPct),
+          avgCadenceDays: r.cadenceDays,
+          oneAndDoneCustomers: r.oneAndDone,
+          winbackPool: r.winbackCount,
+          cohortPctByMonthOffset: r.cohort,
+          groomingCycle: {
+            medianDays: r.cycle.medianDays,
+            recurringShare: r3(r.cycle.recurringPct),
+            histogram: r.cycle.histogram.map((h) => ({ gap: h.label, share: r3(h.value) })),
+          },
+        };
+      },
+    }),
+
+    winback_targets: tool({
+      description:
+        "The actual win-back list: At-risk + Lapsed customers ranked by lifetime value — who to contact first and what they're worth. Dormant (>1yr) customers are excluded by design (too old to win back).",
+      inputSchema: z.object({
+        top: z.number().int().min(5).max(40).default(15).describe("how many targets"),
+      }),
+      execute: async ({ top }) => {
+        const wb = await getWinbackList(allowed);
+        return { poolSize: wb.count, targets: wb.list.slice(0, top).map((c) => ({ name: c.name, store: c.store, lastVisit: c.last, visits: c.visits, ltv: r0(c.ltv), segment: c.segment })) };
+      },
+    }),
+
+    top_customers: tool({
+      description: "Top customers by lifetime value: name, pet, visits, LTV, days since last visit, segment.",
+      inputSchema: z.object({}),
+      execute: async () => {
+        const rows = await getCustomersByValue(allowed);
+        return rows.map((c) => ({ name: c.name, pet: c.pet, store: c.store, visits: c.visits, ltv: r0(c.ltv), daysSinceLastVisit: c.lastVisit, segment: c.segment }));
+      },
+    }),
+
+    new_vs_repeat: tool({
+      description:
+        "Revenue split by customer type for a period: repeat customers vs first-time (first visit in recorded history, which starts 2024-01) vs anonymous walk-ins. Answers whether growth comes from acquisition or retention.",
+      inputSchema: z.object({ month: monthSchema }),
+      execute: async ({ month }) => {
+        const r = await getRevenueNewVsRepeat(allowed, month as MonthValue);
+        return { repeatRevenue: r.repeat, newCustomerRevenue: r.fresh, walkInRevenue: r.walkIn };
+      },
+    }),
+
+    cross_sell: tool({
+      description:
+        "The cross-sell wall, measured: share of all tickets that are grooming+retail ('both' — the strategic north star), grooming-only, and retail-only, for a period. Use when discussing the everyone-grooms-and-buys-retail goal.",
+      inputSchema: z.object({ month: monthSchema }),
+      execute: async ({ month }) => {
+        const x = await getCrossSell(allowed, month as MonthValue);
+        return { bothShare: r3(x.both), groomingOnlyShare: r3(x.groomingOnly), retailOnlyShare: r3(x.retailOnly) };
+      },
+    }),
+
+    list_actions: tool({
+      description:
+        "The current action items on the Actions page — suggested, approved, running and completed — with the metric that motivated each. Check this before recommending something, so you don't suggest work already in flight, and use completed actions' results to judge what worked.",
+      inputSchema: z.object({}),
+      execute: async () => {
+        const actions = await getAllAgentActions();
+        const allowedLabels = new Set(["All stores", ...allowedIds(allowed).map((id) => stores.find((s) => s.id === id)!.name)]);
+        return actions
+          .filter((a) => allowedLabels.has(a.store))
+          .map((a) => ({ title: a.title, store: a.store, area: a.agent, status: a.status, metric: a.metric, result: a.result ?? null }));
       },
     }),
   };

@@ -248,11 +248,11 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
             <div className="grid grid-cols-2 gap-x-3 gap-y-4 border-t border-edge pt-5">
               <div>
                 <Micro>Grooming</Micro>
-                <div className="mt-1.5 font-mono text-[16px] text-ink">{fmtMoney(m.grooming, true)}</div>
+                <div className="mt-1.5 font-mono text-[16px] text-ink">{fmtMoney(m.grooming)}</div>
               </div>
               <div>
                 <Micro>Retail</Micro>
-                <div className="mt-1.5 font-mono text-[16px] text-ink">{fmtMoney(m.retail, true)}</div>
+                <div className="mt-1.5 font-mono text-[16px] text-ink">{fmtMoney(m.retail)}</div>
               </div>
               <div>
                 <Micro>Avg ticket</Micro>

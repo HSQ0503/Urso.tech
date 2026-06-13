@@ -9,6 +9,7 @@ import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { reportModel, assertReportKey } from "@/lib/ai/models";
 import { METRIC_DEFINITIONS } from "@/lib/ai/analyst";
+import { BUSINESS_CONTEXT } from "@/lib/ai/business";
 import { stores, scopeLabel, type Scope, type StoreId } from "@/components/dashboard/data";
 
 const nyToday = () => new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
@@ -21,8 +22,8 @@ function addDays(iso: string, days: number): string {
 type Admin = ReturnType<typeof createAdminClient>;
 
 type StoreWeek = {
-  store: StoreId; revenue: number; bookings: number; avgVisit: number; returnRate: number | null;
-  prevRevenue: number; prevBookings: number; prevAvgVisit: number; prevReturnRate: number | null;
+  store: StoreId; revenue: number; bookings: number; avgVisit: number; returnRate: number | null; retailAttach: number | null;
+  prevRevenue: number; prevBookings: number; prevAvgVisit: number; prevReturnRate: number | null; prevRetailAttach: number | null;
 };
 
 type WeeklyData = {
@@ -39,7 +40,7 @@ const r0 = (n: number) => Math.round(n);
 
 type MetricsRow = {
   store_id: StoreId; revenue: number; bookings: number; booking_revenue: number;
-  identified_bookings: number; rebooks: number;
+  identified_bookings: number; rebooks: number; retail_attached: number;
 };
 
 async function metricsByStore(supabase: Admin, start: string, end: string): Promise<Map<StoreId, MetricsRow>> {
@@ -70,13 +71,15 @@ export async function gatherWeeklyData(supabase: Admin): Promise<WeeklyData> {
   const rate = (r?: MetricsRow) =>
     r && Number(r.identified_bookings) > 0 ? Math.round((Number(r.rebooks) / Number(r.identified_bookings)) * 1000) / 1000 : null;
   const avgVisit = (r?: MetricsRow) => (r && Number(r.bookings) > 0 ? r0(Number(r.booking_revenue) / Number(r.bookings)) : 0);
+  const attach = (r?: MetricsRow) =>
+    r && Number(r.bookings) > 0 ? Math.round((Number(r.retail_attached) / Number(r.bookings)) * 1000) / 1000 : null;
 
   const perStore: StoreWeek[] = stores.map((s) => {
     const c = cur.get(s.id), p = prev.get(s.id);
     return {
       store: s.id,
-      revenue: r0(Number(c?.revenue ?? 0)), bookings: Number(c?.bookings ?? 0), avgVisit: avgVisit(c), returnRate: rate(c),
-      prevRevenue: r0(Number(p?.revenue ?? 0)), prevBookings: Number(p?.bookings ?? 0), prevAvgVisit: avgVisit(p), prevReturnRate: rate(p),
+      revenue: r0(Number(c?.revenue ?? 0)), bookings: Number(c?.bookings ?? 0), avgVisit: avgVisit(c), returnRate: rate(c), retailAttach: attach(c),
+      prevRevenue: r0(Number(p?.revenue ?? 0)), prevBookings: Number(p?.bookings ?? 0), prevAvgVisit: avgVisit(p), prevReturnRate: rate(p), prevRetailAttach: attach(p),
     };
   });
 
@@ -139,7 +142,9 @@ const actionsSchema = z.object({
     .describe("Suggested actions ranked by expected impact, most impactful first — aim for 3 to 6"),
 });
 
-const WEEKLY_SYSTEM = `You write the Monday morning brief for the owner of Woof Gang Bakery & Grooming — four pet grooming + retail stores in Orlando: Winter Park (wp), Winter Garden (wg) — established; Lakeside Village (lv), Windermere (wm) — newer.
+const WEEKLY_SYSTEM = `You write the Monday morning brief for the owner of Woof Gang Bakery & Grooming.
+
+${BUSINESS_CONTEXT}
 
 ${METRIC_DEFINITIONS}
 

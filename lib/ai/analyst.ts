@@ -3,6 +3,7 @@
 // Handoff); if the model defines a metric differently than the chart next to
 // it, trust is dead. Keep both in lockstep.
 
+import { BUSINESS_CONTEXT } from "@/lib/ai/business";
 import { CHART_GUIDES, type ChartGuide } from "@/components/dashboard/chart-guides";
 import { scopeLabel, monthLabel, type Scope, type MonthValue } from "@/components/dashboard/data";
 import type { SessionUser } from "@/lib/auth";
@@ -49,6 +50,8 @@ export function buildSystemPrompt(ctx: ChatScope, seedContext: string): string {
     `Today is ${today} (America/New_York). You are talking to ${ctx.user.name} (${ctx.user.role === "manager" ? `manager of ${scopeLabel(ctx.scope)} — you can only discuss this store` : ctx.user.role}).`,
     `The user's dashboard is currently filtered to: ${scopeLabel(ctx.scope)} · ${monthLabel(ctx.month)}. Treat that as the default scope of their questions unless they say otherwise.`,
     "",
+    BUSINESS_CONTEXT,
+    "",
     DATA_SOURCES,
     "",
     METRIC_DEFINITIONS,
@@ -64,7 +67,11 @@ export function buildSystemPrompt(ctx: ChatScope, seedContext: string): string {
 
   if (seedContext) lines.push("", "Current numbers for the user's scope (pre-loaded so you can answer immediately):", seedContext);
 
-  lines.push("", "Use your tools to drill down before answering anything the pre-loaded numbers don't cover. Prefer one decompose_revenue_change call over guessing why a number moved.");
+  lines.push(
+    "",
+    "Use your tools to drill down before answering anything the pre-loaded numbers don't cover. Prefer one decompose_revenue_change call over guessing why a number moved.",
+    "Be economical: most questions need one or two tool calls. After three, stop and answer with what you have — a good answer now beats an exhaustive one never. Always end with a text answer.",
+  );
 
   return lines.join("\n");
 }

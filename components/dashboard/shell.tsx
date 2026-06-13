@@ -17,7 +17,7 @@ import { signOut } from "@/app/login/actions";
 import { Modal } from "./modal";
 import { ThemeToggle } from "./theme-toggle";
 
-type IconName = "home" | "brief" | "activity" | "money" | "spark" | "store" | "users" | "scissors" | "star" | "compare";
+type IconName = "home" | "brief" | "activity" | "money" | "spark" | "store" | "users" | "scissors" | "star" | "compare" | "box";
 
 function Icon({ name }: { name: IconName }) {
   const common = { width: 18, height: 18, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.75, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
@@ -42,6 +42,8 @@ function Icon({ name }: { name: IconName }) {
       return <svg {...common}><path d="M12 3.2l2.62 5.32 5.88.86-4.25 4.14 1 5.86L12 16.77 6.75 19.4l1-5.86L3.5 9.4l5.88-.86Z" /></svg>;
     case "compare":
       return <svg {...common}><path d="M3 6.5h13" /><path d="M13 3.5l3 3-3 3" /><path d="M21 17.5H8" /><path d="M11 14.5l-3 3 3 3" /></svg>;
+    case "box":
+      return <svg {...common}><path d="M21 8.2 12 3 3 8.2v7.6L12 21l9-5.2Z" /><path d="M3.3 8.4 12 13.4l8.7-5" /><path d="M12 21v-7.6" /></svg>;
   }
 }
 
@@ -64,6 +66,7 @@ const navGroups: NavGroup[] = [
       { href: "/dashboard/performance", label: "Performance", icon: "activity", roles: ["owner"] },
       { href: "/dashboard/revenue", label: "Revenue map", icon: "money", roles: ["owner"] },
       { href: "/dashboard/compare", label: "Compare", icon: "compare", roles: ["owner"] },
+      { href: "/dashboard/products", label: "Products", icon: "box", roles: ["owner"] },
       { href: "/dashboard/actions", label: "AI actions", icon: "spark", roles: ["owner"] },
     ],
   },

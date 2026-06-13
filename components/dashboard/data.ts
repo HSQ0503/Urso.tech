@@ -1195,3 +1195,30 @@ export function parseCompareMetric(mode: CompareMode, v?: string | null): string
   if (v === "all") return "all"; // overview: every metric as small multiples
   return COMPARE_METRICS[mode].some((m) => m.key === v) ? (v as string) : COMPARE_METRICS[mode][0].key;
 }
+
+// ── Products page ────────────────────────────────────────────────────────────
+// One row per canonical product: the same barcode under different register
+// spellings is one product (see migration 0018). Revenue/units are
+// period-scoped; margin only exists for retail items carrying cost.
+export type ProductRow = {
+  key: string;
+  name: string;
+  line: ServiceLine;
+  revenue: number;
+  units: number;
+  avgPrice: number | null;
+  margin: number | null;
+  stores: number;
+};
+
+export const PRODUCT_PAGE_SIZE = 50;
+export type ProductSort = "revenue" | "units" | "margin" | "name";
+export type SortDir = "asc" | "desc";
+
+export function parseProductSort(v?: string | null): ProductSort {
+  return v === "units" || v === "margin" || v === "name" ? v : "revenue";
+}
+export function parseSortDir(v: string | null | undefined, sort: ProductSort): SortDir {
+  if (v === "asc" || v === "desc") return v;
+  return sort === "name" ? "asc" : "desc";
+}

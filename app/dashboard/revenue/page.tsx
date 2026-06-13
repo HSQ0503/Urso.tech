@@ -109,7 +109,7 @@ export default async function RevenueMapPage({ searchParams }: { searchParams: P
                   <span className="text-[13.5px] text-ink">{s.name}</span>
                   <Tag tone={s.line === "Grooming" ? "orange" : "muted"}>{s.line}</Tag>
                 </div>
-                <span className="font-mono text-[13px] text-ink-dim">{fmtMoney(s.value, true)}</span>
+                <span className="font-mono text-[13px] text-ink-dim">{fmtMoney(s.value)}</span>
               </div>
             ))}
           </div>

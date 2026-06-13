@@ -55,7 +55,7 @@ export function TeamClient({ roster, scopeName, period }: { roster: TeamRow[]; s
           </div>
           <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-dimmer">{roster.length} groomers</span>
         </div>
-        <BarRanking data={ranking} valueFmt={(n) => fmtMoney(n, true)} labelWidth={130} valueLabel="Service revenue" />
+        <BarRanking data={ranking} valueFmt={(n) => fmtMoney(n)} labelWidth={130} valueLabel="Service revenue" />
       </Card>
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.45fr_1fr]">
@@ -96,7 +96,7 @@ export function TeamClient({ roster, scopeName, period }: { roster: TeamRow[]; s
                         </div>
                         <Micro className="mt-0.5">{g.store}</Micro>
                       </td>
-                      <td className="px-5 py-3 text-right font-mono text-ink">{fmtMoney(g.revenue, true)}</td>
+                      <td className="px-5 py-3 text-right font-mono text-ink">{fmtMoney(g.revenue)}</td>
                       <td className="px-5 py-3 text-right font-mono text-ink-dim">{g.appts}</td>
                       <td className="px-5 py-3 text-right font-mono text-ink-dim">{fmtMoney(g.avgTicket)}</td>
                       <td className="px-5 py-3 text-right font-mono" style={{ color: g.rebook != null && g.rebook < 0.45 ? "#fe5100" : undefined }}>{pctOr(g.rebook)}</td>
@@ -129,7 +129,7 @@ export function TeamClient({ roster, scopeName, period }: { roster: TeamRow[]; s
           )}
 
           <div className="grid grid-cols-3 gap-2.5">
-            <Stat label="Revenue" value={fmtMoney(selected.revenue, true)} />
+            <Stat label="Revenue" value={fmtMoney(selected.revenue)} />
             <Stat label="Team share" value={pct(selected.share)} />
             <Stat label="Appts" value={String(selected.appts)} />
             <Stat label="Avg ticket" value={fmtMoney(selected.avgTicket)} />

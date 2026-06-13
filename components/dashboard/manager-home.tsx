@@ -173,7 +173,7 @@ export async function ManagerHome({ store, month, userName, streak }: { store: S
                         {g.flag === "coach" && <Tag tone="orange">Coach</Tag>}
                       </div>
                     </td>
-                    <td className="px-5 py-3.5 text-right font-mono text-ink">{fmtMoney(g.revenue, true)}</td>
+                    <td className="px-5 py-3.5 text-right font-mono text-ink">{fmtMoney(g.revenue)}</td>
                     <td className="px-5 py-3.5 text-right font-mono text-ink-dim">{fmtMoney(g.avgTicket)}</td>
                     <td className="px-5 py-3.5 text-right font-mono" style={{ color: g.rebook != null && g.rebook < 0.45 ? ORANGE : "var(--color-ink-dim)" }}>{g.rebook == null ? "—" : pct(g.rebook)}</td>
                     <td className="px-5 py-3.5 text-right font-mono text-ink-dim">{g.attach == null ? "—" : pct(g.attach)}</td>
@@ -234,8 +234,8 @@ function RateRankCard({ title, ranking, storeId }: { title: string; ranking: { i
   const pos = ranking.findIndex((r) => r.id === storeId) + 1;
   const leader = ranking[0];
   const mine = ranking.find((r) => r.id === storeId)!;
-  const gap = Math.round((leader.value - mine.value) * 100);
-  const data = ranking.map((r) => ({ name: shorten(r.name), value: Math.round(r.value * 100), highlight: r.id === storeId }));
+  const gap = Math.round((leader.value - mine.value) * 1000) / 10;
+  const data = ranking.map((r) => ({ name: shorten(r.name), value: Math.round(r.value * 1000) / 10, highlight: r.id === storeId }));
 
   return (
     <Card>

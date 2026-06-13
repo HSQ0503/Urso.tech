@@ -31,7 +31,10 @@ import type { FunnelStep } from "./data";
 
 const ORANGE = "#fe5100";
 const MUTED = "var(--color-series)";
-const fmtPct = (n: number) => `${Math.round(n * 100)}%`;
+// No-rounding rule: values, labels and tooltips show exact figures (cents on
+// money, first decimal on rates). Axis TICK labels may stay compact — Recharts
+// picks round tick values, so nothing real is lost there.
+const fmtPct = (n: number) => `${(n * 100).toLocaleString("en-US", { maximumFractionDigits: 1 })}%`;
 const fmtHour = (h: number) => `${h > 12 ? h - 12 : h}${h >= 12 ? "p" : "a"}`;
 
 // Evenly-spaced X ticks: aim for ~7 so a 31-day axis reads 1·6·11·16·21·26·31
@@ -44,14 +47,20 @@ export type ValueFormat = "number" | "money" | "moneyK" | "pct";
 function formatFor(token: ValueFormat): (n: number) => string {
   switch (token) {
     case "money":
-      return (n) => `$${Math.round(n).toLocaleString("en-US")}`;
-    case "moneyK":
-      return (n) => `$${Math.round(n / 1000)}k`;
+    case "moneyK": // exact for values/tooltips — compaction lives in axisFor only
+      return (n) => `$${n.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
     case "pct":
-      return (n) => `${Math.round(n)}%`;
+      return (n) => `${n.toLocaleString("en-US", { maximumFractionDigits: 1 })}%`;
     default:
-      return (n) => Math.round(n).toLocaleString("en-US");
+      return (n) => n.toLocaleString("en-US", { maximumFractionDigits: 2 });
   }
+}
+
+// Axis ticks only: compact so the scale stays readable; the data itself is
+// always shown exact by formatFor.
+function axisFor(token: ValueFormat): (n: number) => string {
+  if (token === "moneyK") return (n) => `$${Math.round(n / 1000)}k`;
+  return formatFor(token);
 }
 
 // ---- Revenue area chart ----------------------------------------------------
@@ -71,6 +80,7 @@ export function AreaChart({
   height?: number;
 }) {
   const fmt = valueFmt ?? formatFor(format);
+  const axis = valueFmt ?? axisFor(format);
   const gid = "rev-" + useId().replace(/:/g, "");
   const chartData = data.map((v, i) => ({ label: labels[i], value: v }));
   const config = { value: { label: "Revenue", color } } satisfies ChartConfig;
@@ -85,7 +95,7 @@ export function AreaChart({
         </defs>
         <CartesianGrid vertical={false} />
         <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} interval={tickEvery(labels.length)} />
-        <YAxis tickLine={false} axisLine={false} width={42} tickFormatter={fmt} />
+        <YAxis tickLine={false} axisLine={false} width={42} tickFormatter={axis} />
         <ChartTooltip cursor={{ strokeDasharray: "3 3" }} content={<ChartTooltipContent valueFormatter={(v) => fmt(v)} />} />
         <Area dataKey="value" type="monotone" stroke="var(--color-value)" strokeWidth={2} fill={`url(#${gid})`} dot={false} activeDot={{ r: 3 }} />
       </RAreaChart>
@@ -354,7 +364,7 @@ export function ConversionFunnel({ steps }: { steps: FunnelStep[] }) {
             <span className="text-ink-dim">{s.stage}</span>
             <span className="font-mono text-ink">
               {s.value.toLocaleString()}
-              <span className="ml-1.5 text-ink-dimmer">{Math.round(s.pct * 100)}% of top</span>
+              <span className="ml-1.5 text-ink-dimmer">{(s.pct * 100).toLocaleString("en-US", { maximumFractionDigits: 1 })}% of top</span>
             </span>
           </div>
           <div className="h-8 w-full overflow-hidden rounded-md bg-raise">
@@ -368,7 +378,7 @@ export function ConversionFunnel({ steps }: { steps: FunnelStep[] }) {
               className="mt-1 text-right font-mono text-[10px] uppercase tracking-[0.1em]"
               style={{ color: s.leak ? ORANGE : "var(--color-ink-dimmer)" }}
             >
-              {Math.round(s.stepConv * 100)}% continued{s.leak ? " · leak" : ""}
+              {(s.stepConv * 100).toLocaleString("en-US", { maximumFractionDigits: 1 })}% continued{s.leak ? " · leak" : ""}
             </div>
           )}
         </div>
@@ -379,7 +389,7 @@ export function ConversionFunnel({ steps }: { steps: FunnelStep[] }) {
 
 // ---- Radial gauge (a single rate, e.g. % answered) -------------------------
 export function RadialGauge({ value, caption, color = ORANGE, height = 168 }: { value: number; caption?: string; color?: string; height?: number }) {
-  const pctVal = Math.round(value * 100);
+  const pctVal = (value * 100).toLocaleString("en-US", { maximumFractionDigits: 1 });
   const data = [{ name: "v", value: pctVal }];
   const config = { value: { label: caption ?? "", color } } satisfies ChartConfig;
   return (
@@ -448,7 +458,7 @@ export function StackedShareBar({ segments }: { segments: { label: string; value
       {/* No overflow-hidden so the hover tooltip can escape; ends are rounded instead. */}
       <div className="flex h-9 w-full">
         {segments.map((s, i) => {
-          const share = Math.round((s.value / total) * 100);
+          const share = ((s.value / total) * 100).toLocaleString("en-US", { maximumFractionDigits: 1 });
           return (
             <div
               key={i}
@@ -471,7 +481,7 @@ export function StackedShareBar({ segments }: { segments: { label: string; value
           <span key={i} className="inline-flex items-center gap-1.5 text-[12.5px]">
             <span className="size-2.5 rounded-[3px]" style={{ background: s.color }} />
             <span className="text-ink-dim">{s.label}</span>
-            <span className="font-mono text-ink">{Math.round((s.value / total) * 100)}%</span>
+            <span className="font-mono text-ink">{((s.value / total) * 100).toLocaleString("en-US", { maximumFractionDigits: 1 })}%</span>
           </span>
         ))}
       </div>
@@ -532,6 +542,7 @@ export function CompareBars({
   height?: number;
 }) {
   const fmt = formatFor(format);
+  const axis = axisFor(format);
   // Keep nulls: "no activity that period" (new hire, departure) must read as
   // absent, not $0. Recharts skips null bars; the tooltip shows an em dash.
   const chartData = data.map((d) => ({
@@ -572,7 +583,7 @@ export function CompareBars({
       <BarChart data={chartData} margin={{ left: 4, right: 8, top: 20, bottom: 0 }} barCategoryGap="26%" barGap={5}>
         <CartesianGrid vertical={false} />
         <XAxis dataKey="name" tickLine={false} axisLine={false} tickMargin={8} interval={0} />
-        <YAxis tickLine={false} axisLine={false} width={46} tickFormatter={fmt} />
+        <YAxis tickLine={false} axisLine={false} width={46} tickFormatter={axis} />
         <ChartTooltip cursor={{ fill: "var(--color-raise)" }} content={<ChartTooltipContent valueFormatter={(v) => fmt(v)} />} />
         {orderedKeys.map((k) => (
           <Bar key={k} dataKey={k} fill={`var(--color-${k})`} radius={[3, 3, 0, 0]} isAnimationActive={false} />
@@ -643,6 +654,7 @@ export function ComparePace({
   height?: number;
 }) {
   const fmt = formatFor(format);
+  const axis = axisFor(format);
   const all = [a, b, ...more];
   const len = Math.max(...all.map((xs) => xs.length));
   const cumulative = (xs: number[]) => {
@@ -666,7 +678,7 @@ export function ComparePace({
       <LineChart data={chartData} margin={{ left: 4, right: 12, top: 8, bottom: 0 }}>
         <CartesianGrid vertical={false} />
         <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} interval={tickEvery(len)} />
-        <YAxis tickLine={false} axisLine={false} width={44} tickFormatter={fmt} />
+        <YAxis tickLine={false} axisLine={false} width={44} tickFormatter={axis} />
         <ChartTooltip
           cursor={{ strokeDasharray: "3 3" }}
           content={<ChartTooltipContent labelFormatter={(l) => `Day ${l}`} valueFormatter={(v) => fmt(v)} />}
@@ -700,9 +712,9 @@ export function HistogramBars({
         <CartesianGrid vertical={false} />
         <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} interval={0} tick={{ fontSize: 11 }} />
         <YAxis hide />
-        <ChartTooltip cursor={{ fill: "var(--color-raise)" }} content={<ChartTooltipContent valueFormatter={(v) => `${Math.round(v * 100)}%`} />} />
+        <ChartTooltip cursor={{ fill: "var(--color-raise)" }} content={<ChartTooltipContent valueFormatter={(v) => `${(v * 100).toLocaleString("en-US", { maximumFractionDigits: 1 })}%`} />} />
         <Bar dataKey="value" fill="var(--color-value)" radius={[3, 3, 0, 0]} isAnimationActive={false}>
-          <LabelList dataKey="value" position="top" fill="var(--color-ink-dim)" fontSize={10.5} formatter={(v) => `${Math.round(Number(v) * 100)}%`} />
+          <LabelList dataKey="value" position="top" fill="var(--color-ink-dim)" fontSize={10.5} formatter={(v) => `${(Number(v) * 100).toLocaleString("en-US", { maximumFractionDigits: 1 })}%`} />
         </Bar>
       </BarChart>
     </ChartContainer>

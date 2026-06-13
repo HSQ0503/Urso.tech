@@ -28,13 +28,16 @@ export {
   RateTrend,
 } from "./charts";
 
-export function fmtMoney(n: number, compact = false): string {
-  if (compact && Math.abs(n) >= 1000) return `$${(n / 1000).toFixed(n % 1000 === 0 ? 0 : 1)}k`;
-  return `$${n.toLocaleString("en-US")}`;
+// No-rounding rule: dollars display exact to the cent, never truncated or
+// compacted to $x.xk. Axis tick labels (charts.tsx axisFor) are the only place
+// compaction is still allowed — Recharts picks round ticks, so nothing is lost.
+export function fmtMoney(n: number): string {
+  return `$${n.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
 }
 
-export function pct(n: number, digits = 0): string {
-  return `${(n * 100).toFixed(digits)}%`;
+// Rates show their first decimal by default ("67.1%", but "50%" stays "50%").
+export function pct(n: number, digits = 1): string {
+  return `${(n * 100).toLocaleString("en-US", { maximumFractionDigits: digits })}%`;
 }
 
 export function Micro({ children, className = "" }: { children: ReactNode; className?: string }) {
@@ -146,7 +149,7 @@ export function Delta({ value, invert = false }: { value: number; invert?: boole
       <svg width="7.5" height="7.5" viewBox="0 0 10 10" fill="currentColor" aria-hidden className={up ? "" : "rotate-180"}>
         <path d="M5 1.5 9 8.5 1 8.5Z" />
       </svg>
-      {Math.abs(value * 100).toFixed(0)}%
+      {Math.abs(value * 100).toLocaleString("en-US", { maximumFractionDigits: 1 })}%
     </span>
   );
 }

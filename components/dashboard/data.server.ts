@@ -23,6 +23,10 @@ import {
   type AgentAction,
   type Groomer,
   type TeamRow,
+  type ProductRow,
+  type ProductSort,
+  type SortDir,
+  PRODUCT_PAGE_SIZE,
   type ServiceLine,
   type WeeklyBrief,
   type BriefChange,
@@ -31,8 +35,10 @@ import {
 } from "./data";
 
 // ── small helpers (kept local so this module stays self-contained) ──────────
-const money = (n: number) => (Math.abs(n) >= 1000 ? `$${(n / 1000).toFixed(n % 1000 === 0 ? 0 : 1)}k` : `$${n.toLocaleString("en-US")}`);
-const pctStr = (n: number, d = 0) => `${(n * 100).toFixed(d)}%`;
+// No-rounding rule: dollars exact to the cent (no $x.xk compaction), rates to
+// their first decimal. Computations never round; these are display-only.
+const money = (n: number) => `$${n.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
+const pctStr = (n: number, d = 1) => `${(n * 100).toLocaleString("en-US", { maximumFractionDigits: d })}%`;
 const fullName = (id: StoreId) => STORE_OPTIONS.find((o) => o.value === id)!.label;
 const scopeIds = (scope: Scope): StoreId[] => (scope === "all" ? stores.map((s) => s.id) : [scope]);
 
@@ -211,11 +217,11 @@ function computeMetrics(scope: Scope, byStore: Record<StoreId, Agg>, listings: R
   const totalRev = ids.reduce((s, id) => s + byStore[id].rev, 0) || 1;
   const rating = ids.reduce((s, id) => s + (listings[id]?.rating ?? 0) * byStore[id].rev, 0) / totalRev;
   return {
-    revenue: Math.round(a.rev), bookings: a.bookings, grooming: Math.round(a.groom), retail: Math.round(a.retail),
+    revenue: a.rev, bookings: a.bookings, grooming: a.groom, retail: a.retail,
     groomingShare: a.groom + a.retail > 0 ? a.groom / (a.groom + a.retail) : 0,
     // Revenue on grooming tickets ÷ grooming tickets — NOT all revenue, which
     // would mix retail-only purchases into the numerator (showed $134 vs $95).
-    avgTicket: a.bookings ? Math.round(a.bookingRev / a.bookings) : 0,
+    avgTicket: a.bookings ? a.bookingRev / a.bookings : 0,
     // Return rate over IDENTIFIED grooming visits — anonymous walk-in tickets
     // (~10% of bookings) can never register a return, so leaving them in the
     // denominator would bias the rate down.
@@ -364,7 +370,7 @@ export async function getStoreRanking(metric: RankMetric, month: MonthValue) {
 // ── public: revenue map ─────────────────────────────────────────────────────
 export async function getRevenueByLocation(month: MonthValue) {
   const byStore = await loadDaily(month);
-  return stores.map((s) => ({ id: s.id, name: s.name, value: Math.round(byStore[s.id].rev) })).sort((a, b) => b.value - a.value);
+  return stores.map((s) => ({ id: s.id, name: s.name, value: byStore[s.id].rev })).sort((a, b) => b.value - a.value);
 }
 // Real items from product_sales_daily (RPC aggregates by name in the DB).
 // Top 5 per line so retail's long tail doesn't vanish under grooming.
@@ -377,10 +383,54 @@ export async function getRevenueByService(scope: Scope, month: MonthValue): Prom
   if (error) throw new Error(`product_revenue_by_name failed: ${error.message}`);
   type Row = { name: string; is_service: boolean; revenue: number; units: number };
   const rows = ((data ?? []) as unknown as Row[]).map((r) => ({
-    name: r.name, value: Math.round(Number(r.revenue)), line: (r.is_service ? "Grooming" : "Retail") as ServiceLine,
+    name: r.name, value: Number(r.revenue), line: (r.is_service ? "Grooming" : "Retail") as ServiceLine,
   }));
   const top = (line: ServiceLine) => rows.filter((r) => r.line === line).sort((a, b) => b.value - a.value).slice(0, 5);
   return [...top("Grooming"), ...top("Retail")].sort((a, b) => b.value - a.value);
+}
+
+// Full product catalog (Products page): every canonical item sold in the
+// period — search/sort/pagination happen in the product_catalog RPC so the
+// page never ships 10k rows. total_count rides on each row.
+export async function getProductCatalog(
+  scope: Scope,
+  month: MonthValue,
+  opts: { q?: string; sort: ProductSort; dir: SortDir; page: number },
+): Promise<{ rows: ProductRow[]; total: number } | null> {
+  const supabase = await createClient();
+  const range = monthRange(month);
+  const { data, error } = await supabase.rpc("product_catalog", {
+    p_store_ids: scopeIds(scope),
+    p_start: range?.start ?? null,
+    p_end: range?.end ?? null,
+    p_search: opts.q?.trim() || null,
+    p_sort: opts.sort,
+    p_dir: opts.dir,
+    p_limit: PRODUCT_PAGE_SIZE,
+    p_offset: (opts.page - 1) * PRODUCT_PAGE_SIZE,
+  });
+  // null = RPC not deployed yet (pre-0018) — the page renders a setup note
+  // instead of crashing, same pattern as getReturnRateTrend pre-0014.
+  if (error && /schema cache|does not exist/i.test(error.message)) return null;
+  if (error) throw new Error(`product_catalog failed: ${error.message}`);
+  type Row = { key: string; name: string; is_service: boolean; revenue: number; units: number; cost: number; stores: number; total_count: number };
+  const typed = (data ?? []) as unknown as Row[];
+  const rows = typed.map((r) => {
+    const revenue = Number(r.revenue);
+    const units = Number(r.units);
+    const cost = Number(r.cost);
+    return {
+      key: r.key,
+      name: r.name,
+      line: (r.is_service ? "Grooming" : "Retail") as ServiceLine,
+      revenue: Math.round(revenue),
+      units: Math.round(units),
+      avgPrice: units > 0 ? revenue / units : null,
+      margin: !r.is_service && revenue > 0 && cost > 0 ? (revenue - cost) / revenue : null,
+      stores: r.stores,
+    };
+  });
+  return { rows, total: Number(typed[0]?.total_count ?? 0) };
 }
 // True service revenue per groomer over the period (groomer_sales_daily),
 // replacing the old appts×avg_ticket×months approximation — appts was already
@@ -394,7 +444,7 @@ export async function getRevenueByGroomer(scope: Scope, month: MonthValue) {
   if (error) throw new Error(`groomer_revenue failed: ${error.message}`);
   type Row = { store_id: StoreId; name: string; revenue: number; appts: number };
   return ((data ?? []) as unknown as Row[])
-    .map((r) => ({ name: r.name, store: fullName(r.store_id), value: Math.round(Number(r.revenue)) }))
+    .map((r) => ({ name: r.name, store: fullName(r.store_id), value: Number(r.revenue) }))
     .sort((a, b) => b.value - a.value);
 }
 // Real split from metrics_daily. "New" = the customer's first visit day in our
@@ -403,9 +453,9 @@ export async function getRevenueByGroomer(scope: Scope, month: MonthValue) {
 export async function getRevenueNewVsRepeat(scope: Scope, month: MonthValue) {
   const a = sumScope(await loadDaily(month), scopeIds(scope));
   return {
-    repeat: Math.round(a.repeatRev),
-    fresh: Math.round(a.newRev),
-    walkIn: Math.max(0, Math.round(a.rev - a.newRev - a.repeatRev)),
+    repeat: a.repeatRev,
+    fresh: a.newRev,
+    walkIn: Math.max(0, a.rev - a.newRev - a.repeatRev),
   };
 }
 
@@ -432,7 +482,7 @@ export async function getCustomerIntel(scope: Scope) {
   const count = counts.reduce((a, c) => a + Number(c.customers), 0);
   const ltv = counts.reduce((a, c) => a + Number(c.ltv_sum), 0);
   const atRisk = counts.filter((c) => c.segment === "At risk" || c.segment === "Lapsed").reduce((a, c) => a + Number(c.customers), 0);
-  return { avgLtv: count ? Math.round(ltv / count) : 0, atRisk, count };
+  return { avgLtv: count ? ltv / count : 0, atRisk, count };
 }
 // Win-back list shape for the Customers page WinbackCard. The count is exact
 // (DB count of every actionable lapse); the displayed list is the 60 with the
@@ -449,7 +499,7 @@ export async function getWinbackList(scope: Scope) {
   const [{ count, error: countErr }, { data, error: listErr }] = await Promise.all([countQ, listQ]);
   if (countErr || listErr) throw new Error(`winback read failed: ${(countErr ?? listErr)!.message}`);
   const rows = ((data ?? []) as unknown as CustRow[]).map(toCustomerRow);
-  return { list: rows.map((c) => ({ name: c.name, store: c.store, last: `${c.lastVisit} days ago`, visits: c.visits })), count: count ?? rows.length };
+  return { list: rows.map((c) => ({ name: c.name, store: c.store, last: `${c.lastVisit} days ago`, visits: c.visits, ltv: c.ltv, segment: c.segment })), count: count ?? rows.length };
 }
 export async function getCustomersNeedingAttention(store: StoreId): Promise<CustomerRow[]> {
   const supabase = await createClient();
@@ -543,14 +593,14 @@ export async function getRetention(scope: Scope, month: MonthValue) {
   for (let k = 0; byOffset.has(k); k++) {
     const { e, r } = byOffset.get(k)!;
     if (e < 50) break;
-    cohort.push(Math.round((r / e) * 100));
+    cohort.push(Math.round((r / e) * 1000) / 10);
   }
 
   return {
     returningPct,
     newPct: 1 - returningPct,
     rebook: m.rebook,
-    cadenceDays: Math.round(Number(s?.avg_cadence_days ?? 0)),
+    cadenceDays: Math.round(Number(s?.avg_cadence_days ?? 0) * 10) / 10,
     oneAndDone: Number(s?.one_and_done90 ?? 0),
     winbackCount: wb.count,
     cohort: cohort.length > 1 ? cohort : [100],
@@ -618,9 +668,9 @@ export async function getWeeklyBrief(scope: Scope): Promise<WeeklyBrief> {
   ];
 
   const changes: BriefChange[] = [
-    { label: "Revenue", value: money(Math.round(a.rev)), delta: revD, good: revD >= 0 },
+    { label: "Revenue", value: money(a.rev), delta: revD, good: revD >= 0 },
     { label: "Bookings", value: a.bookings.toLocaleString(), delta: bookD, good: bookD >= 0 },
-    { label: "Avg visit", value: money(Math.round(avgVisit(a))), delta: avgD, good: avgD >= 0 },
+    { label: "Avg visit", value: money(avgVisit(a)), delta: avgD, good: avgD >= 0 },
     { label: "Return rate", value: pctStr(rebook), delta: rebookD, good: rebookD >= 0 },
   ];
   const dir = (n: number) => (n >= 0 ? "up" : "down");
@@ -637,7 +687,7 @@ export async function getWeeklyBrief(scope: Scope): Promise<WeeklyBrief> {
         : ["holding the current playbook", { title: "Hold the playbook — the next lever is call capture", detail: `Return rate and retail attach are both holding ${here}. The next measurable lever arrives when call tracking goes live.` }];
 
   const brief: WeeklyBrief = {
-    headline: `Revenue ${revD >= 0 ? "rose" : "eased"} to ${money(Math.round(a.rev))} ${here} this week, and ${lever} is the clearest opportunity to act on.`,
+    headline: `Revenue ${revD >= 0 ? "rose" : "eased"} to ${money(a.rev)} ${here} this week, and ${lever} is the clearest opportunity to act on.`,
     changes,
     wins: wins.length ? wins : ["Performance held steady across the headline metrics."],
     risks: risks.length ? risks : ["No metric moved materially in the wrong direction."],
@@ -738,7 +788,7 @@ export async function getTeamRoster(scope: Scope, month: MonthValue): Promise<Te
     .filter((r) => (roles.get(staffNameKey(r.name)) ?? "groomer") === "groomer")
     .map((r) => {
       const g = byKey.get(`${fullName(r.store_id)}|${staffNameKey(r.name)}`);
-      const revenue = Math.round(Number(r.revenue));
+      const revenue = Number(r.revenue);
       const appts = Number(r.appts);
       return {
         id: `${r.store_id}:${staffNameKey(r.name).replace(/ /g, "-")}`,
@@ -746,7 +796,7 @@ export async function getTeamRoster(scope: Scope, month: MonthValue): Promise<Te
         store: fullName(r.store_id),
         revenue,
         appts,
-        avgTicket: appts ? Math.round(revenue / appts) : 0,
+        avgTicket: appts ? revenue / appts : 0,
         share: 0,
         rebook: g?.rebook ?? null,
         attach: g?.attach ?? null,
@@ -789,7 +839,7 @@ export async function getSeries(scope: Scope, month: MonthValue) {
   const rows = (data ?? []) as unknown as SeriesBucket[];
   return {
     labels: rows.map((r) => (monthly ? MONTH_ABBR[Number(r.bucket.slice(5, 7)) - 1] : String(Number(r.bucket.slice(8, 10))))),
-    revenue: rows.map((r) => Math.round(Number(r.revenue))),
+    revenue: rows.map((r) => Number(r.revenue)),
     callsTotal: rows.map((r) => Number(r.calls_total)),
     callsMissed: rows.map((r) => Number(r.calls_missed)),
     webVisits: rows.map((r) => Number(r.web_visits)),
@@ -1062,7 +1112,7 @@ export type CompareData = {
 };
 
 const fmtVal = (n: number, format: CompareFormat) =>
-  format === "money" ? money(Math.round(n)) : format === "pct" ? pctStr(n) : Math.round(n).toLocaleString();
+  format === "money" ? money(n) : format === "pct" ? pctStr(n) : n.toLocaleString("en-US", { maximumFractionDigits: 2 });
 
 // Plain-English takeaways, deterministic and guarded: movers must clear a
 // volume floor so a $40 item "up 600%" never headlines, and rate metrics are
@@ -1074,12 +1124,12 @@ function buildInsights(rows: CompareRow[], format: CompareFormat, metricLabel: s
   if (rb > 0) {
     if (days.a === db) {
       const d = (revenue.a - rb) / rb;
-      out.push(`Revenue is ${d >= 0 ? "up" : "down"} ${pctStr(Math.abs(d))} — ${money(Math.round(revenue.a))} vs ${money(Math.round(rb))}.`);
+      out.push(`Revenue is ${d >= 0 ? "up" : "down"} ${pctStr(Math.abs(d))} — ${money(revenue.a)} vs ${money(rb)}.`);
     } else {
       const pa = revenue.a / days.a;
       const pb = rb / db;
       const d = (pa - pb) / pb;
-      out.push(`Per day, revenue is ${d >= 0 ? "up" : "down"} ${pctStr(Math.abs(d))} — ${money(Math.round(pa))}/day vs ${money(Math.round(pb))}/day (periods differ in length).`);
+      out.push(`Per day, revenue is ${d >= 0 ? "up" : "down"} ${pctStr(Math.abs(d))} — ${money(pa)}/day vs ${money(pb)}/day (periods differ in length).`);
     }
   }
   // Multi-year arc: the revenue progression oldest → newest in one line.
@@ -1087,7 +1137,7 @@ function buildInsights(rows: CompareRow[], format: CompareFormat, metricLabel: s
     const sameLen = days.bs.every((d) => d === days.a);
     const series = [...revenue.bs].reverse().concat(revenue.a);
     const daysSeries = [...days.bs].reverse().concat(days.a);
-    const arc = series.map((v, i) => money(Math.round(sameLen ? v : v / Math.max(1, daysSeries[i])))).join(" → ");
+    const arc = series.map((v, i) => money(sameLen ? v : v / Math.max(1, daysSeries[i]))).join(" → ");
     out.push(`The arc across all ${series.length} periods, oldest first: ${arc}${sameLen ? "" : " per day"}.`);
   }
   const floor = format === "money" ? 250 : format === "number" ? 10 : 0;
@@ -1097,7 +1147,7 @@ function buildInsights(rows: CompareRow[], format: CompareFormat, metricLabel: s
     .sort((x, y) => y.d - x.d);
   const describe = (r: { name: string; a: number | null; b: number | null; d: number }, dir: string) =>
     format === "pct"
-      ? `${r.name} ${dir} the most on ${metricLabel.toLowerCase()}: ${pctStr(r.b!)} → ${pctStr(r.a!)} (${r.d >= 0 ? "+" : "−"}${Math.abs(r.d * 100).toFixed(0)} pts).`
+      ? `${r.name} ${dir} the most on ${metricLabel.toLowerCase()}: ${pctStr(r.b!)} → ${pctStr(r.a!)} (${r.d >= 0 ? "+" : "−"}${Math.abs(r.d * 100).toLocaleString("en-US", { maximumFractionDigits: 1 })} pts).`
       : `${r.name} ${dir} the most: ${fmtVal(r.b!, format)} → ${fmtVal(r.a!, format)} (${r.d >= 0 ? "+" : "−"}${pctStr(Math.abs(r.d))}).`;
   if (movers.length >= 2) {
     const top = movers[0];
@@ -1262,20 +1312,38 @@ export async function getCompareData(mode: CompareMode, metricKey: string, a: Co
   } else {
     const supabase = await createClient();
     const ids = scopeIds(scope);
-    const call = (r: CompareRange) => supabase.rpc("product_revenue_by_name", { p_store_ids: ids, p_start: r.start, p_end: exclusiveEnd(r) });
+    type Row = { key: string; name: string; is_service: boolean; revenue: number; units: number; cost: number };
+    // PostgREST clips every response at 1,000 rows regardless of the SQL
+    // limit, and a single month sells ~1,500 distinct items — so page through
+    // with Range headers up to the RPC's own 2,500 cap.
+    const call = async (r: CompareRange): Promise<Row[]> => {
+      const out: Row[] = [];
+      for (let from = 0; from < 2500; from += 1000) {
+        const { data, error } = await supabase
+          .rpc("product_revenue_by_name", { p_store_ids: ids, p_start: r.start, p_end: exclusiveEnd(r) })
+          .range(from, Math.min(from + 999, 2499));
+        if (error) throw new Error(`product_revenue_by_name failed: ${error.message}`);
+        out.push(...((data ?? []) as unknown as Row[]));
+        if ((data?.length ?? 0) < 1000) break;
+      }
+      return out;
+    };
     const results = await Promise.all(periods.map(call));
-    const failed = results.find((r) => r.error);
-    if (failed) throw new Error(`product_revenue_by_name failed: ${failed.error!.message}`);
-    type Row = { name: string; is_service: boolean; revenue: number; units: number; cost: number };
     const merged = new Map<string, { name: string; svc: boolean; sides: (Row | undefined)[] }>();
     results.forEach((res, side) => {
-      for (const r of (res.data ?? []) as unknown as Row[]) {
-        const key = r.name.trim().toLowerCase();
-        const e = merged.get(key) ?? { name: r.name, svc: r.is_service, sides: [] };
+      for (const r of res) {
+        // Merge on the RPC's stable identity key — display spellings can
+        // differ between periods, the key cannot (migration 0018). Name
+        // fallback keeps Compare working until 0018 is applied.
+        const k = r.key ?? r.name.trim().toLowerCase();
+        const e = merged.get(k) ?? { name: r.name, svc: r.is_service, sides: [] };
         e.sides[side] = r;
-        merged.set(key, e);
+        merged.set(k, e);
       }
     });
+    if (results.some((res) => res.length >= 2500)) {
+      notes.push("A period here sold more than 2,500 distinct items — the smallest ones beyond that cap are excluded.");
+    }
     const margin = (r?: Row): number | null =>
       r && Number(r.revenue) > 0 && Number(r.cost) > 0 ? (Number(r.revenue) - Number(r.cost)) / Number(r.revenue) : null;
     const val = (r?: Row): number | null => {
@@ -1308,7 +1376,7 @@ export async function getCompareData(mode: CompareMode, metricKey: string, a: Co
       .sort((x, y) => y.vol - x.vol)
       .slice(0, 12)
       .map((e) => ({ key: e.key, name: e.name, tag: e.tag, a: e.a, b: e.b, more: e.more }));
-    notes.push("Table: top 12 items by volume. Deposits and gift cards are excluded (liabilities until redeemed); items merge by name.");
+    notes.push("Table: top 12 items by volume. Deposits and gift cards are excluded (liabilities until redeemed); register spellings of the same product merge by barcode and normalized name.");
   }
 
   rows.sort((x, y) => (y.a ?? -1) - (x.a ?? -1));

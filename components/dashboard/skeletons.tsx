@@ -300,3 +300,16 @@ export function CompareSkeleton() {
     </div>
   );
 }
+
+export function ProductsSkeleton() {
+  return (
+    <div>
+      <Header />
+      <div className="mb-6 flex items-center justify-between">
+        <Skeleton className="h-8 w-64 rounded-lg" />
+        <Skeleton className="h-3 w-28" />
+      </div>
+      <ListCard rows={10} />
+    </div>
+  );
+}

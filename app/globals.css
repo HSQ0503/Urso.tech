@@ -171,7 +171,6 @@
 }
 
 :root {
-  --brand-flash: #fe5100;
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 
   /* Research/reports palette (light-card editorial surface on the dark page) */
@@ -320,100 +319,99 @@ body {
   }
 }
 
-/* ===== Brand lockup ===== */
-.brand {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  color: #ffffff;
-  font-family: inherit;
-  font-weight: 500;
-  font-size: 24px;
-  letter-spacing: -0.02em;
-  line-height: 1;
-  text-decoration: none;
+/* ===== Site system (brand packet v1.0) =====
+   The marketing surface behaves like the operating layer Urso builds: black
+   field, hairline structure, mono instruments, one orange signal per view. */
+
+/* Bone contrast section — flips the semantic tokens locally, so every
+   component stays token-driven inside the 1–2 light moments per page. */
+.bone-scope {
+  color-scheme: light;
+  --color-bg: #f6f5f1;
+  --color-panel: #ffffff;
+  --color-panel-strong: #ffffff;
+  --color-edge: rgba(20, 23, 28, 0.1);
+  --color-edge-strong: rgba(20, 23, 28, 0.17);
+  --color-ink: #14171c;
+  --color-ink-dim: rgba(20, 23, 28, 0.62);
+  --color-ink-dimmer: rgba(20, 23, 28, 0.42);
+  --color-surface: #ffffff;
+  --color-cell: #ffffff;
+  --color-raise: rgba(20, 23, 28, 0.045);
+  --color-raise-strong: rgba(20, 23, 28, 0.08);
+  --color-track: rgba(20, 23, 28, 0.1);
+  --color-series: rgba(20, 23, 28, 0.34);
+  --color-series-soft: rgba(20, 23, 28, 0.16);
+  --color-axis: rgba(20, 23, 28, 0.5);
+  --color-grid: rgba(20, 23, 28, 0.08);
+  --color-good: #11935a;
+  background: var(--color-bg);
+  color: var(--color-ink);
 }
 
-@media (min-width: 768px) {
-  .brand {
-    font-size: 32px;
-  }
-}
-
-.brand--nav {
-  overflow: visible;
-}
-
-.brand-bear-wrap {
-  height: 42px;
-  aspect-ratio: 1 / 1;
-  display: grid;
-  place-items: center;
-  overflow: visible;
-  transform: translateY(0);
-}
-
-@media (min-width: 768px) {
-  .brand-bear-wrap {
-    height: 56px;
-  }
-}
-
-.brand-bear {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  transform-origin: 50% 100%;
-  will-change: transform;
-}
-
-.brand--nav .brand-word {
-  display: inline-flex;
-  white-space: nowrap;
-}
-
-.brand--nav .bw-letter {
-  display: inline-block;
+/* Scroll reveal — once, opacity/translate only, 320ms ease-out. */
+.reveal {
   opacity: 0;
-  transition: opacity 0.2s var(--ease-out)
-    calc(0.2s + var(--bi) * 0.06s);
-  will-change: transform, opacity;
+  transform: translateY(12px);
+  transition:
+    opacity 320ms var(--ease-out) var(--reveal-delay, 0ms),
+    transform 320ms var(--ease-out) var(--reveal-delay, 0ms);
 }
-
-/* Once the user has triggered the pounce, the wordmark stays visible. */
-.brand--pounced .bw-letter {
+.reveal.is-in {
   opacity: 1;
+  transform: none;
 }
 
-/* ===== The pounce ===== */
-.brand--nav:hover .brand-bear {
-  animation: bear-pounce 0.9s var(--ease-out);
+/* Direction line — the one signature stroke. Draws left to right on reveal. */
+.draw-path {
+  stroke-dasharray: var(--path-len, 800);
+  stroke-dashoffset: var(--path-len, 800);
+  transition: stroke-dashoffset 400ms var(--ease-out) var(--reveal-delay, 80ms);
+}
+.is-in .draw-path,
+.is-in.draw-path {
+  stroke-dashoffset: 0;
 }
 
-@keyframes bear-pounce {
-  0%   { transform: translateX(0)    translateY(0)   scale(1)         rotate(0deg); }
-  22%  { transform: translateX(-3px)                 scale(1.05, 0.88) rotate(0deg); }
-  52%  { transform: translateX(12px) translateY(-7px) scale(1.14)     rotate(-8deg); }
-  74%  { transform: translateX(6px)  translateY(0)   scale(1.05)      rotate(-2deg); }
-  100% { transform: translateX(0)    translateY(0)   scale(1)         rotate(0deg); }
+/* Advancing orange segment for phase flows. */
+.advance-line {
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 400ms var(--ease-out) var(--reveal-delay, 80ms);
+}
+.is-in .advance-line,
+.is-in.advance-line {
+  transform: scaleX(1);
 }
 
-/* ===== Letters knocked over in sequence ===== */
-.brand--nav:hover .bw-letter {
-  animation: bw-knock 0.5s var(--ease-out) both;
-  animation-delay: calc(0.2s + var(--bi) * 0.06s);
+/* Ledger row expansion — grid-rows trick, 240ms. */
+.ledger-panel {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 240ms var(--ease-out);
+}
+.ledger-panel[data-open="true"] {
+  grid-template-rows: 1fr;
+}
+.ledger-panel > div {
+  overflow: hidden;
 }
 
-@keyframes bw-knock {
-  0%   { transform: translateY(0)    rotate(0deg); }
-  40%  { transform: translateY(-8px) rotate(-9deg); color: var(--brand-flash); }
-  70%  { transform: translateY(2px)  rotate(3deg); }
-  100% { transform: translateY(0)    rotate(0deg); }
-}
-
-/* ===== Reduced motion ===== */
 @media (prefers-reduced-motion: reduce) {
-  .brand--nav:hover .brand-bear,
-  .brand--nav:hover .bw-letter { animation: none; }
-  .brand--nav:hover .brand-bear { transform: scale(1.06); }
+  .reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  .draw-path {
+    stroke-dashoffset: 0;
+    transition: none;
+  }
+  .advance-line {
+    transform: none;
+    transition: none;
+  }
+  .ledger-panel {
+    transition: none;
+  }
 }

@@ -26,6 +26,7 @@ import {
   fmtMoney,
   pct,
 } from "@/components/dashboard/ui";
+import Link from "next/link";
 import { CompareControls } from "@/components/dashboard/compare-controls";
 import { ChartInfo } from "@/components/dashboard/chart-info";
 
@@ -115,7 +116,7 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
           </div>
           {dayInfo.a !== dayInfo.bs[0] && revB > 0 && (
             <div className="mt-2 text-[12px] text-ink-dim">
-              Per day: {fmtMoney(Math.round(revenue.a / dayInfo.a))} vs {fmtMoney(Math.round(revB / dayInfo.bs[0]))}
+              Per day: {fmtMoney(revenue.a / dayInfo.a)} vs {fmtMoney(revB / dayInfo.bs[0])}
             </div>
           )}
         </div>
@@ -263,6 +264,14 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
       </Card>
       )}
 
+      {data && mode === "products" && (
+        <p className="-mt-2 text-[13px]">
+          <Link href="/dashboard/products" className="text-orange transition-opacity hover:opacity-80">
+            Browse the full product list →
+          </Link>
+        </p>
+      )}
+
       {(data?.notes ?? []).map((n, i) => (
         <p key={i} className="-mt-2 text-[12.5px] leading-[1.5] text-ink-dimmer">{n}</p>
       ))}
@@ -271,7 +280,7 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
 }
 
 const fmtBy = (format: CompareFormat) => (n: number) =>
-  format === "money" ? fmtMoney(Math.round(n)) : format === "pct" ? pct(n) : Math.round(n).toLocaleString();
+  format === "money" ? fmtMoney(n) : format === "pct" ? pct(n) : n.toLocaleString("en-US", { maximumFractionDigits: 2 });
 
 // Single days carry the weekday — a Tuesday losing to a Saturday is a calendar
 // fact, not a performance story.
@@ -341,7 +350,7 @@ function Period({ label, range, value, days, accent }: { label: string; range: C
   return (
     <div className="bg-cell p-4">
       <Micro className={accent ? "!text-orange" : undefined}>{label}</Micro>
-      <div className="mt-2.5 text-[26px] font-medium leading-none tracking-[-0.02em]">{fmtMoney(Math.round(value), true)}</div>
+      <div className="mt-2.5 text-[26px] font-medium leading-none tracking-[-0.02em]">{fmtMoney(value)}</div>
       <div className="mt-2 text-[12px] text-ink-dim">
         {rangeLabel(range)} · {days} {days === 1 ? "day" : "days"}
       </div>

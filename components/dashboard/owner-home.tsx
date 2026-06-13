@@ -193,7 +193,7 @@ export async function OwnerHome({ searchParams, userName, streak }: { searchPara
                   </div>
                   <span className="font-mono text-[12px] text-ink-dim">{fmtMoney(sm.avgTicket)} avg</span>
                 </div>
-                <div className="text-[27px] font-medium leading-none tracking-[-0.02em]">{fmtMoney(sm.revenue, true)}</div>
+                <div className="text-[27px] font-medium leading-none tracking-[-0.02em]">{fmtMoney(sm.revenue)}</div>
                 <div>
                   <div className="mb-1.5 flex items-center justify-between">
                     <Micro>Return</Micro>

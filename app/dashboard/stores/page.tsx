@@ -76,7 +76,7 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
                       <span className="text-ink">{s.name}</span>
                       <Micro className="mt-0.5">{s.tier}</Micro>
                     </td>
-                    <td className="px-5 py-3.5 text-right font-mono text-ink">{fmtMoney(m.revenue, true)}</td>
+                    <td className="px-5 py-3.5 text-right font-mono text-ink">{fmtMoney(m.revenue)}</td>
                     <td className="px-5 py-3.5 text-right font-mono text-ink-dim">{m.bookings.toLocaleString()}</td>
                     <td className="px-5 py-3.5 text-right font-mono text-ink-dim">{fmtMoney(m.avgTicket)}</td>
                     <td className="px-5 py-3.5 text-right font-mono text-ink-dim">{pct(m.groomingShare)}</td>
@@ -111,7 +111,7 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
             <ChartInfo id="storeRankRebook" />
           </div>
           <h2 className="mt-1.5 mb-4 text-[16px] font-medium tracking-[-0.01em]">By location</h2>
-          <BarRanking data={rank((r) => Math.round(r.m.rebook * 100))} format="pct" labelWidth={104} valueLabel="Return rate" />
+          <BarRanking data={rank((r) => Math.round(r.m.rebook * 1000) / 10)} format="pct" labelWidth={104} valueLabel="Return rate" />
         </Card>
         <Card>
           <div className="flex items-center gap-1.5">
@@ -119,7 +119,7 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
             <ChartInfo id="storeRankAttach" />
           </div>
           <h2 className="mt-1.5 mb-4 text-[16px] font-medium tracking-[-0.01em]">By location</h2>
-          <BarRanking data={rank((r) => Math.round(r.m.attach * 100))} format="pct" labelWidth={104} valueLabel="Retail attach" />
+          <BarRanking data={rank((r) => Math.round(r.m.attach * 1000) / 10)} format="pct" labelWidth={104} valueLabel="Retail attach" />
         </Card>
       </section>
 
