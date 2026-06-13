@@ -305,12 +305,24 @@ function FilterBar({ qs, pathname, lockedStore }: { qs: string; pathname: string
           onChange={(v) => setParam("store", v, "all")}
         />
       )}
-      <FilterSelect
-        glyph="calendar"
-        value={month}
-        options={MONTH_OPTIONS}
-        onChange={(v) => setParam("month", v, "all")}
-      />
+      {pathname.startsWith("/dashboard/compare") ? (
+        // Compare picks its own periods — a live month filter here would imply
+        // it scopes that page when it doesn't.
+        <span
+          title="The Compare page uses its own period picker below — the global month filter doesn't apply there."
+          className="inline-flex cursor-not-allowed items-center gap-1.5 rounded-full border border-edge bg-raise px-3 py-1.5 text-[11.5px] text-ink-dimmer opacity-60"
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="3.5" y="5" width="17" height="15" rx="2" /><path d="M3.5 9.5h17M8 3.5v3M16 3.5v3" /></svg>
+          <span className="font-medium">Dates set below</span>
+        </span>
+      ) : (
+        <FilterSelect
+          glyph="calendar"
+          value={month}
+          options={MONTH_OPTIONS}
+          onChange={(v) => setParam("month", v, "all")}
+        />
+      )}
     </div>
   );
 }

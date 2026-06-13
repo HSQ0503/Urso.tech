@@ -3,11 +3,11 @@
 // answered in place.
 
 const COLS: { label: string; desc: string }[] = [
-  { label: "$/hr", desc: "Revenue per labour hour — total revenue divided by hours worked. The cleanest read on productivity." },
-  { label: "Appts", desc: "Completed appointments in the selected period." },
-  { label: "Rebook", desc: "Share of customers who booked their next visit before leaving the chair." },
-  { label: "Attach", desc: "Share of grooming visits that also bought a retail item." },
-  { label: "Util", desc: "Utilisation — booked hours as a share of available hours." },
+  { label: "Revenue", desc: "Service revenue performed in the selected period — grooming lines FranPOS attributes to this groomer at checkout." },
+  { label: "Appts", desc: "Grooming appointments in the selected period." },
+  { label: "Avg ticket", desc: "Service revenue per appointment for the period." },
+  { label: "Return", desc: "Share of their customers who have ever come back for another visit (lifetime, not period)." },
+  { label: "Attach", desc: "Share of their grooming visits that also bought a retail item (lifetime, not period)." },
 ];
 
 export const GROOMER_COL_HELP = (

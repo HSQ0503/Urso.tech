@@ -38,7 +38,6 @@ export async function OwnerHome({ searchParams, userName, streak }: { searchPara
   const scope = parseScope(sp.store);
   const month = parseMonth(sp.month);
   const monthScoped = month !== "all";
-  const here = scope === "all" ? "across the four stores" : `at ${scopeLabel(scope)}`;
   const periodLabel = monthScoped ? monthLabel(month) : "Last 12 months";
 
   const [m, cs, ws, series, action, cards, deltas] = await Promise.all([
@@ -94,12 +93,12 @@ export async function OwnerHome({ searchParams, userName, streak }: { searchPara
                 <Micro>Revenue</Micro>
                 <AskAi
                   topic="Revenue trend"
-                  read={`Revenue ${here} is ${fmtMoney(m.revenue)} over ${monthScoped ? monthLabel(month) : "the last 12 months"}, trending up. This is measured directly from FranPOS, so it's solid ground.`}
-                  points={[
-                    "Grooming drives roughly two-thirds of revenue — it's recurring, so retention compounds it.",
-                    "The fastest growth here is recovering demand you already pay for: missed calls and online drop-off.",
+                  topicId="revenueTrend"
+                  suggestions={[
+                    "What's driving the revenue trend?",
+                    "Which store moved the most recently?",
+                    "How does this month compare to the same month last year?",
                   ]}
-                  recommendation="Don't chase more traffic yet — close the call-capture and rebooking leaks first. They convert demand you already have."
                 />
                 <ChartInfo id="revenueTrend" />
               </div>
@@ -123,10 +122,9 @@ export async function OwnerHome({ searchParams, userName, streak }: { searchPara
                 <Micro>Inbound calls</Micro>
                 <AskAi
                   topic="Inbound call capture"
+                  topicId="callsAnsweredMissed"
                   pending
-                  read={`${pct(cs.missedPct)} of inbound calls ${here} go unanswered — ${cs.missed.toLocaleString()} of ${cs.total.toLocaleString()}. The misses cluster after closing, when no one is at the desk.`}
-                  points={["An unanswered call is usually a booking that goes to a competitor.", "Call tracking isn't live yet — this is shaped like the Twilio feed."]}
-                  recommendation="Stand up the Twilio missed-call line so every unanswered call gets an instant text-back with a booking link."
+                  suggestions={["What would call tracking tell me?", "What's measurable today instead?"]}
                 />
                 <ChartInfo id="callsAnsweredMissed" />
               </div>
@@ -151,10 +149,9 @@ export async function OwnerHome({ searchParams, userName, streak }: { searchPara
                 <Micro>Website traffic vs bookings</Micro>
                 <AskAi
                   topic="Website traffic vs bookings"
+                  topicId="webTraffic"
                   pending
-                  read={`${ws.visits.toLocaleString()} people visited the site ${here} but only ${pct(ws.convRate, 1)} booked. The bars are visits; the line is how many became bookings — the gap between them is demand leaving without an appointment.`}
-                  points={["Most of the drop happens inside the booking form itself.", "Web analytics aren't wired yet — shaped like the GA4 feed."]}
-                  recommendation="Test a shorter, mobile-first booking form to recover the visitors abandoning mid-form."
+                  suggestions={["What would web tracking tell me?", "What's measurable today instead?"]}
                 />
                 <ChartInfo id="webTraffic" />
               </div>

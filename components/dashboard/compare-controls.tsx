@@ -3,7 +3,9 @@
 // Controls for the Compare page. All state lives in the URL (?mode, ?preset,
 // ?a, ?b, ?metric) so every comparison is shareable and the page itself stays
 // a server component. Custom ranges are applied explicitly (Apply button) so
-// half-edited dates never trigger a fetch.
+// half-edited dates never trigger a fetch. Custom mode allows up to three
+// baseline periods (?b= holds them comma-separated) — enough for "this June
+// vs the last two Junes" without turning the chart into noise.
 
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -15,22 +17,24 @@ import {
   type ComparePreset,
 } from "./data";
 
+const MAX_BASELINES = 3;
+
 type Range = { start: string; end: string };
 type Props = {
   mode: CompareMode;
   preset: ComparePreset;
   metric: string;
   a: Range;
-  b: Range;
+  bs: Range[];
   minDate: string;
   maxDate: string;
 };
 
-export function CompareControls({ mode, preset, metric, a, b, minDate, maxDate }: Props) {
+export function CompareControls({ mode, preset, metric, a, bs, minDate, maxDate }: Props) {
   const router = useRouter();
   const sp = useSearchParams();
   const [draftA, setDraftA] = useState(a);
-  const [draftB, setDraftB] = useState(b);
+  const [draftBs, setDraftBs] = useState<Range[]>(bs);
 
   const push = (updates: Record<string, string | null>) => {
     const params = new URLSearchParams(sp.toString());
@@ -40,6 +44,8 @@ export function CompareControls({ mode, preset, metric, a, b, minDate, maxDate }
     }
     router.push(`/dashboard/compare?${params.toString()}`, { scroll: false });
   };
+
+  const setB = (i: number, r: Range) => setDraftBs(draftBs.map((b, j) => (j === i ? r : b)));
 
   return (
     <div className="space-y-4 rounded-2xl border border-edge bg-panel p-5">
@@ -64,19 +70,53 @@ export function CompareControls({ mode, preset, metric, a, b, minDate, maxDate }
       </Row>
 
       {preset === "custom" && (
-        <div className="flex flex-wrap items-end gap-x-6 gap-y-3 border-t border-edge pt-4">
-          <RangeInputs label="This period (A)" value={draftA} onChange={setDraftA} min={minDate} max={maxDate} />
-          <RangeInputs label="Compare against (B)" value={draftB} onChange={setDraftB} min={minDate} max={maxDate} />
-          <button
-            onClick={() => push({ preset: "custom", a: `${draftA.start}..${draftA.end}`, b: `${draftB.start}..${draftB.end}` })}
-            className="rounded-lg bg-orange px-4 py-2 text-[13px] font-medium text-white transition hover:brightness-110"
-          >
-            Apply
-          </button>
+        <div className="space-y-3 border-t border-edge pt-4">
+          <div className="flex flex-wrap items-end gap-x-6 gap-y-3">
+            <RangeInputs label="This period (A)" value={draftA} onChange={setDraftA} min={minDate} max={maxDate} />
+            {draftBs.map((b, i) => (
+              <div key={i} className="flex items-end gap-2">
+                <RangeInputs
+                  label={i === 0 ? "Compare against (B)" : `And also (${String.fromCharCode(67 + i - 1)})`}
+                  value={b}
+                  onChange={(r) => setB(i, r)}
+                  min={minDate}
+                  max={maxDate}
+                />
+                {i > 0 && (
+                  <button
+                    onClick={() => setDraftBs(draftBs.filter((_, j) => j !== i))}
+                    aria-label="Remove this period"
+                    className="rounded-lg border border-edge px-2 py-1.5 text-[12px] text-ink-dim transition-colors hover:border-edge-strong hover:text-ink"
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => push({ preset: "custom", a: `${draftA.start}..${draftA.end}`, b: draftBs.map((b) => `${b.start}..${b.end}`).join(",") })}
+              className="rounded-lg bg-orange px-4 py-2 text-[13px] font-medium text-white transition hover:brightness-110"
+            >
+              Apply
+            </button>
+            {draftBs.length < MAX_BASELINES && (
+              <button
+                onClick={() => setDraftBs([...draftBs, draftBs[draftBs.length - 1]])}
+                className="rounded-lg border border-edge px-3 py-2 text-[12.5px] text-ink-dim transition-colors hover:border-edge-strong hover:text-ink"
+              >
+                + Add another period
+              </button>
+            )}
+          </div>
         </div>
       )}
 
       <Row label="Metric">
+        <Chip active={metric === "all"} onClick={() => push({ metric: "all" })}>
+          All metrics
+        </Chip>
         {COMPARE_METRICS[mode].map((m) => (
           <Chip key={m.key} active={metric === m.key} onClick={() => push({ metric: m.key })}>
             {m.label}

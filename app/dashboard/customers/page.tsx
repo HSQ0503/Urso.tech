@@ -11,6 +11,8 @@ import {
   getCustomersByValue,
   getCustomerIntel,
   getRetention,
+  getReturnRateTrend,
+  getKpiDeltas,
   getWinbackList,
 } from "@/components/dashboard/data.server";
 import {
@@ -18,10 +20,12 @@ import {
   PageHeader,
   Micro,
   Tag,
+  Delta,
   DonutSplit,
   CohortCurve,
   StackedShareBar,
   HistogramBars,
+  RateTrend,
   fmtMoney,
   pct,
 } from "@/components/dashboard/ui";
@@ -41,6 +45,12 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
   const intel = await getCustomerIntel(scope);
   const retention = await getRetention(scope, month);
   const winback = await getWinbackList(scope);
+  const deltas = await getKpiDeltas(scope, month);
+  const trend = await getReturnRateTrend(scope);
+
+  // Dormant only earns a cell once the re-segmentation (migration 0014) has
+  // run — before that the count is 0 and a five-cell grid would just confuse.
+  const segCells = segments.filter((s) => s.segment !== "Dormant" || s.count > 0);
 
   return (
     <div className="animate-stage-in">
@@ -50,12 +60,29 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
         sub="Grooming is recurring revenue, so retention is the clearest indicator of long-term performance. These figures track repeat behaviour, cross-selling, and customers who have lapsed."
       />
 
-      <section className="grid grid-cols-2 gap-x-8 gap-y-6 border-y border-edge py-7 md:grid-cols-4">
-        <Stat label="Returning" value={pct(retention.returningPct)} sub="of customers come back after their first visit" />
-        <Stat label="Return rate" value={pct(m.rebook)} sub="of profiled visits are 90-day returns" />
-        <Stat label="Grooming cycle" value={retention.cycle.medianDays ? `${retention.cycle.medianDays} days` : "—"} sub="median time between grooms" />
-        <Stat label="Single-visit" value={retention.oneAndDone.toLocaleString()} sub="came once, no return in 90+ days" accent />
+      <section className="border-y border-edge py-7">
+        <div className="grid grid-cols-2 gap-x-8 gap-y-6 md:grid-cols-4">
+          <Stat label="Returning" value={pct(retention.returningPct)} sub="of customers come back after their first visit" />
+          <Stat label="Return rate" value={pct(m.rebook)} sub="of profiled visits are 90-day returns" delta={deltas.rebook} />
+          <Stat label="Grooming cycle" value={retention.cycle.medianDays ? `${retention.cycle.medianDays} days` : "—"} sub="median time between grooms" />
+          <Stat label="Single-visit" value={retention.oneAndDone.toLocaleString()} sub="came once, no return in 90+ days" accent />
+        </div>
+        <p className="mt-5 font-mono text-[10px] uppercase tracking-[0.12em] text-ink-dimmer">
+          Returning, cycle &amp; single-visit cover all recorded history (Jan 2024 →) · Return rate follows the month filter
+        </p>
       </section>
+
+      {trend && (
+        <Card className="mt-5">
+          <div className="flex items-center gap-1.5">
+            <Micro>Return rate · by month, trailing year</Micro>
+            <ChartInfo id="returnRateTrend" />
+          </div>
+          <div className="mt-3">
+            <RateTrend data={trend} />
+          </div>
+        </Card>
+      )}
 
       <div className="mt-8 grid grid-cols-1 gap-5 lg:grid-cols-2">
         <Card className="flex flex-col gap-6">
@@ -132,11 +159,11 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
             <Micro>Customer intelligence</Micro>
             <h2 className="mt-1.5 text-[18px] font-medium tracking-[-0.01em]">Value, risk &amp; next action</h2>
           </div>
-          <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-dimmer">Avg LTV {fmtMoney(intel.avgLtv)}</span>
+          <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-dimmer">Avg LTV {fmtMoney(intel.avgLtv)} · all history</span>
         </div>
 
-        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-edge bg-edge md:grid-cols-4">
-          {segments.map((s) => {
+        <div className={`grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-edge bg-edge ${segCells.length === 5 ? "md:grid-cols-5" : "md:grid-cols-4"}`}>
+          {segCells.map((s) => {
             const risk = s.segment === "At risk" || s.segment === "Lapsed";
             return (
               <div key={s.segment} className="bg-cell p-4">
@@ -181,6 +208,9 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
             </table>
           </div>
         </Card>
+        <p className="mt-2.5 text-[11.5px] leading-[1.5] text-ink-dimmer">
+          Customers without a name on file (incomplete FranPOS profiles, house accounts) are excluded from this list and the win-back queue — their revenue still counts everywhere else.
+        </p>
       </section>
 
       <WinbackCard list={winback.list} winbackCount={winback.count} />
@@ -188,11 +218,14 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
   );
 }
 
-function Stat({ label, value, sub, accent }: { label: string; value: string; sub: string; accent?: boolean }) {
+function Stat({ label, value, sub, accent, delta }: { label: string; value: string; sub: string; accent?: boolean; delta?: number | null }) {
   return (
     <div>
       <Micro>{label}</Micro>
-      <div className={`mt-2 text-[34px] font-medium leading-none tracking-[-0.02em] ${accent ? "text-orange" : "text-ink"}`}>{value}</div>
+      <div className={`mt-2 flex items-baseline gap-2 text-[34px] font-medium leading-none tracking-[-0.02em] ${accent ? "text-orange" : "text-ink"}`}>
+        {value}
+        {delta != null && <Delta value={delta} />}
+      </div>
       <div className="mt-1.5 text-[12.5px] text-ink-dim">{sub}</div>
     </div>
   );

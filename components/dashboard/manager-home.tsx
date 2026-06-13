@@ -12,10 +12,10 @@ import {
   getStoreRanking,
   getStoreScores,
   getAgentActionsForStore,
-  getGroomersForStore,
+  getTeamRoster,
   getCustomersNeedingAttention,
 } from "@/components/dashboard/data.server";
-import { Card, Micro, Tag, Delta, Meter, BarRanking, WelcomeBanner, fmtMoney, pct } from "@/components/dashboard/ui";
+import { Card, Micro, Tag, Delta, BarRanking, WelcomeBanner, fmtMoney, pct } from "@/components/dashboard/ui";
 import { ActionItemCard } from "@/components/dashboard/action-item-card";
 import { StoreScoreboard } from "@/components/dashboard/store-scoreboard";
 import { InfoTip } from "@/components/dashboard/info-tip";
@@ -44,7 +44,7 @@ export async function ManagerHome({ store, month, userName, streak }: { store: S
     getStoreRanking("attach", month),
     getStoreScores(month),
     getAgentActionsForStore(store),
-    getGroomersForStore(store),
+    getTeamRoster(store, month),
     getCustomersNeedingAttention(store),
   ]);
 
@@ -158,7 +158,7 @@ export async function ManagerHome({ store, month, userName, streak }: { store: S
             <table className="w-full min-w-[620px] border-collapse text-[13.5px]">
               <thead>
                 <tr className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-dimmer">
-                  {["Groomer", "Rev / hr", "Return", "Retail attach", "Utilization"].map((h, i) => (
+                  {["Groomer", "Revenue", "Avg ticket", "Return", "Retail attach"].map((h, i) => (
                     <th key={h} className={`px-5 py-3 font-normal ${i === 0 ? "text-left" : "text-right"}`}>{h}</th>
                   ))}
                 </tr>
@@ -173,15 +173,10 @@ export async function ManagerHome({ store, month, userName, streak }: { store: S
                         {g.flag === "coach" && <Tag tone="orange">Coach</Tag>}
                       </div>
                     </td>
-                    <td className="px-5 py-3.5 text-right font-mono text-ink">{fmtMoney(g.revPerHr)}</td>
-                    <td className="px-5 py-3.5 text-right font-mono" style={{ color: g.rebook < 0.45 ? ORANGE : "var(--color-ink-dim)" }}>{pct(g.rebook)}</td>
-                    <td className="px-5 py-3.5 text-right font-mono text-ink-dim">{pct(g.attach)}</td>
-                    <td className="px-5 py-3.5">
-                      <div className="flex items-center justify-end gap-2.5">
-                        <span className="w-24"><Meter value={g.util} /></span>
-                        <span className="w-9 text-right font-mono text-ink-dim">{pct(g.util)}</span>
-                      </div>
-                    </td>
+                    <td className="px-5 py-3.5 text-right font-mono text-ink">{fmtMoney(g.revenue, true)}</td>
+                    <td className="px-5 py-3.5 text-right font-mono text-ink-dim">{fmtMoney(g.avgTicket)}</td>
+                    <td className="px-5 py-3.5 text-right font-mono" style={{ color: g.rebook != null && g.rebook < 0.45 ? ORANGE : "var(--color-ink-dim)" }}>{g.rebook == null ? "—" : pct(g.rebook)}</td>
+                    <td className="px-5 py-3.5 text-right font-mono text-ink-dim">{g.attach == null ? "—" : pct(g.attach)}</td>
                   </tr>
                 ))}
               </tbody>

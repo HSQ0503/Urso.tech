@@ -98,7 +98,7 @@ export const CHART_GUIDES = {
   },
   newVsRepeat: {
     summary: "How much revenue comes from repeat customers versus first-time ones.",
-    read: "The bar is 100% of revenue, split by customer type. 'New' means the customer's first visit in our recorded history (from June 2025); 'Walk-in' is revenue rung on the store's house account with no customer profile attached. A larger repeat share means a stickier base — grooming is recurring, so repeat revenue is the durable kind.",
+    read: "The bar is 100% of revenue, split by customer type. 'New' means the customer's first visit in our recorded history (from January 2024); 'Walk-in' is revenue rung on the store's house account with no customer profile attached. A larger repeat share means a stickier base — grooming is recurring, so repeat revenue is the durable kind.",
     legend: [
       { color: ORANGE, label: "Repeat customers" },
       { color: SERIES, label: "New customers" },
@@ -194,7 +194,13 @@ export const CHART_GUIDES = {
     summary: "Of the customers who started in a given month, how many are still active as time passes.",
     read: "The X axis is months since a customer's first visit; the Y axis is the percent whose visits continued at least that long. Only genuinely new customers count (first seen after the first 90 days of our history, so pre-existing regulars don't pollute the curve). A flatter decline means more durable revenue.",
     legend: [{ color: ORANGE, label: "Still active", shape: "line" }],
-    source: "FranPOS order history, June 2025 onward",
+    source: "FranPOS order history, January 2024 onward",
+  },
+  returnRateTrend: {
+    summary: "The share of grooming visits that are 90-day returns, month by month over the trailing year.",
+    read: "Each point is one month; the Y axis is the percent of identified grooming visits where the customer's previous service visit was within the prior 90 days. Anonymous walk-in tickets are excluded from the denominator — they can never register a return. A stable or rising line means the base keeps coming back; a slide is the earliest retention warning you'll get.",
+    legend: [{ color: ORANGE, label: "Return rate", shape: "line" }],
+    source: FRANPOS,
   },
   ratingDistribution: {
     summary: "How this store's reviews break down across one to five stars.",
@@ -206,15 +212,9 @@ export const CHART_GUIDES = {
     source: GBP,
   },
   productivityRank: {
-    summary: "Groomers ranked by revenue per labour hour — the team's productivity view.",
-    read: "Each bar is one groomer; longer is more revenue produced per hour worked. It's a coaching lens, not a leaderboard — read it next to rebooking and retention, never on its own.",
+    summary: "Groomers ranked by service revenue for the selected period — grooming lines only, attributed by FranPOS salesperson.",
+    read: "Each bar is one groomer; longer is more service revenue from their chair in this period. It's a coaching lens, not a leaderboard — read it next to return rate and attach, never on its own. Revenue per labour hour replaces this ranking once labour-hours data is available.",
     legend: [{ color: TRACK, label: "Groomer" }],
-    source: FRANPOS,
-  },
-  groomerRetention: {
-    summary: "For the selected groomer, how many of their clients keep coming back over time.",
-    read: "The X axis is months since a client's first visit with them; the Y axis is the percent still active. A higher, flatter curve means this groomer builds loyalty.",
-    legend: [{ color: ORANGE, label: "Still active", shape: "line" }],
     source: FRANPOS,
   },
 } satisfies Record<string, ChartGuide>;

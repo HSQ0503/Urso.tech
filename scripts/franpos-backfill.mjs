@@ -131,8 +131,67 @@ const argVal = (name) => {
 };
 const FROM = argVal("--from"); // range mode: extend staging without wiping
 const TO = argVal("--to") ?? iso(new Date());
+const IDENTITIES_FROM = argVal("--identities-only"); // names/pets only — no orders, no wipe, no rollup
+const STORES_FILTER = argVal("--stores")?.split(","); // e.g. --stores wp,wm — limit identity passes to truncated stores
+// 18 consecutive empty 30-day windows (~1.5y) before concluding we're past the
+// oldest record. 4 proved too eager: the COVID-2020 registration drought hit 4+
+// empty windows mid-history and silently cut off everything older (WP kept 45%
+// unnamed until the old side was re-walked).
+const EMPTY_STOP = 18;
 
-console.log(`\n━━ FranPOS backfill ${FROM ? `(range ${FROM} → ${TO})` : "(last 12 months)"} ━━━━━━━━━━━━━━━━━━━━`);
+console.log(`\n━━ FranPOS backfill ${IDENTITIES_FROM ? `(identities ${IDENTITIES_FROM} → ${TO})` : FROM ? `(range ${FROM} → ${TO})` : "(last 12 months)"} ━━━━━━━━━━━━━━━━━━━━`);
+
+// ── identities-only mode ─────────────────────────────────────────────────────
+// The v1/customers feed appears keyed on registration date, so regulars who
+// signed up BEFORE the order-history window have no identity row — the rollup
+// shows them as "—" (58% of customers after the 2024 deep backfill). This mode
+// re-walks ONLY the identity feed, newest window first, and stops after 4
+// consecutive empty windows (past the oldest record). The upsert carries just
+// id/name/pet/store/client, so computed stats are untouched and no rollup runs.
+if (IDENTITIES_FROM) {
+  for (const store of STORES.filter((s) => !STORES_FILTER || STORES_FILTER.includes(s.id))) {
+    if (!store.token) {
+      console.log(`⚠ ${store.name}: no FRANPOS_TOKEN_${store.id.toUpperCase()} in .env.local — SKIPPED`);
+      continue;
+    }
+    const t0 = Date.now();
+    const identities = new Map();
+    let empty = 0;
+    for (const from of windowsBetween(IDENTITIES_FROM, TO).reverse()) {
+      let rows = [];
+      try {
+        rows = await dumpAll("v1/customers", store.token, from, store.loc, "customers");
+      } catch (e) {
+        console.log(`  ⚠ customers window ${from} failed (${String(e.message).slice(0, 80)}) — identities may be partial`);
+        continue;
+      }
+      if (rows.length === 0) {
+        if (++empty >= EMPTY_STOP) break;
+        continue;
+      }
+      empty = 0;
+      for (const c of rows) {
+        if (c.CustomerId == null || identities.has(String(c.CustomerId))) continue; // newest window wins
+        const owner = (c.LastName ?? "").trim();
+        const pet = (c.FirstName ?? "").trim();
+        identities.set(String(c.CustomerId), {
+          id: String(c.CustomerId),
+          client_id: CLIENT_ID,
+          store_id: store.id,
+          name: owner || pet || "—",
+          pet: pet || null,
+        });
+      }
+    }
+    await upsertChunks("customers", [...identities.values()], "id");
+    console.log(`✓ ${store.name.padEnd(18)} ${String(identities.size).padStart(5)} identities  (${Math.round((Date.now() - t0) / 1000)}s)`);
+    const quota = await fetch(`${BASE}/checkUsageLimit?Token=${store.token}`).then((r) => r.json()).catch(() => null);
+    if (quota?.result?.[0]) console.log(`  quota: ${quota.result[0]}`);
+  }
+  console.log(`\n✓ identities done — ${callsUsed} successful API calls. Names land in place; no rollup needed.`);
+  process.exit(0);
+}
+
 if (!ROLLUP_ONLY && !FROM) {
   console.log("⚠ Wiping FranPOS-sourced SEED data (metrics_daily, customers, groomers).");
   console.log("  Real rows replace them; calls/web columns go to 0 until Twilio/GA4 land.\n");

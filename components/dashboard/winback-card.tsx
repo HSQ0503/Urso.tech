@@ -93,7 +93,7 @@ export function WinbackCard({ list, winbackCount }: { list: Inactive[]; winbackC
           </p>
         ) : (
           <p className="text-[13.5px] leading-[1.6] text-ink-dim">
-            This sends a personalised rebooking link to every customer inactive 60+ days who previously visited. Messages are spaced over a few days so it never feels like spam — and nothing sends until you launch.
+            This sends a personalised rebooking link to every customer inactive between 60 days and a year. Customers gone longer are marked dormant and left out — a rebooking nudge two years later reads as spam. Messages are spaced over a few days, and nothing sends until you launch.
           </p>
         )}
       </Modal>

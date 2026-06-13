@@ -25,6 +25,7 @@ export {
   CompareDiverging,
   ComparePace,
   HistogramBars,
+  RateTrend,
 } from "./charts";
 
 export function fmtMoney(n: number, compact = false): string {

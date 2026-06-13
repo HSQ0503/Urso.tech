@@ -56,7 +56,6 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
   const funnel = await getFunnel(scope, month);
   const xs = await getCrossSell(scope, month);
   const hourly = await getCallsHourly(scope, month);
-  const here = scope === "all" ? "across the four stores" : `at ${scopeLabel(scope)}`;
   const period = month === "all" ? "Last 12 months" : monthLabel(month);
 
   return (
@@ -76,10 +75,9 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
             <div className="flex items-center gap-2">
               <AskAi
                 topic="Inbound call capture"
+                topicId="callsAnsweredMissed"
                 pending
-                read={`${pct(cs.missedPct)} of inbound calls ${here} go unanswered — ${cs.missed.toLocaleString()} of ${cs.total.toLocaleString()}. The misses cluster in the busy midday hours and after closing.`}
-                points={["Every missed call is usually a booking that goes to a competitor.", "Call tracking isn't live yet — shaped like the Twilio feed."]}
-                recommendation="Stand up the Twilio missed-call line so every unanswered call gets an instant text-back with a booking link."
+                suggestions={["What would call tracking tell me?", "What's measurable today instead?"]}
               />
               <Tag tone="muted">Call tracking pending</Tag>
             </div>
@@ -148,10 +146,9 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
             <div className="flex items-center gap-2">
               <AskAi
                 topic="Booking conversion"
+                topicId="bookingFunnel"
                 pending
-                read={`Only ${pct(ws.convRate, 1)} of website visitors ${here} finish a booking. Most drop out inside the booking form itself, not before it.`}
-                points={["The biggest single drop is between starting and completing the form.", "Web analytics aren't wired yet — shaped like the GA4 feed."]}
-                recommendation="Ship a shorter, mobile-first booking form and A/B test it against the current one."
+                suggestions={["What would web tracking tell me?", "What's measurable today instead?"]}
               />
               <Tag tone="muted">Analytics pending</Tag>
             </div>
@@ -206,9 +203,12 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
             <div className="flex items-center gap-2">
               <AskAi
                 topic="Revenue and mix"
-                read={`Revenue ${here} is ${fmtMoney(m.revenue)}, with grooming about ${pct(m.groomingShare)} of the mix. Retail attaches to ${pct(m.attach)} of grooming visits.`}
-                points={["Grooming is recurring, so retention compounds this line.", "Lifting retail attach is the simplest lever on average ticket."]}
-                recommendation={m.attach < 0.25 ? "Attach is low — prompt a relevant add-on at checkout based on the pet's history." : "Hold attach where it is and protect rebooking — both defend recurring revenue."}
+                topicId="revenueTrend"
+                suggestions={[
+                  "How is the grooming vs retail mix trending?",
+                  "Which products drive retail revenue?",
+                  "Where is retail attach weakest?",
+                ]}
               />
               <Tag tone="good">Measurable now</Tag>
             </div>

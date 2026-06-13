@@ -144,6 +144,23 @@ export type Groomer = {
   flag?: "star" | "coach";
 };
 
+// Team page row: revenue and appts are period-scoped (groomer_revenue RPC);
+// rebook/attach are lifetime shares from the groomers table, null when the
+// groomer has too little history there. Revenue per labour hour is deliberately
+// absent until a labour-hours source exists (FranPOS timeclocks or payroll).
+export type TeamRow = {
+  id: string;
+  name: string;
+  store: string;
+  revenue: number;
+  appts: number;
+  avgTicket: number;
+  share: number;
+  rebook: number | null;
+  attach: number | null;
+  flag?: "star" | "coach";
+};
+
 export const groomers: Groomer[] = [
   { id: "maria", name: "Maria Reyes", store: "Winter Park", revPerHr: 118, appts: 96, rebook: 0.68, attach: 0.41, avgTicket: 102, util: 0.88, flag: "star" },
   { id: "james", name: "James Cole", store: "Winter Garden", revPerHr: 104, appts: 88, rebook: 0.61, attach: 0.34, avgTicket: 94, util: 0.82 },
@@ -860,7 +877,8 @@ export function actionPlanFor(a: AgentAction): ActionPlan {
 //  Customer Intelligence — value, risk and the next best action
 // ============================================================================
 
-export type CustomerSegment = "VIP" | "Loyal" | "At risk" | "Lapsed";
+// Dormant (>365d) keeps two-year-old churn out of the actionable win-back pool.
+export type CustomerSegment = "VIP" | "Loyal" | "At risk" | "Lapsed" | "Dormant";
 export type CustomerRow = {
   name: string;
   pet: string;
@@ -1128,7 +1146,7 @@ export function customersNeedingAttention(store: StoreId): CustomerRow[] {
 // ============================================================================
 
 export type CompareMode = "stores" | "groomers" | "products";
-export type ComparePreset = "mom" | "yoy" | "30d" | "custom";
+export type ComparePreset = "mom" | "yoy" | "years" | "30d" | "custom";
 export type CompareFormat = "money" | "number" | "pct";
 export type CompareMetricDef = { key: string; label: string; format: CompareFormat };
 
@@ -1141,6 +1159,7 @@ export const COMPARE_MODES: { value: CompareMode; label: string }[] = [
 export const COMPARE_PRESETS: { value: ComparePreset; label: string }[] = [
   { value: "mom", label: "vs last month" },
   { value: "yoy", label: "vs last year" },
+  { value: "years", label: "This month · each year" },
   { value: "30d", label: "Last 30 days" },
   { value: "custom", label: "Custom dates" },
 ];
@@ -1173,5 +1192,6 @@ export function parseComparePreset(v?: string | null): ComparePreset {
   return COMPARE_PRESETS.some((p) => p.value === v) ? (v as ComparePreset) : "mom";
 }
 export function parseCompareMetric(mode: CompareMode, v?: string | null): string {
+  if (v === "all") return "all"; // overview: every metric as small multiples
   return COMPARE_METRICS[mode].some((m) => m.key === v) ? (v as string) : COMPARE_METRICS[mode][0].key;
 }

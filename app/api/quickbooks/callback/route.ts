@@ -3,7 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 // Step 2 of the QuickBooks OAuth flow. Intuit redirects the owner here with a
 // one-time `code` + `realmId`. We swap the code for tokens and store them.
-const TOKEN_URL = "https://oauth.platform.intuit.com/oauth2/v1/tokens";
+const TOKEN_URL = "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer";
 
 function done(req: NextRequest, status: "ok" | "error") {
   const res = NextResponse.redirect(new URL(`/quickbooks/connected?status=${status}`, req.url));
@@ -27,6 +27,13 @@ export async function GET(req: NextRequest) {
 
   // Verify the round-trip before trusting anything.
   if (!code || !realmId || !state || !saved || saved.state !== state) {
+    console.error("[qbo callback] round-trip check failed", {
+      hasCode: !!code,
+      hasRealmId: !!realmId,
+      hasState: !!state,
+      hasCookie: !!saved,
+      stateMatches: !!saved && saved.state === state,
+    });
     return done(req, "error");
   }
 
@@ -51,7 +58,11 @@ export async function GET(req: NextRequest) {
     }),
   });
 
-  if (!tokenRes.ok) return done(req, "error");
+  if (!tokenRes.ok) {
+    const body = await tokenRes.text().catch(() => "");
+    console.error(`[qbo callback] token exchange failed (${tokenRes.status}):`, body.slice(0, 300));
+    return done(req, "error");
+  }
   const t = (await tokenRes.json()) as {
     access_token: string;
     refresh_token: string;
@@ -75,5 +86,6 @@ export async function GET(req: NextRequest) {
     { onConflict: "client_id,realm_id" },
   );
 
+  if (error) console.error("[qbo callback] supabase upsert failed:", error.message);
   return done(req, error ? "error" : "ok");
 }

@@ -1,4 +1,4 @@
--- Migration 0014 — staff classification. FranPOS `SalesPerson` is free text
+-- Migration 0016 — staff classification. FranPOS `SalesPerson` is free text
 -- with no role attached, so groomer_sales_daily mixes real groomers with
 -- front-desk staff ringing nail trims (~$10/appt), mobile vendors ("Smiling
 -- Pet Stop"), and system accounts ("Dental Cleaner", "Wgb Support"). This

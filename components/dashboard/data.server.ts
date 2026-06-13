@@ -22,6 +22,7 @@ import {
   type CustomerSegment,
   type AgentAction,
   type Groomer,
+  type TeamRow,
   type ServiceLine,
   type WeeklyBrief,
   type BriefChange,
@@ -138,7 +139,7 @@ async function loadGroomers(): Promise<Groomer[]> {
     }));
 }
 
-// Mirrors staff_name_key() in migration 0014.
+// Mirrors staff_name_key() in migration 0016.
 function staffNameKey(name: string): string {
   return name.trim().replace(/\s+/g, " ").toLowerCase();
 }
@@ -146,7 +147,7 @@ function staffNameKey(name: string): string {
 // FranPOS SalesPerson is free text — the staff table classifies each name as
 // groomer / front_desk / vendor / system so front desks ringing nail trims
 // don't rank as groomers. Unknown names default to groomer (new hires appear
-// without a deploy). Tolerant of the table not existing yet (pre-0014).
+// without a deploy). Tolerant of the table not existing yet (pre-0016).
 async function loadStaffRoles(): Promise<Map<string, string>> {
   const supabase = await createClient();
   const { data, error } = await supabase.from("staff").select("name_key, role");
@@ -155,7 +156,7 @@ async function loadStaffRoles(): Promise<Map<string, string>> {
 }
 
 const NEXT_ACTION: Record<CustomerSegment, string> = {
-  VIP: "Offer standing appointment", Loyal: "Confirm next groom", "At risk": "Send rebooking link", Lapsed: "Reactivation offer",
+  VIP: "Offer standing appointment", Loyal: "Confirm next groom", "At risk": "Send rebooking link", Lapsed: "Reactivation offer", Dormant: "Seasonal reactivation only",
 };
 // The customers table holds ~35k rows (incl. identity-only rows with no orders
 // in our history), far past PostgREST's 1,000-row cap — so customer reads must
@@ -409,9 +410,13 @@ export async function getRevenueNewVsRepeat(scope: Scope, month: MonthValue) {
 }
 
 // ── public: customers ───────────────────────────────────────────────────────
+// Unnamed rows ("—") are excluded from people-facing lists: you can't greet or
+// call a customer without a name, and the heaviest unnamed rows are house
+// accounts the walk-in heuristic missed. Counts stay exact — only display
+// lists filter.
 export async function getCustomersByValue(scope: Scope): Promise<CustomerRow[]> {
   const supabase = await createClient();
-  let q = supabase.from("customers").select(CUSTOMER_COLS).gte("visits", 1).order("ltv", { ascending: false }).limit(12);
+  let q = supabase.from("customers").select(CUSTOMER_COLS).gte("visits", 1).neq("name", "—").order("ltv", { ascending: false }).limit(12);
   if (scope !== "all") q = q.eq("store_id", scope);
   const { data, error } = await q;
   if (error) throw new Error(`customers read failed: ${error.message}`);
@@ -419,7 +424,7 @@ export async function getCustomersByValue(scope: Scope): Promise<CustomerRow[]> 
 }
 export async function getCustomerSegments(scope: Scope) {
   const counts = await loadSegmentCounts(scope);
-  const order: CustomerSegment[] = ["VIP", "Loyal", "At risk", "Lapsed"];
+  const order: CustomerSegment[] = ["VIP", "Loyal", "At risk", "Lapsed", "Dormant"];
   return order.map((segment) => ({ segment, count: Number(counts.find((c) => c.segment === segment)?.customers ?? 0) }));
 }
 export async function getCustomerIntel(scope: Scope) {
@@ -430,11 +435,13 @@ export async function getCustomerIntel(scope: Scope) {
   return { avgLtv: count ? Math.round(ltv / count) : 0, atRisk, count };
 }
 // Win-back list shape for the Customers page WinbackCard. The count is exact
-// (DB count); the displayed list is the 60 most-lapsed.
+// (DB count of every actionable lapse); the displayed list is the 60 with the
+// most value at risk. At risk + Lapsed only — once migration 0014 lands,
+// >365-day churn is Dormant and drops out of this pool by construction.
 export async function getWinbackList(scope: Scope) {
   const supabase = await createClient();
   let countQ = supabase.from("customers").select("*", { count: "exact", head: true }).gte("visits", 1).in("segment", ["At risk", "Lapsed"]);
-  let listQ = supabase.from("customers").select(CUSTOMER_COLS).gte("visits", 1).in("segment", ["At risk", "Lapsed"]).order("last_visit_at", { ascending: true }).limit(60);
+  let listQ = supabase.from("customers").select(CUSTOMER_COLS).gte("visits", 1).neq("name", "—").in("segment", ["At risk", "Lapsed"]).order("ltv", { ascending: false }).limit(60);
   if (scope !== "all") {
     countQ = countQ.eq("store_id", scope);
     listQ = listQ.eq("store_id", scope);
@@ -448,8 +455,8 @@ export async function getCustomersNeedingAttention(store: StoreId): Promise<Cust
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("customers").select(CUSTOMER_COLS)
-    .eq("store_id", store).gte("visits", 1).in("segment", ["At risk", "Lapsed"])
-    .order("last_visit_at", { ascending: true }).limit(60);
+    .eq("store_id", store).gte("visits", 1).neq("name", "—").in("segment", ["At risk", "Lapsed"])
+    .order("ltv", { ascending: false }).limit(60);
   if (error) throw new Error(`customers read failed: ${error.message}`);
   return ((data ?? []) as unknown as CustRow[]).map(toCustomerRow);
 }
@@ -551,6 +558,35 @@ export async function getRetention(scope: Scope, month: MonthValue) {
   };
 }
 
+// Return rate by month over the trailing year — the Customers page trend line.
+// Reads the metrics_monthly RPC (migration 0014) and aggregates the scope in
+// JS (≤48 rows). Returns null until that migration is applied, so the page
+// ships ahead of the DB and the card simply doesn't render yet.
+export async function getReturnRateTrend(scope: Scope): Promise<{ label: string; value: number }[] | null> {
+  const supabase = await createClient();
+  const range = monthRange("all")!;
+  const { data, error } = await supabase.rpc("metrics_monthly", { p_start: range.start, p_end: range.end });
+  if (error) return null;
+  type Row = { store_id: StoreId; month: string; rebooks: number; identified_bookings: number };
+  const ids = new Set(scopeIds(scope));
+  const byMonth = new Map<string, { rebooks: number; identified: number }>();
+  for (const r of (data ?? []) as unknown as Row[]) {
+    if (!ids.has(r.store_id)) continue;
+    const m = byMonth.get(r.month) ?? { rebooks: 0, identified: 0 };
+    m.rebooks += Number(r.rebooks);
+    m.identified += Number(r.identified_bookings);
+    byMonth.set(r.month, m);
+  }
+  const out = [...byMonth.entries()]
+    .sort(([a], [b]) => (a < b ? -1 : 1))
+    .filter(([, v]) => v.identified > 0)
+    .map(([month, v]) => ({
+      label: new Date(`${month}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", year: "2-digit", timeZone: "UTC" }),
+      value: Math.round((v.rebooks / v.identified) * 1000) / 10,
+    }));
+  return out.length > 1 ? out : null;
+}
+
 // ── public: weekly brief ────────────────────────────────────────────────────
 export async function getWeeklyBrief(scope: Scope): Promise<WeeklyBrief> {
   // The brief is always "this week" — the last 7 complete days vs the 7 days
@@ -600,7 +636,7 @@ export async function getWeeklyBrief(scope: Scope): Promise<WeeklyBrief> {
         ? ["retail attach", { title: "Retail attach is the biggest lever", detail: `Only ${pctStr(attach)} of grooming visits ${here} add a retail item this week. A one-line suggestion at checkout is the simplest gain on visits already happening.` }]
         : ["holding the current playbook", { title: "Hold the playbook — the next lever is call capture", detail: `Return rate and retail attach are both holding ${here}. The next measurable lever arrives when call tracking goes live.` }];
 
-  return {
+  const brief: WeeklyBrief = {
     headline: `Revenue ${revD >= 0 ? "rose" : "eased"} to ${money(Math.round(a.rev))} ${here} this week, and ${lever} is the clearest opportunity to act on.`,
     changes,
     wins: wins.length ? wins : ["Performance held steady across the headline metrics."],
@@ -610,6 +646,27 @@ export async function getWeeklyBrief(scope: Scope): Promise<WeeklyBrief> {
     actionsOpen: actions.filter((a) => a.status !== "completed").length,
     recommendation: opportunity.title,
   };
+
+  // If the Monday AI run wrote a fresh narrative for this scope, it replaces
+  // the template prose — the computed `changes` numbers above always stay.
+  const supabase = await createClient();
+  const { data: ai } = await supabase
+    .from("ai_briefs")
+    .select("week_start, headline, wins, risks, opportunity, recommendation")
+    .eq("scope", scope)
+    .order("week_start", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (ai && ai.week_start >= addDays(today, -8)) {
+    type AiBrief = { headline: string; wins: string[]; risks: string[]; opportunity: { title: string; detail: string } | null; recommendation: string | null };
+    const n = ai as unknown as AiBrief;
+    brief.headline = n.headline;
+    if (n.wins?.length) brief.wins = n.wins;
+    if (n.risks?.length) brief.risks = n.risks;
+    if (n.opportunity?.title) brief.opportunity = n.opportunity;
+    if (n.recommendation) brief.recommendation = n.recommendation;
+  }
+  return brief;
 }
 
 // ── public: manager dashboard ───────────────────────────────────────────────
@@ -659,6 +716,48 @@ export async function getManagerFocus(store: StoreId, month: MonthValue) {
 
 export async function getGroomersForStore(store: StoreId): Promise<Groomer[]> {
   return (await loadGroomers()).filter((g) => g.store === fullName(store));
+}
+
+// Team page roster: period-scoped service revenue per groomer (the metric the
+// page ranks by while labour hours are unavailable), joined with the lifetime
+// return/attach shares from the groomers table where they exist.
+export async function getTeamRoster(scope: Scope, month: MonthValue): Promise<TeamRow[]> {
+  const supabase = await createClient();
+  const range = monthRange(month);
+  const [{ data, error }, lifetime, roles] = await Promise.all([
+    supabase.rpc("groomer_revenue", {
+      p_store_ids: scopeIds(scope), p_start: range?.start ?? null, p_end: range?.end ?? null,
+    }),
+    loadGroomers(),
+    loadStaffRoles(),
+  ]);
+  if (error) throw new Error(`groomer_revenue failed: ${error.message}`);
+  const byKey = new Map(lifetime.map((g) => [`${g.store}|${staffNameKey(g.name)}`, g]));
+  type Row = { store_id: StoreId; name: string; revenue: number; appts: number };
+  const rows = ((data ?? []) as unknown as Row[])
+    .filter((r) => (roles.get(staffNameKey(r.name)) ?? "groomer") === "groomer")
+    .map((r) => {
+      const g = byKey.get(`${fullName(r.store_id)}|${staffNameKey(r.name)}`);
+      const revenue = Math.round(Number(r.revenue));
+      const appts = Number(r.appts);
+      return {
+        id: `${r.store_id}:${staffNameKey(r.name).replace(/ /g, "-")}`,
+        name: r.name,
+        store: fullName(r.store_id),
+        revenue,
+        appts,
+        avgTicket: appts ? Math.round(revenue / appts) : 0,
+        share: 0,
+        rebook: g?.rebook ?? null,
+        attach: g?.attach ?? null,
+        flag: g?.flag,
+      };
+    })
+    .filter((r) => r.revenue > 0)
+    .sort((a, b) => b.revenue - a.revenue);
+  const total = rows.reduce((sum, r) => sum + r.revenue, 0);
+  for (const r of rows) r.share = total ? r.revenue / total : 0;
+  return rows;
 }
 
 export async function getAgentActionsForStore(store: StoreId): Promise<AgentAction[]> {
@@ -871,71 +970,92 @@ function parseRangeParam(raw?: string | null): CompareRange | null {
   return m[1] <= m[2] ? { start: m[1], end: m[2] } : { start: m[2], end: m[1] };
 }
 
-// Resolve a preset (or custom params) into two concrete ranges + honesty notes.
-// Completed days only: "this month" means the 1st through yesterday, compared
-// like-for-like against the same day-span — never a partial vs a full month.
-export function resolveCompareRanges(preset: ComparePreset, aRaw?: string, bRaw?: string): { a: CompareRange; b: CompareRange; warnings: string[] } {
+// Resolve a preset (or custom params) into a focus period + 1–3 baseline
+// periods, with honesty notes. Completed days only: "this month" means the 1st
+// through yesterday, compared like-for-like against the same day-span — never
+// a partial vs a full month. bs[0] is the PRIMARY baseline (all deltas,
+// insights and movers read against it); bs[1..] are extra context periods —
+// "years" builds the same window across every year on record, and custom mode
+// accepts up to three comma-separated baseline ranges in ?b=.
+export const MAX_BASELINES = 3;
+export function resolveCompareRanges(preset: ComparePreset, aRaw?: string, bRaw?: string): { a: CompareRange; bs: CompareRange[]; warnings: string[] } {
   const warnings: string[] = [];
   const today = nyToday();
   const yesterday = addDays(today, -1);
   const monthStart = `${today.slice(0, 7)}-01`;
   const prevMonthStart = `${addDays(monthStart, -1).slice(0, 7)}-01`;
 
+  // The shared focus period: this month's completed days (or, on the 1st of a
+  // month, the whole previous month).
+  const focus: CompareRange =
+    monthStart > yesterday ? { start: prevMonthStart, end: addDays(monthStart, -1) } : { start: monthStart, end: yesterday };
+
   let a: CompareRange;
-  let b: CompareRange;
+  let bs: CompareRange[];
   if (preset === "custom") {
     const pa = parseRangeParam(aRaw);
-    const pb = parseRangeParam(bRaw);
-    if (pa && pb) {
+    const pbs = (bRaw ?? "").split(",").map(parseRangeParam).filter((r): r is CompareRange => r != null);
+    if (pa && pbs.length) {
       a = pa;
-      b = pb;
+      bs = pbs.slice(0, MAX_BASELINES);
     } else {
       warnings.push("Custom dates were missing or invalid — showing this month vs last month instead.");
-      ({ a, b } = resolveCompareRanges("mom"));
+      ({ a, bs } = resolveCompareRanges("mom"));
     }
   } else if (preset === "30d") {
     a = { start: addDays(yesterday, -29), end: yesterday };
-    b = { start: addDays(yesterday, -59), end: addDays(yesterday, -30) };
-  } else {
-    // mom / yoy share the same focus period: this month's completed days
-    // (or, on the 1st of a month, the whole previous month).
-    if (monthStart > yesterday) {
-      const prevEnd = addDays(monthStart, -1);
-      a = { start: prevMonthStart, end: prevEnd };
-      b =
-        preset === "yoy"
-          ? { start: shiftYear(prevMonthStart, -1), end: shiftYear(prevEnd, -1) }
-          : { start: `${addDays(prevMonthStart, -1).slice(0, 7)}-01`, end: addDays(prevMonthStart, -1) };
-    } else {
-      a = { start: monthStart, end: yesterday };
-      b =
-        preset === "yoy"
-          ? { start: shiftYear(monthStart, -1), end: shiftYear(yesterday, -1) }
-          : { start: prevMonthStart, end: addDays(prevMonthStart, rangeDays(a) - 1) };
+    bs = [{ start: addDays(yesterday, -59), end: addDays(yesterday, -30) }];
+  } else if (preset === "years") {
+    // The focus window against the same calendar window in every prior year
+    // with recorded history — "this June vs last June vs the June before".
+    a = focus;
+    bs = [];
+    for (let y = 1; y <= MAX_BASELINES; y++) {
+      const shifted = { start: shiftYear(a.start, -y), end: shiftYear(a.end, -y) };
+      if (shifted.end < DATA_START) break;
+      bs.push(shifted);
     }
+    if (!bs.length) {
+      warnings.push("No prior-year data exists for this window yet — showing this month vs last month instead.");
+      ({ a, bs } = resolveCompareRanges("mom"));
+    }
+  } else {
+    a = focus;
+    bs = [
+      preset === "yoy"
+        ? { start: shiftYear(a.start, -1), end: shiftYear(a.end, -1) }
+        : monthStart > yesterday
+          ? { start: `${addDays(prevMonthStart, -1).slice(0, 7)}-01`, end: addDays(prevMonthStart, -1) }
+          : { start: prevMonthStart, end: addDays(prevMonthStart, rangeDays(a) - 1) },
+    ];
   }
 
-  if (a.start < DATA_START || b.start < DATA_START) {
-    warnings.push(`Recorded history starts Jun 16, 2025 — days before that count as zero, so totals for the clipped period under-report.`);
+  if (a.start < DATA_START || bs.some((b) => b.start < DATA_START)) {
+    const startLabel = new Date(`${DATA_START}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
+    warnings.push(`Recorded history starts ${startLabel} — days before that count as zero, so totals for the clipped period under-report.`);
   }
-  if (a.end > yesterday || b.end > yesterday) {
+  if (a.end > yesterday || bs.some((b) => b.end > yesterday)) {
     warnings.push("A period extends past the last complete day — today's sales land after the evening sync.");
   }
-  if (rangeDays(a) !== rangeDays(b)) {
-    warnings.push(`The periods differ in length (${rangeDays(a)} vs ${rangeDays(b)} days) — totals aren't like-for-like; check the per-day figures.`);
+  const offLength = bs.find((b) => rangeDays(b) !== rangeDays(a));
+  if (offLength) {
+    warnings.push(`The periods differ in length (${rangeDays(a)} vs ${rangeDays(offLength)} days) — totals aren't like-for-like; check the per-day figures.`);
   }
-  return { a, b, warnings };
+  return { a, bs, warnings };
 }
 
-export type CompareRow = { key: string; name: string; tag?: string; a: number | null; b: number | null };
+// Row values: `a` is the focus period, `b` the PRIMARY baseline (bs[0] — all
+// deltas/insights/movers read against it), `more` the values for any extra
+// baselines (bs[1..]), oldest last, used for context columns/series only.
+export type CompareRow = { key: string; name: string; tag?: string; a: number | null; b: number | null; more?: (number | null)[] };
 export type CompareData = {
   rows: CompareRow[];
   format: CompareFormat;
   metricLabel: string;
   pointDelta: boolean; // rate metrics: deltas read as percentage points, not relative %
-  revenue: { a: number; b: number };
-  days: { a: number; b: number };
-  pace?: { a: number[]; b: number[] }; // daily revenue per period (stores mode) for the running-total overlay
+  revenue: { a: number; bs: number[] };
+  days: { a: number; bs: number[] };
+  pace?: { a: number[]; bs: number[][] }; // daily revenue per period (stores mode) for the running-total overlay
   movers?: { name: string; delta: number }[]; // products mode: biggest gains + drops across ALL items, noise filtered
   insights: string[];
   notes: string[];
@@ -947,18 +1067,28 @@ const fmtVal = (n: number, format: CompareFormat) =>
 // Plain-English takeaways, deterministic and guarded: movers must clear a
 // volume floor so a $40 item "up 600%" never headlines, and rate metrics are
 // described in percentage points.
-function buildInsights(rows: CompareRow[], format: CompareFormat, metricLabel: string, revenue: { a: number; b: number }, days: { a: number; b: number }): string[] {
+function buildInsights(rows: CompareRow[], format: CompareFormat, metricLabel: string, revenue: { a: number; bs: number[] }, days: { a: number; bs: number[] }): string[] {
   const out: string[] = [];
-  if (revenue.b > 0) {
-    if (days.a === days.b) {
-      const d = (revenue.a - revenue.b) / revenue.b;
-      out.push(`Revenue is ${d >= 0 ? "up" : "down"} ${pctStr(Math.abs(d))} — ${money(Math.round(revenue.a))} vs ${money(Math.round(revenue.b))}.`);
+  const rb = revenue.bs[0] ?? 0;
+  const db = days.bs[0] ?? 0;
+  if (rb > 0) {
+    if (days.a === db) {
+      const d = (revenue.a - rb) / rb;
+      out.push(`Revenue is ${d >= 0 ? "up" : "down"} ${pctStr(Math.abs(d))} — ${money(Math.round(revenue.a))} vs ${money(Math.round(rb))}.`);
     } else {
       const pa = revenue.a / days.a;
-      const pb = revenue.b / days.b;
+      const pb = rb / db;
       const d = (pa - pb) / pb;
       out.push(`Per day, revenue is ${d >= 0 ? "up" : "down"} ${pctStr(Math.abs(d))} — ${money(Math.round(pa))}/day vs ${money(Math.round(pb))}/day (periods differ in length).`);
     }
+  }
+  // Multi-year arc: the revenue progression oldest → newest in one line.
+  if (revenue.bs.length >= 2) {
+    const sameLen = days.bs.every((d) => d === days.a);
+    const series = [...revenue.bs].reverse().concat(revenue.a);
+    const daysSeries = [...days.bs].reverse().concat(days.a);
+    const arc = series.map((v, i) => money(Math.round(sameLen ? v : v / Math.max(1, daysSeries[i])))).join(" → ");
+    out.push(`The arc across all ${series.length} periods, oldest first: ${arc}${sameLen ? "" : " per day"}.`);
   }
   const floor = format === "money" ? 250 : format === "number" ? 10 : 0;
   const movers = rows
@@ -980,32 +1110,103 @@ function buildInsights(rows: CompareRow[], format: CompareFormat, metricLabel: s
   return out.slice(0, 4);
 }
 
-export async function getCompareData(mode: CompareMode, metricKey: string, a: CompareRange, b: CompareRange, scope: Scope): Promise<CompareData> {
+// One store-mode metric on one aggregate — shared by the single-metric rows
+// and the all-metrics overview so the definitions can never drift apart.
+function storeMetricValue(key: string, x: Agg): number | null {
+  switch (key) {
+    case "revenue": return x.rev;
+    case "bookings": return x.bookings;
+    case "avgTicket": return x.bookings ? x.bookingRev / x.bookings : null;
+    case "rebook": return x.identified ? x.rebooks / x.identified : null;
+    case "attach": return x.bookings ? x.attached / x.bookings : null;
+    default: return x.groom + x.retail > 0 ? x.groom / (x.groom + x.retail) : null;
+  }
+}
+
+// "All metrics" overview: every metric for the mode, aggregated over the scope,
+// one value per period (side order: focus, then baselines newest → oldest).
+// Same RPCs and formulas as the single-metric view — only the entity axis is
+// collapsed, so a number here always matches its drill-down.
+export type CompareOverview = {
+  revenue: { a: number; bs: number[] };
+  days: { a: number; bs: number[] };
+  metrics: { key: string; label: string; format: CompareFormat; values: (number | null)[] }[];
+};
+
+export async function getCompareOverview(mode: CompareMode, a: CompareRange, bs: CompareRange[], scope: Scope): Promise<CompareOverview> {
+  const periods = [a, ...bs];
+  const byPeriod = await Promise.all(periods.map((r) => loadDailyRange(r.start, exclusiveEnd(r))));
+  const ids = scopeIds(scope);
+  const revenue = { a: sumScope(byPeriod[0], ids).rev, bs: byPeriod.slice(1).map((by) => sumScope(by, ids).rev) };
+  const days = { a: rangeDays(a), bs: bs.map(rangeDays) };
+
+  let metrics: CompareOverview["metrics"];
+  if (mode === "stores") {
+    const aggs = byPeriod.map((by) => sumScope(by, ids));
+    metrics = COMPARE_METRICS.stores.map((def) => ({ ...def, values: aggs.map((x) => storeMetricValue(def.key, x)) }));
+  } else if (mode === "groomers") {
+    const supabase = await createClient();
+    const results = await Promise.all(periods.map((r) => supabase.rpc("groomer_revenue", { p_store_ids: ids, p_start: r.start, p_end: exclusiveEnd(r) })));
+    const failed = results.find((r) => r.error);
+    if (failed) throw new Error(`groomer_revenue failed: ${failed.error!.message}`);
+    type Row = { revenue: number; appts: number };
+    const totals = results.map((res) => {
+      const rows = (res.data ?? []) as unknown as Row[];
+      return { rev: rows.reduce((s, r) => s + Number(r.revenue), 0), appts: rows.reduce((s, r) => s + Number(r.appts), 0) };
+    });
+    metrics = COMPARE_METRICS.groomers.map((def) => ({
+      ...def,
+      values: totals.map((t) => (def.key === "revenue" ? t.rev : def.key === "appts" ? t.appts : t.appts ? t.rev / t.appts : null)),
+    }));
+  } else {
+    const supabase = await createClient();
+    const results = await Promise.all(periods.map((r) => supabase.rpc("product_revenue_by_name", { p_store_ids: ids, p_start: r.start, p_end: exclusiveEnd(r) })));
+    const failed = results.find((r) => r.error);
+    if (failed) throw new Error(`product_revenue_by_name failed: ${failed.error!.message}`);
+    type Row = { is_service: boolean; revenue: number; units: number; cost: number };
+    const totals = results.map((res) => {
+      const rows = (res.data ?? []) as unknown as Row[];
+      const retail = rows.filter((r) => !r.is_service && Number(r.cost) > 0 && Number(r.revenue) > 0);
+      const retailRev = retail.reduce((s, r) => s + Number(r.revenue), 0);
+      const retailCost = retail.reduce((s, r) => s + Number(r.cost), 0);
+      return {
+        rev: rows.reduce((s, r) => s + Number(r.revenue), 0),
+        units: rows.reduce((s, r) => s + Number(r.units), 0),
+        margin: retailRev > 0 ? (retailRev - retailCost) / retailRev : null,
+      };
+    });
+    metrics = COMPARE_METRICS.products.map((def) => ({
+      ...def,
+      values: totals.map((t) => (def.key === "revenue" ? t.rev : def.key === "units" ? t.units : t.margin)),
+    }));
+  }
+  return { revenue, days, metrics };
+}
+
+export async function getCompareData(mode: CompareMode, metricKey: string, a: CompareRange, bs: CompareRange[], scope: Scope): Promise<CompareData> {
   const metric = COMPARE_METRICS[mode].find((m) => m.key === metricKey) ?? COMPARE_METRICS[mode][0];
-  const days = { a: rangeDays(a), b: rangeDays(b) };
+  const periods = [a, ...bs]; // side 0 = focus, side 1 = primary baseline, 2.. = extra context
+  const days = { a: rangeDays(a), bs: bs.map(rangeDays) };
   const notes: string[] = [];
   let rows: CompareRow[] = [];
   let movers: { name: string; delta: number }[] | undefined;
 
   // The headline revenue strip always reads metrics_daily (the canonical,
   // validated total) — never sums of the capped/attributed RPC rows.
-  const [byA, byB] = await Promise.all([
-    loadDailyRange(a.start, exclusiveEnd(a)),
-    loadDailyRange(b.start, exclusiveEnd(b)),
-  ]);
+  const byPeriod = await Promise.all(periods.map((r) => loadDailyRange(r.start, exclusiveEnd(r))));
   const revIds = scopeIds(mode === "stores" ? "all" : scope);
-  const revenue = { a: sumScope(byA, revIds).rev, b: sumScope(byB, revIds).rev };
+  const revenue = { a: sumScope(byPeriod[0], revIds).rev, bs: byPeriod.slice(1).map((by) => sumScope(by, revIds).rev) };
 
   // Stores mode also gets a day-by-day revenue overlay ("pace"). The series RPC
   // only returns days with rows, so gaps are densified to zero to keep day
-  // indexes aligned between the two periods.
-  let pace: { a: number[]; b: number[] } | undefined;
+  // indexes aligned between the periods.
+  let pace: { a: number[]; bs: number[][] } | undefined;
   if (mode === "stores") {
     const supabase = await createClient();
     const series = (r: CompareRange) =>
       supabase.rpc("metrics_series", { p_store_ids: revIds, p_start: r.start, p_end: exclusiveEnd(r), p_monthly: false });
-    const [sa, sb] = await Promise.all([series(a), series(b)]);
-    if (!sa.error && !sb.error) {
+    const results = await Promise.all(periods.map(series));
+    if (results.every((r) => !r.error)) {
       type SRow = { bucket: string; revenue: number };
       const dense = (r: CompareRange, rs: SRow[]) => {
         const byDay = new Map(rs.map((x) => [x.bucket, Number(x.revenue)]));
@@ -1013,41 +1214,37 @@ export async function getCompareData(mode: CompareMode, metricKey: string, a: Co
         for (let d = r.start; d <= r.end; d = addDays(d, 1)) out.push(byDay.get(d) ?? 0);
         return out;
       };
-      pace = { a: dense(a, (sa.data ?? []) as unknown as SRow[]), b: dense(b, (sb.data ?? []) as unknown as SRow[]) };
+      const lines = results.map((res, i) => dense(periods[i], (res.data ?? []) as unknown as SRow[]));
+      pace = { a: lines[0], bs: lines.slice(1) };
     }
   }
 
+  // helper: assemble a/b/more from one value per side (side 0 = focus)
+  const pack = (vals: (number | null)[]) => ({ a: vals[0], b: vals[1] ?? null, more: vals.length > 2 ? vals.slice(2) : undefined });
+
   if (mode === "stores") {
-    const val = (x: Agg): number | null => {
-      switch (metric.key) {
-        case "revenue": return x.rev;
-        case "bookings": return x.bookings;
-        case "avgTicket": return x.bookings ? x.bookingRev / x.bookings : null;
-        case "rebook": return x.identified ? x.rebooks / x.identified : null;
-        case "attach": return x.bookings ? x.attached / x.bookings : null;
-        default: return x.groom + x.retail > 0 ? x.groom / (x.groom + x.retail) : null;
-      }
-    };
-    rows = stores.map((s) => ({ key: s.id, name: s.name, a: val(byA[s.id]), b: val(byB[s.id]) }));
-    if (metric.key === "rebook" && (a.start < RETURN_RATE_MATURE || b.start < RETURN_RATE_MATURE)) {
-      notes.push("Return rate needs 90 days of history behind it — periods before Oct 2025 read low by construction.");
+    const val = (x: Agg) => storeMetricValue(metric.key, x);
+    rows = stores.map((s) => ({ key: s.id, name: s.name, ...pack(byPeriod.map((by) => val(by[s.id]))) }));
+    if (metric.key === "rebook" && periods.some((r) => r.start < RETURN_RATE_MATURE)) {
+      notes.push("Return rate needs 90 days of history behind it — periods before Apr 2024 read low by construction.");
     }
   } else if (mode === "groomers") {
     const supabase = await createClient();
     const ids = scopeIds(scope);
     const call = (r: CompareRange) => supabase.rpc("groomer_revenue", { p_store_ids: ids, p_start: r.start, p_end: exclusiveEnd(r) });
-    const [ra, rb] = await Promise.all([call(a), call(b)]);
-    if (ra.error || rb.error) throw new Error(`groomer_revenue failed: ${(ra.error ?? rb.error)!.message}`);
+    const results = await Promise.all(periods.map(call));
+    const failed = results.find((r) => r.error);
+    if (failed) throw new Error(`groomer_revenue failed: ${failed.error!.message}`);
     type Row = { store_id: StoreId; name: string; revenue: number; appts: number };
-    const merged = new Map<string, { name: string; tag: string; a?: Row; b?: Row }>();
-    for (const [side, res] of [["a", ra], ["b", rb]] as const) {
+    const merged = new Map<string, { name: string; tag: string; sides: (Row | undefined)[] }>();
+    results.forEach((res, side) => {
       for (const r of (res.data ?? []) as unknown as Row[]) {
         const key = `${r.store_id}|${r.name}`;
-        const e = merged.get(key) ?? { name: r.name, tag: scopeLabel(r.store_id) };
-        e[side] = r;
+        const e = merged.get(key) ?? { name: r.name, tag: scopeLabel(r.store_id), sides: [] };
+        e.sides[side] = r;
         merged.set(key, e);
       }
-    }
+    });
     const val = (r?: Row): number | null => {
       if (!r) return null;
       if (metric.key === "revenue") return Number(r.revenue);
@@ -1055,29 +1252,30 @@ export async function getCompareData(mode: CompareMode, metricKey: string, a: Co
       return Number(r.appts) ? Number(r.revenue) / Number(r.appts) : null;
     };
     const ranked = [...merged.entries()]
-      .map(([key, e]) => ({ key, e, vol: Number(e.a?.revenue ?? 0) + Number(e.b?.revenue ?? 0) }))
+      .map(([key, e]) => ({ key, e, vol: e.sides.reduce((s, r) => s + Number(r?.revenue ?? 0), 0) }))
       .sort((x, y) => y.vol - x.vol);
     rows = ranked
       .slice(0, 12)
-      .map(({ key, e }) => ({ key, name: e.name, tag: scope === "all" ? e.tag : undefined, a: val(e.a), b: val(e.b) }));
-    const cut = ranked.length > rows.length ? ` Showing top 12 of ${ranked.length} groomers active across the two periods.` : "";
+      .map(({ key, e }) => ({ key, name: e.name, tag: scope === "all" ? e.tag : undefined, ...pack(periods.map((_, i) => val(e.sides[i]))) }));
+    const cut = ranked.length > rows.length ? ` Showing top 12 of ${ranked.length} groomers active across the periods.` : "";
     notes.push(`Groomer figures are service-line revenue attributed by FranPOS salesperson — grooming only; front-desk, vendor, and system accounts excluded.${cut} A dash means no activity in that period (new hire or departure).`);
   } else {
     const supabase = await createClient();
     const ids = scopeIds(scope);
     const call = (r: CompareRange) => supabase.rpc("product_revenue_by_name", { p_store_ids: ids, p_start: r.start, p_end: exclusiveEnd(r) });
-    const [ra, rb] = await Promise.all([call(a), call(b)]);
-    if (ra.error || rb.error) throw new Error(`product_revenue_by_name failed: ${(ra.error ?? rb.error)!.message}`);
+    const results = await Promise.all(periods.map(call));
+    const failed = results.find((r) => r.error);
+    if (failed) throw new Error(`product_revenue_by_name failed: ${failed.error!.message}`);
     type Row = { name: string; is_service: boolean; revenue: number; units: number; cost: number };
-    const merged = new Map<string, { name: string; svc: boolean; a?: Row; b?: Row }>();
-    for (const [side, res] of [["a", ra], ["b", rb]] as const) {
+    const merged = new Map<string, { name: string; svc: boolean; sides: (Row | undefined)[] }>();
+    results.forEach((res, side) => {
       for (const r of (res.data ?? []) as unknown as Row[]) {
         const key = r.name.trim().toLowerCase();
-        const e = merged.get(key) ?? { name: r.name, svc: r.is_service };
-        e[side] = r;
+        const e = merged.get(key) ?? { name: r.name, svc: r.is_service, sides: [] };
+        e.sides[side] = r;
         merged.set(key, e);
       }
-    }
+    });
     const margin = (r?: Row): number | null =>
       r && Number(r.revenue) > 0 && Number(r.cost) > 0 ? (Number(r.revenue) - Number(r.cost)) / Number(r.revenue) : null;
     const val = (r?: Row): number | null => {
@@ -1088,8 +1286,8 @@ export async function getCompareData(mode: CompareMode, metricKey: string, a: Co
     };
     let entries = [...merged.entries()].map(([key, e]) => ({
       key, name: e.name, tag: e.svc ? "Grooming" : "Retail", svc: e.svc,
-      a: val(e.a), b: val(e.b),
-      vol: Number(e.a?.revenue ?? 0) + Number(e.b?.revenue ?? 0),
+      ...pack(periods.map((_, i) => val(e.sides[i]))),
+      vol: e.sides.reduce((s, r) => s + Number(r?.revenue ?? 0), 0),
     }));
     if (metric.key === "margin") {
       // Margin only means something for retail (services carry no item cost),
@@ -1109,7 +1307,7 @@ export async function getCompareData(mode: CompareMode, metricKey: string, a: Co
     rows = entries
       .sort((x, y) => y.vol - x.vol)
       .slice(0, 12)
-      .map((e) => ({ key: e.key, name: e.name, tag: e.tag, a: e.a, b: e.b }));
+      .map((e) => ({ key: e.key, name: e.name, tag: e.tag, a: e.a, b: e.b, more: e.more }));
     notes.push("Table: top 12 items by volume. Deposits and gift cards are excluded (liabilities until redeemed); items merge by name.");
   }
 

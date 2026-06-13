@@ -320,6 +320,29 @@ export function CohortCurve({ data, label = "months since first visit" }: { data
   );
 }
 
+// ---- Rate trend (monthly % line — e.g. return rate over the trailing year) --
+export function RateTrend({ data, seriesLabel = "Return rate" }: { data: { label: string; value: number }[]; seriesLabel?: string }) {
+  const gid = "rt-" + useId().replace(/:/g, "");
+  const config = { value: { label: seriesLabel, color: ORANGE } } satisfies ChartConfig;
+  return (
+    <ChartContainer config={config} style={{ height: 150 }}>
+      <RAreaChart data={data} margin={{ left: 0, right: 6, top: 8, bottom: 0 }}>
+        <defs>
+          <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="var(--color-value)" stopOpacity={0.25} />
+            <stop offset="100%" stopColor="var(--color-value)" stopOpacity={0} />
+          </linearGradient>
+        </defs>
+        <CartesianGrid vertical={false} />
+        <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={6} interval="preserveStartEnd" />
+        <YAxis tickLine={false} axisLine={false} width={34} domain={[0, 100]} tickFormatter={(v) => `${v}%`} />
+        <ChartTooltip content={<ChartTooltipContent valueFormatter={(v) => `${v}%`} />} />
+        <Area dataKey="value" type="monotone" stroke="var(--color-value)" strokeWidth={1.75} fill={`url(#${gid})`} dot={{ r: 2, fill: ORANGE }} />
+      </RAreaChart>
+    </ChartContainer>
+  );
+}
+
 // ---- Conversion funnel (stage drop-off) ------------------------------------
 export function ConversionFunnel({ steps }: { steps: FunnelStep[] }) {
   const max = steps[0]?.value || 1;
@@ -488,17 +511,22 @@ const truncName = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)
 // Grouped now-vs-before bars. layout="columns" (few entities, e.g. stores)
 // renders vertical columns; layout="rows" (many named entities, e.g. groomers)
 // renders horizontal paired bars with the names on the left.
+// Extra baselines (multi-year compares) render as progressively softer series.
+const EXTRA_COLORS = ["var(--color-series-soft)", "var(--color-track)"];
+
 export function CompareBars({
   data,
   labelA,
   labelB,
+  moreLabels = [],
   format = "number",
   layout = "columns",
   height,
 }: {
-  data: { name: string; a: number | null; b: number | null }[];
+  data: { name: string; a: number | null; b: number | null; more?: (number | null)[] }[];
   labelA: string;
   labelB: string;
+  moreLabels?: string[]; // labels for data[].more series (older baselines)
   format?: ValueFormat;
   layout?: "columns" | "rows";
   height?: number;
@@ -506,15 +534,21 @@ export function CompareBars({
   const fmt = formatFor(format);
   // Keep nulls: "no activity that period" (new hire, departure) must read as
   // absent, not $0. Recharts skips null bars; the tooltip shows an em dash.
-  const chartData = data.map((d) => ({ name: d.name, a: d.a, b: d.b }));
+  const chartData = data.map((d) => ({
+    name: d.name, a: d.a, b: d.b,
+    ...Object.fromEntries(moreLabels.map((_, i) => [`m${i}`, d.more?.[i] ?? null])),
+  }));
   const fmtLabel = (v: unknown) => (v == null ? "" : fmt(Number(v)));
   const config = {
     a: { label: labelA, color: ORANGE },
     b: { label: labelB, color: MUTED },
+    ...Object.fromEntries(moreLabels.map((l, i) => [`m${i}`, { label: l, color: EXTRA_COLORS[i % EXTRA_COLORS.length] }])),
   } satisfies ChartConfig;
+  // Bars render oldest → newest left-to-right within each group.
+  const orderedKeys = [...moreLabels.map((_, i) => `m${i}`).reverse(), "b"];
 
   if (layout === "rows") {
-    const h = height ?? Math.max(150, data.length * 52);
+    const h = height ?? Math.max(150, data.length * (52 + moreLabels.length * 12));
     return (
       <ChartContainer config={config} style={{ height: h }}>
         <BarChart data={chartData} layout="vertical" margin={{ left: 4, right: 56, top: 2, bottom: 2 }} barCategoryGap={12} barGap={2}>
@@ -522,7 +556,9 @@ export function CompareBars({
           <XAxis type="number" hide />
           <YAxis type="category" dataKey="name" width={118} tickLine={false} axisLine={false} interval={0} tick={{ fontSize: 11 }} tickFormatter={(v) => truncName(String(v), 16)} />
           <ChartTooltip cursor={{ fill: "var(--color-raise)" }} content={<ChartTooltipContent valueFormatter={(v) => fmt(v)} />} />
-          <Bar dataKey="b" fill="var(--color-b)" radius={[0, 3, 3, 0]} barSize={8} isAnimationActive={false} />
+          {orderedKeys.map((k) => (
+            <Bar key={k} dataKey={k} fill={`var(--color-${k})`} radius={[0, 3, 3, 0]} barSize={8} isAnimationActive={false} />
+          ))}
           <Bar dataKey="a" fill="var(--color-a)" radius={[0, 3, 3, 0]} barSize={8} isAnimationActive={false}>
             <LabelList dataKey="a" position="right" fill="var(--color-ink-dim)" fontSize={10.5} formatter={fmtLabel} />
           </Bar>
@@ -538,7 +574,9 @@ export function CompareBars({
         <XAxis dataKey="name" tickLine={false} axisLine={false} tickMargin={8} interval={0} />
         <YAxis tickLine={false} axisLine={false} width={46} tickFormatter={fmt} />
         <ChartTooltip cursor={{ fill: "var(--color-raise)" }} content={<ChartTooltipContent valueFormatter={(v) => fmt(v)} />} />
-        <Bar dataKey="b" fill="var(--color-b)" radius={[3, 3, 0, 0]} isAnimationActive={false} />
+        {orderedKeys.map((k) => (
+          <Bar key={k} dataKey={k} fill={`var(--color-${k})`} radius={[3, 3, 0, 0]} isAnimationActive={false} />
+        ))}
         <Bar dataKey="a" fill="var(--color-a)" radius={[3, 3, 0, 0]} isAnimationActive={false}>
           <LabelList dataKey="a" position="top" fill="var(--color-ink-dim)" fontSize={10.5} formatter={fmtLabel} />
         </Bar>
@@ -582,41 +620,46 @@ export function CompareDiverging({
   );
 }
 
-// Two periods overlaid day by day as running totals — "is this period ahead of
-// or behind the last one at the same point?" Solid orange = focus period,
-// dashed grey = baseline.
+// Periods overlaid day by day as running totals — "is this period ahead of
+// or behind the others at the same point?" Solid orange = focus period,
+// dashed grey = primary baseline, softer dashes = older baselines.
 export function ComparePace({
   a,
   b,
+  more = [],
   labelA,
   labelB,
+  moreLabels = [],
   format = "moneyK",
   height = 230,
 }: {
   a: number[];
   b: number[];
+  more?: number[][]; // older baselines, daily revenue per period
   labelA: string;
   labelB: string;
+  moreLabels?: string[];
   format?: ValueFormat;
   height?: number;
 }) {
   const fmt = formatFor(format);
-  const len = Math.max(a.length, b.length);
+  const all = [a, b, ...more];
+  const len = Math.max(...all.map((xs) => xs.length));
   const cumulative = (xs: number[]) => {
     const out: number[] = [];
     for (const v of xs) out.push((out[out.length - 1] ?? 0) + v);
     return out;
   };
-  const ca = cumulative(a);
-  const cb = cumulative(b);
+  const cum = all.map(cumulative);
+  const keys = ["a", "b", ...more.map((_, i) => `m${i}`)];
   const chartData = Array.from({ length: len }, (_, i) => ({
     label: String(i + 1),
-    a: i < a.length ? ca[i] : null,
-    b: i < b.length ? cb[i] : null,
+    ...Object.fromEntries(keys.map((k, s) => [k, i < all[s].length ? cum[s][i] : null])),
   }));
   const config = {
     a: { label: labelA, color: ORANGE },
     b: { label: labelB, color: MUTED },
+    ...Object.fromEntries(moreLabels.map((l, i) => [`m${i}`, { label: l, color: EXTRA_COLORS[i % EXTRA_COLORS.length] }])),
   } satisfies ChartConfig;
   return (
     <ChartContainer config={config} style={{ height }}>
@@ -628,6 +671,9 @@ export function ComparePace({
           cursor={{ strokeDasharray: "3 3" }}
           content={<ChartTooltipContent labelFormatter={(l) => `Day ${l}`} valueFormatter={(v) => fmt(v)} />}
         />
+        {more.map((_, i) => (
+          <Line key={i} dataKey={`m${i}`} type="monotone" stroke={`var(--color-m${i})`} strokeWidth={1.5} strokeDasharray="3 4" dot={false} />
+        ))}
         <Line dataKey="b" type="monotone" stroke="var(--color-b)" strokeWidth={1.75} strokeDasharray="5 4" dot={false} />
         <Line dataKey="a" type="monotone" stroke="var(--color-a)" strokeWidth={2.25} dot={false} activeDot={{ r: 3 }} />
       </LineChart>
