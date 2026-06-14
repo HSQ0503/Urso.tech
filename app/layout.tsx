@@ -14,13 +14,16 @@ const geistMono = Geist_Mono({
 });
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://urso-tech.vercel.app";
-const TITLE = "Urso | First click to final sale.";
+const TITLE = "Urso — Operational intelligence for people-based businesses";
 const DESCRIPTION =
-  "A data agency for founder-led businesses. We find where your operation is losing money, then fix it with you on retainer.";
+  "Urso connects the data scattered across your business into one operating system — then works with your team to fix what it finds. More revenue, sharper decisions, less chaos.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
-  title: TITLE,
+  title: {
+    default: TITLE,
+    template: "%s — Urso",
+  },
   description: DESCRIPTION,
   openGraph: {
     title: TITLE,

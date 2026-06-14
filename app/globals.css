@@ -234,6 +234,9 @@ body {
   animation: urso-marquee 40s linear infinite;
 }
 
+/* ===== Page transition =====
+   A near-black panel sweeps left → right with a single thin orange leading
+   edge — the direction line applied to navigation. Quiet, no gradient wash. */
 .wipe-page-wrap {
   will-change: transform, opacity;
 }
@@ -243,61 +246,24 @@ body {
   opacity: 0;
 }
 
-:root[data-wipe-variant="slide"][data-wipe-stage="covering"] .wipe-page-wrap,
-:root[data-wipe-variant="slide"][data-wipe-stage="covered"] .wipe-page-wrap {
-  transform: translateX(-100%);
+:root[data-wipe-stage="uncovering"] .wipe-page-wrap {
+  animation: wipe-page-in 420ms var(--ease-out) both;
 }
 
-:root[data-wipe-variant="slide"][data-wipe-stage="uncovering"] .wipe-page-wrap {
-  animation: wipe-page-slide-in 520ms cubic-bezier(0.25, 1, 0.5, 1) both;
-}
-
-:root[data-wipe-variant="bloom"][data-wipe-stage="uncovering"] .wipe-page-wrap {
-  animation: wipe-page-settle 520ms cubic-bezier(0.22, 1, 0.32, 1) both;
-  transform-origin: var(--wipe-x, 50%) var(--wipe-y, 50%);
-}
-
-@keyframes wipe-page-settle {
+@keyframes wipe-page-in {
   from {
-    transform: scale(1.025);
-    opacity: 0.85;
+    opacity: 0;
+    transform: translateY(8px);
   }
   to {
-    transform: scale(1);
     opacity: 1;
-  }
-}
-
-@keyframes wipe-page-slide-in {
-  from {
-    transform: translateX(-100%);
-  }
-  to {
-    transform: translateX(0);
-  }
-}
-
-@keyframes wipe-bloom-grow {
-  from {
-    clip-path: circle(var(--wipe-r0, 28px) at var(--wipe-x, 50%) var(--wipe-y, 50%));
-  }
-  to {
-    clip-path: circle(150vmax at var(--wipe-x, 50%) var(--wipe-y, 50%));
-  }
-}
-
-@keyframes wipe-bloom-implode {
-  from {
-    clip-path: circle(150vmax at var(--wipe-x, 50%) var(--wipe-y, 50%));
-  }
-  to {
-    clip-path: circle(0 at var(--wipe-x, 50%) var(--wipe-y, 50%));
+    transform: none;
   }
 }
 
 @keyframes wipe-slide-cover {
   from {
-    transform: translateX(-102%);
+    transform: translateX(-101%);
   }
   to {
     transform: translateX(0%);
@@ -309,7 +275,7 @@ body {
     transform: translateX(0%);
   }
   to {
-    transform: translateX(102%);
+    transform: translateX(101%);
   }
 }
 

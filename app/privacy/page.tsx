@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
-import { Nav } from "@/components/nav";
-import { Footer } from "@/components/footer";
-import { Pill } from "@/components/ui/pill";
+import { SiteNav, SiteFooter } from "@/components/site/chrome";
+import { Eyebrow } from "@/components/site/ui";
 
 export const metadata: Metadata = {
   title: "Privacy Policy | Urso",
@@ -115,11 +114,11 @@ const sections: Block[] = [
 export default function PrivacyPage() {
   return (
     <main className="bg-bg text-ink">
-      <Nav />
+      <SiteNav />
 
-      <section className="border-b border-edge px-5 pb-12 pt-16 sm:px-8 sm:pb-14 sm:pt-20 md:px-14">
+      <section className="border-b border-edge px-5 pb-12 pt-[clamp(112px,15vw,160px)] sm:px-8 sm:pb-14 md:px-14">
         <div className="max-w-[760px]">
-          <Pill dot>Legal</Pill>
+          <Eyebrow>Legal</Eyebrow>
           <h1 className="mt-5 text-[clamp(34px,6vw,60px)] font-medium leading-[1.04] tracking-[-0.03em] sm:mt-6">
             Privacy Policy<span className="text-orange">.</span>
           </h1>
@@ -163,7 +162,7 @@ export default function PrivacyPage() {
         </div>
       </section>
 
-      <Footer />
+      <SiteFooter />
     </main>
   );
 }
