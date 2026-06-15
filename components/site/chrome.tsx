@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { WipeLink } from "./wipe-link";
-import { Wordmark, Mark, Container, Arrow, cx } from "./ui";
+import { Wordmark, Container, Arrow, cx } from "./ui";
+import { FORECAST_GRAIN } from "./forecast";
 
 const NAV_LINKS = [
   { label: "What we do", href: "/what-we-do" },
@@ -196,20 +197,54 @@ const FOOTER_COLUMNS: Array<{
 
 export function SiteFooter() {
   return (
-    <footer className="border-t border-edge bg-[#050505]">
-      <Container className="py-[clamp(48px,7vw,80px)]">
-        <div className="grid grid-cols-2 gap-x-6 gap-y-10 md:grid-cols-[1.6fr_1fr_1fr_1fr]">
+    <footer className="relative overflow-hidden border-t border-edge bg-[#050505]">
+      {/* A warm hairline, a faint bloom and fine grain — the page's depth
+          carried into the footer so it reads as part of the system, not a
+          plain appendage. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 h-px"
+        style={{
+          background:
+            "linear-gradient(90deg, transparent 0%, rgba(254,81,0,0.4) 50%, transparent 100%)",
+        }}
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background:
+            "radial-gradient(72% 92% at 50% 0%, rgba(254,81,0,0.06) 0%, transparent 56%)",
+        }}
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0"
+        style={{
+          backgroundImage: FORECAST_GRAIN,
+          backgroundSize: "150px 150px",
+          opacity: 0.04,
+          mixBlendMode: "soft-light",
+        }}
+      />
+
+      <Container className="relative py-[clamp(56px,8vw,96px)]">
+        <div className="grid grid-cols-2 gap-x-6 gap-y-12 md:grid-cols-[1.7fr_1fr_1fr_1fr]">
           <div className="col-span-2 md:col-span-1">
             <WipeLink href="/" aria-label="Urso — home" className="inline-flex">
-              <Mark height={26} />
+              <Wordmark height={28} />
             </WipeLink>
-            <p className="mt-5 max-w-[30ch] text-[14px] leading-[1.55] text-ink-dim">
+            <p className="mt-6 max-w-[26ch] font-serif text-[clamp(1.2rem,1.7vw,1.45rem)] font-normal leading-[1.25] tracking-[-0.01em] text-ink">
+              <em className="italic">Following</em> the money
+              <span className="text-orange">.</span>
+            </p>
+            <p className="mt-3.5 max-w-[34ch] text-[14px] leading-[1.55] text-ink-dim">
               Operational intelligence for people-based businesses.
             </p>
           </div>
           {FOOTER_COLUMNS.map((col) => (
             <div key={col.heading}>
-              <div className="mb-4 font-mono text-[11px] uppercase tracking-[0.1em] text-ink-dimmer">
+              <div className="mb-4 font-mono text-[11px] uppercase tracking-[0.14em] text-ink-dimmer">
                 {col.heading}
               </div>
               <ul className="flex flex-col gap-3">
@@ -217,7 +252,7 @@ export function SiteFooter() {
                   <li key={l.label}>
                     <WipeLink
                       href={l.href}
-                      className="text-[14px] text-ink-dim transition-colors hover:text-ink"
+                      className="text-[14px] text-ink-dim transition-colors duration-200 hover:text-ink"
                     >
                       {l.label}
                     </WipeLink>
@@ -227,8 +262,11 @@ export function SiteFooter() {
             </div>
           ))}
         </div>
-        <div className="mt-[clamp(40px,6vw,72px)] flex flex-col justify-between gap-2 border-t border-edge pt-6 font-mono text-[11px] uppercase tracking-[0.1em] text-ink-dimmer sm:flex-row">
+        <div className="mt-[clamp(44px,6vw,72px)] flex flex-col gap-3 border-t border-edge pt-6 font-mono text-[11px] uppercase tracking-[0.1em] text-ink-dimmer md:flex-row md:items-center md:justify-between">
           <span>© 2026 Urso. All rights reserved.</span>
+          <span className="text-ink-dim">
+            29 months · 4 locations · $6.8M validated
+          </span>
           <span>&ldquo;Urso&rdquo; — Portuguese for bear.</span>
         </div>
       </Container>
