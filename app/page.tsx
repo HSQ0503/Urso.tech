@@ -1,7 +1,7 @@
+import Image from "next/image";
 import { SiteNav, SiteFooter } from "@/components/site/chrome";
 import {
   Section,
-  Container,
   Eyebrow,
   Headline,
   Lede,
@@ -10,15 +10,11 @@ import {
   Cta,
   MonoNote,
   CtaBlock,
-  BackdropGrid,
   Card,
 } from "@/components/site/ui";
 import { Reveal } from "@/components/site/reveal";
-import {
-  InstrumentStrip,
-  ConnectDiagram,
-  PhasePath,
-} from "@/components/site/motifs";
+import { HeroAsk } from "@/components/site/hero-ask";
+import { ConnectDiagram, PhasePath } from "@/components/site/motifs";
 import { DashboardScene } from "@/components/site/product-frame";
 import { FindingsLedger } from "@/components/site/ledger";
 import { HOME_FINDINGS } from "@/components/site/findings-data";
@@ -98,47 +94,92 @@ export default function Home() {
       <SiteNav />
       <main className="bg-bg text-ink">
         {/* ===== Hero ===== */}
-        <section className="relative overflow-hidden pb-[clamp(56px,9vw,112px)] pt-[clamp(118px,17vw,200px)]">
-          <BackdropGrid />
-          <Container className="relative">
+        <section className="relative overflow-hidden px-[clamp(20px,4vw,56px)] pb-[clamp(64px,10vw,120px)] pt-[clamp(132px,20vw,224px)]">
+          {/* A soft orange glow stands in for the reference photo — keeps the
+              dark field, adds depth and a luminous center. */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-x-0 top-0 h-[680px]"
+            style={{
+              background:
+                "radial-gradient(58% 64% at 50% 0%, rgba(254,81,0,0.10) 0%, rgba(254,81,0,0.03) 34%, transparent 72%)",
+            }}
+          />
+          <div className="relative mx-auto flex max-w-[940px] flex-col items-center text-center">
             <Reveal>
-              <Eyebrow>For businesses that run on people</Eyebrow>
+              <span className="inline-flex items-center gap-2.5 rounded-full border border-edge bg-white/[0.04] px-4 py-1.5 font-mono text-[11px] uppercase tracking-[0.16em] text-ink-dim backdrop-blur-sm">
+                <span className="h-1.5 w-1.5 rounded-full bg-orange" />
+                For businesses that run on people
+              </span>
             </Reveal>
-            <Reveal delay={60}>
-              <Headline as="h1" size="display" className="mt-6 max-w-[17ch]">
-                See everything. Fix the leaks. Grow with control
-              </Headline>
-            </Reveal>
-            <Reveal delay={120}>
-              <Lede className="mt-7 max-w-[62ch]">
-                Urso connects the data scattered across your business — sales,
-                scheduling, books, phones, reviews — into one operating system.
-                Then we work with your team to fix what it finds, week after week.
-              </Lede>
-            </Reveal>
-            <Reveal delay={180}>
-              <div className="mt-9 flex flex-wrap items-center gap-x-6 gap-y-4">
-                <Cta href="/contact" size="lg">
-                  Start the conversation
-                </Cta>
-                <Cta href="/what-we-find" variant="text" size="lg">
-                  See what you&rsquo;re missing
-                </Cta>
-              </div>
-            </Reveal>
-          </Container>
 
-          <Container className="relative mt-[clamp(48px,7vw,88px)]">
-            <InstrumentStrip />
-            <Reveal delay={120}>
-              <div className="mt-6 border-t border-edge pt-5">
-                <MonoNote>
-                  29 months of client POS history · 4 locations · $6.8M validated
-                  to the penny
-                </MonoNote>
-              </div>
+            <Reveal delay={60}>
+              <h1 className="mt-8 text-balance font-serif text-[clamp(3.25rem,9vw,7rem)] font-normal leading-[0.94] tracking-[-0.02em] text-ink">
+                <em className="italic">Own</em> your direction
+                <span className="text-orange">.</span>
+              </h1>
             </Reveal>
-          </Container>
+
+            <Reveal delay={120}>
+              <p className="mt-9 text-[clamp(1.0625rem,1.9vw,1.375rem)] font-medium tracking-[-0.01em] text-ink">
+                Urso is the operating system for your business.
+              </p>
+            </Reveal>
+
+            <Reveal delay={160}>
+              <p className="mt-3 max-w-[54ch] text-[17px] leading-[1.55] text-ink-dim sm:text-[19px]">
+                Connect the data scattered across sales, scheduling, books, phones
+                and reviews — then fix what it finds, week after week.
+              </p>
+            </Reveal>
+
+            <Reveal delay={220} className="mt-11 w-full">
+              <HeroAsk />
+            </Reveal>
+
+            <Reveal delay={280}>
+              <p className="mt-6 text-[15px] text-ink-dimmer">
+                See everything. Ask anything.
+              </p>
+            </Reveal>
+
+            <Reveal delay={340}>
+              <p className="mt-10 font-mono text-[11px] uppercase leading-[1.6] tracking-[0.14em] text-ink-dimmer">
+                29 months of POS history · 4 locations · $6.8M validated to the penny
+              </p>
+            </Reveal>
+          </div>
+        </section>
+
+        {/* ===== Product showcase ===== */}
+        <section className="relative overflow-hidden px-[clamp(20px,4vw,56px)] pb-[clamp(64px,11vw,160px)] pt-[clamp(24px,5vw,80px)]">
+          <Reveal className="mx-auto max-w-[1000px] text-center">
+            <h2 className="text-balance font-serif text-[clamp(3rem,7vw,6rem)] font-normal leading-[1.02] tracking-[-0.025em] text-ink">
+              <em className="italic">Simplify</em> your operation
+              <span className="text-orange">.</span>
+            </h2>
+          </Reveal>
+          <Reveal delay={120} className="mt-[clamp(28px,4vw,52px)] w-full">
+            <div className="relative mx-auto" style={{ maxWidth: 720 }}>
+              {/* Soft glow lifting the device off the dark field. */}
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-0"
+                style={{
+                  background:
+                    "radial-gradient(52% 44% at 50% 46%, rgba(254,81,0,0.1) 0%, transparent 70%)",
+                }}
+              />
+              <Image
+                src="/images/macbookmockup.png"
+                alt="The Urso dashboard on a MacBook — a performance overview across the whole business."
+                width={1080}
+                height={1080}
+                sizes="(max-width: 768px) 100vw, 720px"
+                className="relative h-auto w-full"
+              />
+            </div>
+          </Reveal>
         </section>
 
         {/* ===== 01 Outcomes ===== */}

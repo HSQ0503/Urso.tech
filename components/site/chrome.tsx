@@ -33,24 +33,24 @@ export function SiteNav() {
 
   return (
     <>
-      <header
-        className={cx(
-          "fixed inset-x-0 top-0 z-50 border-b transition-colors duration-300",
-          scrolled || open
-            ? "border-edge bg-bg/85 backdrop-blur-xl"
-            : "border-transparent bg-transparent",
-        )}
-      >
-        <Container className="flex h-16 items-center justify-between">
+      <header className="fixed inset-x-0 top-0 z-50 px-[clamp(12px,2.5vw,24px)] pt-[clamp(10px,1.4vw,16px)]">
+        <div
+          className={cx(
+            "mx-auto grid h-14 max-w-[1200px] grid-cols-[1fr_auto_1fr] items-center gap-4 rounded-2xl border px-3 backdrop-blur-xl transition-colors duration-300",
+            scrolled || open
+              ? "border-white/[0.12] bg-white/[0.06]"
+              : "border-white/[0.07] bg-white/[0.035]",
+          )}
+        >
           <WipeLink
             href="/"
             aria-label="Urso — home"
-            className="-ml-0.5 shrink-0 rounded outline-none focus-visible:ring-2 focus-visible:ring-orange/70"
+            className="col-start-1 justify-self-start rounded pl-2 outline-none focus-visible:ring-2 focus-visible:ring-orange/70"
           >
-            <Wordmark height={28} priority />
+            <Wordmark height={26} priority />
           </WipeLink>
 
-          <nav className="hidden items-center gap-1 md:flex">
+          <nav className="col-start-2 hidden items-center gap-0.5 justify-self-center lg:flex">
             {NAV_LINKS.map((l) => {
               const active = pathname.startsWith(l.href);
               return (
@@ -58,8 +58,10 @@ export function SiteNav() {
                   key={l.href}
                   href={l.href}
                   className={cx(
-                    "rounded-md px-3.5 py-2 text-[14px] tracking-[-0.005em] transition-colors duration-200",
-                    active ? "text-ink" : "text-ink-dim hover:text-ink",
+                    "whitespace-nowrap rounded-full px-3 py-2 font-mono text-[11px] uppercase tracking-[0.12em] transition-colors duration-200",
+                    active
+                      ? "bg-white/[0.07] text-ink"
+                      : "text-ink-dim hover:bg-white/[0.06] hover:text-ink",
                   )}
                 >
                   {l.label}
@@ -68,30 +70,31 @@ export function SiteNav() {
             })}
           </nav>
 
-          <div className="flex items-center gap-2">
+          <div className="col-start-3 flex items-center gap-1.5 justify-self-end">
             <WipeLink
               href="/login"
-              className="hidden rounded-md px-3 py-2 text-[14px] text-ink-dim transition-colors hover:text-ink sm:inline-flex"
+              className="hidden whitespace-nowrap rounded-full px-3 py-2 font-mono text-[11px] uppercase tracking-[0.12em] text-ink-dim transition-colors hover:text-ink sm:inline-flex"
             >
               Log in
             </WipeLink>
             <WipeLink
               href="/contact"
-              className="hidden rounded-full bg-orange px-[18px] py-[9px] text-[14px] font-medium tracking-[-0.01em] text-[#070707] transition-colors duration-200 hover:bg-[#FF6A1F] active:bg-[#E04800] md:inline-flex"
+              className="group hidden items-center gap-2 whitespace-nowrap rounded-full bg-orange px-5 py-2.5 font-mono text-[11px] uppercase tracking-[0.12em] text-[#070707] transition-colors duration-200 hover:bg-[#FF6A1F] active:bg-[#E04800] md:inline-flex"
             >
-              Start the conversation
+              Get started
+              <Arrow className="transition-transform duration-200 group-hover:translate-x-0.5" />
             </WipeLink>
             <button
               type="button"
               aria-label={open ? "Close menu" : "Open menu"}
               aria-expanded={open}
               onClick={() => setOpen((v) => !v)}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-md text-ink md:hidden"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-md text-ink lg:hidden"
             >
               <MenuGlyph open={open} />
             </button>
           </div>
-        </Container>
+        </div>
       </header>
 
       {/* Mobile sheet */}

@@ -9,7 +9,7 @@ import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { reportModel, assertReportKey } from "@/lib/ai/models";
 import { METRIC_DEFINITIONS } from "@/lib/ai/analyst";
-import { BUSINESS_CONTEXT } from "@/lib/ai/business";
+import { FULL_BUSINESS_CONTEXT } from "@/lib/ai/business";
 import { stores, scopeLabel, type Scope, type StoreId } from "@/components/dashboard/data";
 
 const nyToday = () => new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
@@ -144,7 +144,7 @@ const actionsSchema = z.object({
 
 const WEEKLY_SYSTEM = `You write the Monday morning brief for the owner of Woof Gang Bakery & Grooming.
 
-${BUSINESS_CONTEXT}
+${FULL_BUSINESS_CONTEXT}
 
 ${METRIC_DEFINITIONS}
 

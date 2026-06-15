@@ -3,7 +3,7 @@
 // Handoff); if the model defines a metric differently than the chart next to
 // it, trust is dead. Keep both in lockstep.
 
-import { BUSINESS_CONTEXT } from "@/lib/ai/business";
+import { BUSINESS_CORE } from "@/lib/ai/business";
 import { CHART_GUIDES, type ChartGuide } from "@/components/dashboard/chart-guides";
 import { scopeLabel, monthLabel, type Scope, type MonthValue } from "@/components/dashboard/data";
 import type { SessionUser } from "@/lib/auth";
@@ -50,7 +50,7 @@ export function buildSystemPrompt(ctx: ChatScope, seedContext: string): string {
     `Today is ${today} (America/New_York). You are talking to ${ctx.user.name} (${ctx.user.role === "manager" ? `manager of ${scopeLabel(ctx.scope)} — you can only discuss this store` : ctx.user.role}).`,
     `The user's dashboard is currently filtered to: ${scopeLabel(ctx.scope)} · ${monthLabel(ctx.month)}. Treat that as the default scope of their questions unless they say otherwise.`,
     "",
-    BUSINESS_CONTEXT,
+    BUSINESS_CORE,
     "",
     DATA_SOURCES,
     "",

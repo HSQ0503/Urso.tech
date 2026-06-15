@@ -23,6 +23,7 @@ import {
   getCrossSell,
 } from "@/components/dashboard/data.server";
 import { stores, type Scope, type StoreId, type MonthValue } from "@/components/dashboard/data";
+import { BUSINESS_SECTIONS, BUSINESS_SECTION_KEYS, getBusinessSection } from "@/lib/ai/business";
 
 const monthSchema = z
   .string()
@@ -332,6 +333,21 @@ export function buildAnalystTools(allowed: Scope) {
       execute: async ({ month }) => {
         const r = await getRevenueNewVsRepeat(allowed, month as MonthValue);
         return { repeatRevenue: r.repeat, newCustomerRevenue: r.fresh, walkInRevenue: r.walkIn };
+      },
+    }),
+
+    business_context: tool({
+      description:
+        "Look up how the business actually works — operations, pricing, groomer economics/commission, booking paths, the visit flow, retail tactics, customer/dog profiles, store org, or how Woof Gang differs from competitors. Call this for any question whose answer depends on business specifics not in the always-on context. This is qualitative knowledge, not metrics — use the data tools for numbers.",
+      inputSchema: z.object({
+        section: z
+          .enum(BUSINESS_SECTION_KEYS as [string, ...string[]])
+          .describe("the section key to retrieve (see the reference list in the system context)"),
+      }),
+      execute: ({ section }) => {
+        const s = getBusinessSection(section);
+        if (!s) return { error: `unknown section. Available: ${BUSINESS_SECTIONS.map((b) => b.key).join(", ")}` };
+        return { title: s.title, body: s.body };
       },
     }),
 
