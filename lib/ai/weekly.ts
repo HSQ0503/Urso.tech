@@ -10,6 +10,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { reportModel, assertReportKey } from "@/lib/ai/models";
 import { METRIC_DEFINITIONS } from "@/lib/ai/analyst";
 import { FULL_BUSINESS_CONTEXT } from "@/lib/ai/business";
+import { gatherVerifiedOutcomes, verifiedOutcomesBlock } from "@/lib/ai/outcomes";
 import { stores, scopeLabel, type Scope, type StoreId } from "@/components/dashboard/data";
 
 const nyToday = () => new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
@@ -176,12 +177,8 @@ function actionMemoryBlock(mem: ActionMemory): string {
   const parts: string[] = [];
   if (mem.active.length) parts.push(`Already in motion — do NOT suggest these again:\n${mem.active.map(fmt).join("\n")}`);
   if (mem.dismissed.length) parts.push(`Recently dismissed by the owner — do NOT suggest these again:\n${mem.dismissed.map(fmt).join("\n")}`);
-  if (mem.completed.length)
-    parts.push(
-      "Completed (favor playbook areas that worked; don't repeat a spent play):\n" +
-        mem.completed.map((a) => `- "${a.title}" (${a.agent} · ${a.store})${a.result ? ` → ${a.result}` : ""}`).join("\n"),
-    );
-  return parts.length ? `\n\n--- What you've already suggested, and what happened ---\n${parts.join("\n\n")}` : "";
+  if (mem.completed.length) parts.push(`Already completed — do NOT re-suggest these:\n${mem.completed.map(fmt).join("\n")}`);
+  return parts.length ? `\n\n--- What you've already suggested ---\n${parts.join("\n\n")}` : "";
 }
 
 // Normalized title for code-level dedup (belt-and-suspenders to the prompt rule).
@@ -234,15 +231,21 @@ Rules:
 Memory & continuity:
 - If last week's brief is provided, open by briefly noting whether last week's recommendation played out — compare this week's numbers to last week's. One clause, then move on; don't force it if nothing's comparable.
 - Never suggest an action that duplicates one already in motion or one the owner recently dismissed (both are listed for you) — propose something new instead.
-- When ranking actions, favor playbook areas whose past actions completed with a positive result; don't re-pitch a dismissed idea.`;
+- Rank actions by MEASURED results: a "Measured results of past actions" section may show, from POS data, which completed actions actually moved their target metric. Favor playbook areas with measured wins; ease off ones that showed no measurable effect; and if a past action reads "no signal — may not have been done," that lever is still open — propose a fresh, differently-worded action for it, not a copy of the completed one. Don't re-pitch a dismissed idea.
+- Never imply a past action recovered revenue unless its metric measurably moved.`;
 
 export async function runWeekly(): Promise<{ briefs: number; actions: number; weekStart: string; failed: string[] }> {
   assertReportKey();
   const supabase = createAdminClient();
   const data = await gatherWeeklyData(supabase);
-  const [priorBriefs, actionMemory] = await Promise.all([
+  const [priorBriefs, actionMemory, verifiedOutcomes] = await Promise.all([
     gatherPriorBriefs(supabase, data.weekStart),
     gatherActionMemory(supabase),
+    // Verification is an enhancement — a failure must not lose the whole run.
+    gatherVerifiedOutcomes(supabase, data.weekEnd).catch((e) => {
+      console.warn(`[weekly] verified outcomes failed: ${e instanceof Error ? e.message : e}`);
+      return [];
+    }),
   ]);
 
   const { data: client, error: clientErr } = await supabase.from("clients").select("id").limit(1).single();
@@ -272,7 +275,9 @@ export async function runWeekly(): Promise<{ briefs: number; actions: number; we
             `The week covered is ${data.weekStart} to ${data.weekEnd} (vs the 7 days before it).` +
             priorBriefBlock(scope, priorBriefs.get(scope)) +
             `\n\nData:\n${JSON.stringify(scoped, null, 1)}` +
-            (scope === "all" ? `${actionMemoryBlock(actionMemory)}\n\nAlso produce the ranked suggested actions.` : ""),
+            (scope === "all"
+              ? `${actionMemoryBlock(actionMemory)}${verifiedOutcomesBlock(verifiedOutcomes)}\n\nAlso produce the ranked suggested actions.`
+              : ""),
         });
         return { scope, object };
       } catch (e) {
