@@ -103,10 +103,10 @@ function RevenueWidget() {
  * 2 · By store (current vs target bars)                               *
  * ------------------------------------------------------------------ */
 const STORES = [
-  { name: "Dr. Phillips", current: 31, target: 25 },
-  { name: "Lake Nona", current: 27, target: 25 },
-  { name: "Oviedo", current: 24, target: 25 },
-  { name: "Winter Park", current: 19, target: 25 },
+  { name: "Austin", current: 31, target: 25 },
+  { name: "Denver", current: 27, target: 25 },
+  { name: "Nashville", current: 24, target: 25 },
+  { name: "Charlotte", current: 19, target: 25 },
 ];
 
 function StoreBarsWidget() {
@@ -202,10 +202,10 @@ function CaptureWidget() {
  * 4 · Reputation (2×2 store grid)                                     *
  * ------------------------------------------------------------------ */
 const REVIEWS = [
-  { name: "Dr. Phillips", rating: "4.8", delta: "+12", up: true },
-  { name: "Lake Nona", rating: "4.7", delta: "+9", up: true },
-  { name: "Oviedo", rating: "4.6", delta: "+5", up: true },
-  { name: "Winter Park", rating: "4.4", delta: "−2", up: false },
+  { name: "Austin", rating: "4.8", delta: "+12", up: true },
+  { name: "Denver", rating: "4.7", delta: "+9", up: true },
+  { name: "Nashville", rating: "4.6", delta: "+5", up: true },
+  { name: "Charlotte", rating: "4.4", delta: "−2", up: false },
 ];
 
 function MiniSpark({ up }: { up: boolean }) {

@@ -63,14 +63,7 @@ export default function Home() {
 
             <Reveal delay={120}>
               <p className="mt-9 text-[clamp(1.0625rem,1.9vw,1.375rem)] font-medium tracking-[-0.01em] text-ink">
-                Urso is the operating system for your business.
-              </p>
-            </Reveal>
-
-            <Reveal delay={160}>
-              <p className="mt-3 max-w-[54ch] text-[17px] leading-[1.55] text-ink-dim sm:text-[19px]">
-                Connect the data scattered across sales, scheduling, books, phones
-                and reviews — then fix what it finds, week after week.
+                Urso is the operating partner for your business.
               </p>
             </Reveal>
 
@@ -141,7 +134,7 @@ export default function Home() {
             </p>
             <div className="mt-9 flex justify-center">
               <WipeLink
-                href="/what-we-do"
+                href="/how-it-works"
                 className="group inline-flex items-center gap-2.5 rounded-xl px-7 py-3.5 font-mono text-[12px] uppercase tracking-[0.16em] text-ink transition-all duration-200 hover:-translate-y-px hover:brightness-110"
                 style={{
                   background:
@@ -150,7 +143,7 @@ export default function Home() {
                     "inset 0 1px 0 0 rgba(255,255,255,0.18), inset 0 0 0 1px rgba(255,255,255,0.07), 0 16px 32px -16px rgba(0,0,0,0.85)",
                 }}
               >
-                More about what we do
+                More about how we work
               </WipeLink>
             </div>
           </Reveal>

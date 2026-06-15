@@ -103,12 +103,12 @@ const INSIGHTS = [
   },
   {
     headline: "Rebook rate is climbing",
-    body: "More clients book their next visit before they leave — up 6 points this month. Dr. Phillips leads the group at 71%.",
+    body: "More clients book their next visit before they leave — up 6 points this month. Austin leads the group at 71%.",
     impact: "≈ $4,400/mo if every store matched it",
   },
   {
     headline: "Retail sells at one store, stalls at another",
-    body: "The grooming add-on does 3× the volume at Lake Nona vs Oviedo. Same shelf, same price — the difference is the prompt at checkout.",
+    body: "The checkout add-on does 3× the volume at Denver vs Nashville. Same shelf, same price — the difference is the prompt at checkout.",
     impact: "≈ $1,800/mo on the table",
   },
   {
@@ -177,8 +177,8 @@ function BriefSpark() {
 }
 
 const ACTIONS = [
-  { label: "Fill Tue 2–4pm", where: "Dr. Phillips", impact: "+$520/wk" },
-  { label: "Push grooming add-on", where: "Oviedo", impact: "+$300/wk" },
+  { label: "Fill Tue 2–4pm", where: "Austin", impact: "+$520/wk" },
+  { label: "Push the checkout add-on", where: "Nashville", impact: "+$300/wk" },
   { label: "Win back 14 lapsed clients", where: "all stores", impact: "+$610/wk" },
 ];
 
@@ -200,8 +200,8 @@ const PANELS: ReactNode[] = [
       Revenue climbed 4.1% this week
     </h4>
     <p className="mt-2.5 text-[13.5px] leading-[1.55] text-white/65">
-      Driven by a fuller Saturday book and stronger retail attach at Lake Nona.
-      Dr. Phillips lagged — those soft Tuesday afternoons again.
+      Driven by a fuller Saturday book and stronger retail attach at Denver.
+      Austin lagged — those soft Tuesday afternoons again.
     </p>
     <div className="mt-auto">
       <BriefSpark />

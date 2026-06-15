@@ -7,7 +7,6 @@ import { Wordmark, Container, Arrow, cx } from "./ui";
 import { FORECAST_GRAIN } from "./forecast";
 
 const NAV_LINKS = [
-  { label: "What we do", href: "/what-we-do" },
   { label: "How it works", href: "/how-it-works" },
   { label: "Capabilities", href: "/capabilities" },
   { label: "What we find", href: "/what-we-find" },
@@ -37,7 +36,7 @@ export function SiteNav() {
       <header className="fixed inset-x-0 top-0 z-50 px-[clamp(12px,2.5vw,24px)] pt-[clamp(10px,1.4vw,16px)]">
         <div
           className={cx(
-            "mx-auto grid h-14 max-w-[1200px] grid-cols-[1fr_auto_1fr] items-center gap-4 rounded-2xl border px-3 backdrop-blur-xl transition-colors duration-300",
+            "mx-auto grid h-14 max-w-[1320px] grid-cols-[1fr_auto_1fr] items-center gap-4 rounded-2xl border px-3 backdrop-blur-xl transition-colors duration-300",
             scrolled || open
               ? "border-white/[0.12] bg-white/[0.06]"
               : "border-white/[0.07] bg-white/[0.035]",
@@ -51,7 +50,7 @@ export function SiteNav() {
             <Wordmark height={26} priority />
           </WipeLink>
 
-          <nav className="col-start-2 hidden items-center gap-0.5 justify-self-center lg:flex">
+          <nav className="col-start-2 hidden items-center gap-1 justify-self-center lg:flex">
             {NAV_LINKS.map((l) => {
               const active = pathname.startsWith(l.href);
               return (
@@ -59,10 +58,10 @@ export function SiteNav() {
                   key={l.href}
                   href={l.href}
                   className={cx(
-                    "whitespace-nowrap rounded-full px-3 py-2 font-mono text-[11px] uppercase tracking-[0.12em] transition-colors duration-200",
+                    "whitespace-nowrap rounded-[11px] px-3.5 py-2 font-mono text-[11px] uppercase tracking-[0.12em] transition-colors duration-200",
                     active
-                      ? "bg-white/[0.07] text-ink"
-                      : "text-ink-dim hover:bg-white/[0.06] hover:text-ink",
+                      ? "bg-white/[0.12] text-ink"
+                      : "bg-white/[0.05] text-ink-dim hover:bg-white/[0.1] hover:text-ink",
                   )}
                 >
                   {l.label}
@@ -173,7 +172,6 @@ const FOOTER_COLUMNS: Array<{
   {
     heading: "Site",
     links: [
-      { label: "What we do", href: "/what-we-do" },
       { label: "How it works", href: "/how-it-works" },
       { label: "Capabilities", href: "/capabilities" },
       { label: "What we find", href: "/what-we-find" },

@@ -5,11 +5,14 @@ import {
   Eyebrow,
   Headline,
   Body,
-  PageHero,
+  Cta,
   CtaBlock,
   MonoNote,
+  BackdropGrid,
 } from "@/components/site/ui";
 import { Reveal } from "@/components/site/reveal";
+import { FORECAST_GRAIN } from "@/components/site/forecast";
+import { ProcessCards } from "@/components/site/process-cards";
 
 export const metadata: Metadata = {
   title: "How it works",
@@ -54,17 +57,97 @@ const PHASES = [
 
 const FIRST_WEEKS = ["Access & recon", "Baseline captured", "Leak report", "First fix measured"];
 
+/* Real proof in place of Origin's award laurels — Urso shows validated numbers,
+   not borrowed badges. */
+const PROOF = [
+  { value: "29 months", label: "of validated POS history" },
+  { value: "4 locations", label: "reconciled to one truth" },
+  { value: "$6.8M", label: "tracked to the penny" },
+];
+
 export default function HowItWorksPage() {
   return (
     <>
       <SiteNav />
       <main className="bg-bg text-ink">
-        <PageHero
-          eyebrow="How it works"
-          title="Four phases. One direction"
-          sub="Every engagement runs the same arc: understand the business, build its operating layer, put it to work, keep improving it. Here's what each phase actually involves."
-          primary={{ label: "Start the conversation", href: "/contact" }}
-        />
+        {/* ===== Hero ===== */}
+        <section className="relative overflow-hidden border-b border-edge px-[clamp(20px,4vw,56px)] pb-[clamp(64px,9vw,112px)] pt-[clamp(120px,18vw,208px)]">
+          {/* Same layered backdrop as the homepage hero — OS grid, multi-bloom
+              orange glow, and fine grain. */}
+          <BackdropGrid />
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0"
+            style={{
+              background:
+                "radial-gradient(62% 44% at 50% -2%, rgba(254,81,0,0.17) 0%, rgba(254,81,0,0.045) 40%, transparent 68%)," +
+                "radial-gradient(38% 30% at 82% 5%, rgba(255,120,42,0.08) 0%, transparent 55%)," +
+                "radial-gradient(50% 28% at 50% 78%, rgba(254,81,0,0.05) 0%, transparent 72%)",
+            }}
+          />
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0"
+            style={{
+              backgroundImage: FORECAST_GRAIN,
+              backgroundSize: "150px 150px",
+              opacity: 0.05,
+              mixBlendMode: "soft-light",
+            }}
+          />
+
+          <div className="relative mx-auto flex max-w-[940px] flex-col items-center text-center">
+            <Reveal>
+              <span className="inline-flex items-center gap-2.5 rounded-full border border-edge bg-white/[0.04] px-4 py-1.5 font-mono text-[11px] uppercase tracking-[0.16em] text-ink-dim backdrop-blur-sm">
+                <span className="h-1.5 w-1.5 rounded-full bg-orange" />
+                How it works
+              </span>
+            </Reveal>
+
+            <Reveal delay={60}>
+              <h1 className="mt-8 max-w-[18ch] text-balance font-serif text-[clamp(2.75rem,6.6vw,5.5rem)] font-normal leading-[1.0] tracking-[-0.025em] text-ink">
+                We build the system, then{" "}
+                <em className="italic">stay to run it</em>
+                <span className="text-orange">.</span>
+              </h1>
+            </Reveal>
+
+            <Reveal delay={120}>
+              <p className="mt-8 max-w-[54ch] text-[17px] leading-[1.6] text-ink-dim sm:text-[19px]">
+                Every engagement runs the same arc: review, build, activate,
+                improve. We connect your data, find the money, fix it with your
+                team, and keep it fixed.
+              </p>
+            </Reveal>
+
+            <Reveal delay={180} className="mt-10">
+              <Cta href="/contact" size="lg">
+                Start the conversation
+              </Cta>
+            </Reveal>
+
+            {/* Real proof — validated numbers, not borrowed award badges. */}
+            <Reveal delay={240} className="mt-14 w-full">
+              <div className="mx-auto flex max-w-[620px] flex-col items-center justify-center divide-y divide-edge sm:flex-row sm:divide-x sm:divide-y-0">
+                {PROOF.map((s) => (
+                  <div key={s.label} className="px-7 py-3 text-center sm:py-1">
+                    <div className="font-serif text-[clamp(1.4rem,2.1vw,1.8rem)] leading-none tracking-[-0.02em] text-ink">
+                      {s.value}
+                    </div>
+                    <div className="mt-2 font-mono text-[10px] uppercase tracking-[0.12em] text-ink-dimmer">
+                      {s.label}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Reveal>
+          </div>
+        </section>
+
+        {/* ===== How it works — the engagement in three moves ===== */}
+        <section className="border-b border-edge px-[clamp(20px,4vw,56px)] py-[clamp(64px,10vw,128px)]">
+          <ProcessCards />
+        </section>
 
         {PHASES.map((p, i) => (
           <Section key={p.n} divide={i !== 0}>
