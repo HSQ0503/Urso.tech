@@ -113,6 +113,80 @@ export async function gatherWeeklyData(supabase: Admin): Promise<WeeklyData> {
   };
 }
 
+// ── Memory: what the system said and did last time ──────────────────────────
+// The generator reads its own history so each week builds on the last — it can
+// grade last week's recommendation and won't re-pitch work that's already in
+// motion or that the owner dismissed. Numbers still come from the metrics above;
+// this is the qualitative continuity layer.
+
+type PriorBrief = { headline: string; recommendation: string; opportunityTitle: string | null };
+
+// Newest brief strictly BEFORE this run's week, per scope. lt(week_start)
+// tolerates skipped weeks — it grabs the most recent prior brief, not exactly 7
+// days back. Runs before this week's upsert, so it never reads the row we're
+// about to write.
+async function gatherPriorBriefs(supabase: Admin, weekStart: string): Promise<Map<string, PriorBrief>> {
+  const { data, error } = await supabase
+    .from("ai_briefs")
+    .select("scope, headline, recommendation, opportunity, week_start")
+    .lt("week_start", weekStart)
+    .order("week_start", { ascending: false });
+  if (error) throw new Error(`ai_briefs history read failed: ${error.message}`);
+  const map = new Map<string, PriorBrief>();
+  for (const row of (data ?? []) as { scope: string; headline: string; recommendation: string; opportunity: { title?: string } | null }[]) {
+    if (!map.has(row.scope)) {
+      map.set(row.scope, { headline: row.headline, recommendation: row.recommendation, opportunityTitle: row.opportunity?.title ?? null });
+    }
+  }
+  return map;
+}
+
+type ActionMemo = { title: string; agent: string; store: string; result: string | null };
+type ActionMemory = { active: ActionMemo[]; completed: ActionMemo[]; dismissed: ActionMemo[] };
+
+// Actions that survive the weekly suggested-row wipe: in-flight (approved /
+// running), completed (with results, to learn from), and recently dismissed.
+async function gatherActionMemory(supabase: Admin): Promise<ActionMemory> {
+  const { data, error } = await supabase
+    .from("agent_actions")
+    .select("title, agent, store_label, status, result, updated_at")
+    .in("status", ["approved", "running", "completed", "dismissed"]);
+  if (error) throw new Error(`agent_actions history read failed: ${error.message}`);
+  const rows = (data ?? []) as { title: string; agent: string; store_label: string; status: string; result: string | null; updated_at: string }[];
+  const dismissedCutoff = addDays(nyToday(), -45); // don't suppress old dismissals forever
+  const memo = (r: (typeof rows)[number]): ActionMemo => ({ title: r.title, agent: r.agent, store: r.store_label, result: r.result });
+  return {
+    active: rows.filter((r) => r.status === "approved" || r.status === "running").map(memo).slice(0, 20),
+    completed: rows.filter((r) => r.status === "completed").map(memo).slice(0, 12),
+    dismissed: rows.filter((r) => r.status === "dismissed" && r.updated_at.slice(0, 10) >= dismissedCutoff).map(memo).slice(0, 12),
+  };
+}
+
+// Prompt fragment: last week's brief for this scope, asked to be graded in a clause.
+const priorBriefBlock = (scope: Scope, prior: PriorBrief | undefined): string =>
+  prior
+    ? `\n\nLast week's brief for ${scopeLabel(scope)} — say in one clause whether it played out (you have this week's vs last week's numbers):\n` +
+      `- Headline: ${prior.headline}\n- You recommended: ${prior.recommendation}` +
+      (prior.opportunityTitle ? `\n- Biggest lever you named: ${prior.opportunityTitle}` : "")
+    : "";
+
+// Prompt fragment: action history — only added to the "all" run, which makes the actions.
+function actionMemoryBlock(mem: ActionMemory): string {
+  const fmt = (a: ActionMemo) => `- "${a.title}" (${a.agent} · ${a.store})`;
+  const parts: string[] = [];
+  if (mem.active.length) parts.push(`Already in motion — do NOT suggest these again:\n${mem.active.map(fmt).join("\n")}`);
+  if (mem.dismissed.length) parts.push(`Recently dismissed by the owner — do NOT suggest these again:\n${mem.dismissed.map(fmt).join("\n")}`);
+  if (mem.completed.length)
+    parts.push(
+      "Completed (favor playbook areas that worked; don't repeat a spent play):\n" +
+        mem.completed.map((a) => `- "${a.title}" (${a.agent} · ${a.store})${a.result ? ` → ${a.result}` : ""}`).join("\n"),
+    );
+  return parts.length ? `\n\n--- What you've already suggested, and what happened ---\n${parts.join("\n\n")}` : "";
+}
+
+// Normalized title for code-level dedup (belt-and-suspenders to the prompt rule).
+const normTitle = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+
 // No hard minimums — a quiet week can honestly have zero wins or risks, and a
 // failed validation would kill the scope's brief; the page falls back to the
 // template strings for any empty array.
@@ -155,12 +229,21 @@ Rules:
 - A week is a small sample: call out a move only if it's large enough to matter (roughly 5%+ on revenue/bookings); otherwise say things held steady.
 - Causes you can't see in POS data (weather, a groomer leaving, holidays) are hypotheses — label them as such or leave them out.
 - Suggested actions must be operational (outreach, checkout prompts, schedule tweaks) — never pricing, hiring/firing, or anything irreversible. Never promise recovered dollars.
-- Phone calls, website funnel and Google reviews are NOT tracked yet — never reference them as data.`;
+- Phone calls, website funnel and Google reviews are NOT tracked yet — never reference them as data.
+
+Memory & continuity:
+- If last week's brief is provided, open by briefly noting whether last week's recommendation played out — compare this week's numbers to last week's. One clause, then move on; don't force it if nothing's comparable.
+- Never suggest an action that duplicates one already in motion or one the owner recently dismissed (both are listed for you) — propose something new instead.
+- When ranking actions, favor playbook areas whose past actions completed with a positive result; don't re-pitch a dismissed idea.`;
 
 export async function runWeekly(): Promise<{ briefs: number; actions: number; weekStart: string; failed: string[] }> {
   assertReportKey();
   const supabase = createAdminClient();
   const data = await gatherWeeklyData(supabase);
+  const [priorBriefs, actionMemory] = await Promise.all([
+    gatherPriorBriefs(supabase, data.weekStart),
+    gatherActionMemory(supabase),
+  ]);
 
   const { data: client, error: clientErr } = await supabase.from("clients").select("id").limit(1).single();
   if (clientErr || !client) throw new Error(`clients read failed: ${clientErr?.message ?? "no client row"}`);
@@ -186,9 +269,10 @@ export async function runWeekly(): Promise<{ briefs: number; actions: number; we
           system: WEEKLY_SYSTEM,
           prompt:
             `Write the weekly brief for: ${scopeLabel(scope)}.\n` +
-            `The week covered is ${data.weekStart} to ${data.weekEnd} (vs the 7 days before it).\n\n` +
-            `Data:\n${JSON.stringify(scoped, null, 1)}` +
-            (scope === "all" ? "\n\nAlso produce the ranked suggested actions." : ""),
+            `The week covered is ${data.weekStart} to ${data.weekEnd} (vs the 7 days before it).` +
+            priorBriefBlock(scope, priorBriefs.get(scope)) +
+            `\n\nData:\n${JSON.stringify(scoped, null, 1)}` +
+            (scope === "all" ? `${actionMemoryBlock(actionMemory)}\n\nAlso produce the ranked suggested actions.` : ""),
         });
         return { scope, object };
       } catch (e) {
@@ -221,7 +305,18 @@ export async function runWeekly(): Promise<{ briefs: number; actions: number; we
   // Suggestions are regenerated weekly: anything still "suggested" is replaced
   // (including the original seeds); approved/running/completed rows stay. If
   // the "all" run failed or returned nothing, keep last week's suggestions.
-  const actions = succeeded.find((r) => r.scope === "all")?.object.actions ?? [];
+  const rawActions = succeeded.find((r) => r.scope === "all")?.object.actions ?? [];
+
+  // Dedup safety net: drop any suggestion duplicating work already in motion,
+  // completed, or recently dismissed. The prompt asks for this; this enforces it
+  // even if the model slips.
+  const taken = new Set(
+    [...actionMemory.active, ...actionMemory.completed, ...actionMemory.dismissed].map((a) => normTitle(a.title)),
+  );
+  const actions = rawActions.filter((a) => !taken.has(normTitle(a.title)));
+  const droppedDup = rawActions.length - actions.length;
+  if (droppedDup > 0) console.warn(`[weekly] dropped ${droppedDup} duplicate suggestion(s) already in-flight/dismissed`);
+
   if (!actions.length) return { briefs: rows.length, actions: 0, weekStart: data.weekStart, failed };
 
   const { error: delErr } = await supabase.from("agent_actions").delete().eq("status", "suggested");

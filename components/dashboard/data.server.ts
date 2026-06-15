@@ -189,7 +189,8 @@ async function loadActions(): Promise<RawAction[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("agent_actions")
-    .select("id, store_id, store_label, agent, title, detail, metric, status, result, pending");
+    .select("id, store_id, store_label, agent, title, detail, metric, status, result, pending")
+    .neq("status", "dismissed");
   if (error) throw new Error(`agent_actions read failed: ${error.message}`);
   return (data ?? []) as unknown as RawAction[];
 }
@@ -1401,6 +1402,7 @@ export async function getAllAgentActions(): Promise<ActionWithPlan[]> {
   const { data, error } = await supabase
     .from("agent_actions")
     .select("id, store_id, store_label, agent, title, detail, metric, status, result, pending, plan_key")
+    .neq("status", "dismissed")
     .order("created_at", { ascending: true });
   if (error) throw new Error(`agent_actions read failed: ${error.message}`);
   type R = RawAction & { plan_key: string };

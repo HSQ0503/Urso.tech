@@ -4,7 +4,15 @@
 // months — swap via env, not a deploy.
 
 import { google } from "@ai-sdk/google";
-import { anthropic } from "@ai-sdk/anthropic";
+import { createAnthropic } from "@ai-sdk/anthropic";
+
+// Pin the Anthropic endpoint to the real /v1 host. A stray ANTHROPIC_BASE_URL in
+// the environment (e.g. local tooling that sets it without the /v1 path) is read
+// by the provider and would 404 every report call. Set AI_ANTHROPIC_BASE_URL to
+// override for a real gateway.
+const anthropic = createAnthropic({
+  baseURL: process.env.AI_ANTHROPIC_BASE_URL ?? "https://api.anthropic.com/v1",
+});
 
 export const chatModel = () => google(process.env.AI_CHAT_MODEL ?? "gemini-3.5-flash");
 

@@ -4,11 +4,11 @@
 
 import { streamText, convertToModelMessages, stepCountIs, type UIMessage } from "ai";
 import { getSession, resolveScope } from "@/lib/auth";
-import { getMetrics, getKpiDeltas } from "@/components/dashboard/data.server";
+import { getMetrics, getKpiDeltas, getWeeklyBrief, getAllAgentActions } from "@/components/dashboard/data.server";
 import { buildSystemPrompt } from "@/lib/ai/analyst";
 import { buildAnalystTools } from "@/lib/ai/tools";
 import { chatModel, assertChatKey } from "@/lib/ai/models";
-import { scopeLabel, monthLabel, type MonthValue } from "@/components/dashboard/data";
+import { stores, scopeLabel, monthLabel, type MonthValue } from "@/components/dashboard/data";
 
 export const maxDuration = 60;
 
@@ -36,18 +36,46 @@ export async function POST(req: Request) {
   const scope = resolveScope(user, body.store);
   const month = (body.month && /^(all|\d{4}|\d{4}-\d{2})$/.test(body.month) ? body.month : "all") as MonthValue;
 
-  // Seed: the headline numbers for the user's current filter, so "what am I
-  // looking at" answers stream instantly instead of waiting on a tool loop.
+  // Pre-load everything the prompt wants, in parallel and best-effort: the
+  // headline numbers (seed), this week's brief, and the action center for this
+  // scope — so the chat is brief- and action-aware with no tool round-trip.
+  const [mRes, dRes, briefRes, actionsRes] = await Promise.allSettled([
+    getMetrics(scope, month),
+    getKpiDeltas(scope, month),
+    getWeeklyBrief(scope),
+    getAllAgentActions(),
+  ]);
+
   let seed = "";
-  try {
-    const [m, deltas] = await Promise.all([getMetrics(scope, month), getKpiDeltas(scope, month)]);
+  if (mRes.status === "fulfilled" && dRes.status === "fulfilled") {
+    const m = mRes.value;
+    const deltas = dRes.value;
     seed =
       `${scopeLabel(scope)} · ${monthLabel(month)}: revenue $${m.revenue.toLocaleString()} ` +
       `(grooming $${m.grooming.toLocaleString()} / retail $${m.retail.toLocaleString()}), ` +
       `${m.bookings.toLocaleString()} bookings, avg visit $${m.avgTicket}, return rate ${pct(m.rebook)}, retail attach ${pct(m.attach)}.` +
       (deltas.revenue != null ? ` Vs prior period: revenue ${deltas.revenue >= 0 ? "+" : ""}${pct(deltas.revenue)}.` : "");
-  } catch {
-    // Seed is best-effort — the model can recover everything via tools.
+  }
+
+  const brief =
+    briefRes.status === "fulfilled"
+      ? { headline: briefRes.value.headline, recommendation: briefRes.value.recommendation, opportunityTitle: briefRes.value.opportunity?.title }
+      : null;
+
+  // Only the actions this scope may see (managers are store-locked) — mirrors
+  // the list_actions tool's label filter.
+  let actions: { title: string; agent: string; store: string; status: string }[] = [];
+  if (actionsRes.status === "fulfilled") {
+    const allowed = new Set<string>(["All stores"]);
+    if (scope === "all") stores.forEach((s) => allowed.add(s.name));
+    else {
+      const s = stores.find((st) => st.id === scope);
+      if (s) allowed.add(s.name);
+    }
+    actions = actionsRes.value
+      .filter((a) => allowed.has(a.store))
+      .map((a) => ({ title: a.title, agent: a.agent, store: a.store, status: a.status }))
+      .slice(0, 10);
   }
 
   const result = streamText({
@@ -55,6 +83,8 @@ export async function POST(req: Request) {
     system: buildSystemPrompt(
       { user, scope, month, topic: body.topic, topicId: body.topicId, pending: body.pending },
       seed,
+      brief,
+      actions,
     ),
     messages: await convertToModelMessages(body.messages),
     tools: buildAnalystTools(scope),

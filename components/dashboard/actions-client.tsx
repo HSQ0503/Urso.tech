@@ -4,12 +4,13 @@
 // (data.server) and passed in as the initial list; this component owns the
 // approve / dismiss / filter / agent-toggle state.
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { ACTION_FLOW, actionStatusLabel, actionPlans, type ActionStatus, type AgentAction } from "@/components/dashboard/data";
 import { Card, PageHeader, Micro, Tag, Segmented } from "@/components/dashboard/ui";
 import { Modal } from "@/components/dashboard/modal";
 import { ActionPlanBody } from "@/components/dashboard/action-plan";
 import { InfoTip } from "@/components/dashboard/info-tip";
+import { approveAction, dismissAction } from "@/app/dashboard/actions/actions";
 
 type ActionWithPlan = AgentAction & { planKey: string };
 
@@ -57,13 +58,36 @@ export function ActionsClient({ initialActions }: { initialActions: ActionWithPl
   const [agents, setAgents] = useState(() =>
     Object.fromEntries(AGENTS.map((a) => [a.key, { active: true, autonomy: "ask" as "ask" | "auto" }])),
   );
+  const [error, setError] = useState<string | null>(null);
+  const [, startTransition] = useTransition();
 
   const sorted = useMemo(() => [...actions].sort((a, b) => order[a.status] - order[b.status]), [actions]);
   const list = filter === "all" ? sorted : sorted.filter((a) => a.status === filter);
   const count = (s: ActionStatus) => actions.filter((a) => a.status === s).length;
 
-  const approve = (id: string) => setActions((prev) => prev.map((a) => (a.id === id ? { ...a, status: "approved" } : a)));
-  const dismiss = (id: string) => setActions((prev) => prev.filter((a) => a.id !== id));
+  const approve = (id: string) => {
+    setError(null);
+    setActions((prev) => prev.map((a) => (a.id === id ? { ...a, status: "approved" } : a)));
+    startTransition(async () => {
+      const res = await approveAction(id);
+      if (!res.ok) {
+        setActions((prev) => prev.map((a) => (a.id === id ? { ...a, status: "suggested" } : a)));
+        setError(res.error);
+      }
+    });
+  };
+  const dismiss = (id: string) => {
+    setError(null);
+    const removed = actions.find((a) => a.id === id);
+    setActions((prev) => prev.filter((a) => a.id !== id));
+    startTransition(async () => {
+      const res = await dismissAction(id);
+      if (!res.ok && removed) {
+        setActions((prev) => (prev.some((a) => a.id === id) ? prev : [...prev, removed]));
+        setError(res.error);
+      }
+    });
+  };
 
   return (
     <div className="animate-stage-in space-y-8">
@@ -72,6 +96,12 @@ export function ActionsClient({ initialActions }: { initialActions: ActionWithPl
         title="The dashboard does the work"
         sub="Each agent turns a finding into a concrete action and carries it from approval through to a result. Nothing runs without your approval — the dashboard recommends, you decide."
       />
+
+      {error && (
+        <div className="rounded-xl border border-[rgba(226,75,74,0.4)] bg-[rgba(226,75,74,0.08)] px-4 py-3 text-[13px] text-ink">
+          Couldn’t save that change — {error}. Please try again.
+        </div>
+      )}
 
       {/* Pipeline summary */}
       <section>

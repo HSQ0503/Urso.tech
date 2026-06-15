@@ -41,7 +41,15 @@ export type ChatScope = {
   pending?: boolean;
 };
 
-export function buildSystemPrompt(ctx: ChatScope, seedContext: string): string {
+export type BriefContext = { headline: string; recommendation: string; opportunityTitle?: string };
+export type ActionContext = { title: string; agent: string; store: string; status: string };
+
+export function buildSystemPrompt(
+  ctx: ChatScope,
+  seedContext: string,
+  brief?: BriefContext | null,
+  actions?: ActionContext[],
+): string {
   const guide = ctx.topicId ? (CHART_GUIDES as Record<string, ChartGuide>)[ctx.topicId] : undefined;
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
 
@@ -66,6 +74,24 @@ export function buildSystemPrompt(ctx: ChatScope, seedContext: string): string {
   }
 
   if (seedContext) lines.push("", "Current numbers for the user's scope (pre-loaded so you can answer immediately):", seedContext);
+
+  if (brief) {
+    lines.push(
+      "",
+      `This week's published brief for ${scopeLabel(ctx.scope)} (the owner has already seen this — stay consistent with it, and don't just restate its numbers):`,
+      `- Headline: ${brief.headline}`,
+      `- Recommendation: ${brief.recommendation}`,
+    );
+    if (brief.opportunityTitle) lines.push(`- Biggest lever: ${brief.opportunityTitle}`);
+  }
+
+  if (actions && actions.length) {
+    lines.push(
+      "",
+      "The AI action center already tracks these for this scope. Don't propose work that's already approved or running — it's being handled; you may reference any of them by name:",
+      ...actions.map((a) => `- "${a.title}" (${a.agent} · ${a.store}) — ${a.status}`),
+    );
+  }
 
   lines.push(
     "",
