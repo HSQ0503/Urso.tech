@@ -14,6 +14,11 @@ import {
 } from "@/components/site/ui";
 import { Reveal } from "@/components/site/reveal";
 import { HeroAsk } from "@/components/site/hero-ask";
+import { Offerings } from "@/components/site/offerings";
+import { AskDemo, Sparkle } from "@/components/site/ask-demo";
+import { FeatureCards } from "@/components/site/feature-cards";
+import { MeasureCards } from "@/components/site/measure-cards";
+import { WipeLink } from "@/components/site/wipe-link";
 import { ConnectDiagram, PhasePath } from "@/components/site/motifs";
 import { DashboardScene } from "@/components/site/product-frame";
 import { FindingsLedger } from "@/components/site/ledger";
@@ -180,6 +185,102 @@ export default function Home() {
               />
             </div>
           </Reveal>
+        </section>
+
+        {/* ===== Story / what we offer ===== */}
+        <section className="border-t border-edge px-[clamp(20px,4vw,56px)] py-[clamp(72px,12vw,176px)]">
+          <Reveal className="mx-auto max-w-[820px] text-center">
+            <h2 className="text-balance font-serif text-[clamp(2.75rem,6vw,5rem)] font-normal leading-[1.04] tracking-[-0.025em] text-ink">
+              <em className="italic">More</em> than software
+              <span className="text-orange">.</span>
+            </h2>
+            <p className="mt-7 text-[clamp(1.0625rem,1.9vw,1.375rem)] font-medium tracking-[-0.01em] text-ink">
+              You don&rsquo;t buy a tool — you hire the team that runs it.
+            </p>
+            <p className="mx-auto mt-4 max-w-[60ch] text-[17px] leading-[1.6] text-ink-dim sm:text-[18px]">
+              Urso connects the data scattered across your business into one
+              operating system, surfaces where you&rsquo;re losing money, and works
+              with your team to fix it — week after week. The software is where we
+              start; the partnership is what you&rsquo;re paying for.
+            </p>
+            <div className="mt-9 flex justify-center">
+              <WipeLink
+                href="/what-we-do"
+                className="group inline-flex items-center gap-2.5 rounded-xl px-7 py-3.5 font-mono text-[12px] uppercase tracking-[0.16em] text-ink transition-all duration-200 hover:-translate-y-px hover:brightness-110"
+                style={{
+                  background:
+                    "linear-gradient(180deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.035) 100%)",
+                  boxShadow:
+                    "inset 0 1px 0 0 rgba(255,255,255,0.18), inset 0 0 0 1px rgba(255,255,255,0.07), 0 16px 32px -16px rgba(0,0,0,0.85)",
+                }}
+              >
+                More about what we do
+              </WipeLink>
+            </div>
+          </Reveal>
+
+          <Offerings />
+        </section>
+
+        {/* ===== Ask anything (AI layer) ===== */}
+        <section className="relative overflow-hidden border-t border-edge px-[clamp(20px,4vw,56px)] py-[clamp(72px,12vw,176px)]">
+          <Reveal className="relative mx-auto max-w-[760px] text-center">
+            <div className="flex justify-center">
+              <Sparkle size={52} />
+            </div>
+            <h2 className="mt-8 text-balance font-serif text-[clamp(2.75rem,6vw,5rem)] font-normal leading-[1.04] tracking-[-0.025em] text-ink">
+              <em className="italic">Ask</em> anything
+              <span className="text-orange">.</span>
+            </h2>
+            <p className="mx-auto mt-6 max-w-[52ch] text-[17px] leading-[1.6] text-ink-dim sm:text-[18px]">
+              Urso AI turns your numbers into answers you can trust — grounded in
+              your real data, sized in dollars, and ready to act on.
+            </p>
+          </Reveal>
+          <Reveal delay={120} className="relative mt-[clamp(40px,6vw,72px)]">
+            <AskDemo />
+          </Reveal>
+        </section>
+
+        {/* ===== Feature cards: dashboard + AI analyst ===== */}
+        <section className="border-t border-edge px-[clamp(20px,4vw,56px)] py-[clamp(72px,11vw,160px)]">
+          <Reveal>
+            <FeatureCards />
+          </Reveal>
+        </section>
+
+        {/* ===== Measure what matters (dashboard metrics) ===== */}
+        <section className="border-t border-edge px-[clamp(20px,4vw,56px)] py-[clamp(72px,12vw,176px)]">
+          <Reveal className="mx-auto max-w-[820px] text-center">
+            <h2 className="text-balance font-serif text-[clamp(2.75rem,6vw,5rem)] font-normal leading-[1.04] tracking-[-0.025em] text-ink">
+              <em className="italic">Measure</em> what matters
+              <span className="text-orange">.</span>
+            </h2>
+            <p className="mt-7 text-[clamp(1.0625rem,1.9vw,1.375rem)] font-medium tracking-[-0.01em] text-ink">
+              Every number, defined once.
+            </p>
+            <p className="mx-auto mt-4 max-w-[60ch] text-[17px] leading-[1.6] text-ink-dim sm:text-[18px]">
+              Revenue, capacity, retention, reputation — the metrics that actually
+              move your business, live on one screen and true at every location.
+            </p>
+            <div className="mt-9 flex justify-center">
+              <WipeLink
+                href="/capabilities"
+                className="group inline-flex items-center gap-2.5 rounded-xl px-7 py-3.5 font-mono text-[12px] uppercase tracking-[0.16em] text-ink transition-all duration-200 hover:-translate-y-px hover:brightness-110"
+                style={{
+                  background:
+                    "linear-gradient(180deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.035) 100%)",
+                  boxShadow:
+                    "inset 0 1px 0 0 rgba(255,255,255,0.18), inset 0 0 0 1px rgba(255,255,255,0.07), 0 16px 32px -16px rgba(0,0,0,0.85)",
+                }}
+              >
+                More about the dashboard
+              </WipeLink>
+            </div>
+          </Reveal>
+          <div className="mt-[clamp(48px,7vw,88px)]">
+            <MeasureCards />
+          </div>
         </section>
 
         {/* ===== 01 Outcomes ===== */}
