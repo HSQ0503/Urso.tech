@@ -12,6 +12,7 @@
 import { useState } from "react";
 import { type TeamRow } from "@/components/dashboard/data";
 import { Card, PageHeader, Micro, Tag, BarRanking, fmtMoney, pct } from "@/components/dashboard/ui";
+import { AskAi } from "@/components/dashboard/ask-ai";
 import { ChartInfo } from "@/components/dashboard/chart-info";
 import { InfoTip } from "@/components/dashboard/info-tip";
 import { GROOMER_COL_HELP } from "@/components/dashboard/team-help";
@@ -49,6 +50,11 @@ export function TeamClient({ roster, scopeName, period }: { roster: TeamRow[]; s
           <div>
             <div className="flex items-center gap-1.5">
               <Micro>Productivity</Micro>
+              <AskAi
+                topic="Service revenue per groomer"
+                topicId="productivityRank"
+                suggestions={["Who are the top groomers?", "Read this next to return rate and attach"]}
+              />
               <ChartInfo id="productivityRank" />
             </div>
             <h2 className="mt-1.5 text-[17px] font-medium tracking-[-0.01em]">Service revenue per groomer</h2>

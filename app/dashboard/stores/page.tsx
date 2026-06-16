@@ -16,6 +16,7 @@ import {
   pct,
 } from "@/components/dashboard/ui";
 import { StoreScoreboard } from "@/components/dashboard/store-scoreboard";
+import { AskAi } from "@/components/dashboard/ask-ai";
 import { ChartInfo } from "@/components/dashboard/chart-info";
 
 // Live FranPOS columns only — No-show, Calls missed, and Rating rejoin the
@@ -100,6 +101,11 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
         <Card>
           <div className="flex items-center gap-1.5">
             <Micro>Revenue</Micro>
+            <AskAi
+              topic="Revenue by store"
+              topicId="revenueByLocation"
+              suggestions={["Why is one store ahead on revenue?", "Where is the biggest revenue gap?"]}
+            />
             <ChartInfo id="revenueByLocation" />
           </div>
           <h2 className="mt-1.5 mb-4 text-[16px] font-medium tracking-[-0.01em]">By location</h2>
@@ -108,6 +114,11 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
         <Card>
           <div className="flex items-center gap-1.5">
             <Micro>Return rate</Micro>
+            <AskAi
+              topic="Return rate by store"
+              topicId="storeRankRebook"
+              suggestions={["Which store has the weakest return rate?", "What's driving the gap to the leader?"]}
+            />
             <ChartInfo id="storeRankRebook" />
           </div>
           <h2 className="mt-1.5 mb-4 text-[16px] font-medium tracking-[-0.01em]">By location</h2>
@@ -116,6 +127,11 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
         <Card>
           <div className="flex items-center gap-1.5">
             <Micro>Retail attach</Micro>
+            <AskAi
+              topic="Retail attach by store"
+              topicId="storeRankAttach"
+              suggestions={["Which store has the weakest retail attach?", "How do I lift attach at the laggard?"]}
+            />
             <ChartInfo id="storeRankAttach" />
           </div>
           <h2 className="mt-1.5 mb-4 text-[16px] font-medium tracking-[-0.01em]">By location</h2>

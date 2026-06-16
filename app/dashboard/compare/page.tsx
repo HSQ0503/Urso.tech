@@ -28,6 +28,7 @@ import {
 } from "@/components/dashboard/ui";
 import Link from "next/link";
 import { CompareControls } from "@/components/dashboard/compare-controls";
+import { AskAi } from "@/components/dashboard/ask-ai";
 import { ChartInfo } from "@/components/dashboard/chart-info";
 
 // The comparison engine: any entity set × any metric × any two periods. Each
@@ -160,6 +161,11 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
           <Card>
             <div className="mb-1 flex items-center gap-1.5">
               <Micro>{data.metricLabel} · by store</Micro>
+              <AskAi
+                topic={`${data.metricLabel} — store comparison`}
+                topicId="compareTable"
+                suggestions={["Which store moved the most?", "Why is one store ahead?"]}
+              />
               <ChartInfo id="compareTable" />
             </div>
             <h2 className="mb-4 text-[17px] font-medium tracking-[-0.01em]">Side by side</h2>
@@ -170,6 +176,11 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
             <Card>
               <div className="mb-1 flex items-center gap-1.5">
                 <Micro>Revenue pace · running total by day</Micro>
+                <AskAi
+                  topic="Revenue pace vs the comparison period"
+                  topicId="comparePace"
+                  suggestions={["Are we ahead or behind?", "Is the gap from a strong final week?"]}
+                />
                 <ChartInfo id="comparePace" />
               </div>
               <h2 className="mb-4 text-[17px] font-medium tracking-[-0.01em]">Is this period ahead or behind?</h2>
@@ -186,6 +197,11 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
         <Card>
           <div className="mb-1 flex items-center gap-1.5">
             <Micro>{data.metricLabel} · per groomer</Micro>
+            <AskAi
+              topic={`${data.metricLabel} — groomer comparison`}
+              topicId="compareTable"
+              suggestions={["Which groomers moved the most?", "Who slipped between periods?"]}
+            />
             <ChartInfo id="compareTable" />
           </div>
           <h2 className="mb-4 text-[17px] font-medium tracking-[-0.01em]">Now vs before, ranked</h2>
@@ -198,6 +214,11 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
         <Card>
           <div className="mb-1 flex items-center gap-1.5">
             <Micro>{data.metricLabel} · biggest moves between periods</Micro>
+            <AskAi
+              topic={`${data.metricLabel} — winners and losers`}
+              topicId="compareDiverging"
+              suggestions={["What were the biggest gainers?", "What declined the most?"]}
+            />
             <ChartInfo id="compareDiverging" />
           </div>
           <h2 className="mb-4 text-[17px] font-medium tracking-[-0.01em]">Winners and losers</h2>

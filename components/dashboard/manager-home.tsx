@@ -19,6 +19,7 @@ import { Card, Micro, Tag, Delta, BarRanking, WelcomeBanner, fmtMoney, pct } fro
 import { ActionItemCard } from "@/components/dashboard/action-item-card";
 import { StoreScoreboard } from "@/components/dashboard/store-scoreboard";
 import { InfoTip } from "@/components/dashboard/info-tip";
+import { AskAi } from "@/components/dashboard/ask-ai";
 import { ChartInfo } from "@/components/dashboard/chart-info";
 import { GROOMER_COL_HELP } from "@/components/dashboard/team-help";
 
@@ -242,6 +243,11 @@ function RateRankCard({ title, ranking, storeId }: { title: string; ranking: { i
       <div className="mb-3 flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5">
           <Micro>{title}</Micro>
+          <AskAi
+            topic={`${title} — your store vs the others`}
+            topicId="managerRank"
+            suggestions={["Where do I stand on this?", "How do I close the gap to the leader?"]}
+          />
           <ChartInfo id="managerRank" />
         </div>
         <span className="font-mono text-[11px] text-ink-dim">

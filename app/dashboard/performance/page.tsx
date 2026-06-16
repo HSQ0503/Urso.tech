@@ -71,17 +71,7 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
         <SubHead
           eyebrow="Capture · Twilio"
           title="Inbound call handling"
-          right={
-            <div className="flex items-center gap-2">
-              <AskAi
-                topic="Inbound call capture"
-                topicId="callsAnsweredMissed"
-                pending
-                suggestions={["What would call tracking tell me?", "What's measurable today instead?"]}
-              />
-              <Tag tone="muted">Call tracking pending</Tag>
-            </div>
-          }
+          right={<Tag tone="muted">Call tracking pending</Tag>}
         />
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.7fr_1fr]">
           <Card>
@@ -89,6 +79,12 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
               <div>
                 <div className="flex items-center gap-1.5">
                   <Micro>Answered vs missed</Micro>
+                  <AskAi
+                    topic="Calls answered vs missed"
+                    topicId="callsAnsweredMissed"
+                    pending
+                    suggestions={["What would call tracking tell me?", "What's measurable today instead?"]}
+                  />
                   <ChartInfo id="callsAnsweredMissed" />
                 </div>
                 <div className="mt-1.5 text-[22px] font-medium tracking-[-0.01em]">{cs.total.toLocaleString()} <span className="text-[13px] text-ink-dim">calls</span></div>
@@ -107,6 +103,12 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
           <Card className="flex flex-col">
             <div className="flex items-center gap-1.5">
               <Micro>Calls answered</Micro>
+              <AskAi
+                topic="Call answer rate"
+                topicId="callsAnsweredGauge"
+                pending
+                suggestions={["What would call tracking tell me?", "What's measurable today instead?"]}
+              />
               <ChartInfo id="callsAnsweredGauge" />
             </div>
             <div className="mt-1 grid place-items-center">
@@ -129,7 +131,21 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
         </div>
 
         <Card className="mt-5">
-          <SubHead eyebrow="When calls are missed" title="Calls by hour, with after-hours band" right={<ChartInfo id="callsByHour" align="right" />} />
+          <SubHead
+            eyebrow="When calls are missed"
+            title="Calls by hour, with after-hours band"
+            right={
+              <div className="flex items-center gap-2">
+                <AskAi
+                  topic="Calls by hour"
+                  topicId="callsByHour"
+                  pending
+                  suggestions={["What would call tracking tell me?", "What's measurable today instead?"]}
+                />
+                <ChartInfo id="callsByHour" align="right" />
+              </div>
+            }
+          />
           <CallsChart hourly={hourly.hourly} missedHourly={hourly.missedHourly} startHour={hourly.startHour} closeHour={hourly.closeHour} height={180} />
           <p className="mt-3 text-[13px] text-ink-dim">
             Misses cluster in the busy midday desk hours and after closing (shaded). After-hours calls are the clearest case for instant text-back.
@@ -142,17 +158,7 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
         <SubHead
           eyebrow="Convert · Web analytics + FranPOS"
           title="Booking conversion"
-          right={
-            <div className="flex items-center gap-2">
-              <AskAi
-                topic="Booking conversion"
-                topicId="bookingFunnel"
-                pending
-                suggestions={["What would web tracking tell me?", "What's measurable today instead?"]}
-              />
-              <Tag tone="muted">Analytics pending</Tag>
-            </div>
-          }
+          right={<Tag tone="muted">Analytics pending</Tag>}
         />
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
           <Card>
@@ -160,6 +166,12 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
               <div>
                 <div className="flex items-center gap-1.5">
                   <Micro>Online booking funnel</Micro>
+                  <AskAi
+                    topic="Online booking funnel"
+                    topicId="bookingFunnel"
+                    pending
+                    suggestions={["What would web tracking tell me?", "What's measurable today instead?"]}
+                  />
                   <ChartInfo id="bookingFunnel" />
                 </div>
                 <div className="mt-1.5 text-[15px] text-ink-dim">From first visit to a booked appointment</div>
@@ -177,6 +189,12 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
               <div>
                 <div className="flex items-center gap-1.5">
                   <Micro>Website traffic vs bookings</Micro>
+                  <AskAi
+                    topic="Website traffic vs bookings"
+                    topicId="webTraffic"
+                    pending
+                    suggestions={["What would web tracking tell me?", "What's measurable today instead?"]}
+                  />
                   <ChartInfo id="webTraffic" />
                 </div>
                 <div className="mt-1.5 text-[22px] font-medium tracking-[-0.01em]">{ws.visits.toLocaleString()} <span className="text-[13px] text-ink-dim">visits</span></div>
@@ -199,20 +217,7 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
         <SubHead
           eyebrow="Money · FranPOS"
           title="Revenue and mix"
-          right={
-            <div className="flex items-center gap-2">
-              <AskAi
-                topic="Revenue and mix"
-                topicId="revenueTrend"
-                suggestions={[
-                  "How is the grooming vs retail mix trending?",
-                  "Which products drive retail revenue?",
-                  "Where is retail attach weakest?",
-                ]}
-              />
-              <Tag tone="good">Measurable now</Tag>
-            </div>
-          }
+          right={<Tag tone="good">Measurable now</Tag>}
         />
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.5fr_1fr]">
           <Card>
@@ -220,6 +225,15 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
               <div>
                 <div className="flex items-center gap-1.5">
                   <Micro>Revenue</Micro>
+                  <AskAi
+                    topic="Revenue and mix"
+                    topicId="revenueTrend"
+                    suggestions={[
+                      "How is the grooming vs retail mix trending?",
+                      "Which products drive retail revenue?",
+                      "Where is retail attach weakest?",
+                    ]}
+                  />
                   <ChartInfo id="revenueTrend" />
                 </div>
                 <div className="mt-1.5 text-[22px] font-medium tracking-[-0.01em]">{fmtMoney(m.revenue)}</div>
@@ -233,6 +247,14 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
             <div>
               <div className="flex items-center gap-1.5">
                 <Micro>Grooming &amp; retail mix</Micro>
+                <AskAi
+                  topic="Grooming & retail mix"
+                  topicId="crossSellMix"
+                  suggestions={[
+                    "How is the cross-sell mix trending?",
+                    "How do I move grooming-only into both?",
+                  ]}
+                />
                 <ChartInfo id="crossSellMix" />
               </div>
               <div className="mt-4">

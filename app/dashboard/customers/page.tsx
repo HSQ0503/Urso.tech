@@ -30,6 +30,7 @@ import {
   pct,
 } from "@/components/dashboard/ui";
 import { WinbackCard } from "@/components/dashboard/winback-card";
+import { AskAi } from "@/components/dashboard/ask-ai";
 import { ChartInfo } from "@/components/dashboard/chart-info";
 
 export default async function CustomersPage({ searchParams }: { searchParams: Promise<{ store?: string; month?: string }> }) {
@@ -76,6 +77,11 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
         <Card className="mt-5">
           <div className="flex items-center gap-1.5">
             <Micro>Return rate · by month, trailing year</Micro>
+            <AskAi
+              topic="Return rate trend"
+              topicId="returnRateTrend"
+              suggestions={["Is the return rate sliding?", "When did the trend change?"]}
+            />
             <ChartInfo id="returnRateTrend" />
           </div>
           <div className="mt-3">
@@ -89,6 +95,11 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
           <div>
             <div className="flex items-center gap-1.5">
               <Micro>New vs returning</Micro>
+              <AskAi
+                topic="New vs returning customers"
+                topicId="returningVsNew"
+                suggestions={["How much of the base actually comes back?", "How does this compare to last year?"]}
+              />
               <ChartInfo id="returningVsNew" />
             </div>
             <div className="mt-3">
@@ -98,6 +109,11 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
           <div className="border-t border-edge pt-5">
             <div className="mb-3 flex items-center gap-1.5">
               <Micro>Cohort retention — share of new customers still active, by months since first visit</Micro>
+              <AskAi
+                topic="Cohort retention"
+                topicId="cohortRetention"
+                suggestions={["Which cohorts retain best?", "Where does the curve drop off?"]}
+              />
               <ChartInfo id="cohortRetention" />
             </div>
             <CohortCurve data={retention.cohort} />
@@ -111,6 +127,11 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
           <div>
             <div className="flex items-center gap-1.5">
               <Micro>Cross-sell</Micro>
+              <AskAi
+                topic="Retail & grooming overlap"
+                topicId="crossSellMix"
+                suggestions={["How do I move grooming-only into both?", "What's the cross-sell wall costing me?"]}
+              />
               <ChartInfo id="crossSellMix" />
             </div>
             <h2 className="mt-1.5 text-[18px] font-medium tracking-[-0.01em]">Retail &amp; grooming overlap</h2>
@@ -136,6 +157,11 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
           <div>
             <div className="flex items-center gap-1.5">
               <Micro>Grooming cycle · time between grooms</Micro>
+              <AskAi
+                topic="Grooming cycle"
+                topicId="groomingCycle"
+                suggestions={["When should rebooking nudges go out?", "How many customers are drifting off cadence?"]}
+              />
               <ChartInfo id="groomingCycle" />
             </div>
             <h2 className="mt-1.5 text-[18px] font-medium tracking-[-0.01em]">How often customers come back</h2>

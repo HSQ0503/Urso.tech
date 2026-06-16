@@ -22,6 +22,7 @@ import {
   fmtMoney,
   pct,
 } from "@/components/dashboard/ui";
+import { AskAi } from "@/components/dashboard/ask-ai";
 import { ChartInfo } from "@/components/dashboard/chart-info";
 
 export default async function RevenueMapPage({ searchParams }: { searchParams: Promise<{ store?: string; month?: string }> }) {
@@ -59,6 +60,11 @@ export default async function RevenueMapPage({ searchParams }: { searchParams: P
         <Card>
           <div className="flex items-center gap-1.5">
             <Micro>By location</Micro>
+            <AskAi
+              topic="Revenue by store"
+              topicId="revenueByLocation"
+              suggestions={["Why is one store ahead on revenue?", "Where is the biggest revenue gap?"]}
+            />
             <ChartInfo id="revenueByLocation" />
           </div>
           <h2 className="mb-4 mt-1.5 text-[17px] font-medium tracking-[-0.01em]">Revenue by store</h2>
@@ -68,6 +74,11 @@ export default async function RevenueMapPage({ searchParams }: { searchParams: P
           <div>
             <div className="flex items-center gap-1.5">
               <Micro>By line · customer overlap</Micro>
+              <AskAi
+                topic="Grooming vs retail overlap"
+                topicId="crossSellMix"
+                suggestions={["How do I move grooming-only into both?", "What's the cross-sell wall costing me?"]}
+              />
               <ChartInfo id="crossSellMix" />
             </div>
             <h2 className="mt-1.5 text-[17px] font-medium tracking-[-0.01em]">Grooming vs retail</h2>
@@ -84,6 +95,11 @@ export default async function RevenueMapPage({ searchParams }: { searchParams: P
           <div className="border-t border-edge pt-5">
             <div className="mb-3 flex items-center gap-1.5">
               <Micro>New vs repeat revenue</Micro>
+              <AskAi
+                topic="New vs repeat revenue"
+                topicId="newVsRepeat"
+                suggestions={["Is growth from new customers or repeats?", "How much revenue is walk-in?"]}
+              />
               <ChartInfo id="newVsRepeat" />
             </div>
             <StackedShareBar
@@ -117,6 +133,11 @@ export default async function RevenueMapPage({ searchParams }: { searchParams: P
         <Card>
           <div className="flex items-center gap-1.5">
             <Micro>By groomer</Micro>
+            <AskAi
+              topic="Service revenue by groomer"
+              topicId="revenueByGroomer"
+              suggestions={["Who are the top groomers by revenue?", "Which groomers have capacity to grow?"]}
+            />
             <ChartInfo id="revenueByGroomer" />
           </div>
           <h2 className="mb-4 mt-1.5 text-[17px] font-medium tracking-[-0.01em]">Service revenue performed</h2>

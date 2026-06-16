@@ -8,6 +8,7 @@
 import { useState } from "react";
 import { actionPlans, type Review, type ActionPlan } from "@/components/dashboard/data";
 import { Card, PageHeader, Display, Micro, Tag, Meter, RatingBars, Segmented, pct } from "@/components/dashboard/ui";
+import { AskAi } from "@/components/dashboard/ask-ai";
 import { ChartInfo } from "@/components/dashboard/chart-info";
 import { Modal } from "@/components/dashboard/modal";
 import { ActionPlanBody } from "@/components/dashboard/action-plan";
@@ -126,6 +127,12 @@ export function ReviewsClient({
           <div>
             <div className="flex items-center gap-1.5">
               <Micro>Distribution</Micro>
+              <AskAi
+                topic="Rating distribution"
+                topicId="ratingDistribution"
+                pending
+                suggestions={["What would review tracking tell me?", "What's measurable today instead?"]}
+              />
               <ChartInfo id="ratingDistribution" />
             </div>
             <div className="mt-2 flex items-baseline gap-2.5">
