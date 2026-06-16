@@ -4,7 +4,7 @@ const nextConfig: NextConfig = {
   async redirects() {
     return [
       // Retired marketing routes fold into the new structure.
-      { source: "/about", destination: "/what-we-do", permanent: true },
+      { source: "/about", destination: "/how-it-works", permanent: true },
       { source: "/book-a-diagnostic", destination: "/contact", permanent: true },
     ];
   },

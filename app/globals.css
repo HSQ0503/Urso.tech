@@ -238,8 +238,12 @@ body {
 /* ===== Page transition =====
    A near-black panel sweeps left → right with a single thin orange leading
    edge — the direction line applied to navigation. Quiet, no gradient wash. */
+/* NB: only `opacity` here — `will-change: transform` would make this wrapper a
+   containing block for position:fixed descendants (it wraps every page), which
+   would stop the fixed nav from sticking to the viewport. The wipe animation
+   applies its transform only during the ~420ms transition. */
 .wipe-page-wrap {
-  will-change: transform, opacity;
+  will-change: opacity;
 }
 
 :root[data-wipe-stage="covering"] .wipe-page-wrap,

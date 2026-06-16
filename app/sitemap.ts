@@ -5,7 +5,6 @@ const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://urso.tech";
 export default function sitemap(): MetadataRoute.Sitemap {
   const routes = [
     "",
-    "/what-we-do",
     "/how-it-works",
     "/capabilities",
     "/what-we-find",
