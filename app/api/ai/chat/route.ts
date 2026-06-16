@@ -8,7 +8,7 @@ import { getMetrics, getKpiDeltas, getWeeklyBrief, getAllAgentActions } from "@/
 import { buildSystemPrompt } from "@/lib/ai/analyst";
 import { buildAnalystTools } from "@/lib/ai/tools";
 import { chatModel, assertChatKey } from "@/lib/ai/models";
-import { stores, scopeLabel, monthLabel, type MonthValue } from "@/components/dashboard/data";
+import { stores, scopeLabel, monthLabel, type MonthValue, type Scope } from "@/components/dashboard/data";
 
 export const maxDuration = 60;
 
@@ -31,9 +31,14 @@ export async function POST(req: Request) {
     store?: string;
     month?: string;
     pending?: boolean;
+    comparison?: { aLabel: string; aStart: string; aEnd: string; bLabel: string; bStart: string; bEnd: string; metric: string };
   };
 
   const scope = resolveScope(user, body.store);
+  // `scope` is what they're viewing (drives the seed/brief/actions + prompt default).
+  // `cross` lets an owner's comparison tools span all stores so they can ask
+  // cross-store questions without clearing the filter; managers stay locked.
+  const cross: Scope = user.role === "manager" && user.storeId ? user.storeId : "all";
   const month = (body.month && /^(all|\d{4}|\d{4}-\d{2})$/.test(body.month) ? body.month : "all") as MonthValue;
 
   // Pre-load everything the prompt wants, in parallel and best-effort: the
@@ -81,13 +86,13 @@ export async function POST(req: Request) {
   const result = streamText({
     model: chatModel(),
     system: buildSystemPrompt(
-      { user, scope, month, topic: body.topic, topicId: body.topicId, pending: body.pending },
+      { user, scope, month, topic: body.topic, topicId: body.topicId, pending: body.pending, comparison: body.comparison },
       seed,
       brief,
       actions,
     ),
     messages: await convertToModelMessages(body.messages),
-    tools: buildAnalystTools(scope),
+    tools: buildAnalystTools(scope, cross),
     stopWhen: stepCountIs(6),
   });
 

@@ -8,6 +8,7 @@ import {
   stores,
   STORE_OPTIONS,
   scopeLabel,
+  groomerShare,
   COMPARE_METRICS,
   type CompareMode,
   type ComparePreset,
@@ -810,6 +811,7 @@ export async function getTeamRoster(scope: Scope, month: MonthValue): Promise<Te
       const g = byKey.get(`${fullName(r.store_id)}|${staffNameKey(r.name)}`);
       const revenue = Number(r.revenue);
       const appts = Number(r.appts);
+      const cShare = groomerShare(staffNameKey(r.name));
       return {
         id: `${r.store_id}:${staffNameKey(r.name).replace(/ /g, "-")}`,
         name: r.name,
@@ -820,6 +822,9 @@ export async function getTeamRoster(scope: Scope, month: MonthValue): Promise<Te
         share: 0,
         rebook: g?.rebook ?? null,
         attach: g?.attach ?? null,
+        commissionRate: cShare,
+        payout: revenue * cShare,
+        storeRetained: revenue * (1 - cShare),
         flag: g?.flag,
       };
     })

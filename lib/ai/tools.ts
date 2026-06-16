@@ -119,8 +119,12 @@ function movers(cur: { name: string; value: number }[], base: { name: string; va
   };
 }
 
-export function buildAnalystTools(allowed: Scope) {
+export function buildAnalystTools(allowed: Scope, cross: Scope = allowed) {
   const ids = allowedIds(allowed);
+  // `cross` widens the comparison/trend tools to every store an owner may see, so
+  // an owner filtered to one store can still ask cross-store questions. For a
+  // manager the caller passes cross === their store, so they stay fully locked.
+  const crossIds = allowedIds(cross);
 
   return {
     metrics_overview: tool({
@@ -147,7 +151,7 @@ export function buildAnalystTools(allowed: Scope) {
         fromMonth: z.string().regex(/^\d{4}-\d{2}$/).describe("inclusive start, YYYY-MM, earliest 2024-01"),
         toMonth: z.string().regex(/^\d{4}-\d{2}$/).describe("inclusive end, YYYY-MM"),
       }),
-      execute: ({ fromMonth, toMonth }) => monthlySeries(allowed, fromMonth, toMonth),
+      execute: ({ fromMonth, toMonth }) => monthlySeries(cross, fromMonth, toMonth),
     }),
 
     store_comparison: tool({
@@ -155,7 +159,7 @@ export function buildAnalystTools(allowed: Scope) {
       inputSchema: z.object({ month: monthSchema }),
       execute: async ({ month }) => {
         const byStore = await storeComparison(month as MonthValue);
-        return ids.map((id) => {
+        return crossIds.map((id) => {
           const m = byStore[id];
           return {
             store: id, name: stores.find((s) => s.id === id)!.name,
@@ -180,7 +184,7 @@ export function buildAnalystTools(allowed: Scope) {
 
     team_performance: tool({
       description:
-        "Groomer roster for a period: service revenue performed, appointments, avg ticket, lifetime return rate and retail attach. Null return/attach means too little history.",
+        "Groomer roster for a period: gross service revenue performed, appointments, avg ticket, lifetime return rate and retail attach — PLUS store-retained contribution after the groomer's commission (groomers keep 50%, the Winter Park manager-groomer 55%). Judge groomers on storeRetained (contribution to the store), not gross revenue. Null return/attach means too little history.",
       inputSchema: z.object({ month: monthSchema }),
       execute: async ({ month }) => {
         const rows = await getTeamRoster(allowed, month as MonthValue);
@@ -188,6 +192,7 @@ export function buildAnalystTools(allowed: Scope) {
           name: g.name, store: g.store, revenue: r0(g.revenue), appts: g.appts,
           avgTicket: r0(g.avgTicket), returnRate: g.rebook != null ? r3(g.rebook) : null,
           retailAttach: g.attach != null ? r3(g.attach) : null,
+          commissionPct: r3(g.commissionRate), payout: r0(g.payout), storeRetained: r0(g.storeRetained),
         }));
       },
     }),

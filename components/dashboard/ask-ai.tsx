@@ -31,12 +31,14 @@ export function AskAi({
   suggestions = DEFAULT_SUGGESTIONS,
   pending = false,
   label = "Ask urso.ai",
+  comparison,
 }: {
   topic: string;
   topicId?: string;
   suggestions?: string[];
   pending?: boolean;
   label?: string;
+  comparison?: { aLabel: string; aStart: string; aEnd: string; bLabel: string; bStart: string; bEnd: string; metric: string };
 }) {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
@@ -59,6 +61,7 @@ export function AskAi({
           topic,
           topicId,
           pending,
+          comparison,
           store: params.get("store") ?? undefined,
           month: params.get("month") ?? undefined,
         },

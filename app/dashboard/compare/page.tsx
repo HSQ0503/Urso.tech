@@ -81,6 +81,11 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
     ...extras.map((r, i) => ({ label: rangeLabel(r, true), color: EXTRA_LEGEND_COLORS[i % EXTRA_LEGEND_COLORS.length] })),
   ];
   const entityLabel = mode === "stores" ? "Store" : mode === "groomers" ? "Groomer" : "Item";
+  // Resolved compare periods, handed to the in-page AskAi so chat knows exactly
+  // what's being compared (the global month filter doesn't apply on this page).
+  const cmp = data
+    ? { aLabel: rangeLabel(a, true), aStart: a.start, aEnd: a.end, bLabel: rangeLabel(b, true), bStart: b.start, bEnd: b.end, metric: data.metricLabel }
+    : undefined;
   const headlineCols = ["md:grid-cols-3", "md:grid-cols-4", "md:grid-cols-5"][extras.length] ?? "md:grid-cols-3";
 
   return (
@@ -164,6 +169,7 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
               <AskAi
                 topic={`${data.metricLabel} — store comparison`}
                 topicId="compareTable"
+                comparison={cmp}
                 suggestions={["Which store moved the most?", "Why is one store ahead?"]}
               />
               <ChartInfo id="compareTable" />
@@ -179,6 +185,7 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
                 <AskAi
                   topic="Revenue pace vs the comparison period"
                   topicId="comparePace"
+                  comparison={cmp}
                   suggestions={["Are we ahead or behind?", "Is the gap from a strong final week?"]}
                 />
                 <ChartInfo id="comparePace" />
@@ -200,6 +207,7 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
             <AskAi
               topic={`${data.metricLabel} — groomer comparison`}
               topicId="compareTable"
+              comparison={cmp}
               suggestions={["Which groomers moved the most?", "Who slipped between periods?"]}
             />
             <ChartInfo id="compareTable" />
@@ -217,6 +225,7 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
             <AskAi
               topic={`${data.metricLabel} — winners and losers`}
               topicId="compareDiverging"
+              comparison={cmp}
               suggestions={["What were the biggest gainers?", "What declined the most?"]}
             />
             <ChartInfo id="compareDiverging" />

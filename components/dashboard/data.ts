@@ -158,8 +158,24 @@ export type TeamRow = {
   share: number;
   rebook: number | null;
   attach: number | null;
+  commissionRate: number; // the groomer's share of grooming revenue (0.5; 0.55 for the WP manager-groomer)
+  payout: number;         // revenue × commissionRate
+  storeRetained: number;  // revenue × (1 − commissionRate) — the store's grooming contribution before other costs
   flag?: "star" | "coach";
 };
+
+// Groomer commission: groomers keep 50% of the grooming revenue they perform;
+// the one Winter Park groomer who is also a store manager keeps 55%. So the
+// store-retained grooming contribution = revenue × (1 − share). The staff table
+// has no manager flag, so add the WP manager-groomer's name_key here at 0.55
+// once confirmed (name_key = lowercase, whitespace-collapsed full name).
+export const STANDARD_GROOMER_SHARE = 0.5;
+export const GROOMER_SHARE_OVERRIDES: Record<string, number> = {
+  "haley distefano": 0.55, // Winter Park groomer-manager (keeps 55%; store retains 45%)
+};
+export function groomerShare(nameKey: string): number {
+  return GROOMER_SHARE_OVERRIDES[nameKey] ?? STANDARD_GROOMER_SHARE;
+}
 
 export const groomers: Groomer[] = [
   { id: "maria", name: "Maria Reyes", store: "Winter Park", revPerHr: 118, appts: 96, rebook: 0.68, attach: 0.41, avgTicket: 102, util: 0.88, flag: "star" },
