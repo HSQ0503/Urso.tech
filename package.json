@@ -12,6 +12,7 @@
     "@ai-sdk/anthropic": "^3.0.84",
     "@ai-sdk/google": "^3.0.82",
     "@ai-sdk/react": "^3.0.206",
+    "@react-email/components": "^1.0.12",
     "@supabase/ssr": "^0.10.3",
     "@supabase/supabase-js": "^2.107.0",
     "ai": "^6.0.204",
@@ -20,6 +21,7 @@
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "recharts": "^3.8.1",
+    "resend": "^6.12.4",
     "zod": "^4.4.3"
   },
   "devDependencies": {

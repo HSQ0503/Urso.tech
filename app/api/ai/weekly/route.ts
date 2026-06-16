@@ -7,6 +7,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { runWeekly } from "@/lib/ai/weekly";
+import { sendCronReport } from "@/lib/email";
 
 export const maxDuration = 300;
 
@@ -21,8 +22,23 @@ export async function GET(req: NextRequest) {
 
   try {
     const summary = await runWeekly();
+    await sendCronReport({
+      job: "Weekly AI brief & actions",
+      status: summary.failed.length ? "failed" : "success",
+      rows: [
+        { label: "Week of", value: summary.weekStart },
+        { label: "Briefs written", value: `${summary.briefs} / 5` },
+        { label: "Actions generated", value: String(summary.actions) },
+        { label: "Scope failures", value: summary.failed.length ? summary.failed.join(", ") : "none" },
+      ],
+      note: summary.failed.length
+        ? "One or more store briefs fell back to the computed template this week — see scope failures above."
+        : undefined,
+    });
     return NextResponse.json(summary);
   } catch (e) {
-    return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
+    const msg = e instanceof Error ? e.message : String(e);
+    await sendCronReport({ job: "Weekly AI brief & actions", status: "failed", rows: [], error: msg });
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

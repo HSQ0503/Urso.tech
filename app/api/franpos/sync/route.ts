@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { syncFranpos } from "@/lib/franpos";
+import { sendCronReport } from "@/lib/email";
 
 // FranPOS incremental sync, hit by Vercel cron twice a day (vercel.json):
 // 17:00 UTC = 1pm Orlando (midday pulse) and 00:30 UTC = 8:30pm EDT / 7:30pm
@@ -20,8 +21,22 @@ export async function GET(req: NextRequest) {
 
   try {
     const summary = await syncFranpos();
+    await sendCronReport({
+      job: "FranPOS store sync",
+      status: "success",
+      rows: [
+        ...summary.stores.map((s) => ({
+          label: s.id.toUpperCase(),
+          value: `${s.orders} orders · ${s.items} items · ${s.customers} customers`,
+        })),
+        { label: "API calls", value: String(summary.calls) },
+        { label: "Duration", value: `${(summary.ms / 1000).toFixed(1)}s` },
+      ],
+    });
     return NextResponse.json(summary);
   } catch (e) {
-    return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
+    const msg = e instanceof Error ? e.message : String(e);
+    await sendCronReport({ job: "FranPOS store sync", status: "failed", rows: [], error: msg });
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
