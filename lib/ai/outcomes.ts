@@ -11,6 +11,7 @@
 // to suggest next.
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { gatherEvents, eventsOverlapping, eventLabel, type EventRecord } from "@/lib/ai/events";
 import { stores, type StoreId } from "@/components/dashboard/data";
 
 type Admin = ReturnType<typeof createAdminClient>;
@@ -139,6 +140,7 @@ export type VerifiedOutcome = {
   title: string; agent: string; store: string; completedOn: string;
   metric: MetricKey | null; verdict: Verdict;
   before: number | null; after: number | null; detail: string;
+  confounded?: boolean; // a logged event overlapped the after-window
 };
 
 type CompletedAction = {
@@ -163,7 +165,7 @@ function makeWindowReader(supabase: Admin) {
   };
 }
 
-async function verifyOne(read: ReturnType<typeof makeWindowReader>, a: CompletedAction, today: string): Promise<VerifiedOutcome> {
+async function verifyOne(read: ReturnType<typeof makeWindowReader>, events: EventRecord[], a: CompletedAction, today: string): Promise<VerifiedOutcome> {
   const base = { title: a.title, agent: a.agent, store: a.storeLabel, completedOn: a.completedOn };
   const key = targetMetric(a.agent, a.metric);
   if (!key) {
@@ -200,22 +202,30 @@ async function verifyOne(read: ReturnType<typeof makeWindowReader>, a: Completed
 
   const dir = classifyMove(key, before, after);
   const move = `${fmtVal(key, before)} → ${fmtVal(key, after)}`;
+
+  // Did a logged event overlap the after-window for this action's stores? If so
+  // the move may be the event's doing, not the action's — flag it. We never
+  // change the verdict (the metric still moved); the flag tempers the credit.
+  const confounders = eventsOverlapping(events, storeIds, afterStart, afterEnd);
+  const confoundNote = confounders.length ? ` [confounded: ${confounders.map(eventLabel).join("; ")}]` : "";
+  const confounded = confounders.length > 0;
+
   if (dir === "improved") {
-    return { ...base, metric: key, verdict: "worked", before, after, detail: `${label} ${move} after the action` };
+    return { ...base, metric: key, verdict: "worked", before, after, confounded, detail: `${label} ${move} after the action${confoundNote}` };
   }
   if (dir === "worsened") {
-    return { ...base, metric: key, verdict: "backfired", before, after, detail: `${label} ${move} — wrong direction after the action` };
+    return { ...base, metric: key, verdict: "backfired", before, after, confounded, detail: `${label} ${move} — wrong direction after the action${confoundNote}` };
   }
   // Flat outcome: a flat activity signal hints the work wasn't carried out — but
   // only trust that on enough booking volume; otherwise just call it no effect.
   const afterBookings = metricValue("bookings", afterAgg)!;
   const activity = classifyMove("bookings", metricValue("bookings", beforeAgg)!, afterBookings);
   if (activity === "flat" && afterBookings >= MIN_ACTIVITY_BOOKINGS) {
-    return { ...base, metric: key, verdict: "no_signal", before, after,
-      detail: `${label} held (${move}) and store activity was flat too — the work may not have happened` };
+    return { ...base, metric: key, verdict: "no_signal", before, after, confounded,
+      detail: `${label} held (${move}) and store activity was flat too — the work may not have happened${confoundNote}` };
   }
-  return { ...base, metric: key, verdict: "no_effect", before, after,
-    detail: `${label} held (${move}) — no measurable lift` };
+  return { ...base, metric: key, verdict: "no_effect", before, after, confounded,
+    detail: `${label} held (${move}) — no measurable lift${confoundNote}` };
 }
 
 const COMPLETED_LOOKBACK_DAYS = 240; // long enough for return rate (118d to settle) to mature and stay visible
@@ -255,8 +265,12 @@ export async function gatherVerifiedOutcomes(supabase: Admin, today: string): Pr
     .sort((a, b) => (a.completedOn < b.completedOn ? 1 : -1)) // most recent first
     .slice(0, MAX_VERIFY);
 
+  // Events for the lookback window, to flag confounded outcome windows. Best-
+  // effort: the table may not exist pre-migration, so never let it break verification.
+  const events = await gatherEvents(supabase, cutoff, today).catch(() => [] as EventRecord[]);
+
   const read = makeWindowReader(supabase);
-  return Promise.all(completed.map((a) => verifyOne(read, a, today)));
+  return Promise.all(completed.map((a) => verifyOne(read, events, a, today)));
 }
 
 // Prompt fragment for the weekly run: only the actually-measured verdicts, plus a

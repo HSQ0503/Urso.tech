@@ -17,7 +17,7 @@ import { signOut } from "@/app/login/actions";
 import { Modal } from "./modal";
 import { ThemeToggle } from "./theme-toggle";
 
-type IconName = "home" | "brief" | "activity" | "money" | "spark" | "store" | "users" | "scissors" | "star" | "compare" | "box";
+type IconName = "home" | "brief" | "activity" | "money" | "spark" | "store" | "users" | "scissors" | "star" | "compare" | "box" | "event";
 
 function Icon({ name }: { name: IconName }) {
   const common = { width: 18, height: 18, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.75, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
@@ -44,6 +44,8 @@ function Icon({ name }: { name: IconName }) {
       return <svg {...common}><path d="M3 6.5h13" /><path d="M13 3.5l3 3-3 3" /><path d="M21 17.5H8" /><path d="M11 14.5l-3 3 3 3" /></svg>;
     case "box":
       return <svg {...common}><path d="M21 8.2 12 3 3 8.2v7.6L12 21l9-5.2Z" /><path d="M3.3 8.4 12 13.4l8.7-5" /><path d="M12 21v-7.6" /></svg>;
+    case "event":
+      return <svg {...common}><path d="M5 21V4" /><path d="M5 4h13l-2.2 4L18 12H5" /></svg>;
   }
 }
 
@@ -73,6 +75,7 @@ const navGroups: NavGroup[] = [
   {
     group: "Operations",
     items: [
+      { href: "/dashboard/events", label: "Events", icon: "event" },
       { href: "/dashboard/stores", label: "Stores", icon: "store", roles: ["owner"] },
       { href: "/dashboard/customers", label: "Customers", icon: "users", roles: ["owner"] },
       { href: "/dashboard/team", label: "Team", icon: "scissors", roles: ["owner"] },

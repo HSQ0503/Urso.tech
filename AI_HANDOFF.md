@@ -13,8 +13,11 @@
 `urso.ai` is an embedded data analyst over real FranPOS data, with 3 surfaces (chat, weekly brief, AI actions)
 sharing one brain. It's **committed on `main`, runs on Claude Opus 4.8 for real**, and as of 2026-06-15 has a
 full **memory layer** (brief/actions build on prior weeks) and **metric-verified learning** (it checks from POS
-data whether past actions actually moved their metric). Logic is validated + adversarially reviewed. The
-remaining work is deployment (Vercel env) and the next big lever: the **events / "why" layer**.
+data whether past actions actually moved their metric). Logic is validated + adversarially reviewed. As of
+2026-06-16 the **events / "why" layer is built** (lint+build green) — a `business_events` table + an
+`events_in_range` chat tool + events folded into the weekly run + a confounding flag in metric-verified
+learning + a self-serve "Events" page. **It needs migration `0020` applied in Supabase before it functions.**
+The Home "what to fix first" card and the weekly AI actions are now **memory-aware and Urso-solution-led** — every fix routes to an Urso build (Twilio call tracking, automated rebooking, etc.) and weekly actions carry real `plan_key`s (2026-06-16). Remaining work is deployment (Vercel env).
 
 ## Committed vs uncommitted (check `git status` first)
 
@@ -77,16 +80,19 @@ remaining work is deployment (Vercel env) and the next big lever: the **events /
 2. **Deploy:** add runtime env vars to **Vercel prod** (`GOOGLE_GENERATIVE_AI_API_KEY`, `ANTHROPIC_API_KEY`,
    `CRON_SECRET`, Supabase/FranPOS/QBO/Twilio/Resend; leave `AI_REPORT_MODEL` unset for Opus). `.env` is
    local-only — the deployed Monday cron has none of it. Redeploy after.
-3. **The events / "why" layer** (the biggest remaining lever). Today the AI nails *where* a number moved
-   (attribution) but labels *why* a "hypothesis" — and metric-verified learning confirms a metric *moved* but
-   not that an action *caused* it. A `business_events` table (typed/scoped/dated: staffing, promo, weather,
-   closure, price-change…) + an `events_in_range` chat tool + folding events into the weekly run turns
-   "causes are hypotheses" into "because a groomer's been on leave since X." This also strengthens the
-   metric-verified learning (an event explains a move the data alone can't).
+3. ~~**The events / "why" layer**~~ ✅ **BUILT 2026-06-16** (code; lint+build green). `business_events` table
+   (typed/scoped/dated: staffing, promo, price_change, closure, marketing, weather, other) + the `events_in_range`
+   chat tool + events folded into the weekly run + a **`confounded`** flag in metric-verified learning (an event
+   overlapping an action's after-window tempers the credit) + a self-serve **Events** page (owner logs any store,
+   manager their own). The honesty rule now lets the AI cite a logged event as a cause instead of hedging.
+   **To finish: (a) apply migration `0020` in the Supabase SQL editor, (b) log a couple of real events to test.**
+   Until `0020` is applied the layer no-ops safely (reads are best-effort/caught; the Events page itself will
+   error until the table exists).
 4. **Other roadmap levers** (from the session's plan): use the `action_events` trail more richly; let chat
-   *write* a suggested action back into the pipeline (memory is currently read-only for chat); make the Home
-   "action item" heuristic (`getTopAction`/`getManagerFocus` in `data.server.ts`) consult action memory so it
-   stops surfacing in-flight/dismissed work; make `business.ts` more **diagnostic** (if-metric-moves-check-these
+   *write* a suggested action back into the pipeline (memory is currently read-only for chat); ~~make the Home action-item heuristic memory-aware~~ ✅ DONE 2026-06-16
+   (`getTopAction`/`getManagerFocus` skip approved/running/completed/dismissed via `getHandledSolutionKeys`, route every
+   fix to an Urso solution, and weekly actions are catalog-bound — new `solution` enum → `plan_key`, fixing the
+   missing-plan_key bug); make `business.ts` more **diagnostic** (if-metric-moves-check-these
    patterns mapped to tool names); the **QuickBooks money layer** — pipeline is built but `quickbooks_pnl` holds
    Intuit **sandbox** data (a landscaping demo company), so it's **blocked on connecting Woof Gang's real QBO**,
    then a small read path (`pnl_summary` RPC → `getProfitAndLoss()` → `profit_and_loss` tool).
@@ -97,16 +103,19 @@ remaining work is deployment (Vercel env) and the next big lever: the **events /
 lib/ai/models.ts        chat=Gemini, report=Opus 4.8; Anthropic baseURL pinned; key asserts
 lib/ai/analyst.ts       chat system prompt (buildSystemPrompt) — defs/voice + injected brief + action queue
 lib/ai/business.ts      BUSINESS_CORE (+manifest) · BUSINESS_SECTIONS[] (retrieved) · FULL_BUSINESS_CONTEXT
-lib/ai/tools.ts         buildAnalystTools(scope) — 16 scope-locked tools (15 data + business_context)
+lib/ai/tools.ts         buildAnalystTools(scope) — 17 scope-locked tools (16 data + business_context); events_in_range added
 lib/ai/weekly.ts        gatherWeeklyData + gatherPriorBriefs + gatherActionMemory + runWeekly + WEEKLY_SYSTEM
-lib/ai/outcomes.ts      metric-verified learning (gatherVerifiedOutcomes + verifiedOutcomesBlock)  ← NEW
+lib/ai/outcomes.ts      metric-verified learning (gatherVerifiedOutcomes + verifiedOutcomesBlock) + confounding flag  ← NEW
 app/api/ai/chat/route.ts    POST — auth, scope, seed + brief + actions, streamText + tools
 app/api/ai/weekly/route.ts  GET — CRON_SECRET auth, runWeekly, maxDuration 300
 app/dashboard/actions/actions.ts   server actions: approve/dismiss/setActionStatus
 components/dashboard/actions-client.tsx   approve/dismiss call server actions (was local useState)
-components/dashboard/data.server.ts   getWeeklyBrief overlay; getAllAgentActions; getTopAction/getManagerFocus
+components/dashboard/data.server.ts   getWeeklyBrief overlay; getAllAgentActions; getTopAction/getManagerFocus; getBusinessEvents + getEventsInRange
 supabase/migrations/0017_ai_briefs.sql            ai_briefs
 supabase/migrations/0019_action_persistence.sql   action_events + set_action_status RPC + 'dismissed'
+supabase/migrations/0020_business_events.sql      business_events + create/delete RPCs  ← NEW, APPLY THIS
+lib/ai/events.ts          events "why" layer: gatherEvents + eventsOverlapping + eventLabel  ← NEW
+app/dashboard/events/*    Events page (page + events-client + actions) — store-scoped  ← NEW
 ```
 
 ## Data facts you'll need

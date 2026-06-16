@@ -21,6 +21,7 @@ import {
   getRevenueNewVsRepeat,
   getAllAgentActions,
   getCrossSell,
+  getEventsInRange,
 } from "@/components/dashboard/data.server";
 import { stores, type Scope, type StoreId, type MonthValue } from "@/components/dashboard/data";
 import { BUSINESS_SECTIONS, BUSINESS_SECTION_KEYS, getBusinessSection } from "@/lib/ai/business";
@@ -372,6 +373,16 @@ export function buildAnalystTools(allowed: Scope) {
           .filter((a) => allowedLabels.has(a.store))
           .map((a) => ({ title: a.title, store: a.store, area: a.agent, status: a.status, metric: a.metric, result: a.result ?? null }));
       },
+    }),
+
+    events_in_range: tool({
+      description:
+        "Real-world events logged for the stores — staffing changes, promotions, price changes, closures, marketing pushes, weather — that overlap a date window. Use this to EXPLAIN why a metric moved instead of guessing: find where a number moved (e.g. with decompose_revenue_change), then check what events overlap that period. Returns events for the allowed scope only (a store's own events plus all-stores events).",
+      inputSchema: z.object({
+        startDate: dateSchema.describe("first day of the window, YYYY-MM-DD"),
+        endDate: dateSchema.describe("last day of the window, YYYY-MM-DD"),
+      }),
+      execute: ({ startDate, endDate }) => getEventsInRange(allowed, startDate, endDate),
     }),
   };
 }

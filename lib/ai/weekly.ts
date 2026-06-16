@@ -11,7 +11,8 @@ import { reportModel, assertReportKey } from "@/lib/ai/models";
 import { METRIC_DEFINITIONS } from "@/lib/ai/analyst";
 import { FULL_BUSINESS_CONTEXT } from "@/lib/ai/business";
 import { gatherVerifiedOutcomes, verifiedOutcomesBlock } from "@/lib/ai/outcomes";
-import { stores, scopeLabel, type Scope, type StoreId } from "@/components/dashboard/data";
+import { gatherEvents, eventLabel, type EventRecord } from "@/lib/ai/events";
+import { stores, scopeLabel, actionPlans, SOLUTION_KEYS, type Scope, type StoreId } from "@/components/dashboard/data";
 
 const nyToday = () => new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
 function addDays(iso: string, days: number): string {
@@ -181,8 +182,25 @@ function actionMemoryBlock(mem: ActionMemory): string {
   return parts.length ? `\n\n--- What you've already suggested ---\n${parts.join("\n\n")}` : "";
 }
 
+// Prompt fragment: real-world events overlapping the week, so the brief can
+// explain moves instead of hypothesizing. Added to every scope's prompt.
+function eventsBlock(events: EventRecord[]): string {
+  if (!events.length) return "";
+  return (
+    `\n\n--- Logged real-world events overlapping this week (use these to explain moves; don't just relist them) ---\n` +
+    events.map((e) => `- ${eventLabel(e)}${e.detail ? ` — ${e.detail}` : ""}`).join("\n")
+  );
+}
+
 // Normalized title for code-level dedup (belt-and-suspenders to the prompt rule).
 const normTitle = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+
+// The Urso solutions catalog, handed to the model so every suggested action maps
+// to a real Urso build (its plan_key) — never a generic "tell staff to do X".
+function solutionsCatalogBlock(): string {
+  const lines = SOLUTION_KEYS.map((k) => `- ${k}: ${actionPlans[k].system} — ${actionPlans[k].proposal}`).join("\n");
+  return `\n\n--- Urso solutions catalog (pick the "solution" key for each suggested action) ---\n${lines}`;
+}
 
 // No hard minimums — a quiet week can honestly have zero wins or risks, and a
 // failed validation would kill the scope's brief; the page falls back to the
@@ -204,8 +222,9 @@ const actionsSchema = z.object({
       z.object({
         store: z.enum(["all", "wp", "wg", "lv", "wm"]).describe('"all" if it applies everywhere'),
         agent: z.enum(["Retention", "Team", "Revenue", "Retail", "Call capture", "Reputation"]).describe("which playbook area"),
-        title: z.string().describe("imperative, under 10 words"),
-        detail: z.string().describe("1-2 sentences: the evidence and the move"),
+        solution: z.enum(SOLUTION_KEYS as [string, ...string[]]).describe("the Urso solution that implements this fix — pick the matching key from the catalog below"),
+        title: z.string().describe('imperative, the Urso build, under 10 words (e.g. "Set up automated rebooking reminders")'),
+        detail: z.string().describe("1-2 sentences: the evidence and what Urso ships"),
         metric: z.string().describe('the number that motivated it, e.g. "Return rate 58% (down 4pts)"'),
       }),
     )
@@ -224,27 +243,35 @@ Rules:
 - Every claim carries its number, copied exactly from the data provided — never compute new figures or extrapolate.
 - Format dollars as "$16,988" (or "$17k" in headlines) and rates as percentages ("0.857" in the data → "86%"). Never show raw unformatted values.
 - A week is a small sample: call out a move only if it's large enough to matter (roughly 5%+ on revenue/bookings); otherwise say things held steady.
-- Causes you can't see in POS data (weather, a groomer leaving, holidays) are hypotheses — label them as such or leave them out.
-- Suggested actions must be operational (outreach, checkout prompts, schedule tweaks) — never pricing, hiring/firing, or anything irreversible. Never promise recovered dollars.
+- Causes you can't see in POS data are hypotheses — label them as such or leave them out. BUT if a logged real-world event (listed below, when present) overlaps a move, cite it as the likely cause instead of hypothesizing (e.g. "grooming dipped because a groomer's been on leave since May 3").
+- Every suggested action is an Urso solution we implement WITH the owner — pick the matching "solution" key from the Urso solutions catalog (listed below). Title it as the Urso build (e.g. "Set up automated rebooking reminders"); the detail is the evidence + what Urso ships. Never pricing, hiring/firing, or anything irreversible; never promise recovered dollars.
+- The brief's biggest-lever and recommendation should point to the Urso solution that addresses it, not generic advice.
 - Phone calls, website funnel and Google reviews are NOT tracked yet — never reference them as data.
 
 Memory & continuity:
 - If last week's brief is provided, open by briefly noting whether last week's recommendation played out — compare this week's numbers to last week's. One clause, then move on; don't force it if nothing's comparable.
 - Never suggest an action that duplicates one already in motion or one the owner recently dismissed (both are listed for you) — propose something new instead.
 - Rank actions by MEASURED results: a "Measured results of past actions" section may show, from POS data, which completed actions actually moved their target metric. Favor playbook areas with measured wins; ease off ones that showed no measurable effect; and if a past action reads "no signal — may not have been done," that lever is still open — propose a fresh, differently-worded action for it, not a copy of the completed one. Don't re-pitch a dismissed idea.
-- Never imply a past action recovered revenue unless its metric measurably moved.`;
+- Never imply a past action recovered revenue unless its metric measurably moved.
+- If a measured past result is flagged "confounded" (a logged event overlapped its window), treat it as weak evidence — the event may explain the move rather than the action.`;
 
 export async function runWeekly(): Promise<{ briefs: number; actions: number; weekStart: string; failed: string[] }> {
   assertReportKey();
   const supabase = createAdminClient();
   const data = await gatherWeeklyData(supabase);
-  const [priorBriefs, actionMemory, verifiedOutcomes] = await Promise.all([
+  const [priorBriefs, actionMemory, verifiedOutcomes, weekEvents] = await Promise.all([
     gatherPriorBriefs(supabase, data.weekStart),
     gatherActionMemory(supabase),
     // Verification is an enhancement — a failure must not lose the whole run.
     gatherVerifiedOutcomes(supabase, data.weekEnd).catch((e) => {
       console.warn(`[weekly] verified outcomes failed: ${e instanceof Error ? e.message : e}`);
       return [];
+    }),
+    // Events are an enhancement too (table may not exist pre-migration) — never
+    // let a failure lose the run.
+    gatherEvents(supabase, data.weekStart, data.weekEnd).catch((e) => {
+      console.warn(`[weekly] events read failed: ${e instanceof Error ? e.message : e}`);
+      return [] as EventRecord[];
     }),
   ]);
 
@@ -265,6 +292,7 @@ export async function runWeekly(): Promise<{ briefs: number; actions: number; we
               monthlyContext: data.monthlyContext.filter((m) => m.store === scope),
               groomers: data.groomers.filter((g) => g.store === scope),
             };
+      const scopedEvents = scope === "all" ? weekEvents : weekEvents.filter((e) => e.storeId === scope || e.storeId === null);
       try {
         const { object } = await generateObject({
           model: reportModel(),
@@ -275,8 +303,9 @@ export async function runWeekly(): Promise<{ briefs: number; actions: number; we
             `The week covered is ${data.weekStart} to ${data.weekEnd} (vs the 7 days before it).` +
             priorBriefBlock(scope, priorBriefs.get(scope)) +
             `\n\nData:\n${JSON.stringify(scoped, null, 1)}` +
+            eventsBlock(scopedEvents) +
             (scope === "all"
-              ? `${actionMemoryBlock(actionMemory)}${verifiedOutcomesBlock(verifiedOutcomes)}\n\nAlso produce the ranked suggested actions.`
+              ? `${actionMemoryBlock(actionMemory)}${verifiedOutcomesBlock(verifiedOutcomes)}${solutionsCatalogBlock()}\n\nAlso produce the ranked suggested actions.`
               : ""),
         });
         return { scope, object };
@@ -335,6 +364,7 @@ export async function runWeekly(): Promise<{ briefs: number; actions: number; we
     title: a.title,
     detail: a.detail,
     metric: a.metric,
+    plan_key: a.solution,
     status: "suggested",
     pending: false,
   }));

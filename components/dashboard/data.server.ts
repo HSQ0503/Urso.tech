@@ -32,6 +32,8 @@ import {
   type BriefChange,
   type FunnelStep,
   type Review,
+  type EventType,
+  type BusinessEvent,
 } from "./data";
 
 // ── small helpers (kept local so this module stays self-contained) ──────────
@@ -741,28 +743,45 @@ export async function getManagerScorecard(store: StoreId, month: MonthValue): Pr
   }));
 }
 
+// plan_keys already decided or in motion for a scope — so the Home "fix first"
+// card never re-surfaces a solution the owner approved, dismissed, or that's
+// already running. (Excludes 'suggested': those are still undecided, so the card
+// may still highlight the top one.)
+async function getHandledSolutionKeys(scope: Scope): Promise<Set<string>> {
+  const supabase = await createClient();
+  let q = supabase.from("agent_actions").select("plan_key, store_id").in("status", ["approved", "running", "completed", "dismissed"]);
+  if (scope !== "all") q = q.or(`store_id.eq.${scope},store_id.is.null`);
+  const { data, error } = await q;
+  if (error) throw new Error(`agent_actions handled read failed: ${error.message}`);
+  return new Set(((data ?? []) as { plan_key: string | null }[]).map((r) => r.plan_key).filter((k): k is string => !!k));
+}
+
 export async function getManagerFocus(store: StoreId, month: MonthValue) {
   const byStore = await loadDaily(month);
   const cs = computeCalls(store, byStore);
   const m = computeMetrics(store, byStore, {} as Record<StoreId, Listing>);
   const here = `at ${scopeLabel(store)}`;
-  // Candidates are gated on their data source being live (calls) or the copy
-  // being truthful (the "Only X%" framings presume the metric is actually low).
+  // Each candidate routes to an Urso solution (tech build), gated on live data
+  // (calls) or the "Only X%" copy being truthful (the metric is actually low).
   const candidates = [
     ...(cs.total > 0
-      ? [{ score: cs.missedPct, planKey: "call-capture", title: "Unanswered inbound calls are the biggest capture leak", detail: `${pctStr(cs.missedPct)} of inbound calls went unanswered ${here}. Each unanswered call is most often a booking that goes to a competitor instead.`, metric: `${pctStr(cs.missedPct)} of calls missed`, pending: true }]
+      ? [{ score: cs.missedPct, planKey: "call-capture", title: "Implement Twilio call tracking to capture missed calls", detail: `${pctStr(cs.missedPct)} of inbound calls went unanswered ${here}. Urso puts a Twilio line behind your number that texts every missed caller a booking link within seconds.`, metric: `${pctStr(cs.missedPct)} of calls missed`, pending: true }]
       : []),
     ...(m.rebook < 0.6
-      ? [{ score: 1 - m.rebook, planKey: "rebook-coach", title: "Rebooking at checkout is the most durable lever", detail: `Only ${pctStr(m.rebook)} of grooming visits ${here} come from customers returning within 90 days. A short rebooking prompt at checkout is the most reliable fix.`, metric: `${pctStr(m.rebook)} return rate`, pending: false }]
+      ? [{ score: 1 - m.rebook, planKey: "rebook-reminders", title: "Set up automated rebooking reminders", detail: `Only ${pctStr(m.rebook)} of grooming visits ${here} come from customers returning within 90 days. Urso reads each customer's cycle and sends a personalized booking-link reminder just before they're due.`, metric: `${pctStr(m.rebook)} return rate`, pending: false }]
       : []),
     ...(m.attach < 0.5
-      ? [{ score: 1 - m.attach, planKey: "retail-attach", title: "Retail attachment on grooming visits is below the group", detail: `${pctStr(m.attach)} of grooming visits ${here} add a retail item. Suggesting food or accessories at checkout is the simplest add.`, metric: `${pctStr(m.attach)} retail attach`, pending: false }]
+      ? [{ score: 1 - m.attach, planKey: "retail-attach", title: "Add checkout retail prompts to lift attach", detail: `${pctStr(m.attach)} of grooming visits ${here} add a retail item. Urso sets up checkout prompts and reorder reminders built from each pet's purchase history.`, metric: `${pctStr(m.attach)} retail attach`, pending: false }]
       : []),
   ];
-  if (!candidates.length) {
-    return { score: 0, planKey: "rebook-coach", title: "Retention and attach are on track — hold the line", detail: `Return rate and retail attach ${here} are both at healthy levels. Keep the checkout habits consistent; the next measurable lever arrives with call tracking.`, metric: `${pctStr(m.rebook)} return rate`, pending: false };
+  const handled = await getHandledSolutionKeys(store);
+  const open = candidates.filter((c) => !handled.has(c.planKey));
+  if (open.length) return open.sort((a, b) => b.score - a.score)[0];
+  if (candidates.length) {
+    const top = [...candidates].sort((a, b) => b.score - a.score)[0];
+    return { score: 0, planKey: top.planKey, title: "Your priority fixes are already in motion", detail: `The biggest levers ${here} are already approved or running — nothing new to start. A fresh fix surfaces here as your numbers move.`, metric: top.metric, pending: false };
   }
-  return candidates.sort((a, b) => b.score - a.score)[0];
+  return { score: 0, planKey: "rebook-reminders", title: "Retention and attach are on track — hold the line", detail: `Return rate and retail attach ${here} are both at healthy levels. Keep the checkout habits consistent; the next measurable lever arrives with call tracking.`, metric: `${pctStr(m.rebook)} return rate`, pending: false };
 }
 
 export async function getGroomersForStore(store: StoreId): Promise<Groomer[]> {
@@ -895,13 +914,16 @@ export async function getTopAction(scope: Scope, month: MonthValue) {
   const ws = computeWeb(scope, byStore);
   const m = computeMetrics(scope, byStore, {} as Record<StoreId, Listing>);
   const here = scope === "all" ? "across the four stores" : `at ${scopeLabel(scope)}`;
+  // Each candidate routes to a specific Urso solution (tech build). Live-data
+  // gating: calls/web only enter once they report real volume; the "Only X%"
+  // copy only runs when the metric is actually low.
   const candidates = [
     ...(cs.total > 0
       ? [{
           score: 2 + cs.missedPct,
           planKey: "call-capture",
-          title: "Missed calls aren't being followed up fast enough",
-          detail: `${pctStr(cs.missedPct)} of inbound calls ${here} go unanswered, and nothing texts those callers back. Each one is usually a booking that goes to whoever picks up next. Urso sets up a Twilio line that catches every missed call and texts the caller back a booking link within seconds — you approve the message once, then it runs.`,
+          title: "Implement Twilio call tracking to capture missed calls",
+          detail: `${pctStr(cs.missedPct)} of inbound calls ${here} go unanswered with nothing catching them — each is usually a booking that goes to whoever picks up next. Urso puts a Twilio line behind your existing number that logs every missed call and texts the caller a booking link within seconds; you approve the message once, then it runs.`,
           metric: `${pctStr(cs.missedPct)} of calls missed`,
           pending: true,
         }]
@@ -909,9 +931,9 @@ export async function getTopAction(scope: Scope, month: MonthValue) {
     ...(m.rebook < 0.6
       ? [{
           score: 1 - m.rebook,
-          planKey: "rebook-coach",
-          title: "Rebooking is below the level where recurring revenue holds",
-          detail: `Only ${pctStr(m.rebook)} of grooming visits ${here} come from customers returning within 90 days. Grooming is recurring revenue, so this is the most durable lever on long-term performance. Urso sets up a checkout rebooking prompt and tracks what it brings back.`,
+          planKey: "rebook-reminders",
+          title: "Set up automated rebooking reminders",
+          detail: `Only ${pctStr(m.rebook)} of grooming visits ${here} come from customers returning within 90 days. Grooming is recurring revenue, so this is the most durable lever. Urso reads each customer's grooming cycle and sends a personalized booking-link reminder just before they're due, then tracks who comes back.`,
           metric: `${pctStr(m.rebook)} return rate`,
           pending: false,
         }]
@@ -920,7 +942,7 @@ export async function getTopAction(scope: Scope, month: MonthValue) {
       ? [{
           score: 1 - m.attach,
           planKey: "retail-attach",
-          title: "Retail attach on grooming visits is the clearest revenue lever",
+          title: "Add checkout retail prompts to lift attach",
           detail: `Only ${pctStr(m.attach)} of grooming visits ${here} add a retail item, so most visits leave retail margin on the table. Urso sets up a checkout prompt and reorder reminders built from each pet's purchase history, and tracks attach per store and groomer.`,
           metric: `${pctStr(m.attach)} retail attach`,
           pending: false,
@@ -930,24 +952,40 @@ export async function getTopAction(scope: Scope, month: MonthValue) {
       ? [{
           score: 1 - ws.convRate * 3.5,
           planKey: "booking-form",
-          title: "Online booking abandonment is suppressing new bookings",
-          detail: `${pctStr(1 - ws.convRate)} of website visitors ${here} leave without booking. The drop is concentrated in the booking form — Urso builds and tests a shorter, mobile-first form and tracks the bookings it recovers.`,
+          title: "Rebuild the booking form to recover lost bookings",
+          detail: `${pctStr(1 - ws.convRate)} of website visitors ${here} leave without booking, the drop concentrated in the form. Urso builds and A/B-tests a shorter, mobile-first form and tracks the bookings it recovers.`,
           metric: `${pctStr(ws.convRate, 1)} book online`,
           pending: true,
         }]
       : []),
   ];
-  if (!candidates.length) {
+
+  // Memory-aware: drop any fix the owner already approved, dismissed, or that's
+  // running — the AI action center owns those now, so the card stays net-new.
+  const handled = await getHandledSolutionKeys(scope);
+  const open = candidates.filter((c) => !handled.has(c.planKey));
+  if (open.length) return open.sort((a, b) => b.score - a.score)[0];
+
+  if (candidates.length) {
+    const top = [...candidates].sort((a, b) => b.score - a.score)[0];
     return {
       score: 0,
-      planKey: "rebook-coach",
-      title: "Retention and attach are on track — hold the line",
-      detail: `Return rate and retail attach ${here} are both at healthy levels. Keep the checkout habits consistent; the next measurable lever arrives when call tracking goes live.`,
-      metric: `${pctStr(m.rebook)} return rate`,
+      planKey: top.planKey,
+      title: "Your priority fixes are already in motion",
+      detail: `The biggest levers ${here} are already approved or running in the AI action center — nothing new to start this week. A fresh fix surfaces here as the numbers move.`,
+      metric: top.metric,
       pending: false,
     };
   }
-  return candidates.sort((a, b) => b.score - a.score)[0];
+
+  return {
+    score: 0,
+    planKey: "rebook-reminders",
+    title: "Retention and attach are on track — hold the line",
+    detail: `Return rate and retail attach ${here} are both at healthy levels. Keep the checkout habits consistent; the next measurable lever arrives when call tracking goes live.`,
+    metric: `${pctStr(m.rebook)} return rate`,
+    pending: false,
+  };
 }
 
 // ── public: reviews + reputation (Reviews page) ─────────────────────────────
@@ -1407,4 +1445,45 @@ export async function getAllAgentActions(): Promise<ActionWithPlan[]> {
   if (error) throw new Error(`agent_actions read failed: ${error.message}`);
   type R = RawAction & { plan_key: string };
   return ((data ?? []) as unknown as R[]).map((a) => ({ ...toAction(a), planKey: a.plan_key }));
+}
+
+// ── public: business events (the "why" layer) ───────────────────────────────
+// Real-world context the AI cites to explain moves. Scope rules mirror actions:
+// a store sees its own events PLUS all-stores (store_id null) events.
+const EVENT_COLS = "id, store_id, type, title, detail, start_date, end_date, created_by";
+type EventRow = {
+  id: string; store_id: StoreId | null; type: EventType; title: string;
+  detail: string | null; start_date: string; end_date: string | null; created_by: string | null;
+};
+function toBusinessEvent(r: EventRow): BusinessEvent {
+  return {
+    id: r.id, storeId: r.store_id, store: r.store_id ? fullName(r.store_id) : "All stores",
+    type: r.type, title: r.title, detail: r.detail, start: r.start_date, end: r.end_date, createdBy: r.created_by,
+  };
+}
+
+// The Events page list — newest first, scope-filtered.
+export async function getBusinessEvents(scope: Scope): Promise<BusinessEvent[]> {
+  const supabase = await createClient();
+  let q = supabase.from("business_events").select(EVENT_COLS).order("start_date", { ascending: false }).limit(100);
+  if (scope !== "all") q = q.or(`store_id.eq.${scope},store_id.is.null`);
+  const { data, error } = await q;
+  if (error) throw new Error(`business_events read failed: ${error.message}`);
+  return ((data ?? []) as unknown as EventRow[]).map(toBusinessEvent);
+}
+
+// The chat events_in_range tool: events overlapping [start, end] (inclusive).
+// Overlap = starts on/before the window end AND (ends on/after the window start
+// OR is still ongoing).
+export async function getEventsInRange(scope: Scope, start: string, end: string): Promise<BusinessEvent[]> {
+  const supabase = await createClient();
+  let q = supabase
+    .from("business_events").select(EVENT_COLS)
+    .lte("start_date", end)
+    .or(`end_date.gte.${start},end_date.is.null`)
+    .order("start_date", { ascending: false }).limit(50);
+  if (scope !== "all") q = q.or(`store_id.eq.${scope},store_id.is.null`);
+  const { data, error } = await q;
+  if (error) throw new Error(`business_events range read failed: ${error.message}`);
+  return ((data ?? []) as unknown as EventRow[]).map(toBusinessEvent);
 }

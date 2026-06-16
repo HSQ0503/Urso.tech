@@ -237,6 +237,32 @@ export type Scope = "all" | StoreId;
 export type MonthValue = "all" | string; // "all", "YYYY" (full year), or "YYYY-MM"
 export type Granularity = "daily" | "weekly" | "monthly";
 
+// Real-world events the AI cites to explain WHY a metric moved (the "why"
+// layer). Logged on the Events page; read by chat (the events_in_range tool),
+// the weekly brief, and the metric-verified learning's confounding check.
+export const EVENT_TYPES = ["staffing", "promo", "price_change", "closure", "marketing", "weather", "other"] as const;
+export type EventType = (typeof EVENT_TYPES)[number];
+export const EVENT_TYPE_LABELS: Record<EventType, string> = {
+  staffing: "Staffing",
+  promo: "Promotion",
+  price_change: "Price change",
+  closure: "Closure",
+  marketing: "Marketing",
+  weather: "Weather",
+  other: "Other",
+};
+export type BusinessEvent = {
+  id: string;
+  store: string; // store label, or "All stores"
+  storeId: StoreId | null;
+  type: EventType;
+  title: string;
+  detail: string | null;
+  start: string; // YYYY-MM-DD
+  end: string | null; // YYYY-MM-DD, or null if ongoing
+  createdBy: string | null;
+};
+
 const storesById: Record<StoreId, Store> = Object.fromEntries(stores.map((s) => [s.id, s])) as Record<StoreId, Store>;
 
 export const STORE_OPTIONS: { value: Scope; label: string; short: string }[] = [
@@ -856,7 +882,24 @@ export const actionPlans: Record<string, ActionPlan> = {
     ],
     your: ["Have staff make the one-line suggestion at checkout.", "Keep the recommended items in stock."],
   },
+  "rebook-reminders": {
+    problem:
+      "Grooming is recurring revenue, but customers drift off their cycle when nothing nudges them — a missed rebook compounds visit after visit.",
+    system: "Automated rebooking reminders",
+    proposal:
+      "Urso reads each customer's grooming cycle and sends a personalized booking-link reminder just before they're due, then tracks who comes back.",
+    how: [
+      "The AI computes each customer's grooming cycle (median days between visits) from FranPOS history.",
+      "It schedules a personalized reminder with a booking link timed to land just before the next visit is due.",
+      "Rebookings from the reminder are tracked back to each customer, so the recovered revenue shows up here.",
+    ],
+    your: ["Approve the reminder wording and timing once.", "Nothing day-to-day — Urso runs it and reports the rebookings it brings back."],
+  },
 };
+
+// The Urso solutions the AI may deploy — every "what to fix first" routes to one
+// of these. Excludes the coaching-only plan so suggestions stay tech builds.
+export const SOLUTION_KEYS = Object.keys(actionPlans).filter((k) => k !== "rebook-coach");
 
 const actionPlanKey: Record<string, string> = {
   a1: "call-capture",
