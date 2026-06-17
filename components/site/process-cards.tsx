@@ -185,27 +185,27 @@ const CARDS: Card[] = [
     headline: "We find the money first",
     sub: "Before we touch anything, we pull your data together and reconcile it until the numbers agree with reality. You get a baseline and a leak report, every gap sized in dollars.",
     background:
-      "radial-gradient(96% 62% at 50% 24%, rgba(255,150,78,0.46) 0%, transparent 58%)," +
-      "radial-gradient(64% 44% at 84% 6%, rgba(255,108,38,0.30) 0%, transparent 54%)," +
-      "linear-gradient(180deg, #1c0e07 0%, #150b06 52%, #0b0705 100%)",
+      "radial-gradient(118% 80% at 50% 30%, rgba(255,150,78,0.46) 0%, transparent 70%)," +
+      "radial-gradient(64% 44% at 84% 6%, rgba(255,108,38,0.28) 0%, transparent 54%)," +
+      "linear-gradient(180deg, #1e0f08 0%, #1a0d07 46%, #100805 80%, #0b0705 100%)",
     widget: <LeakReport />,
   },
   {
     headline: "You get a plan, not a dashboard",
     sub: "Every fix is ranked by dollar impact and effort, assigned to an owner, and tracked to done. Not a report that gets exported once and quietly ignored.",
     background:
-      "radial-gradient(98% 60% at 50% 20%, rgba(255,120,46,0.50) 0%, transparent 56%)," +
-      "radial-gradient(60% 44% at 16% 8%, rgba(255,156,90,0.30) 0%, transparent 54%)," +
-      "linear-gradient(180deg, #21110a 0%, #160b06 52%, #0c0705 100%)",
+      "radial-gradient(120% 80% at 50% 28%, rgba(255,120,46,0.50) 0%, transparent 70%)," +
+      "radial-gradient(60% 44% at 16% 8%, rgba(255,156,90,0.28) 0%, transparent 54%)," +
+      "linear-gradient(180deg, #22120b 0%, #1b0e08 46%, #110906 80%, #0c0705 100%)",
     widget: <ActionPlan />,
   },
   {
     headline: "Track everything. Ask anything",
     sub: "Your whole operation lives on one screen. An analyst answers in plain language, grounded in your real numbers, any time you ask.",
     background:
-      "radial-gradient(94% 60% at 50% 18%, rgba(255,166,100,0.44) 0%, transparent 58%)," +
-      "radial-gradient(58% 42% at 86% 90%, rgba(255,110,40,0.22) 0%, transparent 55%)," +
-      "linear-gradient(180deg, #1a0d07 0%, #140a05 54%, #0b0705 100%)",
+      "radial-gradient(116% 80% at 50% 28%, rgba(255,166,100,0.44) 0%, transparent 70%)," +
+      "radial-gradient(58% 44% at 86% 92%, rgba(255,110,40,0.22) 0%, transparent 55%)," +
+      "linear-gradient(180deg, #1c0e08 0%, #170c06 46%, #100805 80%, #0b0705 100%)",
     widget: <AskCard />,
   },
 ];

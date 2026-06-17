@@ -7,6 +7,7 @@ export type StoreId = "wp" | "wg" | "lv" | "wm";
 export type Store = {
   id: StoreId;
   name: string;
+  aliases?: string[]; // other names the owner uses for this store (e.g. Windermere = "Summerport")
   tier: "Established" | "Newer";
   rating: number;
   reviews: number;
@@ -25,7 +26,7 @@ export const stores: Store[] = [
   { id: "wp", name: "Winter Park", tier: "Established", rating: 4.6, reviews: 232, revenue: 58400, groomingPct: 0.64, bookings: 384, noShow: 0.06, rebook: 0.64, attach: 0.38, avgTicket: 96, leak: 1900, trend: [42, 45, 44, 48, 51, 53, 55, 58] },
   { id: "wg", name: "Winter Garden", tier: "Established", rating: 4.5, reviews: 199, revenue: 49200, groomingPct: 0.67, bookings: 332, noShow: 0.07, rebook: 0.58, attach: 0.31, avgTicket: 89, leak: 2300, trend: [40, 41, 43, 42, 45, 46, 48, 49] },
   { id: "lv", name: "Lakeside Village", tier: "Newer", rating: 4.4, reviews: 121, revenue: 39600, groomingPct: 0.71, bookings: 286, noShow: 0.11, rebook: 0.41, attach: 0.24, avgTicket: 82, leak: 3400, trend: [28, 30, 33, 34, 35, 37, 38, 40] },
-  { id: "wm", name: "Windermere", tier: "Newer", rating: 4.4, reviews: 118, revenue: 36900, groomingPct: 0.73, bookings: 261, noShow: 0.13, rebook: 0.38, attach: 0.21, avgTicket: 79, leak: 3800, trend: [26, 27, 29, 31, 32, 33, 35, 37] },
+  { id: "wm", name: "Windermere", aliases: ["Summerport"], tier: "Newer", rating: 4.4, reviews: 118, revenue: 36900, groomingPct: 0.73, bookings: 261, noShow: 0.13, rebook: 0.38, attach: 0.21, avgTicket: 79, leak: 3800, trend: [26, 27, 29, 31, 32, 33, 35, 37] },
 ];
 
 export const totals = {

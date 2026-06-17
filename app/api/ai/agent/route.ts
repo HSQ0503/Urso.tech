@@ -4,12 +4,14 @@
 // reasoning budget, and richer pre-loaded context (full brief + action pipeline).
 // Auth + scope come from the session; managers stay locked to their store.
 
-import { streamText, convertToModelMessages, stepCountIs, type UIMessage } from "ai";
+import { streamText, convertToModelMessages, stepCountIs, generateId, type UIMessage } from "ai";
 import { getSession, resolveScope } from "@/lib/auth";
 import { getMetrics, getKpiDeltas, getWeeklyBrief, getAllAgentActions } from "@/components/dashboard/data.server";
 import { buildAgentSystemPrompt } from "@/lib/ai/analyst";
 import { buildAnalystTools } from "@/lib/ai/tools";
 import { agentModel, assertAgentKey } from "@/lib/ai/models";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { getAnalystMemory, getOwnedThread, persistTurn, type StoredMessage } from "@/lib/ai/memory";
 import { stores, scopeLabel, monthLabel, type MonthValue, type Scope } from "@/components/dashboard/data";
 
 // Opus + a multi-tool analysis can run longer than a quick chat answer.
@@ -32,20 +34,27 @@ export async function POST(req: Request) {
     return Response.json({ error: e instanceof Error ? e.message : String(e) }, { status: 503 });
   }
 
-  const body = (await req.json()) as { messages: UIMessage[]; store?: string; month?: string };
+  const body = (await req.json()) as { messages: UIMessage[]; store?: string; month?: string; threadId?: string };
 
   const scope = resolveScope(user, body.store);
   const cross: Scope = user.role === "manager" && user.storeId ? user.storeId : "all";
   const month = (body.month && /^(all|\d{4}|\d{4}-\d{2})$/.test(body.month) ? body.month : "all") as MonthValue;
 
+  const admin = createAdminClient();
+  // Persist only to a thread the caller actually owns — never trust the id blindly.
+  const ownedThreadId = body.threadId ? (await getOwnedThread(admin, user.id, body.threadId))?.id ?? null : null;
+
   // Pre-load the analyst's opening picture in parallel, best-effort: scope seed,
-  // the full weekly brief, and the action pipeline — so it starts already informed.
-  const [mRes, dRes, briefRes, actionsRes] = await Promise.allSettled([
+  // the full weekly brief, the action pipeline, and the user's rolling memory —
+  // so it starts already informed and remembers prior conversations.
+  const [mRes, dRes, briefRes, actionsRes, memRes] = await Promise.allSettled([
     getMetrics(scope, month),
     getKpiDeltas(scope, month),
     getWeeklyBrief(scope),
     getAllAgentActions(),
+    getAnalystMemory(admin, user.id),
   ]);
+  const memory = memRes.status === "fulfilled" ? memRes.value : "";
 
   let seed = "";
   if (mRes.status === "fulfilled" && dRes.status === "fulfilled") {
@@ -87,7 +96,7 @@ export async function POST(req: Request) {
 
   const result = streamText({
     model: agentModel(),
-    system: buildAgentSystemPrompt({ user, scope, month }, seed, brief, actions),
+    system: buildAgentSystemPrompt({ user, scope, month }, seed, brief, actions, memory),
     messages: await convertToModelMessages(body.messages),
     tools: buildAnalystTools(scope, cross),
     stopWhen: stepCountIs(8),
@@ -102,6 +111,28 @@ export async function POST(req: Request) {
   });
 
   return result.toUIMessageStreamResponse({
+    originalMessages: body.messages,
+    generateMessageId: generateId,
+    // Persist this turn once the answer is complete — best-effort, never blocks
+    // or breaks the response. Only writes to a thread the user owns.
+    onFinish: ownedThreadId
+      ? async ({ responseMessage }) => {
+          try {
+            const last = body.messages.at(-1);
+            const userMessage =
+              last && last.role === "user" ? ({ id: last.id, role: "user", parts: last.parts } as StoredMessage) : null;
+            await persistTurn({
+              userId: user.id,
+              clientId: user.clientId,
+              threadId: ownedThreadId,
+              userMessage,
+              assistantMessage: responseMessage as unknown as StoredMessage,
+            });
+          } catch (e) {
+            console.error("[ai/agent] persist failed:", e instanceof Error ? e.message : e);
+          }
+        }
+      : undefined,
     onError: (error) => {
       const msg = error instanceof Error ? error.message : String(error);
       console.error("[ai/agent] stream error:", msg);

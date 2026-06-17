@@ -13,6 +13,7 @@ import {
 import { Reveal } from "@/components/site/reveal";
 import { FORECAST_GRAIN } from "@/components/site/forecast";
 import { ProcessCards } from "@/components/site/process-cards";
+import { WhoWeServe } from "@/components/site/who-we-serve";
 
 export const metadata: Metadata = {
   title: "How it works",
@@ -145,9 +146,21 @@ export default function HowItWorksPage() {
         </section>
 
         {/* ===== How it works — the engagement in three moves ===== */}
-        <section className="border-b border-edge px-[clamp(20px,4vw,56px)] py-[clamp(64px,10vw,128px)]">
+        <section className="px-[clamp(20px,4vw,56px)] py-[clamp(64px,10vw,128px)]">
+          <Reveal className="mx-auto mb-[clamp(44px,6vw,80px)] max-w-[760px] text-center">
+            <h2 className="text-balance font-serif text-[clamp(2.5rem,5vw,4.25rem)] font-normal leading-[1.05] tracking-[-0.025em] text-ink">
+              <em className="italic">How</em> it works<span className="text-orange">.</span>
+            </h2>
+            <p className="mx-auto mt-6 max-w-[52ch] text-[17px] leading-[1.6] text-ink-dim sm:text-[18px]">
+              What working with us actually looks like, from the first baseline to
+              the weekly fix.
+            </p>
+          </Reveal>
           <ProcessCards />
         </section>
+
+        {/* ===== Who we serve — the verticals, on the amber field ===== */}
+        <WhoWeServe />
 
         {PHASES.map((p, i) => (
           <Section key={p.n} divide={i !== 0}>

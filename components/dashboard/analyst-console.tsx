@@ -3,15 +3,20 @@
 // urso.ai — the owner's full strategy console (AI actions page). A premium,
 // full-screen-capable chat over the same scope-locked analytics tools as the
 // graph chats, but model-stronger (Opus 4.8) and prompted to lead the analysis.
-// Conversation is ephemeral; nothing is persisted server-side. Hits /api/ai/agent.
+//
+// Conversations are PERSISTED (multiple named threads per user) and the analyst
+// carries a rolling, distilled memory across them — see lib/ai/memory.ts and
+// /api/ai/threads. The chat itself hits /api/ai/agent with the active threadId.
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useSearchParams } from "next/navigation";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import { parseScope, parseMonth, scopeLabel, monthLabel } from "./data";
 import { RichText } from "./rich-text";
+
+type ThreadSummary = { id: string; title: string; updated_at: string };
 
 // Friendly names for the tool-activity chips, so the owner sees what it checked.
 const TOOL_LABELS: Record<string, string> = {
@@ -115,7 +120,7 @@ function EmptyState({ firstName, briefHeadline, onPick, busy }: { firstName: str
         </span>
         <h2 className="mt-4 text-[20px] font-medium tracking-[-0.01em] text-ink">Good to see you, {firstName}.</h2>
         <p className="mt-2 text-[14px] leading-[1.6] text-ink-dim">
-          I’m your data analyst across all four stores. Ask me what’s working, what’s leaking, and what to do next — I’ll pull the real numbers and come back with a plan.
+          I’m your data analyst. Ask me what’s working, what’s leaking, and what to do next — I’ll pull the real numbers and come back with a plan. I remember our past conversations.
         </p>
         {briefHeadline && (
           <div className="mt-4 inline-block max-w-full rounded-xl border border-edge bg-raise px-3.5 py-2.5 text-left">
@@ -141,41 +146,109 @@ function EmptyState({ firstName, briefHeadline, onPick, busy }: { firstName: str
   );
 }
 
+function TrashIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6" />
+    </svg>
+  );
+}
+
+function ThreadRow({ thread, active, onOpen, onDelete, onRename }: { thread: ThreadSummary; active: boolean; onOpen: () => void; onDelete: () => void; onRename: (title: string) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState(thread.title);
+  const startEdit = () => { setVal(thread.title); setEditing(true); };
+
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        value={val}
+        onChange={(e) => setVal(e.target.value)}
+        onBlur={() => {
+          setEditing(false);
+          const t = val.trim();
+          if (t && t !== thread.title) onRename(t);
+          else setVal(thread.title);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") e.currentTarget.blur();
+          if (e.key === "Escape") { setVal(thread.title); setEditing(false); }
+        }}
+        className="w-full rounded-lg border border-[rgba(254,81,0,0.4)] bg-raise px-2.5 py-2 text-[13px] text-ink outline-none"
+      />
+    );
+  }
+
+  return (
+    <div className={`group flex items-center gap-1 rounded-lg pl-2.5 pr-1.5 text-[13px] transition-colors ${active ? "bg-raise text-ink" : "text-ink-dim hover:bg-raise/60 hover:text-ink"}`}>
+      <button onClick={onOpen} onDoubleClick={startEdit} className="min-w-0 flex-1 truncate py-2 text-left" title={`${thread.title}  (double-click to rename)`}>
+        {thread.title}
+      </button>
+      <button
+        onClick={onDelete}
+        aria-label="Delete conversation"
+        title="Delete conversation"
+        className="grid size-6 shrink-0 place-items-center rounded text-ink-dimmer opacity-0 transition-opacity hover:text-orange focus:opacity-100 group-hover:opacity-100"
+      >
+        <TrashIcon />
+      </button>
+    </div>
+  );
+}
+
+function ThreadRail({
+  threads, activeThreadId, onOpen, onNew, onDelete, onRename, busy, className = "",
+}: {
+  threads: ThreadSummary[]; activeThreadId: string | null; onOpen: (id: string) => void; onNew: () => void;
+  onDelete: (id: string) => void; onRename: (id: string, title: string) => void; busy: boolean; className?: string;
+}) {
+  return (
+    <div className={`w-60 shrink-0 flex-col border-r border-edge bg-bg/40 ${className}`}>
+      <div className="p-3">
+        <button
+          onClick={onNew}
+          disabled={busy}
+          className="flex w-full items-center justify-center gap-2 rounded-xl border border-[rgba(254,81,0,0.4)] bg-orange-soft px-3 py-2 text-[13px] font-medium text-orange transition-colors hover:bg-[rgba(254,81,0,0.18)] disabled:opacity-50"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" aria-hidden><path d="M12 5v14M5 12h14" /></svg>
+          New conversation
+        </button>
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
+        {threads.length === 0 ? (
+          <p className="px-2 py-3 text-[12px] leading-[1.5] text-ink-dimmer">No conversations yet. Ask something to start one.</p>
+        ) : (
+          <ul className="space-y-0.5">
+            {threads.map((t) => (
+              <li key={t.id}>
+                <ThreadRow thread={t} active={t.id === activeThreadId} onOpen={() => onOpen(t.id)} onDelete={() => onDelete(t.id)} onRename={(title) => onRename(t.id, title)} />
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
+
 type ChatApi = ReturnType<typeof useChat>;
 
 function ChatPanel({
-  chat,
-  input,
-  setInput,
-  scopeText,
-  storeParam,
-  monthParam,
-  userName,
-  briefHeadline,
-  expanded,
-  onToggleExpand,
+  chat, input, setInput, scopeText, userName, briefHeadline, expanded, onToggleExpand, onToggleRail, onSend,
 }: {
-  chat: ChatApi;
-  input: string;
-  setInput: (v: string) => void;
-  scopeText: string;
-  storeParam?: string;
-  monthParam?: string;
-  userName: string;
-  briefHeadline?: string | null;
-  expanded: boolean;
-  onToggleExpand: () => void;
+  chat: ChatApi; input: string; setInput: (v: string) => void; scopeText: string; userName: string;
+  briefHeadline?: string | null; expanded: boolean; onToggleExpand: () => void; onToggleRail: () => void; onSend: (text: string) => void;
 }) {
-  const { messages, sendMessage, status, error, stop } = chat;
+  const { messages, status, error, stop } = chat;
   const busy = status === "submitted" || status === "streaming";
   const scrollRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
 
-  const ask = (text: string) => {
+  const submit = (text: string) => {
     const q = text.trim();
     if (!q || busy) return;
-    sendMessage({ text: q }, { body: { store: storeParam, month: monthParam } });
-    setInput("");
+    onSend(q);
     if (taRef.current) taRef.current.style.height = "auto";
   };
 
@@ -189,7 +262,15 @@ function ChatPanel({
     <div className="flex h-full flex-col">
       {/* Header */}
       <div className="flex items-center justify-between gap-3 border-b border-edge px-4 py-3 md:px-5">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
+          <button
+            onClick={onToggleRail}
+            aria-label="Conversations"
+            title="Conversations"
+            className="grid size-8 shrink-0 place-items-center rounded-lg border border-edge text-ink-dim transition-colors hover:border-edge-strong hover:text-ink md:hidden"
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" aria-hidden><path d="M4 6h16M4 12h16M4 18h16" /></svg>
+          </button>
           <span className="grid size-8 place-items-center rounded-full border border-[rgba(254,81,0,0.35)] bg-orange-soft text-orange">
             <Spark />
           </span>
@@ -221,7 +302,7 @@ function ChatPanel({
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-5 md:px-6">
         <div className="mx-auto w-full max-w-[760px]">
           {messages.length === 0 ? (
-            <EmptyState firstName={firstName} briefHeadline={briefHeadline} onPick={ask} busy={busy} />
+            <EmptyState firstName={firstName} briefHeadline={briefHeadline} onPick={submit} busy={busy} />
           ) : (
             <div className="space-y-6">
               {messages.map((m) => (
@@ -246,7 +327,7 @@ function ChatPanel({
           <form
             onSubmit={(e) => {
               e.preventDefault();
-              ask(input);
+              submit(input);
             }}
             className="flex items-end gap-2 rounded-2xl border border-edge bg-raise px-3 py-2 transition-colors focus-within:border-[rgba(254,81,0,0.45)]"
           >
@@ -262,7 +343,7 @@ function ChatPanel({
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
-                  ask(input);
+                  submit(input);
                 }
               }}
               rows={1}
@@ -300,11 +381,117 @@ function ChatPanel({
 
 export function AnalystConsole({ userName, briefHeadline }: { userName: string; briefHeadline?: string | null }) {
   const [expanded, setExpanded] = useState(false);
+  const [railOpen, setRailOpen] = useState(false);
   const [input, setInput] = useState("");
+  const [threads, setThreads] = useState<ThreadSummary[]>([]);
+  const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const params = useSearchParams();
   const scope = parseScope(params.get("store"));
   const month = parseMonth(params.get("month"));
-  const chat = useChat({ transport: new DefaultChatTransport({ api: "/api/ai/agent" }) });
+
+  const refreshThreads = useCallback(async (): Promise<ThreadSummary[]> => {
+    try {
+      const r = await fetch("/api/ai/threads");
+      if (!r.ok) return [];
+      const list: ThreadSummary[] = (await r.json()).threads ?? [];
+      setThreads(list);
+      return list;
+    } catch {
+      return [];
+    }
+  }, []);
+
+  const chat = useChat({
+    transport: new DefaultChatTransport({ api: "/api/ai/agent" }),
+    onFinish: () => { void refreshThreads(); }, // pick up the auto-title + reordering
+  });
+  const { setMessages, status } = chat;
+  const busy = status === "submitted" || status === "streaming";
+
+  // Initial load: most-recent thread, hydrated.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      let list: ThreadSummary[] = [];
+      try {
+        const r = await fetch("/api/ai/threads");
+        if (r.ok) list = (await r.json()).threads ?? [];
+      } catch { /* offline / not configured — start fresh */ }
+      if (cancelled) return;
+      setThreads(list);
+      if (!list.length) return;
+      setActiveThreadId(list[0].id);
+      try {
+        const r = await fetch(`/api/ai/threads/${list[0].id}`);
+        if (r.ok && !cancelled) setMessages((await r.json()).messages ?? []);
+      } catch { /* leave empty */ }
+    })();
+    return () => { cancelled = true; };
+  }, [setMessages]);
+
+  const openThread = useCallback(async (id: string) => {
+    if (busy) return;
+    setActiveThreadId(id);
+    setRailOpen(false);
+    try {
+      const r = await fetch(`/api/ai/threads/${id}`);
+      setMessages(r.ok ? (await r.json()).messages ?? [] : []);
+    } catch {
+      setMessages([]);
+    }
+  }, [busy, setMessages]);
+
+  const newThread = useCallback(() => {
+    if (busy) return;
+    setActiveThreadId(null);
+    setMessages([]);
+    setInput("");
+    setRailOpen(false);
+  }, [busy, setMessages]);
+
+  const deleteThread = useCallback(async (id: string) => {
+    setThreads((t) => t.filter((x) => x.id !== id));
+    setActiveThreadId((cur) => {
+      if (cur === id) { setMessages([]); return null; }
+      return cur;
+    });
+    await fetch(`/api/ai/threads/${id}`, { method: "DELETE" }).catch(() => {});
+  }, [setMessages]);
+
+  const renameThread = useCallback(async (id: string, title: string) => {
+    setThreads((ts) => ts.map((x) => (x.id === id ? { ...x, title } : x)));
+    await fetch(`/api/ai/threads/${id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ title }),
+    }).catch(() => {});
+  }, []);
+
+  const send = useCallback(async (text: string) => {
+    const q = text.trim();
+    if (!q || busy) return;
+    let tid = activeThreadId;
+    if (!tid) {
+      // Lazily create a thread on first send. If this fails (e.g. the memory
+      // tables aren't migrated yet), fall back to an ephemeral chat with no
+      // threadId — the answer still streams, it just isn't persisted.
+      try {
+        const r = await fetch("/api/ai/threads", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ scope: params.get("store") ?? "all" }),
+        });
+        if (r.ok) {
+          const { thread } = (await r.json()) as { thread: ThreadSummary };
+          tid = thread.id;
+          setActiveThreadId(tid);
+          setThreads((t) => [thread, ...t]);
+        }
+      } catch { /* fall through to ephemeral send */ }
+    }
+    chat.sendMessage({ text: q }, { body: { threadId: tid ?? undefined, store: params.get("store") ?? undefined, month: params.get("month") ?? undefined } });
+    setInput("");
+  }, [activeThreadId, busy, chat, params]);
 
   useEffect(() => {
     if (!expanded) return;
@@ -320,26 +507,55 @@ export function AnalystConsole({ userName, briefHeadline }: { userName: string; 
     };
   }, [expanded]);
 
-  const panel = (
-    <ChatPanel
-      chat={chat}
-      input={input}
-      setInput={setInput}
-      scopeText={`${scopeLabel(scope)} · ${monthLabel(month)}`}
-      storeParam={params.get("store") ?? undefined}
-      monthParam={params.get("month") ?? undefined}
-      userName={userName}
-      briefHeadline={briefHeadline}
-      expanded={expanded}
-      onToggleExpand={() => setExpanded((e) => !e)}
-    />
+  const body = (
+    <div className="relative flex h-full">
+      <ThreadRail
+        className="hidden md:flex"
+        threads={threads}
+        activeThreadId={activeThreadId}
+        onOpen={openThread}
+        onNew={newThread}
+        onDelete={deleteThread}
+        onRename={renameThread}
+        busy={busy}
+      />
+      {railOpen && (
+        <div className="absolute inset-0 z-20 flex md:hidden">
+          <ThreadRail
+            className="flex max-w-[80%] bg-panel"
+            threads={threads}
+            activeThreadId={activeThreadId}
+            onOpen={openThread}
+            onNew={newThread}
+            onDelete={deleteThread}
+            onRename={renameThread}
+            busy={busy}
+          />
+          <button aria-label="Close conversations" className="flex-1 bg-black/40" onClick={() => setRailOpen(false)} />
+        </div>
+      )}
+      <div className="min-w-0 flex-1">
+        <ChatPanel
+          chat={chat}
+          input={input}
+          setInput={setInput}
+          scopeText={`${scopeLabel(scope)} · ${monthLabel(month)}`}
+          userName={userName}
+          briefHeadline={briefHeadline}
+          expanded={expanded}
+          onToggleExpand={() => setExpanded((e) => !e)}
+          onToggleRail={() => setRailOpen(true)}
+          onSend={send}
+        />
+      </div>
+    </div>
   );
 
   if (expanded && typeof document !== "undefined") {
     return createPortal(
       <div className="theme-scope fixed inset-0 z-[60] bg-bg">
-        <div className="mx-auto flex h-full max-w-[1120px] flex-col p-3 md:p-6">
-          <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-edge bg-panel shadow-[0_24px_64px_-24px_rgba(0,0,0,0.85)]">{panel}</div>
+        <div className="mx-auto flex h-full max-w-[1180px] flex-col p-3 md:p-6">
+          <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-edge bg-panel shadow-[0_24px_64px_-24px_rgba(0,0,0,0.85)]">{body}</div>
         </div>
       </div>,
       document.body,
@@ -348,7 +564,7 @@ export function AnalystConsole({ userName, briefHeadline }: { userName: string; 
 
   return (
     <div className="h-[72vh] min-h-[560px] overflow-hidden rounded-2xl border border-edge bg-panel shadow-[0_30px_80px_-40px_rgba(0,0,0,0.7)]">
-      {panel}
+      {body}
     </div>
   );
 }

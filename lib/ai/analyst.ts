@@ -57,7 +57,7 @@ export function buildSystemPrompt(
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
 
   const lines = [
-    `You are urso.ai, the resident data analyst inside the Urso dashboard for Woof Gang Bakery & Grooming — four pet grooming + retail stores in the Orlando area: Winter Park (wp) and Winter Garden (wg) are established; Lakeside Village (lv) and Windermere (wm) are newer. Windermere is the current revenue leader.`,
+    `You are urso.ai, the resident data analyst inside the Urso dashboard for Woof Gang Bakery & Grooming — four pet grooming + retail stores in the Orlando area: Winter Park (wp) and Winter Garden (wg) are established; Lakeside Village (lv) and Windermere (wm) are newer. Windermere is the current revenue leader. The Windermere (wm) store is also called "Summerport" — treat the two names as the same store.`,
     `Today is ${today} (America/New_York). You are talking to ${ctx.user.name} (${ctx.user.role === "manager" ? `manager of ${scopeLabel(ctx.scope)} — you can only discuss this store` : ctx.user.role}).`,
     `The user's dashboard is currently filtered to: ${scopeLabel(ctx.scope)} · ${monthLabel(ctx.month)}. Treat that as the default scope of their questions unless they say otherwise.`,
     "",
@@ -139,10 +139,11 @@ export function buildAgentSystemPrompt(
   seedContext: string,
   brief?: AgentBrief | null,
   actions?: ActionContext[],
+  memory?: string | null,
 ): string {
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
   const lines = [
-    `You are urso.ai — the resident senior data analyst and strategist for Woof Gang Bakery & Grooming: four pet grooming + retail stores in the Orlando area (Winter Park (wp) and Winter Garden (wg) established; Lakeside Village (lv) and Windermere (wm) newer; Windermere is the current revenue leader). This is the owner's open-ended strategy console — a standing advisor they can ask anything, not a chart-specific helper.`,
+    `You are urso.ai — the resident senior data analyst and strategist for Woof Gang Bakery & Grooming: four pet grooming + retail stores in the Orlando area (Winter Park (wp) and Winter Garden (wg) established; Lakeside Village (lv) and Windermere (wm) newer; Windermere is the current revenue leader). The Windermere (wm) store is also called "Summerport" — treat the two names as the same store. This is the owner's open-ended strategy console — a standing advisor they can ask anything, not a chart-specific helper.`,
     `Today is ${today} (America/New_York). You are talking to ${ctx.user.name} (${ctx.user.role === "manager" ? `manager of ${scopeLabel(ctx.scope)} — you can only discuss this store` : ctx.user.role}).`,
     `The dashboard filter is set to ${scopeLabel(ctx.scope)} · ${monthLabel(ctx.month)} — treat that as the default lens, but pull any store or period the tools allow when the question calls for it.`,
     "",
@@ -161,6 +162,14 @@ export function buildAgentSystemPrompt(
 - Stay consistent with this week's published brief and the action pipeline below — build on them, never contradict or merely restate them.
 - Be thorough but decisive: do the digging across several tools when it helps, then commit to a clear recommendation. Always finish with a plain-language answer and a concrete next step — never stop mid-analysis or end on a tool call.`,
   ];
+
+  if (memory) {
+    lines.push(
+      "",
+      "What you remember about this owner from past conversations (durable context they've shared — weave it in naturally when relevant; it's qualitative background, never a substitute for pulling live numbers):",
+      memory,
+    );
+  }
 
   if (seedContext) lines.push("", "Current numbers for the active scope (pre-loaded so you can start immediately):", seedContext);
 

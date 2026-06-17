@@ -62,8 +62,10 @@ async function refreshConnection(conn: QboConnection): Promise<QboConnection> {
   });
   if (!res.ok) {
     const body = await res.text().catch(() => "");
+    const tid = res.headers.get("intuit_tid") ?? "n/a"; // Intuit transaction id — capture for support
+    console.error(`[qbo] token refresh failed (${res.status}) intuit_tid=${tid}: ${body.slice(0, 200)}`);
     throw new Error(
-      `QBO token refresh failed (${res.status}) — owner may need to reconnect via /api/quickbooks/connect. ${body.slice(0, 200)}`,
+      `QBO token refresh failed (${res.status}) [intuit_tid=${tid}] — owner may need to reconnect via /api/quickbooks/connect. ${body.slice(0, 200)}`,
     );
   }
   const t = (await res.json()) as {
@@ -129,7 +131,9 @@ export async function qboGet(
   }
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    throw new Error(`QBO ${path} failed (${res.status}): ${body.slice(0, 300)}`);
+    const tid = res.headers.get("intuit_tid") ?? "n/a"; // Intuit transaction id — capture for support
+    console.error(`[qbo] ${path} failed (${res.status}) intuit_tid=${tid}: ${body.slice(0, 300)}`);
+    throw new Error(`QBO ${path} failed (${res.status}) [intuit_tid=${tid}]: ${body.slice(0, 300)}`);
   }
   return { json: (await res.json()) as Record<string, unknown>, conn };
 }
@@ -147,10 +151,17 @@ export type PnlRow = {
   amount: number;
 };
 
+export type PnlTotal = {
+  month: string;
+  label: string; // QBO summary label, e.g. 'Total Income', 'Net Income'
+  amount: number;
+  depth: number; // 0 = top-level P&L line; >0 = a nested group subtotal
+};
+
 export type PnlSummary = {
   months: string[];
   rows: PnlRow[];
-  totals: { month: string; label: string; amount: number }[]; // Total Income, Gross Profit, Net Income…
+  totals: PnlTotal[]; // Total Income, Gross Profit, Net Income… (all depths)
 };
 
 type ReportCol = { ColTitle?: string; ColType?: string; MetaData?: { Name: string; Value: string }[] };
@@ -176,7 +187,7 @@ function parsePnl(report: Record<string, unknown>): PnlSummary {
   const months = [...monthByCol.values()];
 
   const rows: PnlRow[] = [];
-  const totals: PnlSummary["totals"] = [];
+  const totals: PnlTotal[] = [];
 
   const eachMoney = (cd: ColData[] | undefined, fn: (month: string, amount: number) => void) => {
     cd?.forEach((c, i) => {
@@ -187,13 +198,16 @@ function parsePnl(report: Record<string, unknown>): PnlSummary {
     });
   };
 
-  const walk = (rs: ReportRow[] | undefined, section: string) => {
+  const walk = (rs: ReportRow[] | undefined, section: string, depth: number) => {
     for (const r of rs ?? []) {
       if (r.type === "Section" || r.Rows) {
         const name = r.Header?.ColData?.[0]?.value || r.group || section;
-        walk(r.Rows?.Row, name);
+        walk(r.Rows?.Row, name, depth + 1);
         const label = r.Summary?.ColData?.[0]?.value;
-        if (label) eachMoney(r.Summary?.ColData, (month, amount) => totals.push({ month, label, amount }));
+        // depth tags whether this is a top-level P&L line (Total Income, Net
+        // Income…) or a nested group subtotal — only the top-level ones are
+        // persisted as authoritative totals (see syncQuickbooks).
+        if (label) eachMoney(r.Summary?.ColData, (month, amount) => totals.push({ month, label, amount, depth }));
       } else if (r.ColData?.length) {
         const account = r.ColData[0]?.value ?? "";
         if (!account) continue;
@@ -201,7 +215,7 @@ function parsePnl(report: Record<string, unknown>): PnlSummary {
       }
     }
   };
-  walk(((report.Rows as { Row?: ReportRow[] })?.Row ?? []) as ReportRow[], "");
+  walk(((report.Rows as { Row?: ReportRow[] })?.Row ?? []) as ReportRow[], "", 0);
 
   return { months, rows, totals };
 }
@@ -256,7 +270,37 @@ export async function syncQuickbooks(clientId = "woof-gang", monthsBack = 3, acc
     if (error) throw new Error(`quickbooks_pnl upsert failed: ${error.message}`);
   }
 
-  const netIncome = pnl.totals.filter((t) => /net income/i.test(t.label));
+  // Persist QuickBooks' OWN top-level P&L summary lines (depth 0): Total Income,
+  // Total Cost of Goods Sold, Gross Profit, Total Expenses, Net Income, etc.
+  // These are authoritative and complete (read straight from the report's
+  // Summary rows), unlike the flattened leaf rows above — the dashboard Money
+  // panel reads THESE. Dedupe by (month,label) defensively, same as the leaves.
+  const totalsMerged = new Map<string, { month: string; label: string; amount: number }>();
+  for (const t of pnl.totals) {
+    if (t.depth !== 0) continue; // skip nested group subtotals
+    const key = `${t.month}|${t.label}`;
+    const prev = totalsMerged.get(key);
+    if (prev) prev.amount += t.amount;
+    else totalsMerged.set(key, { month: t.month, label: t.label, amount: t.amount });
+  }
+  const totalRows = [...totalsMerged.values()];
+  if (totalRows.length) {
+    const { error } = await supabase.from("quickbooks_pnl_totals").upsert(
+      totalRows.map((t) => ({
+        client_id: clientId,
+        realm_id: conn.realm_id,
+        month: t.month,
+        label: t.label,
+        amount: t.amount,
+        accounting_method: accountingMethod,
+        synced_at: new Date().toISOString(),
+      })),
+      { onConflict: "client_id,realm_id,month,label,accounting_method" },
+    );
+    if (error) throw new Error(`quickbooks_pnl_totals upsert failed: ${error.message}`);
+  }
+
+  const netIncome = pnl.totals.filter((t) => t.depth === 0 && /net income/i.test(t.label));
   return {
     environment: conn.environment,
     realm_id: conn.realm_id,
@@ -264,8 +308,9 @@ export async function syncQuickbooks(clientId = "woof-gang", monthsBack = 3, acc
     accountingMethod,
     months: pnl.months,
     accounts: rows.length,
+    totalsStored: totalRows.length,
     netIncome,
-    totals: pnl.totals,
+    totals: pnl.totals.filter((t) => t.depth === 0),
     ms: Date.now() - started,
   };
 }

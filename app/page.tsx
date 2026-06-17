@@ -105,7 +105,7 @@ export default function Home() {
                 }}
               />
               <Image
-                src="/images/macbookmockup.png"
+                src="/images/macbook.png"
                 alt="The Urso dashboard on a MacBook — a performance overview across the whole business."
                 width={1080}
                 height={1080}

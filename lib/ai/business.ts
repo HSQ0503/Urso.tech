@@ -18,7 +18,7 @@ export const BUSINESS_SECTIONS: BusinessSection[] = [
     key: "stores-and-org",
     title: "Stores, ownership & org structure",
     summary: "The four stores, Rubens Campos as owner, the manager→groomer hierarchy, and who owns which decision (manager = execution, Rubens = decision, AI = intelligence).",
-    body: `The four stores are owned and operated by Rubens Campos: Woof Gang Winter Park (wp), Winter Garden (wg), Windermere (wm), and Lakeside Village (lv). Each store is its own operating unit with its own manager, employees, groomers, customer base, grooming schedule, retail habits, and performance issues — treat them as four businesses under one owner, not one business with four counters.
+    body: `The four stores are owned and operated by Rubens Campos: Woof Gang Winter Park (wp), Winter Garden (wg), Windermere (wm), and Lakeside Village (lv). The Windermere (wm) store is also referred to as "Summerport" (its location) — the two names mean the same store. Each store is its own operating unit with its own manager, employees, groomers, customer base, grooming schedule, retail habits, and performance issues — treat them as four businesses under one owner, not one business with four counters.
 
 Hierarchy: Rubens Campos → Store Managers → Groomers / Front Desk / Retail Staff. Each store has one main manager responsible for daily operation; other staff work under them.
 

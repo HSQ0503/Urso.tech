@@ -60,7 +60,8 @@ export async function GET(req: NextRequest) {
 
   if (!tokenRes.ok) {
     const body = await tokenRes.text().catch(() => "");
-    console.error(`[qbo callback] token exchange failed (${tokenRes.status}):`, body.slice(0, 300));
+    const tid = tokenRes.headers.get("intuit_tid") ?? "n/a"; // Intuit transaction id — capture for support
+    console.error(`[qbo callback] token exchange failed (${tokenRes.status}) intuit_tid=${tid}:`, body.slice(0, 300));
     return done(req, "error");
   }
   const t = (await tokenRes.json()) as {

@@ -36,6 +36,31 @@ the owner just talks to. Memory layer + metric-verified learning + the events "w
 - **Formatting** — shared `components/dashboard/rich-text.tsx` renders **bold**/*italic*/`code`/bullets in
   ALL chats (fixes literal asterisks). Graph-chat logic unchanged; only presentation.
 
+## What changed 2026-06-17 (b) — console memory + Summerport alias
+
+- **The general console now has MEMORY** (was fully ephemeral). Two layers: **persisted multi-thread
+  conversations** (ChatGPT-style — a thread rail with new/select/rename/delete, auto-titled from the first
+  message) and a **rolling, distilled long-term memory per user**, injected into every new conversation so the
+  analyst recalls durable facts/decisions across threads (the weekly-brief memory idea, applied to chat). New
+  `lib/ai/memory.ts` (`getAnalystMemory` · `getOwnedThread` · `persistTurn` + `distillMemory`), new tables in
+  **migration `0023_analyst_chat.sql`** (`analyst_threads` / `analyst_messages` / `analyst_memory`), new routes
+  `app/api/ai/threads/route.ts` (+`[id]`). `app/api/ai/agent/route.ts` now loads memory → prompt, verifies thread
+  ownership, and persists each turn via `toUIMessageStreamResponse({ originalMessages, generateMessageId, onFinish })`.
+  Distillation runs every 6 messages on a **cheap model** (`gemini-2.5-flash`, `AI_MEMORY_MODEL`) — numbers are
+  NEVER stored (they go stale; tools re-fetch live), only durable qualitative context. **Tables are RLS-on /
+  no-policies / server-only via the service-role client, ownership enforced in code** (same as `quickbooks_pnl`).
+  **Degrades gracefully: until `0023` is applied the console still works ephemerally** (thread-create fails →
+  sends with no threadId → no persistence). **Verified: lint + build green; migration pending manual apply.**
+- **Summerport alias.** The Windermere (`wm`) store is also called **Summerport** — wired into both analyst
+  prompts + `business.ts` (stores-and-org) + the `stores` constant (`aliases: ["Summerport"]`), and **migration
+  `0022_store_aliases.sql`** (adds `stores.aliases text[]`). The AI reads store names from the prompts/constant,
+  NOT the DB `stores.name`, so the prompt edits are what make "how's Summerport doing?" resolve to `wm`.
+- **Migration numbering:** `0020` is used by two files — `0020_business_events.sql` (applied) and the uncommitted
+  QBO WIP `0020_quickbooks_pnl_totals.sql`. New files are `0022_store_aliases.sql` + `0023_analyst_chat.sql`
+  (both pending apply). Suggest renumbering the QBO file to `0021` to close the gap.
+- **`npm install` was needed** — `resend` + `@react-email/components` were in `package.json` but missing from
+  `node_modules`, breaking `npm run build` in the cron-email path (nothing to do with the AI work). Installed.
+
 ## Operational gotchas — READ before touching anything
 
 - **Verification gate:** `npm run lint && npm run build` (from `C:\Dev\Urso.tech`).
@@ -45,8 +70,8 @@ the owner just talks to. Memory layer + metric-verified learning + the events "w
 - **gemini-3.x flash family is broken for the tool loop** (over-calls, empty answers) even when it's up —
   verify ANY chat-model swap in the FULL tool loop (a 200 ping is not enough), or bump the step budget /
   `@ai-sdk/google` first.
-- **Migrations are applied MANUALLY** in the Supabase SQL editor (no CLI). 0017/0019/0020 applied. New ones:
-  write the file, ask Han to run it.
+- **Migrations are applied MANUALLY** in the Supabase SQL editor (no CLI). 0017/0019/0020 applied; **0022
+  (store aliases) + 0023 (analyst chat memory) are PENDING** — write the file, ask Han to run it.
 - **Read-only DB checks:** hit Supabase REST with `SUPABASE_SECRET_KEY` (service role). Parse `.env` by
   splitting lines + `startsWith`, NOT a `\s` regex through bash (it eats the leading `s` of `sb_secret_…`).
 - **The weekly cron MUTATES + costs Opus tokens** (`/api/ai/weekly?secret=$CRON_SECRET`) — don't fire casually.
@@ -69,9 +94,11 @@ lib/ai/models.ts        resolveChatModel (chat=2.5-flash + health fallback) · a
 lib/ai/analyst.ts       buildSystemPrompt (graph chats) + buildAgentSystemPrompt (console) — share METRIC_DEFINITIONS, DATA_SOURCES, VOICE
 lib/ai/tools.ts         buildAnalystTools(allowed, cross) — 17 scope-locked tools (16 data + business_context)
 lib/ai/weekly.ts        runWeekly + WEEKLY_SYSTEM + memory + events fold-in · lib/ai/outcomes.ts metric-verified learning · lib/ai/events.ts "why" layer
+lib/ai/memory.ts        console memory — getAnalystMemory · getOwnedThread · persistTurn + distillMemory (gemini-2.5-flash)   ← NEW
 app/api/ai/chat/route.ts    graph chat (gemini-2.5-flash; onError + dev trace)
-app/api/ai/agent/route.ts   general console (Opus; onError + dev trace)        ← NEW
-components/dashboard/analyst-console.tsx   console UI (full-screen-capable)     ← NEW
+app/api/ai/agent/route.ts   general console (Opus; loads memory + persists turns; onError + dev trace)
+app/api/ai/threads/route.ts + [id]/route.ts   thread list/create + messages/rename/delete (user-scoped)   ← NEW
+components/dashboard/analyst-console.tsx   console UI — thread rail + persistence + full-screen-capable
 components/dashboard/rich-text.tsx         shared answer renderer               ← NEW
 components/dashboard/ask-ai.tsx            graph-chat modal (renders via RichText)
 app/dashboard/actions/page.tsx             renders ActionsClient (suggested-actions pipeline) + AnalystConsole
