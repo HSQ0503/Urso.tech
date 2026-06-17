@@ -17,8 +17,9 @@ the owner just talks to. Memory layer + metric-verified learning + the events "w
 
 ## What changed 2026-06-17 (this session)
 
-- **General analyst console** — `/dashboard/actions` is now an open-ended urso.ai analyst (replaces the
-  static pipeline/agent sections). New `app/api/ai/agent/route.ts` + `components/dashboard/analyst-console.tsx`.
+- **General analyst console** — `/dashboard/actions` leads with an open-ended urso.ai analyst as the
+  prominent hero (page header + ~72vh frame), with the AI suggested-actions pipeline restored below it —
+  both live on the page. New `app/api/ai/agent/route.ts` + `components/dashboard/analyst-console.tsx`.
   Runs on **Opus 4.8** (`agentModel()`), strategist prompt `buildAgentSystemPrompt`, the same scope-locked
   17-tool belt, an 8-step budget, and richer context (seed + full brief + action pipeline). Full-screen
   capable, premium styling. Verified: Opus chains tools, sizes leaks in dollars, and always finalizes with text.
@@ -73,7 +74,7 @@ app/api/ai/agent/route.ts   general console (Opus; onError + dev trace)        �
 components/dashboard/analyst-console.tsx   console UI (full-screen-capable)     ← NEW
 components/dashboard/rich-text.tsx         shared answer renderer               ← NEW
 components/dashboard/ask-ai.tsx            graph-chat modal (renders via RichText)
-app/dashboard/actions/page.tsx             renders AnalystConsole
+app/dashboard/actions/page.tsx             renders ActionsClient (suggested-actions pipeline) + AnalystConsole
 components/dashboard/data.server.ts        the functions every tool wraps
 ```
 

@@ -52,7 +52,7 @@ const autonomyOptions: { value: "ask" | "auto"; label: string }[] = [
 
 const order: Record<ActionStatus, number> = { suggested: 0, running: 1, approved: 2, completed: 3 };
 
-export function ActionsClient({ initialActions }: { initialActions: ActionWithPlan[] }) {
+export function ActionsClient({ initialActions, showHeader = true }: { initialActions: ActionWithPlan[]; showHeader?: boolean }) {
   const [actions, setActions] = useState<ActionWithPlan[]>(initialActions);
   const [filter, setFilter] = useState<Filter>("all");
   const [agents, setAgents] = useState(() =>
@@ -91,11 +91,13 @@ export function ActionsClient({ initialActions }: { initialActions: ActionWithPl
 
   return (
     <div className="animate-stage-in space-y-8">
-      <PageHeader
-        eyebrow="AI action center"
-        title="The dashboard does the work"
-        sub="Each agent turns a finding into a concrete action and carries it from approval through to a result. Nothing runs without your approval — the dashboard recommends, you decide."
-      />
+      {showHeader && (
+        <PageHeader
+          eyebrow="AI action center"
+          title="The dashboard does the work"
+          sub="Each agent turns a finding into a concrete action and carries it from approval through to a result. Nothing runs without your approval — the dashboard recommends, you decide."
+        />
+      )}
 
       {error && (
         <div className="rounded-xl border border-[rgba(226,75,74,0.4)] bg-[rgba(226,75,74,0.08)] px-4 py-3 text-[13px] text-ink">
@@ -103,11 +105,40 @@ export function ActionsClient({ initialActions }: { initialActions: ActionWithPl
         </div>
       )}
 
+      {/* Status filter */}
+      <div className="no-scrollbar flex gap-1.5 overflow-x-auto">
+        {filters.map((f) => {
+          const active = f.value === filter;
+          return (
+            <button
+              key={f.value}
+              onClick={() => setFilter(f.value)}
+              className={`shrink-0 cursor-pointer rounded-full border px-3.5 py-1.5 text-[12.5px] transition-colors ${
+                active ? "border-edge-strong bg-raise-strong text-ink" : "border-edge text-ink-dim hover:text-ink"
+              }`}
+            >
+              {f.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Action list */}
+      <div className="space-y-4">
+        {list.length === 0 ? (
+          <Card>
+            <p className="text-center text-[13px] text-ink-dim">No actions in this stage.</p>
+          </Card>
+        ) : (
+          list.map((a) => <ActionCard key={a.id} action={a} onApprove={() => approve(a.id)} onDismiss={() => dismiss(a.id)} />)
+        )}
+      </div>
+
       {/* Pipeline summary */}
       <section>
         <div className="mb-3 flex items-center gap-1.5">
           <Micro>Pipeline · most urgent first</Micro>
-          <InfoTip text="Every action moves left to right: the AI suggests it, you approve, the agent runs it, then it completes with a result. The list below is ordered by what needs you most." />
+          <InfoTip text="Every action moves left to right: the AI suggests it, you approve, the agent runs it, then it completes with a result. The list above is ordered by what needs you most." />
         </div>
         <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-edge bg-edge md:grid-cols-4">
           {ACTION_FLOW.map((s, i) => (
@@ -163,35 +194,6 @@ export function ActionsClient({ initialActions }: { initialActions: ActionWithPl
           })}
         </Card>
       </section>
-
-      {/* Status filter */}
-      <div className="no-scrollbar flex gap-1.5 overflow-x-auto">
-        {filters.map((f) => {
-          const active = f.value === filter;
-          return (
-            <button
-              key={f.value}
-              onClick={() => setFilter(f.value)}
-              className={`shrink-0 cursor-pointer rounded-full border px-3.5 py-1.5 text-[12.5px] transition-colors ${
-                active ? "border-edge-strong bg-raise-strong text-ink" : "border-edge text-ink-dim hover:text-ink"
-              }`}
-            >
-              {f.label}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Action list */}
-      <div className="space-y-4">
-        {list.length === 0 ? (
-          <Card>
-            <p className="text-center text-[13px] text-ink-dim">No actions in this stage.</p>
-          </Card>
-        ) : (
-          list.map((a) => <ActionCard key={a.id} action={a} onApprove={() => approve(a.id)} onDismiss={() => dismiss(a.id)} />)
-        )}
-      </div>
     </div>
   );
 }

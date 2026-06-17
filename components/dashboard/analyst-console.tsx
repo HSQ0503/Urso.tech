@@ -347,7 +347,7 @@ export function AnalystConsole({ userName, briefHeadline }: { userName: string; 
   }
 
   return (
-    <div className="h-[calc(100vh-13rem)] min-h-[520px] overflow-hidden rounded-2xl border border-edge bg-panel">
+    <div className="h-[72vh] min-h-[560px] overflow-hidden rounded-2xl border border-edge bg-panel shadow-[0_30px_80px_-40px_rgba(0,0,0,0.7)]">
       {panel}
     </div>
   );

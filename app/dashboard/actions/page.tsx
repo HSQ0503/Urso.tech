@@ -1,12 +1,12 @@
 import { redirect } from "next/navigation";
 import { getSession, resolveScope } from "@/lib/auth";
-import { getWeeklyBrief } from "@/components/dashboard/data.server";
+import { getAllAgentActions, getWeeklyBrief } from "@/components/dashboard/data.server";
+import { ActionsClient } from "@/components/dashboard/actions-client";
 import { AnalystConsole } from "@/components/dashboard/analyst-console";
+import { PageHeader, Micro } from "@/components/dashboard/ui";
 
-// The AI actions page is now the owner's general strategy console — an open-ended
-// urso.ai analyst (stronger model + full tool belt) that replaces the static
-// pipeline/agent sections. The action pipeline still exists and the analyst can
-// surface it via its list_actions tool.
+// The AI actions page leads with the general urso.ai analyst console (the primary
+// surface), then the AI suggested-actions pipeline (approve / dismiss) below it.
 export default async function ActionsPage({ searchParams }: { searchParams: Promise<{ store?: string; month?: string }> }) {
   const user = await getSession();
   if (!user) redirect("/login");
@@ -14,7 +14,9 @@ export default async function ActionsPage({ searchParams }: { searchParams: Prom
   const sp = await searchParams;
   const scope = resolveScope(user, sp.store);
 
-  // Best-effort opening context: this week's headline. Never blocks the page.
+  const actions = await getAllAgentActions();
+
+  // Best-effort opening context for the console: this week's headline.
   let briefHeadline: string | null = null;
   try {
     briefHeadline = (await getWeeklyBrief(scope)).headline;
@@ -22,5 +24,29 @@ export default async function ActionsPage({ searchParams }: { searchParams: Prom
     briefHeadline = null;
   }
 
-  return <AnalystConsole userName={user.name} briefHeadline={briefHeadline} />;
+  return (
+    <div className="space-y-12">
+      {/* Hero — the general analyst console */}
+      <div>
+        <PageHeader
+          eyebrow="urso.ai · analyst"
+          title="Your data analyst, on demand."
+          sub="Ask anything about the business — what's working, what's leaking, what to fix first. urso.ai reasons across all four stores on your live numbers. Your suggested actions are queued just below."
+        />
+        <AnalystConsole userName={user.name} briefHeadline={briefHeadline} />
+      </div>
+
+      {/* AI suggested actions — the pipeline, agent toggles, approve/dismiss cards */}
+      <section className="border-t border-edge pt-10">
+        <div className="mb-6">
+          <Micro>AI suggested actions</Micro>
+          <h2 className="mt-2 text-[22px] font-medium tracking-[-0.02em] text-ink">What the agents recommend</h2>
+          <p className="mt-1.5 max-w-[560px] text-[13.5px] leading-[1.55] text-ink-dim">
+            Each finding becomes a concrete action — you approve or dismiss; nothing runs without you.
+          </p>
+        </div>
+        <ActionsClient initialActions={actions} showHeader={false} />
+      </section>
+    </div>
+  );
 }
