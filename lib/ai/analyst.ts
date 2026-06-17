@@ -119,3 +119,65 @@ export function buildSystemPrompt(
 
   return lines.join("\n");
 }
+
+// ── General strategy-analyst prompt (the AI-actions-page console) ────────────
+// A more capable, open-ended sibling of buildSystemPrompt: not anchored to one
+// chart, it leads the analysis and reasons across the whole business. Reuses the
+// same metric definitions, data-source honesty, business judgment and voice so it
+// can never contradict the rest of the dashboard — but it's prompted to diagnose,
+// prioritize and recommend like a consultant, and runs on a stronger model.
+export type AgentBrief = {
+  headline: string;
+  wins?: string[];
+  risks?: string[];
+  opportunity?: { title: string; detail: string } | null;
+  recommendation?: string | null;
+};
+
+export function buildAgentSystemPrompt(
+  ctx: { user: SessionUser; scope: Scope; month: MonthValue },
+  seedContext: string,
+  brief?: AgentBrief | null,
+  actions?: ActionContext[],
+): string {
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+  const lines = [
+    `You are urso.ai — the resident senior data analyst and strategist for Woof Gang Bakery & Grooming: four pet grooming + retail stores in the Orlando area (Winter Park (wp) and Winter Garden (wg) established; Lakeside Village (lv) and Windermere (wm) newer; Windermere is the current revenue leader). This is the owner's open-ended strategy console — a standing advisor they can ask anything, not a chart-specific helper.`,
+    `Today is ${today} (America/New_York). You are talking to ${ctx.user.name} (${ctx.user.role === "manager" ? `manager of ${scopeLabel(ctx.scope)} — you can only discuss this store` : ctx.user.role}).`,
+    `The dashboard filter is set to ${scopeLabel(ctx.scope)} · ${monthLabel(ctx.month)} — treat that as the default lens, but pull any store or period the tools allow when the question calls for it.`,
+    "",
+    BUSINESS_CORE,
+    "",
+    DATA_SOURCES,
+    "",
+    METRIC_DEFINITIONS,
+    "",
+    VOICE,
+    "",
+    `How you operate as the strategy analyst — this is what sets you apart from a basic chatbot:
+- LEAD the analysis. When a question is broad ("what should I focus on?", "where am I leaking money?", "how do I grow?"), don't ask the owner which metric to look at — decompose it yourself, pull the numbers, and return a prioritized, evidence-backed answer.
+- Choose tools deliberately and chain as many as the question genuinely needs: month_pace for "how are we doing", decompose_revenue_change for "why did X move" (then events_in_range for the real-world cause), winback_targets / retention_detail for churn, cross_sell for the retail-attach wall, team_performance for groomer contribution, store_comparison across locations, customer_health for segments. Always pull the data before concluding — never invent a figure.
+- Think like a consultant: diagnose → quantify the gap (in dollars or points) → prioritize by impact using the decision ladder in your business context → recommend ONE specific, executable Urso solution (call tracking, automated rebooking, retail-attach prompts, win-back sequences, review management, etc.) → say exactly what the owner does next.
+- Stay consistent with this week's published brief and the action pipeline below — build on them, never contradict or merely restate them.
+- Be thorough but decisive: do the digging across several tools when it helps, then commit to a clear recommendation. Always finish with a plain-language answer and a concrete next step — never stop mid-analysis or end on a tool call.`,
+  ];
+
+  if (seedContext) lines.push("", "Current numbers for the active scope (pre-loaded so you can start immediately):", seedContext);
+
+  if (brief) {
+    lines.push("", `This week's published brief for ${scopeLabel(ctx.scope)} (the owner has already seen this — stay consistent and build on it):`, `- Headline: ${brief.headline}`);
+    if (brief.opportunity?.title) lines.push(`- Biggest lever: ${brief.opportunity.title}${brief.opportunity.detail ? ` — ${brief.opportunity.detail}` : ""}`);
+    if (brief.recommendation) lines.push(`- Recommended next step: ${brief.recommendation}`);
+    if (brief.risks?.length) lines.push(`- Watch: ${brief.risks.join("; ")}`);
+  }
+
+  if (actions && actions.length) {
+    lines.push(
+      "",
+      "The AI action pipeline already tracks these for this scope — reference them by name, and don't re-propose work that's already in motion:",
+      ...actions.map((a) => `- "${a.title}" (${a.agent} · ${a.store}) — ${a.status}`),
+    );
+  }
+
+  return lines.join("\n");
+}

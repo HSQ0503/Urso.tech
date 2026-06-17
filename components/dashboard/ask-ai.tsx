@@ -10,6 +10,7 @@ import { useSearchParams } from "next/navigation";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import { Modal } from "./modal";
+import { RichText } from "./rich-text";
 
 function Spark() {
   return (
@@ -120,13 +121,10 @@ export function AskAi({
                         <Spark /> checked the numbers
                       </div>
                     )}
-                    {m.parts.map((p, i) =>
-                      p.type === "text" ? (
-                        <p key={i} className="whitespace-pre-wrap text-[13.5px] leading-[1.65] text-ink">
-                          {p.text}
-                        </p>
-                      ) : null,
-                    )}
+                    <RichText
+                      className="text-[13.5px] text-ink"
+                      text={m.parts.map((p) => (p.type === "text" ? p.text : "")).join("")}
+                    />
                   </div>
                 )}
               </div>
@@ -140,7 +138,9 @@ export function AskAi({
             )}
             {error && (
               <p className="text-[12.5px] leading-[1.5] text-ink-dim">
-                Something went wrong — {error.message.includes("API_KEY") ? "the AI key isn't configured yet." : "try asking again."}
+                {error.message.includes("API_KEY")
+                  ? "The AI key isn't configured yet."
+                  : error.message.trim() || "Something went wrong — try asking again."}
               </p>
             )}
           </div>

@@ -7,12 +7,21 @@ import { getSession, resolveScope } from "@/lib/auth";
 import { getMetrics, getKpiDeltas, getWeeklyBrief, getAllAgentActions } from "@/components/dashboard/data.server";
 import { buildSystemPrompt } from "@/lib/ai/analyst";
 import { buildAnalystTools } from "@/lib/ai/tools";
-import { chatModel, assertChatKey } from "@/lib/ai/models";
+import { resolveChatModel, markChatModelDown, assertChatKey } from "@/lib/ai/models";
 import { stores, scopeLabel, monthLabel, type MonthValue, type Scope } from "@/components/dashboard/data";
 
 export const maxDuration = 60;
 
 const pct = (n: number) => `${(n * 100).toFixed(0)}%`;
+
+// Dev trace of the analyst's tool calls, results and answers, printed to the
+// server (npm run dev) terminal so you can watch its reasoning. On by default in
+// dev; opt in for a production build with AI_CHAT_DEBUG=1.
+const CHAT_DEBUG = process.env.AI_CHAT_DEBUG === "1" || process.env.NODE_ENV !== "production";
+const short = (v: unknown, n = 300) => {
+  const s = typeof v === "string" ? v : JSON.stringify(v);
+  return s && s.length > n ? `${s.slice(0, n)}…` : (s ?? "");
+};
 
 export async function POST(req: Request) {
   const user = await getSession();
@@ -40,6 +49,11 @@ export async function POST(req: Request) {
   // cross-store questions without clearing the filter; managers stay locked.
   const cross: Scope = user.role === "manager" && user.storeId ? user.storeId : "all";
   const month = (body.month && /^(all|\d{4}|\d{4}-\d{2})$/.test(body.month) ? body.month : "all") as MonthValue;
+
+  // Resolve the chat model up front (health-checked, may fall back to a GA model
+  // if the preferred one is down) — kicked off here so its probe runs concurrently
+  // with the data reads and adds no latency on the hot path.
+  const modelPromise = resolveChatModel();
 
   // Pre-load everything the prompt wants, in parallel and best-effort: the
   // headline numbers (seed), this week's brief, and the action center for this
@@ -83,8 +97,16 @@ export async function POST(req: Request) {
       .slice(0, 10);
   }
 
+  const model = await modelPromise;
+  if (CHAT_DEBUG) {
+    const last = body.messages.at(-1);
+    const q = (last?.parts ?? []).map((p) => ("text" in p && typeof p.text === "string" ? p.text : "")).join(" ").trim();
+    console.log(`\n┌─ [ai/chat] ${user.name} (${user.role}) · ${scopeLabel(scope)} · ${monthLabel(month)} · model=${model.modelId}`);
+    if (q) console.log(`│  Q: ${short(q, 200)}`);
+  }
+
   const result = streamText({
-    model: chatModel(),
+    model,
     system: buildSystemPrompt(
       { user, scope, month, topic: body.topic, topicId: body.topicId, pending: body.pending, comparison: body.comparison },
       seed,
@@ -94,7 +116,34 @@ export async function POST(req: Request) {
     messages: await convertToModelMessages(body.messages),
     tools: buildAnalystTools(scope, cross),
     stopWhen: stepCountIs(6),
+    onStepFinish: CHAT_DEBUG
+      ? (step) => {
+          if (step.reasoningText?.trim()) console.log(`│  🧠 ${short(step.reasoningText, 400)}`);
+          for (const c of step.toolCalls) console.log(`│  🔧 ${c.toolName}(${short(c.input, 200)})`);
+          for (const r of step.toolResults) console.log(`│  ↳  ${r.toolName} → ${short(r.output, 300)}`);
+          if (step.text?.trim()) console.log(`│  💬 ${short(step.text, 500)}`);
+        }
+      : undefined,
+    onFinish: CHAT_DEBUG
+      ? ({ steps, finishReason }) => console.log(`└─ [ai/chat] done · ${steps.length} step(s) · ${finishReason}\n`)
+      : undefined,
   });
 
-  return result.toUIMessageStreamResponse();
+  // Surface the real failure instead of masking it: log it server-side, and
+  // return a useful client message. On a model-overload error, flip to the
+  // fallback model so the next requests don't hit the down model.
+  return result.toUIMessageStreamResponse({
+    onError: (error) => {
+      const msg = error instanceof Error ? error.message : String(error);
+      console.error("[ai/chat] stream error:", msg);
+      if (/overloaded|unavailable|503/i.test(msg)) {
+        markChatModelDown();
+        return "The AI model is briefly busy — try that again in a moment.";
+      }
+      if (/quota|rate.?limit|429|resource_exhausted/i.test(msg)) {
+        return "The AI is rate-limited right now — give it a few seconds and retry.";
+      }
+      return "Something went wrong generating that answer — try again.";
+    },
+  });
 }
