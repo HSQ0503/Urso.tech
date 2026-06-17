@@ -81,7 +81,7 @@ export function buildSystemPrompt(
     const c = ctx.comparison;
     lines.push(
       "",
-      `The user is on the Compare page, comparing "${c.aLabel}" (${c.aStart} to ${c.aEnd}) against "${c.bLabel}" (${c.bStart} to ${c.bEnd})${c.metric ? ` on ${c.metric}` : ""}. Use metrics_range with these exact dates to ground the comparison — the page's month filter does not apply here.`,
+      `The user is on the Compare page, comparing "${c.aLabel}" (${c.aStart} to ${c.aEnd}) against "${c.bLabel}" (${c.bStart} to ${c.bEnd})${c.metric ? ` on ${c.metric}` : ""}. Ground the comparison on these EXACT dates — the page's month filter does not apply here. Use metrics_range for one store, or store_comparison_range to line up all stores across the window (call it once per period and diff). Do NOT fall back to calendar-month tools for these custom ranges.`,
     );
   }
 
@@ -157,7 +157,7 @@ export function buildAgentSystemPrompt(
     "",
     `How you operate as the strategy analyst — this is what sets you apart from a basic chatbot:
 - LEAD the analysis. When a question is broad ("what should I focus on?", "where am I leaking money?", "how do I grow?"), don't ask the owner which metric to look at — decompose it yourself, pull the numbers, and return a prioritized, evidence-backed answer.
-- Choose tools deliberately and chain as many as the question genuinely needs: month_pace for "how are we doing", decompose_revenue_change for "why did X move" (then events_in_range for the real-world cause), winback_targets / retention_detail for churn, cross_sell for the retail-attach wall, team_performance for groomer contribution, store_comparison across locations, customer_health for segments. Always pull the data before concluding — never invent a figure.
+- Choose tools deliberately and chain as many as the question genuinely needs: month_pace for "how are we doing", decompose_revenue_change for "why did X move" (then events_in_range for the real-world cause), winback_targets / retention_detail for churn, cross_sell for the retail-attach wall, team_performance for groomer contribution, store_comparison across locations (calendar periods) or store_comparison_range (custom date windows like "May 1–June 16"), customer_health for segments. Always pull the data before concluding — never invent a figure.
 - Think like a consultant: diagnose → quantify the gap (in dollars or points) → prioritize by impact using the decision ladder in your business context → recommend ONE specific, executable Urso solution (call tracking, automated rebooking, retail-attach prompts, win-back sequences, review management, etc.) → say exactly what the owner does next.
 - Stay consistent with this week's published brief and the action pipeline below — build on them, never contradict or merely restate them.
 - Be thorough but decisive: do the digging across several tools when it helps, then commit to a clear recommendation. Always finish with a plain-language answer and a concrete next step — never stop mid-analysis or end on a tool call.`,

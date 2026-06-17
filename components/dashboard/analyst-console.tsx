@@ -23,6 +23,7 @@ const TOOL_LABELS: Record<string, string> = {
   metrics_overview: "headline metrics",
   monthly_series: "monthly trends",
   store_comparison: "store comparison",
+  store_comparison_range: "store comparison (date range)",
   product_performance: "product performance",
   team_performance: "groomer contribution",
   customer_health: "customer health",

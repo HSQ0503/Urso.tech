@@ -155,7 +155,8 @@ export function buildAnalystTools(allowed: Scope, cross: Scope = allowed) {
     }),
 
     store_comparison: tool({
-      description: "Side-by-side store metrics for one period (only the stores the user may see).",
+      description:
+        "Side-by-side store metrics for one CALENDAR period — a month (YYYY-MM), a year (YYYY), or the trailing 12 months (all). Only the stores the user may see. For a CUSTOM date window (e.g. May 1–June 16, a specific week, 'since the 5th'), use store_comparison_range instead.",
       inputSchema: z.object({ month: monthSchema }),
       execute: async ({ month }) => {
         const byStore = await storeComparison(month as MonthValue);
@@ -165,6 +166,28 @@ export function buildAnalystTools(allowed: Scope, cross: Scope = allowed) {
             store: id, name: stores.find((s) => s.id === id)!.name,
             revenue: m.revenue, grooming: m.grooming, retail: m.retail, bookings: m.bookings,
             avgVisit: m.avgTicket, returnRate: r3(m.rebook), retailAttach: r3(m.attach),
+          };
+        });
+      },
+    }),
+
+    store_comparison_range: tool({
+      description:
+        "Side-by-side metrics for ALL stores the user may see across an ARBITRARY date window (both dates inclusive): revenue, grooming/retail split, bookings, avg visit, return rate, retail attach — one row per store. Use THIS to compare stores over a custom period like 'May 1–June 16', a specific week, or any range that isn't a whole calendar month (store_comparison can't). To compare two periods, call it once per period and diff the rows. Data starts 2024-01-01.",
+      inputSchema: z.object({
+        startDate: dateSchema.describe("first day included, YYYY-MM-DD"),
+        endDate: dateSchema.describe("last day included, YYYY-MM-DD"),
+      }),
+      execute: async ({ startDate, endDate }) => {
+        const rows = await rangeMetrics(cross, startDate, addDays(endDate, 1));
+        const byId = new Map(rows.map((row) => [row.store, row]));
+        return crossIds.map((id) => {
+          const m = byId.get(id);
+          return {
+            store: id, name: stores.find((s) => s.id === id)!.name,
+            revenue: m?.revenue ?? 0, grooming: m?.grooming ?? 0, retail: m?.retail ?? 0,
+            bookings: m?.bookings ?? 0, avgVisit: m?.avgVisit ?? 0,
+            returnRate: m?.returnRate ?? null, retailAttach: m?.retailAttach ?? null,
           };
         });
       },

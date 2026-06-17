@@ -113,7 +113,7 @@ the owner just talks to. Memory layer + metric-verified learning + the events "w
 ```
 lib/ai/models.ts        resolveChatModel (chat=2.5-flash + health fallback) · agentModel (console=Opus) · reportModel (weekly=Opus) · key asserts
 lib/ai/analyst.ts       buildSystemPrompt (graph chats) + buildAgentSystemPrompt (console) — share METRIC_DEFINITIONS, DATA_SOURCES, VOICE
-lib/ai/tools.ts         buildAnalystTools(allowed, cross) — 17 scope-locked tools (16 data + business_context)
+lib/ai/tools.ts         buildAnalystTools(allowed, cross) — 18 scope-locked tools (17 data + business_context); store_comparison_range = all stores over an arbitrary date window (cross scope)
 lib/ai/weekly.ts        runWeekly + WEEKLY_SYSTEM + memory + events fold-in · lib/ai/outcomes.ts metric-verified learning · lib/ai/events.ts "why" layer
 lib/ai/memory.ts        console memory — getAnalystMemory · getOwnedThread · persistTurn + distillMemory (gemini-2.5-flash)   ← NEW
 app/api/ai/chat/route.ts    graph chat (gemini-2.5-flash; onError + dev trace)
