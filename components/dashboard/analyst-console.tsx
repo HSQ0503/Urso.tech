@@ -77,7 +77,7 @@ function Thinking() {
   );
 }
 
-function Message({ role, parts }: { role: string; parts: { type: string; text?: string }[] }) {
+function Message({ role, parts, live = false }: { role: string; parts: { type: string; text?: string }[]; live?: boolean }) {
   if (role === "user") {
     const text = parts.filter((p) => p.type === "text").map((p) => p.text ?? "").join("");
     return (
@@ -100,7 +100,13 @@ function Message({ role, parts }: { role: string; parts: { type: string; text?: 
             ))}
           </div>
         )}
-        {text ? <RichText text={text} className="text-[14px] text-ink" /> : tools.length > 0 ? <ThinkingLabel label="reading the numbers" /> : null}
+        {text ? (
+          <RichText text={text} className="text-[14px] text-ink" />
+        ) : tools.length > 0 && live ? (
+          <ThinkingLabel label="reading the numbers" />
+        ) : tools.length > 0 ? (
+          <span className="text-[12.5px] italic text-ink-dimmer">No written summary was saved for this answer.</span>
+        ) : null}
       </div>
     </div>
   );
@@ -305,8 +311,13 @@ function ChatPanel({
             <EmptyState firstName={firstName} briefHeadline={briefHeadline} onPick={submit} busy={busy} />
           ) : (
             <div className="space-y-6">
-              {messages.map((m) => (
-                <Message key={m.id} role={m.role} parts={m.parts as { type: string; text?: string }[]} />
+              {messages.map((m, i) => (
+                <Message
+                  key={m.id}
+                  role={m.role}
+                  parts={m.parts as { type: string; text?: string }[]}
+                  live={status === "streaming" && i === messages.length - 1}
+                />
               ))}
               {status === "submitted" && <Thinking />}
             </div>
@@ -407,6 +418,10 @@ export function AnalystConsole({ userName, briefHeadline }: { userName: string; 
   });
   const { setMessages, status } = chat;
   const busy = status === "submitted" || status === "streaming";
+  // Synchronous guard for the lazy thread-create window: during the create POST,
+  // `status` is still "ready" so `busy` is false — a second submit would create a
+  // duplicate thread. This closes that gap (busy can't).
+  const sendingRef = useRef(false);
 
   // Initial load: most-recent thread, hydrated.
   useEffect(() => {
@@ -450,13 +465,16 @@ export function AnalystConsole({ userName, briefHeadline }: { userName: string; 
   }, [busy, setMessages]);
 
   const deleteThread = useCallback(async (id: string) => {
+    // Stop a live stream on the thread being deleted, else the in-flight answer
+    // repopulates the cleared view (and persists to a now-deleted thread).
+    if (id === activeThreadId && busy) chat.stop();
     setThreads((t) => t.filter((x) => x.id !== id));
     setActiveThreadId((cur) => {
       if (cur === id) { setMessages([]); return null; }
       return cur;
     });
     await fetch(`/api/ai/threads/${id}`, { method: "DELETE" }).catch(() => {});
-  }, [setMessages]);
+  }, [activeThreadId, busy, chat, setMessages]);
 
   const renameThread = useCallback(async (id: string, title: string) => {
     setThreads((ts) => ts.map((x) => (x.id === id ? { ...x, title } : x)));
@@ -469,28 +487,34 @@ export function AnalystConsole({ userName, briefHeadline }: { userName: string; 
 
   const send = useCallback(async (text: string) => {
     const q = text.trim();
-    if (!q || busy) return;
-    let tid = activeThreadId;
-    if (!tid) {
-      // Lazily create a thread on first send. If this fails (e.g. the memory
-      // tables aren't migrated yet), fall back to an ephemeral chat with no
-      // threadId — the answer still streams, it just isn't persisted.
-      try {
-        const r = await fetch("/api/ai/threads", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ scope: params.get("store") ?? "all" }),
-        });
-        if (r.ok) {
-          const { thread } = (await r.json()) as { thread: ThreadSummary };
-          tid = thread.id;
-          setActiveThreadId(tid);
-          setThreads((t) => [thread, ...t]);
-        }
-      } catch { /* fall through to ephemeral send */ }
+    if (!q || busy || sendingRef.current) return;
+    sendingRef.current = true;
+    try {
+      let tid = activeThreadId;
+      if (!tid) {
+        // Lazily create a thread on first send. If this fails (e.g. the memory
+        // tables aren't migrated yet), fall back to an ephemeral chat with no
+        // threadId — the answer still streams, it just isn't persisted.
+        try {
+          const r = await fetch("/api/ai/threads", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ scope: params.get("store") ?? "all" }),
+          });
+          if (r.ok) {
+            const { thread } = (await r.json()) as { thread: ThreadSummary };
+            tid = thread.id;
+            setActiveThreadId(tid);
+            setThreads((t) => [thread, ...t]);
+          }
+        } catch { /* fall through to ephemeral send */ }
+      }
+      chat.sendMessage({ text: q }, { body: { threadId: tid ?? undefined, store: params.get("store") ?? undefined, month: params.get("month") ?? undefined } });
+      setInput("");
+    } finally {
+      // Released once sendMessage is dispatched; from here `busy` (status) guards.
+      sendingRef.current = false;
     }
-    chat.sendMessage({ text: q }, { body: { threadId: tid ?? undefined, store: params.get("store") ?? undefined, month: params.get("month") ?? undefined } });
-    setInput("");
   }, [activeThreadId, busy, chat, params]);
 
   useEffect(() => {

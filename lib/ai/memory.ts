@@ -55,9 +55,13 @@ export async function persistTurn(opts: {
   const supabase = createAdminClient();
   const { userId, clientId, threadId, userMessage, assistantMessage } = opts;
 
+  // Stamp distinct created_at so the user turn always sorts before its answer.
+  // A single multi-row insert would give both rows the same now() (transaction
+  // timestamp), leaving intra-turn order undefined on hydration.
+  const base = Date.now();
   const rows = [
-    ...(userMessage ? [{ id: userMessage.id, thread_id: threadId, role: "user", parts: userMessage.parts }] : []),
-    { id: assistantMessage.id, thread_id: threadId, role: "assistant", parts: assistantMessage.parts },
+    ...(userMessage ? [{ id: userMessage.id, thread_id: threadId, role: "user", parts: userMessage.parts, created_at: new Date(base).toISOString() }] : []),
+    { id: assistantMessage.id, thread_id: threadId, role: "assistant", parts: assistantMessage.parts, created_at: new Date(base + 1).toISOString() },
   ];
   await supabase.from("analyst_messages").upsert(rows, { onConflict: "id" });
   await supabase.from("analyst_threads").update({ updated_at: new Date().toISOString() }).eq("id", threadId);
@@ -98,6 +102,10 @@ Return the FULL updated memory as a short list of plain bullet lines (max ~12 bu
 // memory into an updated rolling summary. Uses a cheap model — this is
 // summarization, not analysis.
 async function distillMemory(supabase: Admin, userId: string, clientId: string): Promise<void> {
+  // Distillation only ever runs on the Google model — skip fast if its key is
+  // absent (e.g. the agent is on Anthropic) instead of making a doomed call.
+  if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY) return;
+
   const { data: threads } = await supabase.from("analyst_threads").select("id").eq("user_id", userId);
   const ids = ((threads ?? []) as { id: string }[]).map((t) => t.id);
   if (!ids.length) return;
@@ -123,6 +131,9 @@ async function distillMemory(supabase: Admin, userId: string, clientId: string):
     model: google(MEMORY_MODEL),
     system: MEMORY_SYSTEM,
     prompt: `Existing memory:\n${prev || "(none yet)"}\n\nRecent conversation turns (oldest first):\n${transcript}\n\nReturn the updated memory.`,
+    // This runs inside the chat's onFinish (which keeps the serverless function
+    // alive); bound it so a slow distill can't eat the route's whole budget.
+    abortSignal: AbortSignal.timeout(20_000),
   });
 
   await supabase

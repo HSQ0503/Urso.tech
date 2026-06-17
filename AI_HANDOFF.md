@@ -50,7 +50,28 @@ the owner just talks to. Memory layer + metric-verified learning + the events "w
   NEVER stored (they go stale; tools re-fetch live), only durable qualitative context. **Tables are RLS-on /
   no-policies / server-only via the service-role client, ownership enforced in code** (same as `quickbooks_pnl`).
   **Degrades gracefully: until `0023` is applied the console still works ephemerally** (thread-create fails →
-  sends with no threadId → no persistence). **Verified: lint + build green; migration pending manual apply.**
+  sends with no threadId → no persistence). **Migrations 0022 + 0023 are now APPLIED** (DB exercised end-to-end:
+  insert / idempotent upsert / jsonb round-trip / cascade delete / ordered hydration all pass).
+
+- **Hardening pass (2026-06-17 adversarial review, 14 findings fixed).** A multi-agent review caught real
+  runtime bugs lint/build missed; all fixed (code-only, no new migration):
+  - **CRITICAL cross-tenant IDOR** — the user-message id was taken from the client and upserted against a global
+    PK, so a crafted request could overwrite/steal another user's message row. FIX: the user-message id is now
+    **generated server-side** (`generateId()` in `agent/route.ts` onFinish); the client id is never trusted.
+  - **Dangling tool-call / un-resumable thread** — a Stopped/step-capped turn persisted a tool-call with no
+    result → Anthropic 400 on every later send. FIX: persist a turn **only if it produced final text**, and pass
+    `convertToModelMessages(body.messages, { tools, ignoreIncompleteToolCalls: true })` to strip any stored
+    dangling calls. This also kills the "stuck reading-the-numbers spinner" + blank-bubble on reload.
+  - **Double-send race** created duplicate threads → `sendingRef` synchronous guard in `send`.
+  - **Intra-turn ordering** — user+assistant shared one `now()` timestamp → `persistTurn` now stamps distinct
+    `created_at` (user, user+1ms) so hydration order is deterministic.
+  - **Delete active thread mid-stream** → `deleteThread` now `chat.stop()`s a live stream first.
+  - **Distill blocking** → bounded with `AbortSignal.timeout(20s)` + a fast Google-key skip.
+  - The "reading the numbers" label is now gated on `status==="streaming" && last message` (hydrated turns show a
+    neutral note). Known low: a thread's scope can drift if the owner changes the dashboard filter mid-thread.
+- **Console hard-requires an agent key.** Locally `ANTHROPIC_API_KEY` is absent, so the console defaulted to Opus
+  → 503. Added **`AI_AGENT_MODEL=gemini-2.5-flash` to `.env.local`** (runs on the Google key locally); prod leaves
+  it unset → Opus. Without one of these the console 503s `assertAgentKey`.
 - **Summerport alias.** The Windermere (`wm`) store is also called **Summerport** — wired into both analyst
   prompts + `business.ts` (stores-and-org) + the `stores` constant (`aliases: ["Summerport"]`), and **migration
   `0022_store_aliases.sql`** (adds `stores.aliases text[]`). The AI reads store names from the prompts/constant,
@@ -70,8 +91,8 @@ the owner just talks to. Memory layer + metric-verified learning + the events "w
 - **gemini-3.x flash family is broken for the tool loop** (over-calls, empty answers) even when it's up —
   verify ANY chat-model swap in the FULL tool loop (a 200 ping is not enough), or bump the step budget /
   `@ai-sdk/google` first.
-- **Migrations are applied MANUALLY** in the Supabase SQL editor (no CLI). 0017/0019/0020 applied; **0022
-  (store aliases) + 0023 (analyst chat memory) are PENDING** — write the file, ask Han to run it.
+- **Migrations are applied MANUALLY** in the Supabase SQL editor (no CLI). 0017/0019/0020/**0022/0023 applied**.
+  New ones: write the file, ask Han to run it.
 - **Read-only DB checks:** hit Supabase REST with `SUPABASE_SECRET_KEY` (service role). Parse `.env` by
   splitting lines + `startsWith`, NOT a `\s` regex through bash (it eats the leading `s` of `sb_secret_…`).
 - **The weekly cron MUTATES + costs Opus tokens** (`/api/ai/weekly?secret=$CRON_SECRET`) — don't fire casually.

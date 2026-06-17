@@ -94,11 +94,16 @@ export async function POST(req: Request) {
 
   if (AGENT_DEBUG) console.log(`\n┌─ [ai/agent] ${user.name} (${user.role}) · ${scopeLabel(scope)} · ${monthLabel(month)}`);
 
+  const tools = buildAnalystTools(scope, cross);
+
   const result = streamText({
     model: agentModel(),
     system: buildAgentSystemPrompt({ user, scope, month }, seed, brief, actions, memory),
-    messages: await convertToModelMessages(body.messages),
-    tools: buildAnalystTools(scope, cross),
+    // ignoreIncompleteToolCalls strips any dangling tool-call from a previously
+    // interrupted turn so a rehydrated thread can't send Anthropic an unpaired
+    // tool_use (which 400s and would break the thread permanently).
+    messages: await convertToModelMessages(body.messages, { tools, ignoreIncompleteToolCalls: true }),
+    tools,
     stopWhen: stepCountIs(8),
     onStepFinish: AGENT_DEBUG
       ? (step) => {
@@ -118,15 +123,25 @@ export async function POST(req: Request) {
     onFinish: ownedThreadId
       ? async ({ responseMessage }) => {
           try {
+            const assistant = responseMessage as unknown as StoredMessage;
+            // Only persist a COMPLETE turn (the assistant produced a final text
+            // answer). A turn aborted / step-capped mid-tool has no text and only
+            // tool parts — persisting it would store a dangling tool-call (400s
+            // every future send) and render a stuck "reading the numbers" bubble.
+            const answer = assistant.parts.filter((p) => p.type === "text").map((p) => p.text ?? "").join("").trim();
+            if (!answer) return;
             const last = body.messages.at(-1);
+            // Generate the user-message id SERVER-SIDE — never trust the client id.
+            // analyst_messages has a global PK; a client-supplied id could upsert
+            // over another tenant's row (cross-tenant overwrite/exfiltration).
             const userMessage =
-              last && last.role === "user" ? ({ id: last.id, role: "user", parts: last.parts } as StoredMessage) : null;
+              last && last.role === "user" ? ({ id: generateId(), role: "user", parts: last.parts } as StoredMessage) : null;
             await persistTurn({
               userId: user.id,
               clientId: user.clientId,
               threadId: ownedThreadId,
               userMessage,
-              assistantMessage: responseMessage as unknown as StoredMessage,
+              assistantMessage: assistant,
             });
           } catch (e) {
             console.error("[ai/agent] persist failed:", e instanceof Error ? e.message : e);
