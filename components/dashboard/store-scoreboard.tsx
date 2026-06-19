@@ -120,7 +120,7 @@ export function StoreScoreboard({
               </div>
 
               <div className="shrink-0 text-right">
-                <div className={`font-medium leading-none tracking-[-0.02em] ${isLeader ? "text-[30px] text-orange" : "text-[22px] text-ink"}`}>{r.score}</div>
+                <div className={`font-bold leading-none tracking-[-0.02em] ${isLeader ? "text-[30px] text-orange" : "text-[22px] text-ink"}`}>{r.score}</div>
                 <div className="mt-1 font-mono text-[9px] uppercase tracking-[0.14em] text-ink-dimmer">score</div>
               </div>
             </div>

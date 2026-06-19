@@ -436,7 +436,7 @@ export function RadialGauge({ value, caption, color = ORANGE, height = 168 }: { 
         </RadialBarChart>
       </ChartContainer>
       <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-[30px] font-medium leading-none tracking-[-0.02em] text-ink">{pctVal}%</span>
+        <span className="text-[30px] font-bold leading-none tracking-[-0.02em] text-ink">{pctVal}%</span>
         {caption && <span className="mt-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-ink-dimmer">{caption}</span>}
       </div>
     </div>

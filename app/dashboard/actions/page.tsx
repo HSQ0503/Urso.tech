@@ -31,7 +31,6 @@ export default async function ActionsPage({ searchParams }: { searchParams: Prom
         <PageHeader
           eyebrow="urso.ai · analyst"
           title="Your data analyst, on demand."
-          sub="Ask anything about the business — what's working, what's leaking, what to fix first. urso.ai reasons across all four stores on your live numbers. Your suggested actions are queued just below."
         />
         <AnalystConsole userName={user.name} briefHeadline={briefHeadline} />
       </div>
@@ -40,7 +39,7 @@ export default async function ActionsPage({ searchParams }: { searchParams: Prom
       <section className="border-t border-edge pt-10">
         <div className="mb-6">
           <Micro>AI suggested actions</Micro>
-          <h2 className="mt-2 text-[22px] font-medium tracking-[-0.02em] text-ink">What the agents recommend</h2>
+          <h2 className="mt-2 text-[22px] font-bold tracking-[-0.02em] text-ink">What the agents recommend</h2>
           <p className="mt-1.5 max-w-[560px] text-[13.5px] leading-[1.55] text-ink-dim">
             Each finding becomes a concrete action — you approve or dismiss; nothing runs without you.
           </p>

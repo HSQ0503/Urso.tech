@@ -46,7 +46,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
   if (!catalog) {
     return (
       <div className="animate-stage-in">
-        <PageHeader eyebrow={`Products · ${scopeLabel(scope)} · ${period}`} title="Products" sub="The product catalog comes online once migration 0018 is applied to the database." />
+        <PageHeader eyebrow={`Products · ${scopeLabel(scope)} · ${period}`} title="Products" />
       </div>
     );
   }
@@ -72,7 +72,6 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
       <PageHeader
         eyebrow={`Products · ${scopeLabel(scope)} · ${period}`}
         title="Products"
-        sub="Everything that sold in the selected period, one row per product — the same item rung under different register spellings is merged by barcode and normalized name."
       />
 
       <div className="flex flex-wrap items-center justify-between gap-3">

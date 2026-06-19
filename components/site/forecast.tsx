@@ -145,7 +145,7 @@ export function ForecastChart() {
 
   const ease = "var(--ease-out)";
   const axisFont: React.CSSProperties = {
-    fontFamily: "var(--font-roboto-mono), monospace",
+    fontFamily: "var(--font-mono), monospace",
     letterSpacing: "0.1em",
   };
 

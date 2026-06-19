@@ -95,7 +95,6 @@ export function ActionsClient({ initialActions, showHeader = true }: { initialAc
         <PageHeader
           eyebrow="AI action center"
           title="The dashboard does the work"
-          sub="Each agent turns a finding into a concrete action and carries it from approval through to a result. Nothing runs without your approval — the dashboard recommends, you decide."
         />
       )}
 
@@ -147,7 +146,7 @@ export function ActionsClient({ initialActions, showHeader = true }: { initialAc
                 <Micro>{actionStatusLabel[s]}</Micro>
                 <span className="font-mono text-[10px] text-ink-dimmer">{i + 1}/4</span>
               </div>
-              <div className="mt-2.5 text-[24px] font-medium leading-none tracking-[-0.02em]" style={{ color: s === "suggested" && count(s) > 0 ? "#fe5100" : undefined }}>
+              <div className="mt-2.5 text-[24px] font-bold leading-none tracking-[-0.02em]" style={{ color: s === "suggested" && count(s) > 0 ? "#fe5100" : undefined }}>
                 {count(s)}
               </div>
               <p className="mt-2 text-[11px] leading-[1.4] text-ink-dimmer">{stageHelp[s]}</p>

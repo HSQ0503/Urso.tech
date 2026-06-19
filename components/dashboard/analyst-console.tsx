@@ -125,7 +125,7 @@ function EmptyState({ firstName, briefHeadline, onPick, busy }: { firstName: str
         <span className="mx-auto grid size-12 place-items-center rounded-none border border-[rgba(254,81,0,0.35)] bg-orange-soft text-orange">
           <Spark className="size-5" />
         </span>
-        <h2 className="mt-4 text-[20px] font-medium tracking-[-0.01em] text-ink">Good to see you, {firstName}.</h2>
+        <h2 className="mt-4 text-[20px] font-bold tracking-[-0.01em] text-ink">Good to see you, {firstName}.</h2>
         <p className="mt-2 text-[14px] leading-[1.6] text-ink-dim">
           I’m your data analyst. Ask me what’s working, what’s leaking, and what to do next — I’ll pull the real numbers and come back with a plan. I remember our past conversations.
         </p>

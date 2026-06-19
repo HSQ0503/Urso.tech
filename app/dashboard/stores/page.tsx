@@ -47,7 +47,6 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
       <PageHeader
         eyebrow={`All locations · ${period}`}
         title="Store comparison"
-        sub="Every metric is defined identically across the four locations, so differences reflect performance rather than measurement. Use the store filter to highlight one; the month filter rescopes every figure."
       />
 
       {/* Scoreboard */}

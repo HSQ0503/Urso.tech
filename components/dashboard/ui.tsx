@@ -66,7 +66,7 @@ export function Card({
 
 // Large display numbers — Geist, tight tracking. Just a sizing/weight wrapper.
 export function Display({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <span className={`font-medium tracking-[-0.02em] ${className}`}>{children}</span>;
+  return <span className={`font-bold tracking-[-0.02em] ${className}`}>{children}</span>;
 }
 
 // Loading skeleton block — pulses in the brand's surface color.
@@ -81,13 +81,11 @@ export function SkeletonCard({ className = "", children }: { className?: string;
 export function PageHeader({
   eyebrow,
   title,
-  sub,
   right,
   period = false,
 }: {
   eyebrow: string;
   title: ReactNode;
-  sub?: string;
   right?: ReactNode;
   period?: boolean;
 }) {
@@ -100,7 +98,6 @@ export function PageHeader({
             {title}
             {period && <span className="text-orange">.</span>}
           </h1>
-          {sub && <p className="mt-2 max-w-[560px] text-[13.5px] leading-[1.5] text-ink-dim">{sub}</p>}
         </div>
         {right && <div className="shrink-0">{right}</div>}
       </div>

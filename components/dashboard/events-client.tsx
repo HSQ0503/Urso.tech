@@ -100,7 +100,6 @@ export function EventsClient({
       <PageHeader
         eyebrow="Context log"
         title="Events"
-        sub="Log real-world events — staffing, promos, price changes, closures, weather — so urso.ai can explain WHY a number moved instead of guessing, and tell a real win from a confounded one."
       />
 
       {error && (

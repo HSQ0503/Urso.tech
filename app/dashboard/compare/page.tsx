@@ -93,7 +93,6 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
       <PageHeader
         eyebrow={`Compare · ${rangeLabel(a)} vs ${rangeLabel(b)}${scopeNote}`}
         title="Compare anything"
-        sub="Stores, groomers, or products across any two periods — this month against last, this time last year, or any two dates. The period picker below drives this page; the month filter in the top bar does not apply here."
       />
 
       <CompareControls key={[a, ...bs].map((r) => `${r.start}${r.end}`).join("")} mode={mode} preset={preset} metric={metricKey} a={a} bs={bs} minDate={bounds.min} maxDate={bounds.max} />
@@ -115,7 +114,7 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
         <div className="col-span-2 bg-cell p-4 md:col-span-1">
           <Micro>Revenue change{extras.length > 0 ? " · vs previous" : ""}</Micro>
           <div className="mt-2.5 flex items-baseline gap-2.5">
-            <span className="text-[26px] font-medium leading-none tracking-[-0.02em]">
+            <span className="text-[26px] font-bold leading-none tracking-[-0.02em]">
               {revDelta == null ? "—" : `${revDelta >= 0 ? "+" : "−"}${Math.abs(revDelta * 100).toFixed(1)}%`}
             </span>
             {dayInfo.a !== dayInfo.bs[0] && <span className="text-[11.5px] text-ink-dim">totals · lengths differ</span>}
@@ -380,7 +379,7 @@ function Period({ label, range, value, days, accent }: { label: string; range: C
   return (
     <div className="bg-cell p-4">
       <Micro className={accent ? "!text-orange" : undefined}>{label}</Micro>
-      <div className="mt-2.5 text-[26px] font-medium leading-none tracking-[-0.02em]">{fmtMoney(value)}</div>
+      <div className="mt-2.5 text-[26px] font-bold leading-none tracking-[-0.02em]">{fmtMoney(value)}</div>
       <div className="mt-2 text-[12px] text-ink-dim">
         {rangeLabel(range)} · {days} {days === 1 ? "day" : "days"}
       </div>

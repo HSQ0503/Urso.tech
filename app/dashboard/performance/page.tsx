@@ -63,7 +63,6 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
       <PageHeader
         eyebrow={`Diagnostics · ${scopeLabel(scope)} · ${period}`}
         title="Performance"
-        sub="Where bookings and revenue are won and lost — capture, conversion and revenue mix. Pending sources need tracking enabled."
       />
 
       {/* Capture */}
@@ -87,10 +86,10 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
                   />
                   <ChartInfo id="callsAnsweredMissed" />
                 </div>
-                <div className="mt-1.5 text-[22px] font-medium tracking-[-0.01em]">{cs.total.toLocaleString()} <span className="text-[13px] text-ink-dim">calls</span></div>
+                <div className="mt-1.5 text-[22px] font-bold tracking-[-0.01em]">{cs.total.toLocaleString()} <span className="text-[13px] text-ink-dim">calls</span></div>
               </div>
               <div className="text-right">
-                <div className="text-[20px] font-medium text-orange">{pct(cs.missedPct)}</div>
+                <div className="text-[20px] font-bold text-orange">{pct(cs.missedPct)}</div>
                 <Micro>missed</Micro>
               </div>
             </div>
@@ -177,7 +176,7 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
                 <div className="mt-1.5 text-[15px] text-ink-dim">From first visit to a booked appointment</div>
               </div>
               <div className="text-right">
-                <div className="text-[20px] font-medium">{pct(ws.convRate, 1)}</div>
+                <div className="text-[20px] font-bold">{pct(ws.convRate, 1)}</div>
                 <Micro>visit → book</Micro>
               </div>
             </div>
@@ -197,10 +196,10 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
                   />
                   <ChartInfo id="webTraffic" />
                 </div>
-                <div className="mt-1.5 text-[22px] font-medium tracking-[-0.01em]">{ws.visits.toLocaleString()} <span className="text-[13px] text-ink-dim">visits</span></div>
+                <div className="mt-1.5 text-[22px] font-bold tracking-[-0.01em]">{ws.visits.toLocaleString()} <span className="text-[13px] text-ink-dim">visits</span></div>
               </div>
               <div className="text-right">
-                <div className="text-[20px] font-medium">{ws.bookings.toLocaleString()}</div>
+                <div className="text-[20px] font-bold">{ws.bookings.toLocaleString()}</div>
                 <Micro>bookings</Micro>
               </div>
             </div>
@@ -236,7 +235,7 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
                   />
                   <ChartInfo id="revenueTrend" />
                 </div>
-                <div className="mt-1.5 text-[22px] font-medium tracking-[-0.01em]">{fmtMoney(m.revenue)}</div>
+                <div className="mt-1.5 text-[22px] font-bold tracking-[-0.01em]">{fmtMoney(m.revenue)}</div>
               </div>
               <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-dimmer">{period}</span>
             </div>

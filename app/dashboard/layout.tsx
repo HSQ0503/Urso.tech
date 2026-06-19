@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { Shell } from "@/components/dashboard/shell";
 import { getSession } from "@/lib/auth";
+import { getLocale } from "@/lib/i18n.server";
 
 export const metadata: Metadata = {
   title: "Dashboard | Urso · Woof Gang",
@@ -12,6 +13,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const user = await getSession();
   if (!user) redirect("/login");
   if (user.role === "urso_admin") redirect("/console");
+  const locale = await getLocale();
 
   return (
     <Shell
@@ -22,6 +24,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       email={user.email}
       streak={user.streak}
       memberSince={user.memberSince}
+      locale={locale}
     >
       {children}
     </Shell>

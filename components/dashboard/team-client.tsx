@@ -26,7 +26,7 @@ export function TeamClient({ roster, scopeName, period }: { roster: TeamRow[]; s
   if (roster.length === 0) {
     return (
       <div className="animate-stage-in">
-        <PageHeader eyebrow={`Team · ${scopeName} · ${period}`} title="Groomer performance" sub="No groomer activity on record for this location and period." />
+        <PageHeader eyebrow={`Team · ${scopeName} · ${period}`} title="Groomer performance" />
       </div>
     );
   }
@@ -41,7 +41,6 @@ export function TeamClient({ roster, scopeName, period }: { roster: TeamRow[]; s
       <PageHeader
         eyebrow={`Team · ${scopeName} · ${period}`}
         title="Groomer performance"
-        sub="A coaching view, not a leaderboard — ranked by service revenue for the selected period, alongside retention and retail attachment. Select a groomer to see their full profile."
       />
 
       {/* Revenue ranking */}

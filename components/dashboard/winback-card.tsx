@@ -22,7 +22,7 @@ export function WinbackCard({ list, winbackCount }: { list: Inactive[]; winbackC
           <h2 className="mt-1.5 text-[18px] font-medium tracking-[-0.01em]">Inactive customers</h2>
         </div>
         <div className="text-right">
-          <div className="text-[22px] font-medium tracking-[-0.01em]">{winbackCount}</div>
+          <div className="text-[22px] font-bold tracking-[-0.01em]">{winbackCount}</div>
           <Micro>eligible for win-back</Micro>
         </div>
       </div>

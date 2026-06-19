@@ -33,6 +33,7 @@ import {
 import { AskAi } from "@/components/dashboard/ask-ai";
 import { ActionItemCard } from "@/components/dashboard/action-item-card";
 import { ChartInfo } from "@/components/dashboard/chart-info";
+import { CountUp } from "@/components/dashboard/count-up";
 
 export async function OwnerHome({ searchParams, userName, streak }: { searchParams: Promise<{ store?: string; month?: string }>; userName: string; streak: number }) {
   const sp = await searchParams;
@@ -52,6 +53,29 @@ export async function OwnerHome({ searchParams, userName, streak }: { searchPara
   ]);
   const labels = series.labels;
 
+  // The single metric with the strongest positive move — surfaced in orange as a
+  // "win". Real data only: when nothing actually improved, nothing is shown.
+  const WIN_LABELS: Record<string, string> = {
+    revenue: "Revenue",
+    bookings: "Bookings",
+    avgTicket: "Avg visit",
+    rebook: "Return rate",
+    attach: "Retail attach",
+    groomingShare: "Grooming share",
+  };
+  const winner = (
+    [
+      { key: "revenue", d: deltas.revenue },
+      { key: "bookings", d: deltas.bookings },
+      { key: "avgTicket", d: deltas.avgTicket },
+      { key: "rebook", d: deltas.rebook },
+      { key: "attach", d: deltas.attach },
+      { key: "groomingShare", d: deltas.groomingShare },
+    ] as { key: string; d: number | null }[]
+  )
+    .filter((k): k is { key: string; d: number } => k.d != null && k.d > 0)
+    .sort((a, b) => b.d - a.d)[0];
+
   return (
     <div>
       <div className="animate-stage-in">
@@ -59,20 +83,28 @@ export async function OwnerHome({ searchParams, userName, streak }: { searchPara
         <PageHeader
           eyebrow={`Overview · ${scopeLabel(scope)} · ${periodLabel}`}
           title="Performance overview"
-          sub={`Revenue, demand and conversion ${scope === "all" ? "across all four locations" : `for ${scopeLabel(scope)}`}. Use the store and month filters in the top bar to change this view.`}
         />
       </div>
+
+      {winner && (
+        <div className="mt-3 inline-flex animate-stage-in items-center gap-2.5 border-l-2 border-orange bg-orange-wash py-2 pl-3 pr-4">
+          <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-orange">urso.ai</span>
+          <span className="text-[13px] text-ink-dim">
+            <span className="font-semibold text-orange">{WIN_LABELS[winner.key]} up {pct(winner.d)}</span> — your strongest move this period.
+          </span>
+        </div>
+      )}
 
       {/* KPI row — all six are live FranPOS metrics with real period-over-period
           deltas (chips hide when no honest prior period exists). Calls answered
           and no-show join the row when Twilio / the booking feed go live. */}
       <section className="dash-raise mt-2 grid animate-stage-in grid-cols-2 gap-px overflow-hidden rounded-none border border-edge bg-edge md:grid-cols-3 xl:grid-cols-6" style={{ animationDelay: "50ms" }}>
-        <Kpi label="Revenue" value={fmtMoney(m.revenue)} delta={deltas.revenue} />
-        <Kpi label="Bookings" value={m.bookings.toLocaleString()} delta={deltas.bookings} />
-        <Kpi label="Avg visit" value={fmtMoney(m.avgTicket)} delta={deltas.avgTicket} />
-        <Kpi label="Return rate" value={pct(m.rebook)} delta={deltas.rebook} />
-        <Kpi label="Retail attach" value={pct(m.attach)} delta={deltas.attach} />
-        <Kpi label="Grooming share" value={pct(m.groomingShare)} delta={deltas.groomingShare} />
+        <Kpi label="Revenue" raw={m.revenue} format="money" delta={deltas.revenue} accent={winner?.key === "revenue"} />
+        <Kpi label="Bookings" raw={m.bookings} format="int" delta={deltas.bookings} accent={winner?.key === "bookings"} />
+        <Kpi label="Avg visit" raw={m.avgTicket} format="money" delta={deltas.avgTicket} accent={winner?.key === "avgTicket"} />
+        <Kpi label="Return rate" raw={m.rebook} format="pct" delta={deltas.rebook} accent={winner?.key === "rebook"} />
+        <Kpi label="Retail attach" raw={m.attach} format="pct" delta={deltas.attach} accent={winner?.key === "attach"} />
+        <Kpi label="Grooming share" raw={m.groomingShare} format="pct" delta={deltas.groomingShare} accent={winner?.key === "groomingShare"} />
       </section>
 
       {/* One action item + revenue */}
@@ -103,7 +135,7 @@ export async function OwnerHome({ searchParams, userName, streak }: { searchPara
                 <ChartInfo id="revenueTrend" />
               </div>
               <div className="mt-1.5 flex items-baseline gap-2.5">
-                <span className="text-[22px] font-medium tracking-[-0.01em]">{fmtMoney(m.revenue)}</span>
+                <span className="text-[22px] font-bold tracking-[-0.01em] tabular-nums"><CountUp value={m.revenue} format="money" /></span>
                 {deltas.revenue != null && <Delta value={deltas.revenue} />}
                 <span className="text-[12px] text-ink-dim">{periodLabel}</span>
               </div>
@@ -135,9 +167,9 @@ export async function OwnerHome({ searchParams, userName, streak }: { searchPara
           ) : (
             <>
               <div className="mb-4 flex items-start justify-between gap-3">
-                <div className="text-[22px] font-medium tracking-[-0.01em]">{cs.total.toLocaleString()} <span className="text-[13px] text-ink-dim">calls</span></div>
+                <div className="text-[22px] font-bold tracking-[-0.01em]">{cs.total.toLocaleString()} <span className="text-[13px] text-ink-dim">calls</span></div>
                 <div className="text-right">
-                  <div className="text-[20px] font-medium text-orange">{pct(cs.missedPct)}</div>
+                  <div className="text-[20px] font-bold text-orange">{pct(cs.missedPct)}</div>
                   <Micro>missed</Micro>
                 </div>
               </div>
@@ -169,9 +201,9 @@ export async function OwnerHome({ searchParams, userName, streak }: { searchPara
           ) : (
             <>
               <div className="mb-4 flex items-start justify-between gap-3">
-                <div className="text-[22px] font-medium tracking-[-0.01em]">{ws.visits.toLocaleString()} <span className="text-[13px] text-ink-dim">visits</span></div>
+                <div className="text-[22px] font-bold tracking-[-0.01em]">{ws.visits.toLocaleString()} <span className="text-[13px] text-ink-dim">visits</span></div>
                 <div className="text-right">
-                  <div className="text-[20px] font-medium text-orange">{pct(ws.convRate, 1)}</div>
+                  <div className="text-[20px] font-bold text-orange">{pct(ws.convRate, 1)}</div>
                   <Micro>book online</Micro>
                 </div>
               </div>
@@ -207,7 +239,7 @@ export async function OwnerHome({ searchParams, userName, streak }: { searchPara
                   </div>
                   <span className="font-mono text-[12px] text-ink-dim">{fmtMoney(sm.avgTicket)} avg</span>
                 </div>
-                <div className="text-[27px] font-medium leading-none tracking-[-0.02em]">{fmtMoney(sm.revenue)}</div>
+                <div className="text-[27px] font-bold leading-none tracking-[-0.02em] tabular-nums"><CountUp value={sm.revenue} format="money" /></div>
                 <div>
                   <div className="mb-1.5 flex items-center justify-between">
                     <Micro>Return</Micro>
@@ -249,14 +281,16 @@ function EmptyFeed({ title, detail, tag }: { title: string; detail: string; tag:
   );
 }
 
-function Kpi({ label, value, delta, deltaInvert }: { label: string; value: string; delta: number | null; deltaInvert?: boolean }) {
+function Kpi({ label, raw, format, delta, deltaInvert, accent }: { label: string; raw: number; format: "money" | "pct" | "int"; delta: number | null; deltaInvert?: boolean; accent?: boolean }) {
   return (
     <div className="bg-cell p-4">
       <div className="flex items-center justify-between">
         <Micro>{label}</Micro>
         {delta != null && <Delta value={delta} invert={deltaInvert} />}
       </div>
-      <div className="mt-2.5 text-[24px] font-medium leading-none tracking-[-0.02em]">{value}</div>
+      <div className={`mt-2.5 text-[24px] font-bold leading-none tracking-[-0.02em] tabular-nums ${accent ? "text-orange" : "text-ink"}`}>
+        <CountUp value={raw} format={format} />
+      </div>
     </div>
   );
 }

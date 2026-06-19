@@ -58,7 +58,6 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
       <PageHeader
         eyebrow={`Customers · ${scopeLabel(scope)} · ${period}`}
         title="Customer retention"
-        sub="Grooming is recurring revenue, so retention is the clearest indicator of long-term performance. These figures track repeat behaviour, cross-selling, and customers who have lapsed."
       />
 
       <section className="border-y border-edge py-7">
@@ -194,7 +193,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
             return (
               <div key={s.segment} className="bg-cell p-4">
                 <Micro>{s.segment}</Micro>
-                <div className="mt-2.5 text-[24px] font-medium leading-none tracking-[-0.02em]" style={{ color: risk ? "#fe5100" : undefined }}>{s.count}</div>
+                <div className="mt-2.5 text-[24px] font-bold leading-none tracking-[-0.02em]" style={{ color: risk ? "#fe5100" : undefined }}>{s.count}</div>
               </div>
             );
           })}
@@ -248,7 +247,7 @@ function Stat({ label, value, sub, accent, delta }: { label: string; value: stri
   return (
     <div>
       <Micro>{label}</Micro>
-      <div className={`mt-2 flex items-baseline gap-2 text-[34px] font-medium leading-none tracking-[-0.02em] ${accent ? "text-orange" : "text-ink"}`}>
+      <div className={`mt-2 flex items-baseline gap-2 text-[34px] font-bold leading-none tracking-[-0.02em] ${accent ? "text-orange" : "text-ink"}`}>
         {value}
         {delta != null && <Delta value={delta} />}
       </div>

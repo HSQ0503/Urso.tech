@@ -73,7 +73,6 @@ export function ReviewsClient({
       <PageHeader
         eyebrow="Reputation & visibility · Google"
         title="Reputation & visibility"
-        sub="Search ranking and review quality determine whether prospective customers reach a location. Reviews are also cross-referenced against FranPOS records to flag those with no matching customer on file."
         right={
           <div className="flex gap-2">
             <Tag tone="orange">{suspectedFakes} suspected fakes</Tag>
@@ -136,7 +135,7 @@ export function ReviewsClient({
               <ChartInfo id="ratingDistribution" />
             </div>
             <div className="mt-2 flex items-baseline gap-2.5">
-              <span className="text-[30px] font-medium leading-none tracking-[-0.02em]">{dist.rating.toFixed(1)}<span className="text-star">★</span></span>
+              <span className="text-[30px] font-bold leading-none tracking-[-0.02em]">{dist.rating.toFixed(1)}<span className="text-star">★</span></span>
               <span className="text-[12.5px] text-ink-dim">{dist.total} reviews</span>
             </div>
           </div>

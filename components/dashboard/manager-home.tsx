@@ -100,7 +100,7 @@ export async function ManagerHome({ store, month, userName, streak }: { store: S
                 <Micro>{s.label}</Micro>
                 {s.delta != null && <Delta value={s.delta} invert={s.invert} />}
               </div>
-              <div className="mt-2.5 text-[24px] font-medium leading-none tracking-[-0.02em]">{s.value}</div>
+              <div className="mt-2.5 text-[24px] font-bold leading-none tracking-[-0.02em]">{s.value}</div>
               <div className="mt-2.5 flex items-center justify-between gap-2 text-[11px]">
                 <span className="font-mono text-ink-dimmer">Group {s.avgLabel}</span>
                 <span className="font-mono" style={{ color: s.beatsAvg ? GREEN : ORANGE }}>{s.beatsAvg ? "Ahead" : "Behind"}</span>

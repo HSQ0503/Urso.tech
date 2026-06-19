@@ -44,7 +44,6 @@ export default async function RevenueMapPage({ searchParams }: { searchParams: P
       <PageHeader
         eyebrow={`Revenue map · ${scopeLabel(scope)} · ${period}`}
         title="Where the money comes from"
-        sub="Revenue broken down by location, service line and groomer — so the picture is concrete rather than a single top-line figure. Every cut uses the same definitions across the four stores."
       />
 
       {/* Headline strip */}
@@ -156,7 +155,7 @@ function Kpi({ label, value }: { label: string; value: string }) {
   return (
     <div className="bg-cell p-4">
       <Micro>{label}</Micro>
-      <div className="mt-2.5 text-[22px] font-medium leading-none tracking-[-0.02em]">{value}</div>
+      <div className="mt-2.5 text-[22px] font-bold leading-none tracking-[-0.02em]">{value}</div>
     </div>
   );
 }
