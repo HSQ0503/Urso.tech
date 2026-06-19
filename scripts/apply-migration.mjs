@@ -3,8 +3,8 @@
 // hand into the dashboard SQL editor. This runs them via the Supabase
 // Management API instead.
 //
-//   Run:  node scripts/apply-migration.mjs 0020
-//         node scripts/apply-migration.mjs supabase/migrations/0020_quickbooks_pnl_totals.sql
+//   Run:  node scripts/apply-migration.mjs 0021
+//         node scripts/apply-migration.mjs supabase/migrations/0021_quickbooks_pnl_totals.sql
 //
 // One-time setup: create a Personal Access Token at
 //   https://supabase.com/dashboard/account/tokens

@@ -76,9 +76,10 @@ the owner just talks to. Memory layer + metric-verified learning + the events "w
   prompts + `business.ts` (stores-and-org) + the `stores` constant (`aliases: ["Summerport"]`), and **migration
   `0022_store_aliases.sql`** (adds `stores.aliases text[]`). The AI reads store names from the prompts/constant,
   NOT the DB `stores.name`, so the prompt edits are what make "how's Summerport doing?" resolve to `wm`.
-- **Migration numbering:** `0020` is used by two files — `0020_business_events.sql` (applied) and the uncommitted
-  QBO WIP `0020_quickbooks_pnl_totals.sql`. New files are `0022_store_aliases.sql` + `0023_analyst_chat.sql`
-  (both pending apply). Suggest renumbering the QBO file to `0021` to close the gap.
+- **Migration numbering:** the old `0020` collision is resolved — the QBO totals migration was renumbered to
+  `0021_quickbooks_pnl_totals.sql` (was `0020_…`, which clashed with `0020_business_events.sql`). The table name
+  (`quickbooks_pnl_totals`) is unchanged and the migration is `CREATE TABLE IF NOT EXISTS`, so the rename is
+  file-only — no DB re-apply needed. `0022_store_aliases.sql` + `0023_analyst_chat.sql` follow.
 - **`npm install` was needed** — `resend` + `@react-email/components` were in `package.json` but missing from
   `node_modules`, breaking `npm run build` in the cron-email path (nothing to do with the AI work). Installed.
 

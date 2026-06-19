@@ -6,6 +6,7 @@
 // (must be a domain verified in Resend) and CRON_EMAIL_TO (comma-separated).
 
 import { Resend } from "resend";
+import { render } from "@react-email/components";
 import { CronReportEmail, type CronReportProps } from "@/emails/cron-report";
 
 const FROM = process.env.CRON_EMAIL_FROM ?? "Urso Server <server@urso.ws>";
@@ -26,11 +27,17 @@ export async function sendCronReport(input: Omit<CronReportProps, "ranAt">): Pro
   try {
     const resend = new Resend(key);
     const props: CronReportProps = { ...input, ranAt: nyStamp() };
+    // Render to HTML here with a STATIC import. Passing resend the `react` prop
+    // makes it lazily require @react-email/render at send-time, which Next's
+    // serverless file-tracing misses → "Failed to render React component" in
+    // prod (the renderer isn't in the function bundle). Rendering ourselves and
+    // sending `html` keeps the dependency static and traceable.
+    const html = await render(<CronReportEmail {...props} />);
     const { error } = await resend.emails.send({
       from: FROM,
       to: TO,
       subject: `Urso · ${input.job} · ${input.status === "success" ? "OK" : "FAILED"}`,
-      react: <CronReportEmail {...props} />,
+      html,
     });
     if (error) {
       const msg = typeof error === "string" ? error : (error as { message?: string }).message ?? JSON.stringify(error);

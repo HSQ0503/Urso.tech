@@ -205,7 +205,7 @@ if (totErr)
   fail(
     `Reading quickbooks_pnl_totals failed: ${totErr.message}\n` +
       `  Apply the migration, then re-sync:\n` +
-      `    (run supabase/migrations/0020_quickbooks_pnl_totals.sql against your DB)\n` +
+      `    (run supabase/migrations/0021_quickbooks_pnl_totals.sql against your DB)\n` +
       `    node scripts/verify-qbo-pnl.mjs --sync`,
   );
 

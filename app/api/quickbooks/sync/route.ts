@@ -17,7 +17,9 @@ export async function GET(req: NextRequest) {
   if (!authorized) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   const sp = req.nextUrl.searchParams;
-  const months = Math.min(Math.max(Number(sp.get("months")) || 3, 1), 24);
+  // Cap at 36 so a one-shot backfill can reach the full FranPOS history start
+  // (2024-01); the daily cron passes no param and stays at the light default 3.
+  const months = Math.min(Math.max(Number(sp.get("months")) || 3, 1), 36);
   const method = sp.get("method") === "Cash" ? "Cash" : "Accrual";
   const client = sp.get("client") ?? "woof-gang";
 

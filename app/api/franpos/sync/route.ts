@@ -8,7 +8,9 @@ import { sendCronReport } from "@/lib/email";
 // this stays past close in both DST phases).
 // Vercel sends `Authorization: Bearer ${CRON_SECRET}` automatically when the
 // env var exists; manual runs can pass ?secret= instead.
-export const maxDuration = 60;
+// 300s (Pro max) — a 60s cap was timing out when a missed run left a large
+// catch-up backlog, which then snowballed (each failure grew the next window).
+export const maxDuration = 300;
 
 export async function GET(req: NextRequest) {
   const secret = process.env.CRON_SECRET;
