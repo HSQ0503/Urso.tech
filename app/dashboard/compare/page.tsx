@@ -30,6 +30,7 @@ import Link from "next/link";
 import { CompareControls } from "@/components/dashboard/compare-controls";
 import { AskAi } from "@/components/dashboard/ask-ai";
 import { ChartInfo } from "@/components/dashboard/chart-info";
+import { getI18n } from "@/lib/i18n.server";
 
 // The comparison engine: any entity set × any metric × any two periods. Each
 // mode gets the visual built for its question — stores: side-by-side columns +
@@ -38,6 +39,7 @@ import { ChartInfo } from "@/components/dashboard/chart-info";
 // length warnings, weekday labels, history-edge notes) surface inline.
 export default async function ComparePage({ searchParams }: { searchParams: Promise<{ mode?: string; preset?: string; metric?: string; a?: string; b?: string; store?: string }> }) {
   const sp = await searchParams;
+  const { t } = await getI18n();
   const mode = parseCompareMode(sp.mode);
   const preset = parseComparePreset(sp.preset);
   const metricKey = parseCompareMetric(mode, sp.metric);
@@ -76,8 +78,8 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
   const EXTRA_LEGEND_COLORS = ["var(--color-series-soft)", "var(--color-track)"];
   const extraLabels = extras.map((r) => rangeLabel(r, true));
   const legend = [
-    { label: `Now · ${rangeLabel(a, true)}`, color: "#fe5100" },
-    { label: `Before · ${rangeLabel(b, true)}`, color: "var(--color-series)" },
+    { label: `${t("Now")} · ${rangeLabel(a, true)}`, color: "#fe5100" },
+    { label: `${t("Before")} · ${rangeLabel(b, true)}`, color: "var(--color-series)" },
     ...extras.map((r, i) => ({ label: rangeLabel(r, true), color: EXTRA_LEGEND_COLORS[i % EXTRA_LEGEND_COLORS.length] })),
   ];
   const entityLabel = mode === "stores" ? "Store" : mode === "groomers" ? "Groomer" : "Item";
@@ -91,8 +93,8 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
   return (
     <div className="animate-stage-in space-y-3">
       <PageHeader
-        eyebrow={`Compare · ${rangeLabel(a)} vs ${rangeLabel(b)}${scopeNote}`}
-        title="Compare anything"
+        eyebrow={`${t("Compare")} · ${rangeLabel(a)} ${t("vs")} ${rangeLabel(b)}${scopeNote}`}
+        title={t("Compare anything")}
       />
 
       <CompareControls key={[a, ...bs].map((r) => `${r.start}${r.end}`).join("")} mode={mode} preset={preset} metric={metricKey} a={a} bs={bs} minDate={bounds.min} maxDate={bounds.max} />
@@ -107,21 +109,21 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
       {/* Headline: revenue across every period, oldest first */}
       <section className={`grid grid-cols-2 gap-px overflow-hidden rounded-none border border-edge bg-edge ${headlineCols}`}>
         {[...extras].reverse().map((r, i) => (
-          <Period key={`x${i}`} label={r.start.slice(0, 4)} range={r} value={revenue.bs[extras.length - i]} days={dayInfo.bs[extras.length - i]} />
+          <Period key={`x${i}`} label={r.start.slice(0, 4)} range={r} value={revenue.bs[extras.length - i]} days={dayInfo.bs[extras.length - i]} t={t} />
         ))}
-        <Period label="Compared against" range={b} value={revB} days={dayInfo.bs[0]} />
-        <Period label="This period" range={a} value={revenue.a} days={dayInfo.a} accent />
+        <Period label={t("Compared against")} range={b} value={revB} days={dayInfo.bs[0]} t={t} />
+        <Period label={t("This period")} range={a} value={revenue.a} days={dayInfo.a} accent t={t} />
         <div className="col-span-2 bg-cell p-4 md:col-span-1">
-          <Micro>Revenue change{extras.length > 0 ? " · vs previous" : ""}</Micro>
+          <Micro>{t("Revenue change")}{extras.length > 0 ? ` · ${t("vs previous")}` : ""}</Micro>
           <div className="mt-2.5 flex items-baseline gap-2.5">
             <span className="text-[26px] font-bold leading-none tracking-[-0.02em]">
               {revDelta == null ? "—" : `${revDelta >= 0 ? "+" : "−"}${Math.abs(revDelta * 100).toFixed(1)}%`}
             </span>
-            {dayInfo.a !== dayInfo.bs[0] && <span className="text-[11.5px] text-ink-dim">totals · lengths differ</span>}
+            {dayInfo.a !== dayInfo.bs[0] && <span className="text-[11.5px] text-ink-dim">{t("totals · lengths differ")}</span>}
           </div>
           {dayInfo.a !== dayInfo.bs[0] && revB > 0 && (
             <div className="mt-2 text-[12px] text-ink-dim">
-              Per day: {fmtMoney(revenue.a / dayInfo.a)} vs {fmtMoney(revB / dayInfo.bs[0])}
+              {t("Per day")}: {fmtMoney(revenue.a / dayInfo.a)} {t("vs")} {fmtMoney(revB / dayInfo.bs[0])}
             </div>
           )}
         </div>
@@ -132,17 +134,17 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
         <section>
           <div className="mb-4 flex items-end justify-between gap-3">
             <div>
-              <Micro>All metrics · totals for {scopeLabel(scope)}</Micro>
-              <h2 className="mt-1.5 text-[17px] font-medium tracking-[-0.01em]">Every metric, period by period</h2>
+              <Micro>{t("All metrics")} · {t("totals for")} {scopeLabel(scope)}</Micro>
+              <h2 className="mt-1.5 text-[17px] font-medium tracking-[-0.01em]">{t("Every metric, period by period")}</h2>
             </div>
           </div>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
             {overview.metrics.map((m) => (
-              <MetricPanel key={m.key} label={m.label} format={m.format} values={m.values} periods={[a, ...bs]} />
+              <MetricPanel key={m.key} label={t(m.label)} format={m.format} values={m.values} periods={[a, ...bs]} t={t} />
             ))}
           </div>
           <p className="mt-3 text-[12.5px] leading-[1.5] text-ink-dimmer">
-            Each panel totals the selected scope across the periods, oldest at the top; the chip is the change vs the previous period. Pick a single metric above for the per-{entityLabel.toLowerCase()} breakdown, charts and exact figures.
+            {t("Each panel totals the selected scope across the periods, oldest at the top; the chip is the change vs the previous period.")} {t("Pick a single metric above for the per-{entity} breakdown, charts and exact figures.").replace("{entity}", t(entityLabel).toLowerCase())}
           </p>
         </section>
       )}
@@ -150,7 +152,7 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
       {/* What stands out */}
       {data && data.insights.length > 0 && (
         <Card className="flex flex-col gap-3">
-          <Micro className="!text-orange">What stands out</Micro>
+          <Micro className="!text-orange">{t("What stands out")}</Micro>
           <ul className="space-y-2">
             {data.insights.map((s, i) => (
               <li key={i} className="text-[14px] leading-[1.55] text-ink">{s}</li>
@@ -164,7 +166,7 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
         <section className="grid grid-cols-1 gap-3 xl:grid-cols-2">
           <Card>
             <div className="mb-1 flex items-center gap-1.5">
-              <Micro>{data.metricLabel} · by store</Micro>
+              <Micro>{t(data.metricLabel)} · {t("by store")}</Micro>
               <AskAi
                 topic={`${data.metricLabel} — store comparison`}
                 topicId="compareTable"
@@ -173,14 +175,14 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
               />
               <ChartInfo id="compareTable" />
             </div>
-            <h2 className="mb-4 text-[17px] font-medium tracking-[-0.01em]">Side by side</h2>
-            <CompareBars data={scaled} labelA={`Now · ${rangeLabel(a, true)}`} labelB={`Before · ${rangeLabel(b, true)}`} moreLabels={extraLabels} format={chartFormat} />
+            <h2 className="mb-4 text-[17px] font-medium tracking-[-0.01em]">{t("Side by side")}</h2>
+            <CompareBars data={scaled} labelA={`${t("Now")} · ${rangeLabel(a, true)}`} labelB={`${t("Before")} · ${rangeLabel(b, true)}`} moreLabels={extraLabels} format={chartFormat} />
             <div className="mt-3"><Legend items={legend} /></div>
           </Card>
           {data.pace && (
             <Card>
               <div className="mb-1 flex items-center gap-1.5">
-                <Micro>Revenue pace · running total by day</Micro>
+                <Micro>{t("Revenue pace · running total by day")}</Micro>
                 <AskAi
                   topic="Revenue pace vs the comparison period"
                   topicId="comparePace"
@@ -189,10 +191,10 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
                 />
                 <ChartInfo id="comparePace" />
               </div>
-              <h2 className="mb-4 text-[17px] font-medium tracking-[-0.01em]">Is this period ahead or behind?</h2>
-              <ComparePace a={data.pace.a} b={data.pace.bs[0]} more={data.pace.bs.slice(1)} labelA={`Now · ${rangeLabel(a, true)}`} labelB={`Before · ${rangeLabel(b, true)}`} moreLabels={extraLabels} />
+              <h2 className="mb-4 text-[17px] font-medium tracking-[-0.01em]">{t("Is this period ahead or behind?")}</h2>
+              <ComparePace a={data.pace.a} b={data.pace.bs[0]} more={data.pace.bs.slice(1)} labelA={`${t("Now")} · ${rangeLabel(a, true)}`} labelB={`${t("Before")} · ${rangeLabel(b, true)}`} moreLabels={extraLabels} />
               <p className="mt-3 text-[12.5px] leading-[1.5] text-ink-dim">
-                Each line adds up revenue day by day. When the orange line sits above the dashed one, this period is ahead of the comparison at the same point.
+                {t("Each line adds up revenue day by day. When the orange line sits above the dashed one, this period is ahead of the comparison at the same point.")}
               </p>
             </Card>
           )}
@@ -202,7 +204,7 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
       {data && mode === "groomers" && (
         <Card>
           <div className="mb-1 flex items-center gap-1.5">
-            <Micro>{data.metricLabel} · per groomer</Micro>
+            <Micro>{t(data.metricLabel)} · {t("per groomer")}</Micro>
             <AskAi
               topic={`${data.metricLabel} — groomer comparison`}
               topicId="compareTable"
@@ -211,8 +213,8 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
             />
             <ChartInfo id="compareTable" />
           </div>
-          <h2 className="mb-4 text-[17px] font-medium tracking-[-0.01em]">Now vs before, ranked</h2>
-          <CompareBars layout="rows" data={scaled} labelA={`Now · ${rangeLabel(a, true)}`} labelB={`Before · ${rangeLabel(b, true)}`} moreLabels={extraLabels} format={chartFormat} />
+          <h2 className="mb-4 text-[17px] font-medium tracking-[-0.01em]">{t("Now vs before, ranked")}</h2>
+          <CompareBars layout="rows" data={scaled} labelA={`${t("Now")} · ${rangeLabel(a, true)}`} labelB={`${t("Before")} · ${rangeLabel(b, true)}`} moreLabels={extraLabels} format={chartFormat} />
           <div className="mt-3"><Legend items={legend} /></div>
         </Card>
       )}
@@ -220,7 +222,7 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
       {data && mode === "products" && movers.length > 0 && (
         <Card>
           <div className="mb-1 flex items-center gap-1.5">
-            <Micro>{data.metricLabel} · biggest moves between periods</Micro>
+            <Micro>{t(data.metricLabel)} · {t("biggest moves between periods")}</Micro>
             <AskAi
               topic={`${data.metricLabel} — winners and losers`}
               topicId="compareDiverging"
@@ -229,12 +231,12 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
             />
             <ChartInfo id="compareDiverging" />
           </div>
-          <h2 className="mb-4 text-[17px] font-medium tracking-[-0.01em]">Winners and losers</h2>
+          <h2 className="mb-4 text-[17px] font-medium tracking-[-0.01em]">{t("Winners and losers")}</h2>
           <CompareDiverging data={movers} format={deltaFormat} />
           <p className="mt-3 text-[12.5px] leading-[1.5] text-ink-dim">
             {data.pointDelta
-              ? "The biggest margin moves across every item, in percentage points — right improved, left slipped. Changes under 1 point are left out."
-              : "The biggest moves across every item — right of the line sold more than in the comparison period, left sold less. Small changes are left out; the table below has the exact figures for your top sellers."}
+              ? t("The biggest margin moves across every item, in percentage points — right improved, left slipped. Changes under 1 point are left out.")
+              : t("The biggest moves across every item — right of the line sold more than in the comparison period, left sold less. Small changes are left out; the table below has the exact figures for your top sellers.")}
           </p>
         </Card>
       )}
@@ -243,19 +245,19 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
       {data && (
       <Card pad={false}>
         <div className="px-5 pb-1 pt-5">
-          <Micro>Exact figures · {data.metricLabel.toLowerCase()}</Micro>
+          <Micro>{t("Exact figures")} · {t(data.metricLabel).toLowerCase()}</Micro>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[560px] border-collapse text-[13.5px]">
             <thead>
               <tr className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-dimmer">
-                <th className="px-5 py-3 text-left font-normal">{entityLabel}</th>
+                <th className="px-5 py-3 text-left font-normal">{t(entityLabel)}</th>
                 {[...extras].reverse().map((r, i) => (
                   <th key={`xh${i}`} className="px-5 py-3 text-right font-normal">{rangeLabel(r, true)} · {r.start.slice(0, 4)}</th>
                 ))}
-                <th className="px-5 py-3 text-right font-normal">Before · {rangeLabel(b, true)}</th>
-                <th className="px-5 py-3 text-right font-normal">Now · {rangeLabel(a, true)}</th>
-                <th className="px-5 py-3 text-right font-normal">Change{extras.length > 0 ? " · vs previous" : ""}</th>
+                <th className="px-5 py-3 text-right font-normal">{t("Before")} · {rangeLabel(b, true)}</th>
+                <th className="px-5 py-3 text-right font-normal">{t("Now")} · {rangeLabel(a, true)}</th>
+                <th className="px-5 py-3 text-right font-normal">{t("Change")}{extras.length > 0 ? ` · ${t("vs previous")}` : ""}</th>
               </tr>
             </thead>
             <tbody>
@@ -276,14 +278,14 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
                   <td className="px-5 py-3 text-right font-mono text-ink-dim">{r.b == null ? "—" : fmt(r.b)}</td>
                   <td className="px-5 py-3 text-right font-mono text-ink">{r.a == null ? "—" : fmt(r.a)}</td>
                   <td className="px-5 py-3 text-right">
-                    <Change a={r.a} b={r.b} points={data.pointDelta} />
+                    <Change a={r.a} b={r.b} points={data.pointDelta} t={t} />
                   </td>
                 </tr>
               ))}
               {data.rows.length === 0 && (
                 <tr className="border-t border-edge">
                   <td colSpan={4 + extras.length} className="px-5 py-8 text-center text-[13.5px] text-ink-dim">
-                    No data in these periods — try widening the dates (history starts {new Date(`${bounds.min}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" })}).
+                    {t("No data in these periods — try widening the dates (history starts {date}).").replace("{date}", new Date(`${bounds.min}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" }))}
                   </td>
                 </tr>
               )}
@@ -296,7 +298,7 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
       {data && mode === "products" && (
         <p className="-mt-2 text-[13px]">
           <Link href="/dashboard/products" className="text-orange transition-opacity hover:opacity-80">
-            Browse the full product list →
+            {t("Browse the full product list")} →
           </Link>
         </p>
       )}
@@ -331,7 +333,7 @@ function rangeLabel(r: CompareRange, short = false): string {
 // One metric as a small multiple: a bar per period (oldest at the top, focus
 // in orange) plus the change vs the previous period. Plain divs — no client
 // chart needed at this size, so the overview stays fully server-rendered.
-function MetricPanel({ label, format, values, periods }: { label: string; format: CompareFormat; values: (number | null)[]; periods: CompareRange[] }) {
+function MetricPanel({ label, format, values, periods, t }: { label: string; format: CompareFormat; values: (number | null)[]; periods: CompareRange[]; t: (s: string) => string }) {
   const f = fmtBy(format);
   const orderedIdx = [...values.keys()].reverse(); // side order is [focus, newest baseline, …]; display oldest first
   const max = Math.max(0, ...values.map((v) => v ?? 0));
@@ -343,7 +345,7 @@ function MetricPanel({ label, format, values, periods }: { label: string; format
     <Card>
       <div className="flex items-baseline justify-between gap-2">
         <Micro>{label}</Micro>
-        <Change a={values[0]} b={values[1] ?? null} points={format === "pct"} />
+        <Change a={values[0]} b={values[1] ?? null} points={format === "pct"} t={t} />
       </div>
       <div className="mt-3.5 space-y-2.5">
         {orderedIdx.map((idx) => {
@@ -375,28 +377,28 @@ function MetricPanel({ label, format, values, periods }: { label: string; format
   );
 }
 
-function Period({ label, range, value, days, accent }: { label: string; range: CompareRange; value: number; days: number; accent?: boolean }) {
+function Period({ label, range, value, days, accent, t }: { label: string; range: CompareRange; value: number; days: number; accent?: boolean; t: (s: string) => string }) {
   return (
     <div className="bg-cell p-4">
       <Micro className={accent ? "!text-orange" : undefined}>{label}</Micro>
       <div className="mt-2.5 text-[26px] font-bold leading-none tracking-[-0.02em]">{fmtMoney(value)}</div>
       <div className="mt-2 text-[12px] text-ink-dim">
-        {rangeLabel(range)} · {days} {days === 1 ? "day" : "days"}
+        {rangeLabel(range)} · {days} {days === 1 ? t("day") : t("days")}
       </div>
     </div>
   );
 }
 
-function Change({ a, b, points }: { a: number | null; b: number | null; points: boolean }) {
-  if (a != null && (b == null || b === 0)) return <Tag tone="orange">New</Tag>;
-  if ((a == null || a === 0) && b != null && b > 0) return <Tag tone="muted">No sales</Tag>;
+function Change({ a, b, points, t }: { a: number | null; b: number | null; points: boolean; t: (s: string) => string }) {
+  if (a != null && (b == null || b === 0)) return <Tag tone="orange">{t("New")}</Tag>;
+  if ((a == null || a === 0) && b != null && b > 0) return <Tag tone="muted">{t("No sales")}</Tag>;
   if (a == null || b == null || b === 0) return <span className="font-mono text-[12px] text-ink-dimmer">—</span>;
   if (points) {
     const d = (a - b) * 100;
     const good = d >= 0;
     return (
       <span className="font-mono text-[12px] tabular-nums" style={{ color: good ? "var(--color-good)" : "#fe5100" }}>
-        {good ? "+" : "−"}{Math.abs(d).toFixed(1)} pts
+        {good ? "+" : "−"}{Math.abs(d).toFixed(1)} {t("pts")}
       </span>
     );
   }

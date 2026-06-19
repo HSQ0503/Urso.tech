@@ -5,6 +5,8 @@
 // The active locale lives in a cookie (urso-lang) so it works across server
 // components (see i18n.server.ts) and client components (see locale-provider).
 
+import { ptGenerated } from "./i18n-pt.generated";
+
 export type Locale = "en" | "pt";
 export const LOCALES: Locale[] = ["en", "pt"];
 export const DEFAULT_LOCALE: Locale = "en";
@@ -95,7 +97,8 @@ const pt: Record<string, string> = {
   "Download PDF": "Baixar PDF",
 };
 
-export const messages: Record<Locale, Record<string, string>> = { en: {}, pt };
+// Curated chrome strings (pt) override the bulk page strings (ptGenerated).
+export const messages: Record<Locale, Record<string, string>> = { en: {}, pt: { ...ptGenerated, ...pt } };
 
 export type T = (key: string, vars?: Record<string, string | number>) => string;
 

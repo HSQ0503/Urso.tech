@@ -1,15 +1,22 @@
 import type { ReactNode } from "react";
+import type { T } from "@/lib/i18n";
+
+// InfoTip renders in both server and client components and is synchronous, so
+// neither getI18n nor useT is valid. The translator is passed in as an optional
+// prop and falls back to identity (English); `text` is already translated by
+// the caller, so only the fixed aria-label needs t here.
+const identity: T = (key) => key;
 
 // An "(i)" affordance with a hover/focus tooltip. CSS-only so it stays
 // server-safe and works inside server pages. Keyboard reachable via tabIndex.
-export function InfoTip({ text, className = "", align = "center" }: { text: ReactNode; className?: string; align?: "center" | "right" }) {
+export function InfoTip({ text, className = "", align = "center", t = identity }: { text: ReactNode; className?: string; align?: "center" | "right"; t?: T }) {
   const pos = align === "right" ? "right-0 translate-x-0" : "left-1/2 -translate-x-1/2";
   return (
     <span className={`group/info relative inline-flex align-middle ${className}`}>
       <span
         tabIndex={0}
         role="button"
-        aria-label="What this means"
+        aria-label={t("What this means")}
         className="grid size-6 cursor-help select-none place-items-center rounded-full border border-edge-strong font-mono text-[13px] font-medium normal-case leading-none tracking-normal text-ink-dimmer transition-colors hover:border-orange hover:text-orange focus:outline-none focus-visible:border-orange focus-visible:text-orange"
       >
         i

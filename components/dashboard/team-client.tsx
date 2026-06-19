@@ -15,18 +15,20 @@ import { Card, PageHeader, Micro, Tag, BarRanking, fmtMoney, pct } from "@/compo
 import { AskAi } from "@/components/dashboard/ask-ai";
 import { ChartInfo } from "@/components/dashboard/chart-info";
 import { InfoTip } from "@/components/dashboard/info-tip";
-import { GROOMER_COL_HELP } from "@/components/dashboard/team-help";
+import { groomerColHelp } from "@/components/dashboard/team-help";
+import { useT } from "@/components/dashboard/locale-provider";
 
 const dash = "—";
 const pctOr = (v: number | null) => (v == null ? dash : pct(v));
 
 export function TeamClient({ roster, scopeName, period }: { roster: TeamRow[]; scopeName: string; period: string }) {
+  const t = useT();
   const [selectedId, setSelectedId] = useState(() => roster[0]?.id ?? "");
 
   if (roster.length === 0) {
     return (
       <div className="animate-stage-in">
-        <PageHeader eyebrow={`Team · ${scopeName} · ${period}`} title="Groomer performance" />
+        <PageHeader eyebrow={`${t("Team")} · ${scopeName} · ${period}`} title={t("Groomer performance")} />
       </div>
     );
   }
@@ -39,8 +41,8 @@ export function TeamClient({ roster, scopeName, period }: { roster: TeamRow[]; s
   return (
     <div className="animate-stage-in space-y-10">
       <PageHeader
-        eyebrow={`Team · ${scopeName} · ${period}`}
-        title="Groomer performance"
+        eyebrow={`${t("Team")} · ${scopeName} · ${period}`}
+        title={t("Groomer performance")}
       />
 
       {/* Revenue ranking */}
@@ -48,7 +50,7 @@ export function TeamClient({ roster, scopeName, period }: { roster: TeamRow[]; s
         <div className="mb-4 flex items-end justify-between">
           <div>
             <div className="flex items-center gap-1.5">
-              <Micro>Productivity</Micro>
+              <Micro>{t("Productivity")}</Micro>
               <AskAi
                 topic="Service revenue per groomer"
                 topicId="productivityRank"
@@ -56,21 +58,21 @@ export function TeamClient({ roster, scopeName, period }: { roster: TeamRow[]; s
               />
               <ChartInfo id="productivityRank" />
             </div>
-            <h2 className="mt-1.5 text-[17px] font-medium tracking-[-0.01em]">Service revenue per groomer</h2>
+            <h2 className="mt-1.5 text-[17px] font-medium tracking-[-0.01em]">{t("Service revenue per groomer")}</h2>
           </div>
-          <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-dimmer">{roster.length} groomers</span>
+          <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-dimmer">{roster.length} {t("groomers")}</span>
         </div>
-        <BarRanking data={ranking} valueFmt={(n) => fmtMoney(n)} labelWidth={150} valueLabel="Service revenue" />
+        <BarRanking data={ranking} valueFmt={(n) => fmtMoney(n)} labelWidth={150} valueLabel={t("Service revenue")} />
       </Card>
 
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-[1.45fr_1fr]">
         {/* Scorecard */}
         <Card pad={false}>
           <div className="px-5 pb-3 pt-5">
-            <Micro>Scorecard</Micro>
+            <Micro>{t("Scorecard")}</Micro>
             <div className="mt-1.5 flex items-center gap-1.5">
-              <h2 className="text-[18px] font-medium tracking-[-0.01em]">Groomer scorecard</h2>
-              <InfoTip text={GROOMER_COL_HELP} />
+              <h2 className="text-[18px] font-medium tracking-[-0.01em]">{t("Groomer scorecard")}</h2>
+              <InfoTip text={groomerColHelp(t)} />
             </div>
           </div>
           {/* Scrolls past ~8 rows so the card stays level with the profile. */}
@@ -79,7 +81,7 @@ export function TeamClient({ roster, scopeName, period }: { roster: TeamRow[]; s
               <thead>
                 <tr className="font-mono text-[10px] uppercase tracking-[0.1em] text-ink-dimmer">
                   {["Groomer", "Revenue", "Appts", "Avg ticket", "Return", "Attach"].map((h, i) => (
-                    <th key={h} className={`sticky top-0 bg-panel px-5 py-2.5 font-normal shadow-[inset_0_1px_0_var(--color-edge),inset_0_-1px_0_var(--color-edge)] ${i === 0 ? "text-left" : "text-right"}`}>{h}</th>
+                    <th key={h} className={`sticky top-0 bg-panel px-5 py-2.5 font-normal shadow-[inset_0_1px_0_var(--color-edge),inset_0_-1px_0_var(--color-edge)] ${i === 0 ? "text-left" : "text-right"}`}>{t(h)}</th>
                   ))}
                 </tr>
               </thead>
@@ -96,8 +98,8 @@ export function TeamClient({ roster, scopeName, period }: { roster: TeamRow[]; s
                         {active && <span className="absolute left-0 top-1/2 h-5 w-[2.5px] -translate-y-1/2 rounded-full bg-orange" />}
                         <div className="flex items-center gap-2">
                           <span className="text-ink">{g.name}</span>
-                          {g.flag === "star" && <Tag tone="good">Top</Tag>}
-                          {g.flag === "coach" && <Tag tone="orange">Coach</Tag>}
+                          {g.flag === "star" && <Tag tone="good">{t("Top")}</Tag>}
+                          {g.flag === "coach" && <Tag tone="orange">{t("Coach")}</Tag>}
                         </div>
                         <Micro className="mt-0.5">{g.store}</Micro>
                       </td>
@@ -122,30 +124,30 @@ export function TeamClient({ roster, scopeName, period }: { roster: TeamRow[]; s
               <div className="text-[16px] text-ink">{selected.name}</div>
               <Micro className="mt-0.5">{selected.store}</Micro>
             </div>
-            {selected.flag === "star" && <Tag tone="good">Top groomer</Tag>}
-            {selected.flag === "coach" && <Tag tone="orange">Coach</Tag>}
+            {selected.flag === "star" && <Tag tone="good">{t("Top groomer")}</Tag>}
+            {selected.flag === "coach" && <Tag tone="orange">{t("Coach")}</Tag>}
           </div>
 
           {selected.rebook != null && selected.rebook < 0.45 && (
             <div className="flex items-center gap-2 rounded-none border border-[rgba(254,81,0,0.35)] bg-orange-soft px-3.5 py-2.5">
               <span className="size-1.5 rounded-full bg-orange" />
-              <span className="text-[12.5px] text-ink">Return rate ({pct(selected.rebook)}) is below the team floor — the clearest single thing to address.</span>
+              <span className="text-[12.5px] text-ink">{t("Return rate")} ({pct(selected.rebook)}) {t("is below the team floor — the clearest single thing to address.")}</span>
             </div>
           )}
 
           <div className="grid grid-cols-3 gap-2.5">
-            <Stat label="Revenue" value={fmtMoney(selected.revenue)} />
-            <Stat label="Team share" value={pct(selected.share)} />
-            <Stat label="Appts" value={String(selected.appts)} />
-            <Stat label="Avg ticket" value={fmtMoney(selected.avgTicket)} />
-            <Stat label="Return" value={pctOr(selected.rebook)} />
-            <Stat label="Attach" value={pctOr(selected.attach)} />
+            <Stat label={t("Revenue")} value={fmtMoney(selected.revenue)} />
+            <Stat label={t("Team share")} value={pct(selected.share)} />
+            <Stat label={t("Appts")} value={String(selected.appts)} />
+            <Stat label={t("Avg ticket")} value={fmtMoney(selected.avgTicket)} />
+            <Stat label={t("Return")} value={pctOr(selected.rebook)} />
+            <Stat label={t("Attach")} value={pctOr(selected.attach)} />
           </div>
         </Card>
       </div>
 
       <p className="mt-3 text-[13px] leading-[1.6] text-ink-dim">
-        Revenue, appointments and avg ticket reflect the selected period; return and attach are lifetime shares from the full FranPOS history ({dash} means too little history to say). Revenue per labour hour returns once labour-hours data is available — FranPOS timeclocks today, payroll as the fallback.
+        {t("Revenue, appointments and avg ticket reflect the selected period; return and attach are lifetime shares from the full FranPOS history (")}{dash}{t(" means too little history to say). Revenue per labour hour returns once labour-hours data is available — FranPOS timeclocks today, payroll as the fallback.")}
       </p>
     </div>
   );

@@ -10,6 +10,7 @@ import { Micro, Tag } from "./ui";
 import { Modal } from "./modal";
 import { ActionPlanBody } from "./action-plan";
 import { actionPlans } from "./data";
+import { useT } from "@/components/dashboard/locale-provider";
 
 const MAILTO = "mailto:han@urso.tech?subject=Urso%20%E2%80%94%20Woof%20Gang%20action%20item";
 
@@ -38,6 +39,7 @@ export function ActionItemCard({
   planKey: string;
   cta?: string;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const plan = actionPlans[planKey] ?? actionPlans["call-capture"];
 
@@ -74,7 +76,7 @@ export function ActionItemCard({
 
         <div className="relative mt-5 flex flex-wrap items-center gap-2">
           <Tag tone="orange">{metric}</Tag>
-          {pending && <Tag tone="muted">Pending data</Tag>}
+          {pending && <Tag tone="muted">{t("Pending data")}</Tag>}
         </div>
 
         <div className="relative mt-6 flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -85,14 +87,14 @@ export function ActionItemCard({
           >
             {cta}
           </a>
-          <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-dimmer transition-colors group-hover:text-ink-dim">See breakdown →</span>
+          <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-dimmer transition-colors group-hover:text-ink-dim">{t("See breakdown")} →</span>
         </div>
       </div>
 
       <Modal
         open={open}
         onClose={() => setOpen(false)}
-        eyebrow="Proposed fix"
+        eyebrow={t("Proposed fix")}
         title={title}
         footer={
           <a href={MAILTO} className="flex w-full items-center justify-center rounded-lg bg-orange px-4 py-2.5 text-[13px] font-medium text-[#070707] transition hover:bg-[#FF6A1F]">

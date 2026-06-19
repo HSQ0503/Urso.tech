@@ -12,20 +12,21 @@ import {
 import { getProductCatalog } from "@/components/dashboard/data.server";
 import { Card, PageHeader, Micro, Tag, fmtMoney, pct } from "@/components/dashboard/ui";
 import { InfoTip } from "@/components/dashboard/info-tip";
+import { getI18n } from "@/lib/i18n.server";
 
 // Every canonical product sold in the selected period. The same item rung
 // under different register spellings is ONE row here: barcodes collapse to a
 // canonical name, names collapse by normalization (migration 0018).
 
-const COL_HELP = (
+const colHelp = (t: (s: string) => string) => (
   <div>
-    <div className="font-medium text-ink">What each column means</div>
+    <div className="font-medium text-ink">{t("What each column means")}</div>
     <ul className="mt-2 space-y-1.5">
-      <li><span className="font-mono text-ink">Revenue</span><span className="text-ink-dim"> — net of discounts for the selected period. Deposits and gift cards excluded.</span></li>
-      <li><span className="font-mono text-ink">Units</span><span className="text-ink-dim"> — quantity sold in the period.</span></li>
-      <li><span className="font-mono text-ink">Avg price</span><span className="text-ink-dim"> — revenue per unit.</span></li>
-      <li><span className="font-mono text-ink">Margin</span><span className="text-ink-dim"> — (revenue − item cost) / revenue. Retail only; services carry no item cost.</span></li>
-      <li><span className="font-mono text-ink">Stores</span><span className="text-ink-dim"> — how many of the selected stores sold it.</span></li>
+      <li><span className="font-mono text-ink">{t("Revenue")}</span><span className="text-ink-dim"> — {t("net of discounts for the selected period. Deposits and gift cards excluded.")}</span></li>
+      <li><span className="font-mono text-ink">{t("Units")}</span><span className="text-ink-dim"> — {t("quantity sold in the period.")}</span></li>
+      <li><span className="font-mono text-ink">{t("Avg price")}</span><span className="text-ink-dim"> — {t("revenue per unit.")}</span></li>
+      <li><span className="font-mono text-ink">{t("Margin")}</span><span className="text-ink-dim"> — {t("(revenue − item cost) / revenue. Retail only; services carry no item cost.")}</span></li>
+      <li><span className="font-mono text-ink">{t("Stores")}</span><span className="text-ink-dim"> — {t("how many of the selected stores sold it.")}</span></li>
     </ul>
   </div>
 );
@@ -34,6 +35,7 @@ type SP = { store?: string; month?: string; q?: string; sort?: string; dir?: str
 
 export default async function ProductsPage({ searchParams }: { searchParams: Promise<SP> }) {
   const sp = await searchParams;
+  const { t } = await getI18n();
   const scope = parseScope(sp.store);
   const month = parseMonth(sp.month);
   const sort = parseProductSort(sp.sort);
@@ -46,7 +48,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
   if (!catalog) {
     return (
       <div className="animate-stage-in">
-        <PageHeader eyebrow={`Products · ${scopeLabel(scope)} · ${period}`} title="Products" />
+        <PageHeader eyebrow={`${t("Products")} · ${scopeLabel(scope)} · ${period}`} title={t("Products")} />
       </div>
     );
   }
@@ -70,8 +72,8 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
   return (
     <div className="animate-stage-in space-y-3">
       <PageHeader
-        eyebrow={`Products · ${scopeLabel(scope)} · ${period}`}
-        title="Products"
+        eyebrow={`${t("Products")} · ${scopeLabel(scope)} · ${period}`}
+        title={t("Products")}
       />
 
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -83,46 +85,46 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
             type="search"
             name="q"
             defaultValue={q}
-            placeholder="Search products…"
+            placeholder={t("Search products…")}
             className="w-64 rounded-lg border border-edge bg-transparent px-3 py-1.5 text-[13px] text-ink placeholder:text-ink-dimmer focus:border-orange/60 focus:outline-none"
           />
           <button type="submit" className="rounded-lg border border-edge px-3 py-1.5 text-[12.5px] text-ink-dim transition-colors hover:border-orange/60 hover:text-ink">
-            Search
+            {t("Search")}
           </button>
           {q && (
             <Link href={href({ q: undefined })} className="text-[12.5px] text-ink-dimmer transition-colors hover:text-ink">
-              Clear
+              {t("Clear")}
             </Link>
           )}
         </form>
         <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-dimmer">
-          {total.toLocaleString("en-US")} products{q ? ` matching “${q}”` : ""}
+          {total.toLocaleString("en-US")} {t("products")}{q ? ` ${t("matching")} “${q}”` : ""}
         </span>
       </div>
 
       <Card pad={false}>
         <div className="flex items-center gap-1.5 px-5 pb-1 pt-5">
-          <Micro>Catalog · sold in period</Micro>
-          <InfoTip text={COL_HELP} />
+          <Micro>{t("Catalog · sold in period")}</Micro>
+          <InfoTip text={colHelp(t)} />
         </div>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[640px] border-collapse text-[13.5px]">
             <thead>
               <tr className="font-mono text-[10px] uppercase tracking-[0.1em] text-ink-dimmer">
                 <th className="px-5 py-2.5 text-left font-normal">
-                  <Link href={sortHref("name")} className="transition-colors hover:text-ink">Product{arrow("name")}</Link>
+                  <Link href={sortHref("name")} className="transition-colors hover:text-ink">{t("Product")}{arrow("name")}</Link>
                 </th>
                 <th className="px-5 py-2.5 text-right font-normal">
-                  <Link href={sortHref("revenue")} className="transition-colors hover:text-ink">Revenue{arrow("revenue")}</Link>
+                  <Link href={sortHref("revenue")} className="transition-colors hover:text-ink">{t("Revenue")}{arrow("revenue")}</Link>
                 </th>
                 <th className="px-5 py-2.5 text-right font-normal">
-                  <Link href={sortHref("units")} className="transition-colors hover:text-ink">Units{arrow("units")}</Link>
+                  <Link href={sortHref("units")} className="transition-colors hover:text-ink">{t("Units")}{arrow("units")}</Link>
                 </th>
-                <th className="px-5 py-2.5 text-right font-normal">Avg price</th>
+                <th className="px-5 py-2.5 text-right font-normal">{t("Avg price")}</th>
                 <th className="px-5 py-2.5 text-right font-normal">
-                  <Link href={sortHref("margin")} className="transition-colors hover:text-ink">Margin{arrow("margin")}</Link>
+                  <Link href={sortHref("margin")} className="transition-colors hover:text-ink">{t("Margin")}{arrow("margin")}</Link>
                 </th>
-                <th className="px-5 py-2.5 text-right font-normal">Stores</th>
+                <th className="px-5 py-2.5 text-right font-normal">{t("Stores")}</th>
               </tr>
             </thead>
             <tbody>
@@ -144,7 +146,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
               {rows.length === 0 && (
                 <tr className="border-t border-edge">
                   <td colSpan={6} className="px-5 py-8 text-center text-[13.5px] text-ink-dim">
-                    Nothing sold matches{q ? ` “${q}”` : " this period"} — try a different search or widen the period.
+                    {t("Nothing sold matches")}{q ? ` “${q}”` : ` ${t("this period")}`} — {t("try a different search or widen the period.")}
                   </td>
                 </tr>
               )}
@@ -153,26 +155,26 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
         </div>
         <div className="flex items-center justify-between border-t border-edge px-5 py-3">
           <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-dimmer">
-            {first.toLocaleString("en-US")}–{last.toLocaleString("en-US")} of {total.toLocaleString("en-US")}
+            {first.toLocaleString("en-US")}–{last.toLocaleString("en-US")} {t("of")} {total.toLocaleString("en-US")}
           </span>
           <div className="flex items-center gap-3 text-[12.5px]">
             {page > 1 ? (
-              <Link href={href({ page: String(page - 1) })} className="text-ink-dim transition-colors hover:text-ink">← Prev</Link>
+              <Link href={href({ page: String(page - 1) })} className="text-ink-dim transition-colors hover:text-ink">← {t("Prev")}</Link>
             ) : (
-              <span className="text-ink-dimmer/50">← Prev</span>
+              <span className="text-ink-dimmer/50">← {t("Prev")}</span>
             )}
             <span className="font-mono text-[11px] text-ink-dimmer">{page} / {pages}</span>
             {page < pages ? (
-              <Link href={href({ page: String(page + 1) })} className="text-ink-dim transition-colors hover:text-ink">Next →</Link>
+              <Link href={href({ page: String(page + 1) })} className="text-ink-dim transition-colors hover:text-ink">{t("Next")} →</Link>
             ) : (
-              <span className="text-ink-dimmer/50">Next →</span>
+              <span className="text-ink-dimmer/50">{t("Next")} →</span>
             )}
           </div>
         </div>
       </Card>
 
       <p className="text-[12.5px] leading-[1.5] text-ink-dimmer">
-        Products that never sold in the period don’t appear — FranPOS doesn’t expose the full catalog yet (vendor request open). Margin uses the item cost FranPOS records at sale time.
+        {t("Products that never sold in the period don’t appear — FranPOS doesn’t expose the full catalog yet (vendor request open). Margin uses the item cost FranPOS records at sale time.")}
       </p>
     </div>
   );

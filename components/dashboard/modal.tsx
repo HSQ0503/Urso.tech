@@ -6,6 +6,7 @@
 
 import { useEffect, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { useT } from "@/components/dashboard/locale-provider";
 
 export function Modal({
   open,
@@ -24,6 +25,7 @@ export function Modal({
   footer?: ReactNode;
   maxWidth?: number;
 }) {
+  const t = useT();
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -42,7 +44,7 @@ export function Modal({
 
   return createPortal(
     <div className="theme-scope fixed inset-0 z-[70] flex items-end justify-center sm:items-center" role="dialog" aria-modal="true">
-      <button aria-label="Close" className="absolute inset-0 cursor-default bg-black/70 backdrop-blur-sm" onClick={onClose} />
+      <button aria-label={t("Close")} className="absolute inset-0 cursor-default bg-black/70 backdrop-blur-sm" onClick={onClose} />
       <div
         className="no-scrollbar animate-stage-in relative z-10 max-h-[88vh] w-full overflow-y-auto rounded-t-2xl border border-edge bg-surface shadow-[0_24px_64px_-24px_rgba(0,0,0,0.85)] sm:rounded-2xl"
         style={{ maxWidth }}
@@ -59,7 +61,7 @@ export function Modal({
           </div>
           <button
             onClick={onClose}
-            aria-label="Close"
+            aria-label={t("Close")}
             className="grid size-7 shrink-0 place-items-center rounded-lg border border-edge text-ink-dim transition-colors hover:border-edge-strong hover:text-ink"
           >
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>

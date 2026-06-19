@@ -28,6 +28,7 @@ import {
 } from "recharts";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "./chart";
 import type { FunnelStep } from "./data";
+import { useT } from "@/components/dashboard/locale-provider";
 
 const ORANGE = "#fe5100";
 const MUTED = "var(--color-series)";
@@ -114,11 +115,12 @@ export function AreaChart({
   color?: string;
   height?: number;
 }) {
+  const t = useT();
   const fmt = valueFmt ?? formatFor(format);
   const axis = valueFmt ?? axisFor(format);
   const gid = "rev-" + useId().replace(/:/g, "");
   const chartData = data.map((v, i) => ({ label: labels[i], value: v }));
-  const config = { value: { label: "Revenue", color } } satisfies ChartConfig;
+  const config = { value: { label: t("Revenue"), color } } satisfies ChartConfig;
   return (
     <ChartContainer config={config} style={{ height }}>
       <RAreaChart data={chartData} margin={{ left: 4, right: 10, top: 8, bottom: 0 }}>
@@ -152,10 +154,11 @@ export function CallsBars({
   color?: string;
   height?: number;
 }) {
+  const t = useT();
   const chartData = labels.map((l, i) => ({ label: l, answered: total[i] - missed[i], missed: missed[i] }));
   const config = {
-    answered: { label: "Answered", color: "var(--color-series)" },
-    missed: { label: "Missed", color },
+    answered: { label: t("Answered"), color: "var(--color-series)" },
+    missed: { label: t("Missed"), color },
   } satisfies ChartConfig;
   return (
     <ChartContainer config={config} style={{ height }}>
@@ -185,10 +188,11 @@ export function TrafficChart({
   color?: string;
   height?: number;
 }) {
+  const t = useT();
   const chartData = labels.map((l, i) => ({ label: l, visits: visits[i], bookings: bookings[i] }));
   const config = {
-    visits: { label: "Visits", color: "var(--color-series)" },
-    bookings: { label: "New bookings", color },
+    visits: { label: t("Visits"), color: "var(--color-series)" },
+    bookings: { label: t("New bookings"), color },
   } satisfies ChartConfig;
   return (
     <ChartContainer config={config} style={{ height }}>
@@ -219,10 +223,11 @@ export function CallsChart({
   closeHour: number;
   height?: number;
 }) {
+  const t = useT();
   const data = hourly.map((v, i) => ({ hour: startHour + i, answered: v - missedHourly[i], missed: missedHourly[i] }));
   const config = {
-    answered: { label: "Answered", color: "var(--color-series)" },
-    missed: { label: "Missed", color: ORANGE },
+    answered: { label: t("Answered"), color: "var(--color-series)" },
+    missed: { label: t("Missed"), color: ORANGE },
   } satisfies ChartConfig;
   return (
     <ChartContainer config={config} style={{ height }}>
@@ -241,10 +246,11 @@ export function CallsChart({
 
 // ---- Grooming vs retail stacked area ---------------------------------------
 export function StackedArea({ data }: { data: { m: string; grooming: number; retail: number }[] }) {
+  const t = useT();
   const gid = "mix-" + useId().replace(/:/g, "");
   const config = {
-    grooming: { label: "Grooming", color: ORANGE },
-    retail: { label: "Retail", color: MUTED },
+    grooming: { label: t("Grooming"), color: ORANGE },
+    retail: { label: t("Retail"), color: MUTED },
   } satisfies ChartConfig;
   return (
     <ChartContainer config={config} style={{ height: 150 }}>
@@ -340,9 +346,10 @@ export function Donut({ segments }: { segments: { label: string; value: number; 
 
 // ---- Cohort retention curve ------------------------------------------------
 export function CohortCurve({ data, label = "months since first visit" }: { data: number[]; label?: string }) {
+  const t = useT();
   const gid = "co-" + useId().replace(/:/g, "");
   const chartData = data.map((v, i) => ({ x: i, value: v }));
-  const config = { value: { label: "Still active", color: ORANGE } } satisfies ChartConfig;
+  const config = { value: { label: t("Still active"), color: ORANGE } } satisfies ChartConfig;
   return (
     <div>
       <ChartContainer config={config} style={{ height: 120 }}>
@@ -356,19 +363,20 @@ export function CohortCurve({ data, label = "months since first visit" }: { data
           <CartesianGrid vertical={false} />
           <XAxis dataKey="x" tickLine={false} axisLine={false} tickMargin={6} />
           <YAxis tickLine={false} axisLine={false} width={28} domain={[0, 100]} tickFormatter={(v) => `${v}%`} />
-          <ChartTooltip content={<ChartTooltipContent labelFormatter={(x) => `Month ${x}`} valueFormatter={(v) => `${v}%`} />} />
+          <ChartTooltip content={<ChartTooltipContent labelFormatter={(x) => t("Month {x}", { x: String(x) })} valueFormatter={(v) => `${v}%`} />} />
           <Area dataKey="value" type="linear" stroke="var(--color-value)" strokeWidth={1.75} fill={`url(#${gid})`} dot={false} />
         </RAreaChart>
       </ChartContainer>
-      <div className="mt-1.5 font-mono text-[10px] uppercase tracking-[0.1em] text-ink-dimmer">{label}</div>
+      <div className="mt-1.5 font-mono text-[10px] uppercase tracking-[0.1em] text-ink-dimmer">{t(label)}</div>
     </div>
   );
 }
 
 // ---- Rate trend (monthly % line — e.g. return rate over the trailing year) --
 export function RateTrend({ data, seriesLabel = "Return rate" }: { data: { label: string; value: number }[]; seriesLabel?: string }) {
+  const t = useT();
   const gid = "rt-" + useId().replace(/:/g, "");
-  const config = { value: { label: seriesLabel, color: ORANGE } } satisfies ChartConfig;
+  const config = { value: { label: t(seriesLabel), color: ORANGE } } satisfies ChartConfig;
   return (
     <ChartContainer config={config} style={{ height: 150 }}>
       <RAreaChart data={data} margin={{ left: 0, right: 6, top: 8, bottom: 0 }}>
@@ -390,6 +398,7 @@ export function RateTrend({ data, seriesLabel = "Return rate" }: { data: { label
 
 // ---- Conversion funnel (stage drop-off) ------------------------------------
 export function ConversionFunnel({ steps }: { steps: FunnelStep[] }) {
+  const t = useT();
   const max = steps[0]?.value || 1;
   return (
     <div className="space-y-3">
@@ -399,7 +408,7 @@ export function ConversionFunnel({ steps }: { steps: FunnelStep[] }) {
             <span className="text-ink-dim">{s.stage}</span>
             <span className="font-mono text-ink">
               {s.value.toLocaleString()}
-              <span className="ml-1.5 text-ink-dimmer">{(s.pct * 100).toLocaleString("en-US", { maximumFractionDigits: 1 })}% of top</span>
+              <span className="ml-1.5 text-ink-dimmer">{(s.pct * 100).toLocaleString("en-US", { maximumFractionDigits: 1 })}% {t("of top")}</span>
             </span>
           </div>
           <div className="h-8 w-full overflow-hidden rounded-none bg-raise">
@@ -413,7 +422,7 @@ export function ConversionFunnel({ steps }: { steps: FunnelStep[] }) {
               className="mt-1 text-right font-mono text-[10px] uppercase tracking-[0.1em]"
               style={{ color: s.leak ? ORANGE : "var(--color-ink-dimmer)" }}
             >
-              {(s.stepConv * 100).toLocaleString("en-US", { maximumFractionDigits: 1 })}% continued{s.leak ? " · leak" : ""}
+              {(s.stepConv * 100).toLocaleString("en-US", { maximumFractionDigits: 1 })}% {t("continued")}{s.leak ? ` · ${t("leak")}` : ""}
             </div>
           )}
         </div>
@@ -463,8 +472,9 @@ export function BarRanking({
   height?: number;
   valueLabel?: string;
 }) {
+  const t = useT();
   const fmt = valueFmt ?? formatFor(format);
-  const config = { value: { label: valueLabel, color } } satisfies ChartConfig;
+  const config = { value: { label: t(valueLabel), color } } satisfies ChartConfig;
   const h = height ?? Math.max(120, data.length * 40);
   return (
     <ChartContainer config={config} style={{ height: h }}>
@@ -645,9 +655,10 @@ export function CompareDiverging({
   format?: ValueFormat;
   height?: number;
 }) {
+  const t = useT();
   const fmt = formatFor(format);
   const signed = (n: number) => `${n >= 0 ? "+" : "−"}${fmt(Math.abs(n))}`;
-  const config = { delta: { label: "Change", color: ORANGE } } satisfies ChartConfig;
+  const config = { delta: { label: t("Change"), color: ORANGE } } satisfies ChartConfig;
   const h = height ?? Math.max(150, data.length * 40);
   return (
     <ChartContainer config={config} style={{ height: h }}>
@@ -691,6 +702,7 @@ export function ComparePace({
   format?: ValueFormat;
   height?: number;
 }) {
+  const t = useT();
   const fmt = formatFor(format);
   const axis = axisFor(format);
   const all = [a, b, ...more];
@@ -719,7 +731,7 @@ export function ComparePace({
         <YAxis tickLine={false} axisLine={false} width={44} tickFormatter={axis} />
         <ChartTooltip
           cursor={{ strokeDasharray: "3 3" }}
-          content={<ChartTooltipContent labelFormatter={(l) => `Day ${l}`} valueFormatter={(v) => fmt(v)} />}
+          content={<ChartTooltipContent labelFormatter={(l) => t("Day {l}", { l: String(l) })} valueFormatter={(v) => fmt(v)} />}
         />
         {more.map((_, i) => (
           <Line key={i} dataKey={`m${i}`} type="linear" stroke={`var(--color-m${i})`} strokeWidth={1.5} strokeDasharray="3 4" dot={false} />
@@ -743,7 +755,8 @@ export function HistogramBars({
   color?: string;
   seriesLabel?: string;
 }) {
-  const config = { value: { label: seriesLabel, color } } satisfies ChartConfig;
+  const t = useT();
+  const config = { value: { label: t(seriesLabel), color } } satisfies ChartConfig;
   return (
     <ChartContainer config={config} style={{ height }}>
       <BarChart data={data} margin={{ left: 0, right: 8, top: 20, bottom: 0 }} barCategoryGap="22%">

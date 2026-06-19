@@ -24,9 +24,11 @@ import {
 } from "@/components/dashboard/ui";
 import { AskAi } from "@/components/dashboard/ask-ai";
 import { ChartInfo } from "@/components/dashboard/chart-info";
+import { getI18n } from "@/lib/i18n.server";
 
 export default async function RevenueMapPage({ searchParams }: { searchParams: Promise<{ store?: string; month?: string }> }) {
   const sp = await searchParams;
+  const { t } = await getI18n();
   const scope = parseScope(sp.store);
   const month = parseMonth(sp.month);
   const period = month === "all" ? "Last 12 months" : monthLabel(month);
@@ -42,70 +44,70 @@ export default async function RevenueMapPage({ searchParams }: { searchParams: P
   return (
     <div className="animate-stage-in space-y-3">
       <PageHeader
-        eyebrow={`Revenue map · ${scopeLabel(scope)} · ${period}`}
-        title="Where the money comes from"
+        eyebrow={`${t("Revenue map")} · ${scopeLabel(scope)} · ${period}`}
+        title={t("Where the money comes from")}
       />
 
       {/* Headline strip */}
       <section className="grid grid-cols-2 gap-px overflow-hidden rounded-none border border-edge bg-edge md:grid-cols-4">
-        <Kpi label="Total revenue" value={fmtMoney(m.revenue)} />
-        <Kpi label="Avg ticket" value={fmtMoney(m.avgTicket)} />
-        <Kpi label="Buy both" value={pct(xs.both)} />
-        <Kpi label="Repeat revenue" value={pct(repeatShare)} />
+        <Kpi label={t("Total revenue")} value={fmtMoney(m.revenue)} />
+        <Kpi label={t("Avg ticket")} value={fmtMoney(m.avgTicket)} />
+        <Kpi label={t("Buy both")} value={pct(xs.both)} />
+        <Kpi label={t("Repeat revenue")} value={pct(repeatShare)} />
       </section>
 
       {/* Location + line */}
       <section className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <Card>
           <div className="flex items-center gap-1.5">
-            <Micro>By location</Micro>
+            <Micro>{t("By location")}</Micro>
             <AskAi
-              topic="Revenue by store"
+              topic={t("Revenue by store")}
               topicId="revenueByLocation"
-              suggestions={["Why is one store ahead on revenue?", "Where is the biggest revenue gap?"]}
+              suggestions={[t("Why is one store ahead on revenue?"), t("Where is the biggest revenue gap?")]}
             />
             <ChartInfo id="revenueByLocation" />
           </div>
-          <h2 className="mb-4 mt-1.5 text-[17px] font-medium tracking-[-0.01em]">Revenue by store</h2>
-          <BarRanking data={byLocation} format="moneyK" labelWidth={104} valueLabel="Revenue" />
+          <h2 className="mb-4 mt-1.5 text-[17px] font-medium tracking-[-0.01em]">{t("Revenue by store")}</h2>
+          <BarRanking data={byLocation} format="moneyK" labelWidth={104} valueLabel={t("Revenue")} />
         </Card>
         <Card className="flex flex-col gap-6">
           <div>
             <div className="flex items-center gap-1.5">
-              <Micro>By line · customer overlap</Micro>
+              <Micro>{t("By line · customer overlap")}</Micro>
               <AskAi
-                topic="Grooming vs retail overlap"
+                topic={t("Grooming vs retail overlap")}
                 topicId="crossSellMix"
-                suggestions={["How do I move grooming-only into both?", "What's the cross-sell wall costing me?"]}
+                suggestions={[t("How do I move grooming-only into both?"), t("What's the cross-sell wall costing me?")]}
               />
               <ChartInfo id="crossSellMix" />
             </div>
-            <h2 className="mt-1.5 text-[17px] font-medium tracking-[-0.01em]">Grooming vs retail</h2>
+            <h2 className="mt-1.5 text-[17px] font-medium tracking-[-0.01em]">{t("Grooming vs retail")}</h2>
             <div className="mt-4">
               <StackedShareBar
                 segments={[
-                  { label: "Both", value: xs.both, color: "#fe5100" },
-                  { label: "Grooming only", value: xs.groomingOnly, color: "var(--color-series)" },
-                  { label: "Retail only", value: xs.retailOnly, color: "var(--color-series-soft)" },
+                  { label: t("Both"), value: xs.both, color: "#fe5100" },
+                  { label: t("Grooming only"), value: xs.groomingOnly, color: "var(--color-series)" },
+                  { label: t("Retail only"), value: xs.retailOnly, color: "var(--color-series-soft)" },
                 ]}
               />
             </div>
           </div>
           <div className="border-t border-edge pt-5">
             <div className="mb-3 flex items-center gap-1.5">
-              <Micro>New vs repeat revenue</Micro>
+              <Micro>{t("New vs repeat revenue")}</Micro>
               <AskAi
-                topic="New vs repeat revenue"
+                topic={t("New vs repeat revenue")}
                 topicId="newVsRepeat"
-                suggestions={["Is growth from new customers or repeats?", "How much revenue is walk-in?"]}
+                suggestions={[t("Is growth from new customers or repeats?"), t("How much revenue is walk-in?")]}
               />
               <ChartInfo id="newVsRepeat" />
             </div>
             <StackedShareBar
               segments={[
-                { label: "Repeat customers", value: nvr.repeat, color: "#fe5100" },
-                { label: "New customers", value: nvr.fresh, color: "var(--color-series)" },
-                { label: "Walk-in (no profile)", value: nvr.walkIn, color: "var(--color-series-soft)" },
+                { label: t("Repeat customers"), value: nvr.repeat, color: "#fe5100" },
+                { label: t("New customers"), value: nvr.fresh, color: "var(--color-series)" },
+                { label: t("Walk-in (no profile)"), value: nvr.walkIn, color: "var(--color-series-soft)" },
               ]}
             />
           </div>
@@ -115,14 +117,14 @@ export default async function RevenueMapPage({ searchParams }: { searchParams: P
       {/* Service + groomer */}
       <section className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <Card>
-          <Micro>By service</Micro>
-          <h2 className="mb-3 mt-1.5 text-[17px] font-medium tracking-[-0.01em]">Top revenue lines</h2>
+          <Micro>{t("By service")}</Micro>
+          <h2 className="mb-3 mt-1.5 text-[17px] font-medium tracking-[-0.01em]">{t("Top revenue lines")}</h2>
           <div className="divide-y divide-edge">
             {byService.map((s) => (
               <div key={s.name} className="flex items-center justify-between py-2.5">
                 <div className="flex items-center gap-2.5">
                   <span className="text-[13.5px] text-ink">{s.name}</span>
-                  <Tag tone={s.line === "Grooming" ? "orange" : "muted"}>{s.line}</Tag>
+                  <Tag tone={s.line === "Grooming" ? "orange" : "muted"}>{t(s.line)}</Tag>
                 </div>
                 <span className="font-mono text-[13px] text-ink-dim">{fmtMoney(s.value)}</span>
               </div>
@@ -131,21 +133,21 @@ export default async function RevenueMapPage({ searchParams }: { searchParams: P
         </Card>
         <Card>
           <div className="flex items-center gap-1.5">
-            <Micro>By groomer</Micro>
+            <Micro>{t("By groomer")}</Micro>
             <AskAi
-              topic="Service revenue by groomer"
+              topic={t("Service revenue by groomer")}
               topicId="revenueByGroomer"
-              suggestions={["Who are the top groomers by revenue?", "Which groomers have capacity to grow?"]}
+              suggestions={[t("Who are the top groomers by revenue?"), t("Which groomers have capacity to grow?")]}
             />
             <ChartInfo id="revenueByGroomer" />
           </div>
-          <h2 className="mb-4 mt-1.5 text-[17px] font-medium tracking-[-0.01em]">Service revenue performed</h2>
-          <BarRanking data={byGroomer} format="moneyK" labelWidth={130} valueLabel="Service revenue" />
+          <h2 className="mb-4 mt-1.5 text-[17px] font-medium tracking-[-0.01em]">{t("Service revenue performed")}</h2>
+          <BarRanking data={byGroomer} format="moneyK" labelWidth={130} valueLabel={t("Service revenue")} />
         </Card>
       </section>
 
       <p className="mt-3 text-[13px] leading-[1.6] text-ink-dim">
-        Retail attaches to grooming visits, so grooming share and retail attach move together. The clearest revenue lever is converting grooming-only customers into retail buyers at checkout.
+        {t("Retail attaches to grooming visits, so grooming share and retail attach move together. The clearest revenue lever is converting grooming-only customers into retail buyers at checkout.")}
       </p>
     </div>
   );

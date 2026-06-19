@@ -20,6 +20,7 @@ import {
   type CompareMode,
   type ComparePreset,
 } from "./data";
+import { useT } from "@/components/dashboard/locale-provider";
 
 const MAX_BASELINES = 3;
 
@@ -54,6 +55,7 @@ function fmtRange(r: Range): string {
 }
 
 export function CompareControls({ mode, preset, metric, a, bs, minDate, maxDate }: Props) {
+  const t = useT();
   const router = useRouter();
   const sp = useSearchParams();
   const [draftA, setDraftA] = useState(a);
@@ -104,27 +106,27 @@ export function CompareControls({ mode, preset, metric, a, bs, minDate, maxDate 
   const dA = daysIn(a);
   const dB = daysIn(bs[0]);
   const extras = bs.length - 1;
-  const lengthNote = dA === dB ? `${dA} ${dA === 1 ? "day" : "days"} each` : `${dA} vs ${dB} days`;
+  const lengthNote = dA === dB ? `${dA} ${dA === 1 ? t("day") : t("days")} ${t("each")}` : `${dA} ${t("vs")} ${dB} ${t("days")}`;
 
   return (
     <div className="space-y-5 rounded-none border border-edge bg-panel p-5">
       {/* Step 1 — what to compare */}
       <div className="space-y-3">
-        <StepLabel n="1" title="What to compare" />
-        <Row label="Break down">
+        <StepLabel n="1" title={t("What to compare")} />
+        <Row label={t("Break down")}>
           {COMPARE_MODES.map((m) => (
             <Chip key={m.value} active={mode === m.value} onClick={() => push({ mode: m.value, metric: null })}>
-              {m.label}
+              {t(m.label)}
             </Chip>
           ))}
         </Row>
-        <Row label="Measure">
+        <Row label={t("Measure")}>
           <Chip active={metric === "all"} onClick={() => push({ metric: "all" })}>
-            All metrics
+            {t("All metrics")}
           </Chip>
           {COMPARE_METRICS[mode].map((m) => (
             <Chip key={m.key} active={metric === m.key} onClick={() => push({ metric: m.key })}>
-              {m.label}
+              {t(m.label)}
             </Chip>
           ))}
         </Row>
@@ -134,15 +136,15 @@ export function CompareControls({ mode, preset, metric, a, bs, minDate, maxDate 
 
       {/* Step 2 — over which periods */}
       <div className="space-y-3">
-        <StepLabel n="2" title="Over which periods" />
-        <Row label="Compare">
+        <StepLabel n="2" title={t("Over which periods")} />
+        <Row label={t("Compare")}>
           {COMPARE_PRESETS.map((p) => (
             <Chip
               key={p.value}
               active={preset === p.value}
               onClick={() => (p.value === "custom" ? push({ preset: "custom" }) : push({ preset: p.value, a: null, b: null }))}
             >
-              {p.label}
+              {t(p.label)}
             </Chip>
           ))}
         </Row>
@@ -151,36 +153,36 @@ export function CompareControls({ mode, preset, metric, a, bs, minDate, maxDate 
           <div className="space-y-4 border-t border-edge pt-4">
             {/* One click fills the focus period AND a like-for-like baseline. */}
             <div className="space-y-2">
-              <SubLabel>This period — quick pick</SubLabel>
+              <SubLabel>{t("This period — quick pick")}</SubLabel>
               <div className="flex flex-wrap gap-2">
                 {QUICK.map((q) => (
                   <Chip key={q.label} active={eqRange(draftA, q.a)} onClick={() => applyQuick(q.a)}>
-                    {q.label}
+                    {t(q.label)}
                   </Chip>
                 ))}
               </div>
             </div>
 
             <div className="space-y-2">
-              <SubLabel>Compare against</SubLabel>
+              <SubLabel>{t("Compare against")}</SubLabel>
               <div className="flex flex-wrap gap-2">
                 <Chip active={draftBs.length === 1 && eqRange(draftBs[0], prevB)} onClick={() => applyBaseline(prevB)}>
-                  Previous period
+                  {t("Previous period")}
                 </Chip>
                 <Chip active={draftBs.length === 1 && eqRange(draftBs[0], yearB)} onClick={() => applyBaseline(yearB)}>
-                  Same dates, last year
+                  {t("Same dates, last year")}
                 </Chip>
               </div>
             </div>
 
             <div className="space-y-3">
-              <SubLabel>Or set exact dates</SubLabel>
+              <SubLabel>{t("Or set exact dates")}</SubLabel>
               <div className="flex flex-wrap items-end gap-x-6 gap-y-3">
-                <RangeInputs label="This period (A)" value={draftA} onChange={setDraftA} min={minDate} max={maxDate} />
+                <RangeInputs label={t("This period (A)")} value={draftA} onChange={setDraftA} min={minDate} max={maxDate} />
                 {draftBs.map((b, i) => (
                   <div key={i} className="flex items-end gap-2">
                     <RangeInputs
-                      label={i === 0 ? "Compare against (B)" : `And also (${String.fromCharCode(67 + i - 1)})`}
+                      label={i === 0 ? t("Compare against (B)") : `${t("And also")} (${String.fromCharCode(67 + i - 1)})`}
                       value={b}
                       onChange={(r) => setB(i, r)}
                       min={minDate}
@@ -189,7 +191,7 @@ export function CompareControls({ mode, preset, metric, a, bs, minDate, maxDate 
                     {i > 0 && (
                       <button
                         onClick={() => setDraftBs(draftBs.filter((_, j) => j !== i))}
-                        aria-label="Remove this period"
+                        aria-label={t("Remove this period")}
                         className="rounded-sm border border-edge px-2 py-1.5 text-[12px] text-ink-dim transition-colors hover:border-edge-strong hover:text-ink"
                       >
                         ×
@@ -201,9 +203,9 @@ export function CompareControls({ mode, preset, metric, a, bs, minDate, maxDate 
 
               {dirty && (
                 <p className="text-[12px] text-ink-dim">
-                  Will compare <span className="font-medium text-orange">{fmtRange(draftA)}</span> vs{" "}
+                  {t("Will compare")} <span className="font-medium text-orange">{fmtRange(draftA)}</span> {t("vs")}{" "}
                   <span className="font-medium text-ink">{fmtRange(draftBs[0])}</span>
-                  <span className="text-ink-dimmer"> · {daysIn(draftA) === daysIn(draftBs[0]) ? `${daysIn(draftA)} days each` : `${daysIn(draftA)} vs ${daysIn(draftBs[0])} days`}</span>
+                  <span className="text-ink-dimmer"> · {daysIn(draftA) === daysIn(draftBs[0]) ? `${daysIn(draftA)} ${t("days each")}` : `${daysIn(draftA)} ${t("vs")} ${daysIn(draftBs[0])} ${t("days")}`}</span>
                 </p>
               )}
 
@@ -215,14 +217,14 @@ export function CompareControls({ mode, preset, metric, a, bs, minDate, maxDate 
                     dirty ? "cursor-pointer bg-orange text-[#070707] hover:brightness-110" : "cursor-default border border-edge text-ink-dimmer"
                   }`}
                 >
-                  {dirty ? "Apply" : "Applied"}
+                  {dirty ? t("Apply") : t("Applied")}
                 </button>
                 {draftBs.length < MAX_BASELINES && (
                   <button
                     onClick={() => setDraftBs([...draftBs, draftBs[draftBs.length - 1]])}
                     className="cursor-pointer rounded-sm border border-edge px-3 py-2 text-[12.5px] text-ink-dim transition-colors hover:border-edge-strong hover:text-ink"
                   >
-                    + Add another period
+                    + {t("Add another period")}
                   </button>
                 )}
               </div>
@@ -235,11 +237,11 @@ export function CompareControls({ mode, preset, metric, a, bs, minDate, maxDate 
 
       {/* The resolved comparison — stated plainly so it's never left implicit. */}
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-        <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-dimmer">Comparing</span>
+        <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-dimmer">{t("Comparing")}</span>
         <span className="text-[14px] font-medium tracking-[-0.01em] text-orange">{fmtRange(a)}</span>
-        <span className="text-[13px] text-ink-dim">vs</span>
+        <span className="text-[13px] text-ink-dim">{t("vs")}</span>
         <span className="text-[14px] font-medium tracking-[-0.01em] text-ink">{fmtRange(bs[0])}</span>
-        {extras > 0 && <span className="text-[12.5px] text-ink-dim">+ {extras} earlier {extras === 1 ? "period" : "periods"}</span>}
+        {extras > 0 && <span className="text-[12.5px] text-ink-dim">+ {extras} {extras === 1 ? t("earlier period") : t("earlier periods")}</span>}
         <span className="text-ink-dimmer">·</span>
         <span className="text-[12.5px] text-ink-dim">{lengthNote}</span>
       </div>

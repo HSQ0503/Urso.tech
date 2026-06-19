@@ -22,6 +22,7 @@ import { InfoTip } from "@/components/dashboard/info-tip";
 import { AskAi } from "@/components/dashboard/ask-ai";
 import { ChartInfo } from "@/components/dashboard/chart-info";
 import { GROOMER_COL_HELP } from "@/components/dashboard/team-help";
+import { getI18n } from "@/lib/i18n.server";
 
 const GREEN = "var(--color-good)";
 const ORANGE = "#fe5100";
@@ -36,6 +37,7 @@ const statusTone: Record<ActionStatus, "muted" | "orange" | "good" | "warn"> = {
 const shorten = (name: string) => name.replace(" Village", "");
 
 export async function ManagerHome({ store, month, userName, streak }: { store: StoreId; month: MonthValue; userName: string; streak: number }) {
+  const { t } = await getI18n();
   const storeName = scopeLabel(store);
   const period = month === "all" ? "Last 12 months" : monthLabel(month);
   const [focus, scorecard, rebookRank, attachRank, scores, actions, team, watch] = await Promise.all([
@@ -54,56 +56,56 @@ export async function ManagerHome({ store, month, userName, streak }: { store: S
       <WelcomeBanner name={userName} streak={streak} />
 
       <header>
-        <Micro>Store dashboard · {storeName} · {period}</Micro>
+        <Micro>{t("Store dashboard")} · {storeName} · {t(period)}</Micro>
         <h1 className="mt-2.5 text-[clamp(26px,3.6vw,34px)] font-medium tracking-[-0.02em]">{storeName}</h1>
         <p className="mt-2 max-w-[560px] text-[14px] leading-[1.5] text-ink-dim">
-          Welcome back, {userName.split(" ")[0]}. Here is how {storeName} is doing, how it compares to the other stores, and what to do next. Use the month filter in the top bar to change the period.
+          {t("Welcome back,")} {userName.split(" ")[0]}. {t("Here is how")} {storeName} {t("is doing, how it compares to the other stores, and what to do next. Use the month filter in the top bar to change the period.")}
         </p>
       </header>
 
       {/* 1 — Your focus */}
       <ActionItemCard
-        eyebrow="Your focus · what to fix first"
+        eyebrow={t("Your focus · what to fix first")}
         title={focus.title}
         detail={focus.detail}
         metric={focus.metric}
         pending={focus.pending}
         planKey={focus.planKey}
-        cta="Talk to Urso"
+        cta={t("Talk to Urso")}
       />
 
       {/* 2 — Where you stand */}
       <section>
         <div className="mb-4">
-          <Micro>Where you stand</Micro>
-          <h2 className="mt-1.5 text-[18px] font-medium tracking-[-0.01em]">How {storeName} ranks across the four stores</h2>
+          <Micro>{t("Where you stand")}</Micro>
+          <h2 className="mt-1.5 text-[18px] font-medium tracking-[-0.01em]">{t("How")} {storeName} {t("ranks across the four stores")}</h2>
         </div>
         <div className="mb-5">
           <StoreScoreboard rows={scores} highlightId={store} variant="manager" />
         </div>
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-          <RateRankCard title="Return rate" ranking={rebookRank} storeId={store} />
-          <RateRankCard title="Retail attach" ranking={attachRank} storeId={store} />
+          <RateRankCard title={t("Return rate")} ranking={rebookRank} storeId={store} t={t} />
+          <RateRankCard title={t("Retail attach")} ranking={attachRank} storeId={store} t={t} />
         </div>
       </section>
 
       {/* 3 — Your scorecard */}
       <section>
         <div className="mb-4">
-          <Micro>Your scorecard</Micro>
-          <h2 className="mt-1.5 text-[18px] font-medium tracking-[-0.01em]">How you&apos;re doing — and versus the group average</h2>
+          <Micro>{t("Your scorecard")}</Micro>
+          <h2 className="mt-1.5 text-[18px] font-medium tracking-[-0.01em]">{t("How you're doing — and versus the group average")}</h2>
         </div>
         <div className="grid grid-cols-1 gap-px overflow-hidden rounded-none border border-edge bg-edge md:grid-cols-3">
           {scorecard.map((s) => (
             <div key={s.label} className="bg-cell p-4">
               <div className="flex items-center justify-between gap-2">
-                <Micro>{s.label}</Micro>
+                <Micro>{t(s.label)}</Micro>
                 {s.delta != null && <Delta value={s.delta} invert={s.invert} />}
               </div>
               <div className="mt-2.5 text-[24px] font-bold leading-none tracking-[-0.02em]">{s.value}</div>
               <div className="mt-2.5 flex items-center justify-between gap-2 text-[11px]">
-                <span className="font-mono text-ink-dimmer">Group {s.avgLabel}</span>
-                <span className="font-mono" style={{ color: s.beatsAvg ? GREEN : ORANGE }}>{s.beatsAvg ? "Ahead" : "Behind"}</span>
+                <span className="font-mono text-ink-dimmer">{t("Group")} {s.avgLabel}</span>
+                <span className="font-mono" style={{ color: s.beatsAvg ? GREEN : ORANGE }}>{s.beatsAvg ? t("Ahead") : t("Behind")}</span>
               </div>
             </div>
           ))}
@@ -113,8 +115,8 @@ export async function ManagerHome({ store, month, userName, streak }: { store: S
       {/* 4 — Your action queue */}
       <section>
         <div className="mb-4">
-          <Micro>Your action queue</Micro>
-          <h2 className="mt-1.5 text-[18px] font-medium tracking-[-0.01em]">The dashboard is working on these</h2>
+          <Micro>{t("Your action queue")}</Micro>
+          <h2 className="mt-1.5 text-[18px] font-medium tracking-[-0.01em]">{t("The dashboard is working on these")}</h2>
         </div>
         <div className="space-y-3">
           {actions.map((a) => (
@@ -122,12 +124,12 @@ export async function ManagerHome({ store, month, userName, streak }: { store: S
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                    <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-dimmer">{a.agent} agent</span>
-                    {a.pending && <Tag tone="muted">Pending data</Tag>}
+                    <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-dimmer">{a.agent} {t("agent")}</span>
+                    {a.pending && <Tag tone="muted">{t("Pending data")}</Tag>}
                   </div>
                   <h3 className="mt-2 text-[15px] font-medium tracking-[-0.01em] text-ink">{a.title}</h3>
                 </div>
-                <Tag tone={statusTone[a.status]}>{actionStatusLabel[a.status]}</Tag>
+                <Tag tone={statusTone[a.status]}>{t(actionStatusLabel[a.status])}</Tag>
               </div>
               <p className="text-[13px] leading-[1.55] text-ink-dim">{a.detail}</p>
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -147,12 +149,12 @@ export async function ManagerHome({ store, month, userName, streak }: { store: S
       {/* 5 — Your team */}
       <section>
         <div className="mb-4">
-          <Micro>Your team</Micro>
+          <Micro>{t("Your team")}</Micro>
           <div className="mt-1.5 flex items-center gap-1.5">
-            <h2 className="text-[18px] font-medium tracking-[-0.01em]">Groomer scorecards</h2>
+            <h2 className="text-[18px] font-medium tracking-[-0.01em]">{t("Groomer scorecards")}</h2>
             <InfoTip text={GROOMER_COL_HELP} />
           </div>
-          <p className="mt-1.5 max-w-[560px] text-[13px] leading-[1.5] text-ink-dim">A coaching view — where each groomer is strong and where a conversation would help. Not a ranking against other stores.</p>
+          <p className="mt-1.5 max-w-[560px] text-[13px] leading-[1.5] text-ink-dim">{t("A coaching view — where each groomer is strong and where a conversation would help. Not a ranking against other stores.")}</p>
         </div>
         <Card pad={false}>
           <div className="overflow-x-auto">
@@ -160,7 +162,7 @@ export async function ManagerHome({ store, month, userName, streak }: { store: S
               <thead>
                 <tr className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-dimmer">
                   {["Groomer", "Revenue", "Avg ticket", "Return", "Retail attach"].map((h, i) => (
-                    <th key={h} className={`px-5 py-3 font-normal ${i === 0 ? "text-left" : "text-right"}`}>{h}</th>
+                    <th key={h} className={`px-5 py-3 font-normal ${i === 0 ? "text-left" : "text-right"}`}>{t(h)}</th>
                   ))}
                 </tr>
               </thead>
@@ -170,8 +172,8 @@ export async function ManagerHome({ store, month, userName, streak }: { store: S
                     <td className="px-5 py-3.5">
                       <div className="flex items-center gap-2">
                         <span className="text-ink">{g.name}</span>
-                        {g.flag === "star" && <Tag tone="good">Top</Tag>}
-                        {g.flag === "coach" && <Tag tone="orange">Coach</Tag>}
+                        {g.flag === "star" && <Tag tone="good">{t("Top")}</Tag>}
+                        {g.flag === "coach" && <Tag tone="orange">{t("Coach")}</Tag>}
                       </div>
                     </td>
                     <td className="px-5 py-3.5 text-right font-mono text-ink">{fmtMoney(g.revenue)}</td>
@@ -189,12 +191,12 @@ export async function ManagerHome({ store, month, userName, streak }: { store: S
       {/* 6 — Customers needing attention */}
       <section>
         <div className="mb-4">
-          <Micro>Customers needing attention</Micro>
-          <h2 className="mt-1.5 text-[18px] font-medium tracking-[-0.01em]">Reach out before they lapse</h2>
+          <Micro>{t("Customers needing attention")}</Micro>
+          <h2 className="mt-1.5 text-[18px] font-medium tracking-[-0.01em]">{t("Reach out before they lapse")}</h2>
         </div>
         {watch.length === 0 ? (
           <Card>
-            <p className="text-[13.5px] leading-[1.6] text-ink-dim">No customers are flagged right now — your retention is on track. Keep prompting rebooking at checkout to stay ahead.</p>
+            <p className="text-[13.5px] leading-[1.6] text-ink-dim">{t("No customers are flagged right now — your retention is on track. Keep prompting rebooking at checkout to stay ahead.")}</p>
           </Card>
         ) : (
           <Card pad={false}>
@@ -203,7 +205,7 @@ export async function ManagerHome({ store, month, userName, streak }: { store: S
                 <thead>
                   <tr className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-dimmer">
                     {["Customer", "Status", "Last visit", "Suggested action"].map((h, i) => (
-                      <th key={h} className={`px-5 py-3 font-normal ${i === 2 ? "text-right" : "text-left"}`}>{h}</th>
+                      <th key={h} className={`px-5 py-3 font-normal ${i === 2 ? "text-right" : "text-left"}`}>{t(h)}</th>
                     ))}
                   </tr>
                 </thead>
@@ -215,10 +217,10 @@ export async function ManagerHome({ store, month, userName, streak }: { store: S
                         <Micro className="mt-0.5">{c.pet}</Micro>
                       </td>
                       <td className="px-5 py-3.5">
-                        <Tag tone="orange">{c.segment}</Tag>
+                        <Tag tone="orange">{t(c.segment)}</Tag>
                       </td>
-                      <td className="px-5 py-3.5 text-right font-mono" style={{ color: c.lastVisit > 60 ? ORANGE : "var(--color-ink-dim)" }}>{c.lastVisit}d ago</td>
-                      <td className="px-5 py-3.5 text-ink-dim">{c.next}</td>
+                      <td className="px-5 py-3.5 text-right font-mono" style={{ color: c.lastVisit > 60 ? ORANGE : "var(--color-ink-dim)" }}>{c.lastVisit}{t("d ago")}</td>
+                      <td className="px-5 py-3.5 text-ink-dim">{t(c.next)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -231,7 +233,7 @@ export async function ManagerHome({ store, month, userName, streak }: { store: S
   );
 }
 
-function RateRankCard({ title, ranking, storeId }: { title: string; ranking: { id: string; name: string; value: number }[]; storeId: string }) {
+function RateRankCard({ title, ranking, storeId, t }: { title: string; ranking: { id: string; name: string; value: number }[]; storeId: string; t: (s: string) => string }) {
   const pos = ranking.findIndex((r) => r.id === storeId) + 1;
   const leader = ranking[0];
   const mine = ranking.find((r) => r.id === storeId)!;
@@ -244,15 +246,15 @@ function RateRankCard({ title, ranking, storeId }: { title: string; ranking: { i
         <div className="flex items-center gap-1.5">
           <Micro>{title}</Micro>
           <AskAi
-            topic={`${title} — your store vs the others`}
+            topic={`${title} — ${t("your store vs the others")}`}
             topicId="managerRank"
-            suggestions={["Where do I stand on this?", "How do I close the gap to the leader?"]}
+            suggestions={[t("Where do I stand on this?"), t("How do I close the gap to the leader?")]}
           />
           <ChartInfo id="managerRank" />
         </div>
         <span className="font-mono text-[11px] text-ink-dim">
-          #{pos} of {ranking.length}
-          {pos > 1 ? ` · ${gap} pts behind ${shorten(leader.name)}` : " · leading"}
+          #{pos} {t("of")} {ranking.length}
+          {pos > 1 ? ` · ${gap} ${t("pts behind")} ${shorten(leader.name)}` : ` · ${t("leading")}`}
         </span>
       </div>
       <BarRanking data={data} format="pct" labelWidth={96} valueLabel={title} />

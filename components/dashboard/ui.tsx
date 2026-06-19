@@ -2,8 +2,14 @@
 // Charts now live in ./charts (Recharts) and are re-exported below.
 
 import type { ReactNode } from "react";
+import type { T } from "@/lib/i18n";
 
 const ORANGE = "#fe5100";
+
+// WelcomeBanner/StreakPill render inside server components but ui.tsx is also
+// pulled into client bundles, so neither getI18n nor useT is safe here. The
+// translator is passed down instead; it falls back to identity (English).
+const identity: T = (key) => key;
 
 // Recharts-backed charts (client components) — re-exported so pages keep
 // importing everything from "@/components/dashboard/ui".
@@ -205,30 +211,30 @@ export function Segmented<T extends string>({ options, value, onChange }: { opti
 
 // Consecutive-days-active counter — shown in the welcome row after sign-in.
 // Hidden until login history is actually tracked (real auth sends streak: 0).
-export function StreakPill({ streak }: { streak: number }) {
+export function StreakPill({ streak, t = identity }: { streak: number; t?: T }) {
   if (streak <= 0) return null;
   return (
     <span
       className="inline-flex items-center gap-1.5 rounded-full border border-[rgba(254,81,0,0.35)] bg-orange-soft px-2.5 py-1 font-mono text-[10.5px] uppercase tracking-[0.1em] text-orange"
-      title={`${streak} consecutive days active`}
+      title={t("{streak} consecutive days active", { streak })}
     >
       <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
         <path d="M12 2c1 3-1 4.6-1 6.6 0 1.4 1 2.3 2 2.3 1.6 0 2.2-1.7 2-3.4 2 1.7 3 4 3 6.5a6 6 0 1 1-12 0c0-2.7 1.7-4.8 3-6 .5 1.2 1.4 1.9 2.3 1.4C9 8 8.5 5 12 2Z" />
       </svg>
-      {streak}-day streak
+      {t("{streak}-day streak", { streak })}
     </span>
   );
 }
 
 // "Welcome back" row with the streak counter — the first thing after sign-in.
-export function WelcomeBanner({ name, streak }: { name: string; streak: number }) {
+export function WelcomeBanner({ name, streak, t = identity }: { name: string; streak: number; t?: T }) {
   const first = name.split(" ")[0];
   return (
     <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
       <div className="text-[13.5px] text-ink-dim">
-        Welcome back, <span className="font-medium text-ink">{first}</span>.
+        {t("Welcome back")}, <span className="font-medium text-ink">{first}</span>.
       </div>
-      <StreakPill streak={streak} />
+      <StreakPill streak={streak} t={t} />
     </div>
   );
 }

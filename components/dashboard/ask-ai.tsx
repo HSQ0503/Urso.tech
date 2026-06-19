@@ -11,6 +11,7 @@ import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import { Modal } from "./modal";
 import { RichText } from "./rich-text";
+import { useT } from "@/components/dashboard/locale-provider";
 
 function Spark() {
   return (
@@ -41,6 +42,7 @@ export function AskAi({
   label?: string;
   comparison?: { aLabel: string; aStart: string; aEnd: string; bLabel: string; bStart: string; bEnd: string; metric: string };
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
   const params = useSearchParams();
@@ -79,8 +81,8 @@ export function AskAi({
     <>
       <button
         onClick={() => setOpen(true)}
-        title={label}
-        aria-label={label}
+        title={t(label)}
+        aria-label={t(label)}
         className="inline-grid size-6 shrink-0 cursor-pointer place-items-center rounded-full border border-[rgba(254,81,0,0.35)] bg-orange-soft text-orange transition-colors hover:border-[rgba(254,81,0,0.55)] hover:bg-[rgba(254,81,0,0.18)]"
       >
         <Spark />
@@ -92,7 +94,7 @@ export function AskAi({
             {messages.length === 0 && (
               <div className="space-y-3">
                 <p className="text-[13.5px] leading-[1.6] text-ink-dim">
-                  Ask anything about this data — what changed, why, and what to do about it. Answers come live from your numbers.
+                  {t("Ask anything about this data — what changed, why, and what to do about it. Answers come live from your numbers.")}
                 </p>
                 <div className="flex flex-wrap gap-2">
                   {suggestions.map((s) => (
@@ -101,7 +103,7 @@ export function AskAi({
                       onClick={() => ask(s)}
                       className="cursor-pointer rounded-full border border-edge px-3 py-1.5 text-[12.5px] text-ink-dim transition-colors hover:border-[rgba(254,81,0,0.45)] hover:text-ink"
                     >
-                      {s}
+                      {t(s)}
                     </button>
                   ))}
                 </div>
@@ -118,7 +120,7 @@ export function AskAi({
                   <div className="space-y-2">
                     {m.parts.some((p) => p.type.startsWith("tool-")) && (
                       <div className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-ink-dimmer">
-                        <Spark /> checked the numbers
+                        <Spark /> {t("checked the numbers")}
                       </div>
                     )}
                     <RichText
@@ -133,14 +135,14 @@ export function AskAi({
             {status === "submitted" && (
               <div className="flex items-center gap-2 text-[12.5px] text-ink-dimmer">
                 <span className="inline-block size-1.5 animate-pulse rounded-full bg-orange" />
-                thinking…
+                {t("thinking")}…
               </div>
             )}
             {error && (
               <p className="text-[12.5px] leading-[1.5] text-ink-dim">
                 {error.message.includes("API_KEY")
-                  ? "The AI key isn't configured yet."
-                  : error.message.trim() || "Something went wrong — try asking again."}
+                  ? t("The AI key isn't configured yet.")
+                  : error.message.trim() || t("Something went wrong — try asking again.")}
               </p>
             )}
           </div>
@@ -155,20 +157,20 @@ export function AskAi({
             <input
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Ask about this data…"
+              placeholder={t("Ask about this data…")}
               className="h-9 flex-1 rounded-none border border-edge bg-transparent px-3 text-[13.5px] text-ink outline-none placeholder:text-ink-dimmer focus:border-[rgba(254,81,0,0.45)]"
             />
             <button
               type="submit"
               disabled={busy || !input.trim()}
               className="inline-grid size-9 shrink-0 cursor-pointer place-items-center rounded-none border border-[rgba(254,81,0,0.35)] bg-orange-soft text-orange transition-colors hover:bg-[rgba(254,81,0,0.18)] disabled:cursor-default disabled:opacity-40"
-              aria-label="Send"
+              aria-label={t("Send")}
             >
               <Spark />
             </button>
           </form>
           <p className="mt-2 text-[10.5px] leading-[1.4] text-ink-dimmer">
-            urso.ai reads live dashboard data and can make mistakes — cross-check anything that drives a real decision.
+            {t("urso.ai reads live dashboard data and can make mistakes — cross-check anything that drives a real decision.")}
           </p>
         </div>
       </Modal>

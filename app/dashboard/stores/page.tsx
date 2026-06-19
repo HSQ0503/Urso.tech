@@ -18,6 +18,7 @@ import {
 import { StoreScoreboard } from "@/components/dashboard/store-scoreboard";
 import { AskAi } from "@/components/dashboard/ask-ai";
 import { ChartInfo } from "@/components/dashboard/chart-info";
+import { getI18n } from "@/lib/i18n.server";
 
 // Live FranPOS columns only — No-show, Calls missed, and Rating rejoin the
 // table when the booking feed, Twilio, and GBP go live (their values today
@@ -26,9 +27,10 @@ const COLS = ["Location", "Revenue", "Bookings", "Avg visit", "Grooming share", 
 
 export default async function StoresPage({ searchParams }: { searchParams: Promise<{ store?: string; month?: string }> }) {
   const sp = await searchParams;
+  const { t } = await getI18n();
   const scope = parseScope(sp.store);
   const month = parseMonth(sp.month);
-  const period = month === "all" ? "Last 12 months" : monthLabel(month);
+  const period = month === "all" ? t("Last 12 months") : monthLabel(month);
 
   // Real data, all from Supabase: per-store metrics aggregated from the
   // metrics_daily rollup, plus the composite scoreboard scores (return rate +
@@ -45,8 +47,8 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
   return (
     <div className="animate-stage-in space-y-12">
       <PageHeader
-        eyebrow={`All locations · ${period}`}
-        title="Store comparison"
+        eyebrow={`${t("All locations")} · ${period}`}
+        title={t("Store comparison")}
       />
 
       {/* Scoreboard */}
@@ -59,7 +61,7 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
             <thead>
               <tr className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-dimmer">
                 {COLS.map((h) => (
-                  <th key={h} className={`px-5 py-3 font-normal ${h === "Location" ? "text-left" : "text-right"}`}>{h}</th>
+                  <th key={h} className={`px-5 py-3 font-normal ${h === "Location" ? "text-left" : "text-right"}`}>{t(h)}</th>
                 ))}
               </tr>
             </thead>
@@ -99,49 +101,49 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
       <section className="grid grid-cols-1 gap-3 lg:grid-cols-3">
         <Card>
           <div className="flex items-center gap-1.5">
-            <Micro>Revenue</Micro>
+            <Micro>{t("Revenue")}</Micro>
             <AskAi
-              topic="Revenue by store"
+              topic={t("Revenue by store")}
               topicId="revenueByLocation"
-              suggestions={["Why is one store ahead on revenue?", "Where is the biggest revenue gap?"]}
+              suggestions={[t("Why is one store ahead on revenue?"), t("Where is the biggest revenue gap?")]}
             />
             <ChartInfo id="revenueByLocation" />
           </div>
-          <h2 className="mt-1.5 mb-4 text-[16px] font-medium tracking-[-0.01em]">By location</h2>
-          <BarRanking data={rank((r) => r.m.revenue)} format="moneyK" labelWidth={104} valueLabel="Revenue" />
+          <h2 className="mt-1.5 mb-4 text-[16px] font-medium tracking-[-0.01em]">{t("By location")}</h2>
+          <BarRanking data={rank((r) => r.m.revenue)} format="moneyK" labelWidth={104} valueLabel={t("Revenue")} />
         </Card>
         <Card>
           <div className="flex items-center gap-1.5">
-            <Micro>Return rate</Micro>
+            <Micro>{t("Return rate")}</Micro>
             <AskAi
-              topic="Return rate by store"
+              topic={t("Return rate by store")}
               topicId="storeRankRebook"
-              suggestions={["Which store has the weakest return rate?", "What's driving the gap to the leader?"]}
+              suggestions={[t("Which store has the weakest return rate?"), t("What's driving the gap to the leader?")]}
             />
             <ChartInfo id="storeRankRebook" />
           </div>
-          <h2 className="mt-1.5 mb-4 text-[16px] font-medium tracking-[-0.01em]">By location</h2>
-          <BarRanking data={rank((r) => Math.round(r.m.rebook * 1000) / 10)} format="pct" labelWidth={104} valueLabel="Return rate" />
+          <h2 className="mt-1.5 mb-4 text-[16px] font-medium tracking-[-0.01em]">{t("By location")}</h2>
+          <BarRanking data={rank((r) => Math.round(r.m.rebook * 1000) / 10)} format="pct" labelWidth={104} valueLabel={t("Return rate")} />
         </Card>
         <Card>
           <div className="flex items-center gap-1.5">
-            <Micro>Retail attach</Micro>
+            <Micro>{t("Retail attach")}</Micro>
             <AskAi
-              topic="Retail attach by store"
+              topic={t("Retail attach by store")}
               topicId="storeRankAttach"
-              suggestions={["Which store has the weakest retail attach?", "How do I lift attach at the laggard?"]}
+              suggestions={[t("Which store has the weakest retail attach?"), t("How do I lift attach at the laggard?")]}
             />
             <ChartInfo id="storeRankAttach" />
           </div>
-          <h2 className="mt-1.5 mb-4 text-[16px] font-medium tracking-[-0.01em]">By location</h2>
-          <BarRanking data={rank((r) => Math.round(r.m.attach * 1000) / 10)} format="pct" labelWidth={104} valueLabel="Retail attach" />
+          <h2 className="mt-1.5 mb-4 text-[16px] font-medium tracking-[-0.01em]">{t("By location")}</h2>
+          <BarRanking data={rank((r) => Math.round(r.m.attach * 1000) / 10)} format="pct" labelWidth={104} valueLabel={t("Retail attach")} />
         </Card>
       </section>
 
       <p className="mt-3 text-[13px] text-ink-dim">
         {scope === "all"
-          ? "Return rate and retail attach are the two levers every store controls today — the ranked bars show where coaching pays off first. Call capture joins the comparison once tracking is live."
-          : `Showing ${scopeLabel(scope)} highlighted against the other locations.`}
+          ? t("Return rate and retail attach are the two levers every store controls today — the ranked bars show where coaching pays off first. Call capture joins the comparison once tracking is live.")
+          : `${t("Showing")} ${scopeLabel(scope)} ${t("highlighted against the other locations.")}`}
       </p>
     </div>
   );

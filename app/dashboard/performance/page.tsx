@@ -31,6 +31,7 @@ import {
 } from "@/components/dashboard/ui";
 import { AskAi } from "@/components/dashboard/ask-ai";
 import { ChartInfo } from "@/components/dashboard/chart-info";
+import { getI18n } from "@/lib/i18n.server";
 
 function SubHead({ eyebrow, title, right }: { eyebrow: string; title: string; right?: React.ReactNode }) {
   return (
@@ -46,6 +47,7 @@ function SubHead({ eyebrow, title, right }: { eyebrow: string; title: string; ri
 
 export default async function PerformancePage({ searchParams }: { searchParams: Promise<{ store?: string; month?: string }> }) {
   const sp = await searchParams;
+  const { t } = await getI18n();
   const scope = parseScope(sp.store);
   const month = parseMonth(sp.month);
   const m = await getMetrics(scope, month);
@@ -56,28 +58,28 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
   const funnel = await getFunnel(scope, month);
   const xs = await getCrossSell(scope, month);
   const hourly = await getCallsHourly(scope, month);
-  const period = month === "all" ? "Last 12 months" : monthLabel(month);
+  const period = month === "all" ? t("Last 12 months") : monthLabel(month);
 
   return (
     <div className="animate-stage-in space-y-12">
       <PageHeader
-        eyebrow={`Diagnostics · ${scopeLabel(scope)} · ${period}`}
-        title="Performance"
+        eyebrow={`${t("Diagnostics")} · ${scopeLabel(scope)} · ${period}`}
+        title={t("Performance")}
       />
 
       {/* Capture */}
       <section>
         <SubHead
-          eyebrow="Capture · Twilio"
-          title="Inbound call handling"
-          right={<Tag tone="muted">Call tracking pending</Tag>}
+          eyebrow={`${t("Capture")} · Twilio`}
+          title={t("Inbound call handling")}
+          right={<Tag tone="muted">{t("Call tracking pending")}</Tag>}
         />
         <div className="grid grid-cols-1 gap-3 xl:grid-cols-[1.7fr_1fr]">
           <Card>
             <div className="mb-4 flex items-start justify-between">
               <div>
                 <div className="flex items-center gap-1.5">
-                  <Micro>Answered vs missed</Micro>
+                  <Micro>{t("Answered vs missed")}</Micro>
                   <AskAi
                     topic="Calls answered vs missed"
                     topicId="callsAnsweredMissed"
@@ -86,22 +88,22 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
                   />
                   <ChartInfo id="callsAnsweredMissed" />
                 </div>
-                <div className="mt-1.5 text-[22px] font-bold tracking-[-0.01em]">{cs.total.toLocaleString()} <span className="text-[13px] text-ink-dim">calls</span></div>
+                <div className="mt-1.5 text-[22px] font-bold tracking-[-0.01em]">{cs.total.toLocaleString()} <span className="text-[13px] text-ink-dim">{t("calls")}</span></div>
               </div>
               <div className="text-right">
                 <div className="text-[20px] font-bold text-orange">{pct(cs.missedPct)}</div>
-                <Micro>missed</Micro>
+                <Micro>{t("missed")}</Micro>
               </div>
             </div>
             <CallsBars labels={labels} total={series.callsTotal} missed={series.callsMissed} height={224} />
             <div className="mt-3">
-              <Legend items={[{ label: "Answered", color: "var(--color-series)" }, { label: "Missed", color: "#fe5100" }]} />
+              <Legend items={[{ label: t("Answered"), color: "var(--color-series)" }, { label: t("Missed"), color: "#fe5100" }]} />
             </div>
           </Card>
 
           <Card className="flex flex-col">
             <div className="flex items-center gap-1.5">
-              <Micro>Calls answered</Micro>
+              <Micro>{t("Calls answered")}</Micro>
               <AskAi
                 topic="Call answer rate"
                 topicId="callsAnsweredGauge"
@@ -111,28 +113,28 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
               <ChartInfo id="callsAnsweredGauge" />
             </div>
             <div className="mt-1 grid place-items-center">
-              <RadialGauge value={cs.answeredPct} caption="answered" />
+              <RadialGauge value={cs.answeredPct} caption={t("answered")} />
             </div>
             <div className="grid grid-cols-2 gap-px overflow-hidden rounded-none border border-edge bg-edge">
               <div className="bg-panel p-3.5">
-                <Micro>Answered</Micro>
+                <Micro>{t("Answered")}</Micro>
                 <div className="mt-1.5 font-mono text-[16px] text-ink">{(cs.total - cs.missed).toLocaleString()}</div>
               </div>
               <div className="bg-panel p-3.5">
-                <Micro>Missed</Micro>
+                <Micro>{t("Missed")}</Micro>
                 <div className="mt-1.5 font-mono text-[16px] text-orange">{cs.missed.toLocaleString()}</div>
               </div>
             </div>
             <p className="mt-auto pt-4 text-[12.5px] leading-[1.5] text-ink-dim">
-              Each missed call is a prospective booking. Instant text-back recovers most after-hours misses before they reach a competitor.
+              {t("Each missed call is a prospective booking. Instant text-back recovers most after-hours misses before they reach a competitor.")}
             </p>
           </Card>
         </div>
 
         <Card className="mt-3">
           <SubHead
-            eyebrow="When calls are missed"
-            title="Calls by hour, with after-hours band"
+            eyebrow={t("When calls are missed")}
+            title={t("Calls by hour, with after-hours band")}
             right={
               <div className="flex items-center gap-2">
                 <AskAi
@@ -147,7 +149,7 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
           />
           <CallsChart hourly={hourly.hourly} missedHourly={hourly.missedHourly} startHour={hourly.startHour} closeHour={hourly.closeHour} height={180} />
           <p className="mt-3 text-[13px] text-ink-dim">
-            Misses cluster in the busy midday desk hours and after closing (shaded). After-hours calls are the clearest case for instant text-back.
+            {t("Misses cluster in the busy midday desk hours and after closing (shaded). After-hours calls are the clearest case for instant text-back.")}
           </p>
         </Card>
       </section>
@@ -155,16 +157,16 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
       {/* Convert */}
       <section>
         <SubHead
-          eyebrow="Convert · Web analytics + FranPOS"
-          title="Booking conversion"
-          right={<Tag tone="muted">Analytics pending</Tag>}
+          eyebrow={`${t("Convert")} · ${t("Web analytics")} + FranPOS`}
+          title={t("Booking conversion")}
+          right={<Tag tone="muted">{t("Analytics pending")}</Tag>}
         />
         <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
           <Card>
             <div className="mb-4 flex items-end justify-between">
               <div>
                 <div className="flex items-center gap-1.5">
-                  <Micro>Online booking funnel</Micro>
+                  <Micro>{t("Online booking funnel")}</Micro>
                   <AskAi
                     topic="Online booking funnel"
                     topicId="bookingFunnel"
@@ -173,11 +175,11 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
                   />
                   <ChartInfo id="bookingFunnel" />
                 </div>
-                <div className="mt-1.5 text-[15px] text-ink-dim">From first visit to a booked appointment</div>
+                <div className="mt-1.5 text-[15px] text-ink-dim">{t("From first visit to a booked appointment")}</div>
               </div>
               <div className="text-right">
                 <div className="text-[20px] font-bold">{pct(ws.convRate, 1)}</div>
-                <Micro>visit → book</Micro>
+                <Micro>{t("visit → book")}</Micro>
               </div>
             </div>
             <ConversionFunnel steps={funnel} />
@@ -187,7 +189,7 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
             <div className="mb-4 flex items-start justify-between">
               <div>
                 <div className="flex items-center gap-1.5">
-                  <Micro>Website traffic vs bookings</Micro>
+                  <Micro>{t("Website traffic vs bookings")}</Micro>
                   <AskAi
                     topic="Website traffic vs bookings"
                     topicId="webTraffic"
@@ -196,16 +198,16 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
                   />
                   <ChartInfo id="webTraffic" />
                 </div>
-                <div className="mt-1.5 text-[22px] font-bold tracking-[-0.01em]">{ws.visits.toLocaleString()} <span className="text-[13px] text-ink-dim">visits</span></div>
+                <div className="mt-1.5 text-[22px] font-bold tracking-[-0.01em]">{ws.visits.toLocaleString()} <span className="text-[13px] text-ink-dim">{t("visits")}</span></div>
               </div>
               <div className="text-right">
                 <div className="text-[20px] font-bold">{ws.bookings.toLocaleString()}</div>
-                <Micro>bookings</Micro>
+                <Micro>{t("bookings")}</Micro>
               </div>
             </div>
             <TrafficChart labels={labels} visits={series.webVisits} bookings={series.webBookings} height={228} />
             <div className="mt-3">
-              <Legend items={[{ label: "Visits", color: "var(--color-series)" }, { label: "Became bookings", color: "#fe5100" }]} />
+              <Legend items={[{ label: t("Visits"), color: "var(--color-series)" }, { label: t("Became bookings"), color: "#fe5100" }]} />
             </div>
           </Card>
         </div>
@@ -214,16 +216,16 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
       {/* Money */}
       <section>
         <SubHead
-          eyebrow="Money · FranPOS"
-          title="Revenue and mix"
-          right={<Tag tone="good">Measurable now</Tag>}
+          eyebrow={`${t("Money")} · FranPOS`}
+          title={t("Revenue and mix")}
+          right={<Tag tone="good">{t("Measurable now")}</Tag>}
         />
         <div className="grid grid-cols-1 gap-3 xl:grid-cols-[1.5fr_1fr]">
           <Card>
             <div className="mb-4 flex items-end justify-between">
               <div>
                 <div className="flex items-center gap-1.5">
-                  <Micro>Revenue</Micro>
+                  <Micro>{t("Revenue")}</Micro>
                   <AskAi
                     topic="Revenue and mix"
                     topicId="revenueTrend"
@@ -245,7 +247,7 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
           <Card className="flex flex-col gap-5">
             <div>
               <div className="flex items-center gap-1.5">
-                <Micro>Grooming &amp; retail mix</Micro>
+                <Micro>{t("Grooming & retail mix")}</Micro>
                 <AskAi
                   topic="Grooming & retail mix"
                   topicId="crossSellMix"
@@ -259,28 +261,28 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
               <div className="mt-4">
                 <Donut
                   segments={[
-                    { label: "Both", value: xs.both, color: "#fe5100" },
-                    { label: "Grooming only", value: xs.groomingOnly, color: "var(--color-series)" },
-                    { label: "Retail only", value: xs.retailOnly, color: "var(--color-series-soft)" },
+                    { label: t("Both"), value: xs.both, color: "#fe5100" },
+                    { label: t("Grooming only"), value: xs.groomingOnly, color: "var(--color-series)" },
+                    { label: t("Retail only"), value: xs.retailOnly, color: "var(--color-series-soft)" },
                   ]}
                 />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-x-3 gap-y-4 border-t border-edge pt-5">
               <div>
-                <Micro>Grooming</Micro>
+                <Micro>{t("Grooming")}</Micro>
                 <div className="mt-1.5 font-mono text-[16px] text-ink">{fmtMoney(m.grooming)}</div>
               </div>
               <div>
-                <Micro>Retail</Micro>
+                <Micro>{t("Retail")}</Micro>
                 <div className="mt-1.5 font-mono text-[16px] text-ink">{fmtMoney(m.retail)}</div>
               </div>
               <div>
-                <Micro>Avg ticket</Micro>
+                <Micro>{t("Avg ticket")}</Micro>
                 <div className="mt-1.5 font-mono text-[16px] text-ink">{fmtMoney(m.avgTicket)}</div>
               </div>
               <div>
-                <Micro>Retail attach</Micro>
+                <Micro>{t("Retail attach")}</Micro>
                 <div className="mt-1.5 font-mono text-[16px]" style={{ color: m.attach < 0.25 ? "#fe5100" : undefined }}>{pct(m.attach)}</div>
               </div>
             </div>

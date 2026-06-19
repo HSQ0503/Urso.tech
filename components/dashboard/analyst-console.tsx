@@ -15,6 +15,7 @@ import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import { parseScope, parseMonth, scopeLabel, monthLabel } from "./data";
 import { RichText } from "./rich-text";
+import { useT } from "@/components/dashboard/locale-provider";
 
 type ThreadSummary = { id: string; title: string; updated_at: string };
 
@@ -70,15 +71,17 @@ function ThinkingLabel({ label }: { label: string }) {
 }
 
 function Thinking() {
+  const t = useT();
   return (
     <div className="flex gap-3">
       <span className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-full border border-edge bg-raise text-orange"><Spark /></span>
-      <ThinkingLabel label="analyzing" />
+      <ThinkingLabel label={t("analyzing")} />
     </div>
   );
 }
 
 function Message({ role, parts, live = false }: { role: string; parts: { type: string; text?: string }[]; live?: boolean }) {
+  const t = useT();
   if (role === "user") {
     const text = parts.filter((p) => p.type === "text").map((p) => p.text ?? "").join("");
     return (
@@ -95,18 +98,18 @@ function Message({ role, parts, live = false }: { role: string; parts: { type: s
       <div className="min-w-0 flex-1 space-y-2">
         {tools.length > 0 && (
           <div className="flex flex-wrap items-center gap-1.5 font-mono text-[9.5px] uppercase tracking-[0.12em] text-ink-dimmer">
-            <span className="text-orange">analyzed</span>
+            <span className="text-orange">{t("analyzed")}</span>
             {tools.map((n) => (
-              <span key={n} className="rounded-full border border-edge px-1.5 py-[2px]">{n}</span>
+              <span key={n} className="rounded-full border border-edge px-1.5 py-[2px]">{t(n)}</span>
             ))}
           </div>
         )}
         {text ? (
           <RichText text={text} className="text-[14px] text-ink" />
         ) : tools.length > 0 && live ? (
-          <ThinkingLabel label="reading the numbers" />
+          <ThinkingLabel label={t("reading the numbers")} />
         ) : tools.length > 0 ? (
-          <span className="text-[12.5px] italic text-ink-dimmer">No written summary was saved for this answer.</span>
+          <span className="text-[12.5px] italic text-ink-dimmer">{t("No written summary was saved for this answer.")}</span>
         ) : null}
       </div>
     </div>
@@ -114,6 +117,7 @@ function Message({ role, parts, live = false }: { role: string; parts: { type: s
 }
 
 function EmptyState({ firstName, briefHeadline, onPick, busy }: { firstName: string; briefHeadline?: string | null; onPick: (t: string) => void; busy: boolean }) {
+  const t = useT();
   return (
     <div className="relative mx-auto max-w-[560px] py-6 text-center">
       <div
@@ -125,13 +129,13 @@ function EmptyState({ firstName, briefHeadline, onPick, busy }: { firstName: str
         <span className="mx-auto grid size-12 place-items-center rounded-none border border-[rgba(254,81,0,0.35)] bg-orange-soft text-orange">
           <Spark className="size-5" />
         </span>
-        <h2 className="mt-4 text-[20px] font-bold tracking-[-0.01em] text-ink">Good to see you, {firstName}.</h2>
+        <h2 className="mt-4 text-[20px] font-bold tracking-[-0.01em] text-ink">{t("Good to see you,")} {firstName}.</h2>
         <p className="mt-2 text-[14px] leading-[1.6] text-ink-dim">
-          I’m your data analyst. Ask me what’s working, what’s leaking, and what to do next — I’ll pull the real numbers and come back with a plan. I remember our past conversations.
+          {t("I’m your data analyst. Ask me what’s working, what’s leaking, and what to do next — I’ll pull the real numbers and come back with a plan. I remember our past conversations.")}
         </p>
         {briefHeadline && (
           <div className="mt-4 inline-block max-w-full rounded-none border border-edge bg-raise px-3.5 py-2.5 text-left">
-            <div className="font-mono text-[9.5px] uppercase tracking-[0.14em] text-orange">This week</div>
+            <div className="font-mono text-[9.5px] uppercase tracking-[0.14em] text-orange">{t("This week")}</div>
             <div className="mt-1 text-[12.5px] leading-[1.5] text-ink">{briefHeadline}</div>
           </div>
         )}
@@ -143,7 +147,7 @@ function EmptyState({ firstName, briefHeadline, onPick, busy }: { firstName: str
               disabled={busy}
               className="group flex items-center justify-between gap-3 rounded-none border border-edge bg-raise px-4 py-3 text-[13.5px] text-ink-dim transition-colors hover:border-[rgba(254,81,0,0.4)] hover:text-ink disabled:opacity-50"
             >
-              <span>{s}</span>
+              <span>{t(s)}</span>
               <span className="text-ink-dimmer transition-colors group-hover:text-orange"><Spark /></span>
             </button>
           ))}
@@ -162,6 +166,7 @@ function TrashIcon() {
 }
 
 function ThreadRow({ thread, active, onOpen, onDelete, onRename }: { thread: ThreadSummary; active: boolean; onOpen: () => void; onDelete: () => void; onRename: (title: string) => void }) {
+  const t = useT();
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState(thread.title);
   const startEdit = () => { setVal(thread.title); setEditing(true); };
@@ -189,13 +194,13 @@ function ThreadRow({ thread, active, onOpen, onDelete, onRename }: { thread: Thr
 
   return (
     <div className={`group flex items-center gap-1 rounded-lg pl-2.5 pr-1.5 text-[13px] transition-colors ${active ? "bg-raise text-ink" : "text-ink-dim hover:bg-raise/60 hover:text-ink"}`}>
-      <button onClick={onOpen} onDoubleClick={startEdit} className="min-w-0 flex-1 truncate py-2 text-left" title={`${thread.title}  (double-click to rename)`}>
+      <button onClick={onOpen} onDoubleClick={startEdit} className="min-w-0 flex-1 truncate py-2 text-left" title={`${thread.title}  (${t("double-click to rename")})`}>
         {thread.title}
       </button>
       <button
         onClick={onDelete}
-        aria-label="Delete conversation"
-        title="Delete conversation"
+        aria-label={t("Delete conversation")}
+        title={t("Delete conversation")}
         className="grid size-6 shrink-0 place-items-center rounded text-ink-dimmer opacity-0 transition-opacity hover:text-orange focus:opacity-100 group-hover:opacity-100"
       >
         <TrashIcon />
@@ -210,6 +215,7 @@ function ThreadRail({
   threads: ThreadSummary[]; activeThreadId: string | null; onOpen: (id: string) => void; onNew: () => void;
   onDelete: (id: string) => void; onRename: (id: string, title: string) => void; busy: boolean; className?: string;
 }) {
+  const t = useT();
   return (
     <div className={`w-60 shrink-0 flex-col border-r border-edge bg-bg/40 ${className}`}>
       <div className="p-3">
@@ -219,12 +225,12 @@ function ThreadRail({
           className="flex w-full items-center justify-center gap-2 rounded-none border border-[rgba(254,81,0,0.4)] bg-orange-soft px-3 py-2 text-[13px] font-medium text-orange transition-colors hover:bg-[rgba(254,81,0,0.18)] disabled:opacity-50"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" aria-hidden><path d="M12 5v14M5 12h14" /></svg>
-          New conversation
+          {t("New conversation")}
         </button>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
         {threads.length === 0 ? (
-          <p className="px-2 py-3 text-[12px] leading-[1.5] text-ink-dimmer">No conversations yet. Ask something to start one.</p>
+          <p className="px-2 py-3 text-[12px] leading-[1.5] text-ink-dimmer">{t("No conversations yet. Ask something to start one.")}</p>
         ) : (
           <ul className="space-y-0.5">
             {threads.map((t) => (
@@ -247,6 +253,7 @@ function ChatPanel({
   chat: ChatApi; input: string; setInput: (v: string) => void; scopeText: string; userName: string;
   briefHeadline?: string | null; expanded: boolean; onToggleExpand: () => void; onToggleRail: () => void; onSend: (text: string) => void;
 }) {
+  const t = useT();
   const { messages, status, error, stop } = chat;
   const busy = status === "submitted" || status === "streaming";
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -263,7 +270,7 @@ function ChatPanel({
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, status]);
 
-  const firstName = userName.split(" ")[0] || "there";
+  const firstName = userName.split(" ")[0] || t("there");
 
   return (
     <div className="flex h-full flex-col">
@@ -272,8 +279,8 @@ function ChatPanel({
         <div className="flex items-center gap-2.5">
           <button
             onClick={onToggleRail}
-            aria-label="Conversations"
-            title="Conversations"
+            aria-label={t("Conversations")}
+            title={t("Conversations")}
             className="grid size-8 shrink-0 place-items-center rounded-lg border border-edge text-ink-dim transition-colors hover:border-edge-strong hover:text-ink md:hidden"
           >
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" aria-hidden><path d="M4 6h16M4 12h16M4 18h16" /></svg>
@@ -285,7 +292,7 @@ function ChatPanel({
             <div className="flex items-center gap-2">
               <span className="text-[14px] font-medium tracking-[-0.01em] text-ink">urso.ai</span>
               <span className="inline-flex items-center gap-1 font-mono text-[9.5px] uppercase tracking-[0.14em] text-ink-dimmer">
-                <span className="size-1.5 rounded-full bg-[var(--color-good)]" /> analyst
+                <span className="size-1.5 rounded-full bg-[var(--color-good)]" /> {t("analyst")}
               </span>
             </div>
             <div className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-dimmer">{scopeText}</div>
@@ -293,8 +300,8 @@ function ChatPanel({
         </div>
         <button
           onClick={onToggleExpand}
-          aria-label={expanded ? "Exit full screen" : "Full screen"}
-          title={expanded ? "Exit full screen (Esc)" : "Full screen"}
+          aria-label={expanded ? t("Exit full screen") : t("Full screen")}
+          title={expanded ? t("Exit full screen (Esc)") : t("Full screen")}
           className="grid size-8 shrink-0 place-items-center rounded-lg border border-edge text-ink-dim transition-colors hover:border-edge-strong hover:text-ink"
         >
           {expanded ? (
@@ -326,8 +333,8 @@ function ChatPanel({
           {error && (
             <p className="mt-4 rounded-lg border border-[rgba(254,81,0,0.3)] bg-orange-soft px-3 py-2 text-[12.5px] leading-[1.5] text-ink-dim">
               {error.message.includes("API_KEY")
-                ? "The analyst key isn’t configured yet."
-                : error.message.trim() || "Something went wrong — try again."}
+                ? t("The analyst key isn’t configured yet.")
+                : error.message.trim() || t("Something went wrong — try again.")}
             </p>
           )}
         </div>
@@ -359,14 +366,14 @@ function ChatPanel({
                 }
               }}
               rows={1}
-              placeholder="Ask about revenue, retention, a store, the team, what to fix first…"
+              placeholder={t("Ask about revenue, retention, a store, the team, what to fix first…")}
               className="max-h-[160px] flex-1 resize-none bg-transparent py-1.5 text-[14px] leading-[1.5] text-ink outline-none placeholder:text-ink-dimmer"
             />
             {busy ? (
               <button
                 type="button"
                 onClick={() => stop()}
-                aria-label="Stop"
+                aria-label={t("Stop")}
                 className="grid size-9 shrink-0 place-items-center rounded-none border border-edge text-ink-dim transition-colors hover:border-edge-strong hover:text-ink"
               >
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
@@ -375,7 +382,7 @@ function ChatPanel({
               <button
                 type="submit"
                 disabled={!input.trim()}
-                aria-label="Send"
+                aria-label={t("Send")}
                 className="grid size-9 shrink-0 place-items-center rounded-none border border-[rgba(254,81,0,0.4)] bg-orange-soft text-orange transition-colors hover:bg-[rgba(254,81,0,0.18)] disabled:cursor-default disabled:opacity-40"
               >
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M12 19V5M6 11l6-6 6 6" /></svg>
@@ -383,7 +390,7 @@ function ChatPanel({
             )}
           </form>
           <p className="mt-2 px-1 text-[10.5px] leading-[1.4] text-ink-dimmer">
-            urso.ai reads your live FranPOS data and can make mistakes — verify anything that drives a real decision.
+            {t("urso.ai reads your live FranPOS data and can make mistakes — verify anything that drives a real decision.")}
           </p>
         </div>
       </div>
@@ -392,6 +399,7 @@ function ChatPanel({
 }
 
 export function AnalystConsole({ userName, briefHeadline }: { userName: string; briefHeadline?: string | null }) {
+  const t = useT();
   const [expanded, setExpanded] = useState(false);
   const [railOpen, setRailOpen] = useState(false);
   const [input, setInput] = useState("");
@@ -556,7 +564,7 @@ export function AnalystConsole({ userName, briefHeadline }: { userName: string; 
             onRename={renameThread}
             busy={busy}
           />
-          <button aria-label="Close conversations" className="flex-1 bg-black/40" onClick={() => setRailOpen(false)} />
+          <button aria-label={t("Close conversations")} className="flex-1 bg-black/40" onClick={() => setRailOpen(false)} />
         </div>
       )}
       <div className="min-w-0 flex-1">
