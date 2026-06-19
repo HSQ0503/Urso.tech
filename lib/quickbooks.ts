@@ -314,3 +314,27 @@ export async function syncQuickbooks(clientId = "woof-gang", monthsBack = 3, acc
     ms: Date.now() - started,
   };
 }
+
+// Sync EVERY connected QuickBooks company — one client_id per company. The daily
+// cron calls this (no `client` param) so all of a customer's books refresh, not
+// just one. Per-company errors are captured so one bad connection doesn't abort
+// the rest. (Connect each company under its own client id, e.g. wp / wg / wm-lv.)
+export async function syncAllQuickbooks(
+  monthsBack = 3,
+  accountingMethod: "Accrual" | "Cash" = "Accrual",
+) {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase.from("quickbooks_connections").select("client_id");
+  if (error) throw new Error(`listing quickbooks_connections failed: ${error.message}`);
+  const clients = [...new Set((data ?? []).map((r) => (r as { client_id: string }).client_id))].sort();
+
+  const results: Array<Record<string, unknown>> = [];
+  for (const clientId of clients) {
+    try {
+      results.push({ client_id: clientId, ...(await syncQuickbooks(clientId, monthsBack, accountingMethod)) });
+    } catch (e) {
+      results.push({ client_id: clientId, error: e instanceof Error ? e.message : String(e) });
+    }
+  }
+  return { clients, count: clients.length, results };
+}

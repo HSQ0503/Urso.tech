@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { syncQuickbooks } from "@/lib/quickbooks";
+import { syncQuickbooks, syncAllQuickbooks } from "@/lib/quickbooks";
 
 // QuickBooks P&L sync — pulls the monthly ProfitAndLoss report and upserts it
 // into quickbooks_pnl. Same auth pattern as /api/franpos/sync: Vercel cron
@@ -21,10 +21,14 @@ export async function GET(req: NextRequest) {
   // (2024-01); the daily cron passes no param and stays at the light default 3.
   const months = Math.min(Math.max(Number(sp.get("months")) || 3, 1), 36);
   const method = sp.get("method") === "Cash" ? "Cash" : "Accrual";
-  const client = sp.get("client") ?? "woof-gang";
+  // No `client` → sync ALL connected companies (this is what the daily cron
+  // does). `?client=wp` targets a single company.
+  const client = sp.get("client");
 
   try {
-    const summary = await syncQuickbooks(client, months, method);
+    const summary = client
+      ? await syncQuickbooks(client, months, method)
+      : await syncAllQuickbooks(months, method);
     return NextResponse.json(summary);
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
