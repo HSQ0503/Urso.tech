@@ -89,7 +89,7 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
   const headlineCols = ["md:grid-cols-3", "md:grid-cols-4", "md:grid-cols-5"][extras.length] ?? "md:grid-cols-3";
 
   return (
-    <div className="animate-stage-in space-y-6">
+    <div className="animate-stage-in space-y-3">
       <PageHeader
         eyebrow={`Compare · ${rangeLabel(a)} vs ${rangeLabel(b)}${scopeNote}`}
         title="Compare anything"
@@ -106,7 +106,7 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
       ))}
 
       {/* Headline: revenue across every period, oldest first */}
-      <section className={`grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-edge bg-edge ${headlineCols}`}>
+      <section className={`grid grid-cols-2 gap-px overflow-hidden rounded-none border border-edge bg-edge ${headlineCols}`}>
         {[...extras].reverse().map((r, i) => (
           <Period key={`x${i}`} label={r.start.slice(0, 4)} range={r} value={revenue.bs[extras.length - i]} days={dayInfo.bs[extras.length - i]} />
         ))}
@@ -137,7 +137,7 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
               <h2 className="mt-1.5 text-[17px] font-medium tracking-[-0.01em]">Every metric, period by period</h2>
             </div>
           </div>
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
             {overview.metrics.map((m) => (
               <MetricPanel key={m.key} label={m.label} format={m.format} values={m.values} periods={[a, ...bs]} />
             ))}
@@ -162,7 +162,7 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
 
       {/* Mode-specific visuals */}
       {data && mode === "stores" && (
-        <section className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+        <section className="grid grid-cols-1 gap-3 xl:grid-cols-2">
           <Card>
             <div className="mb-1 flex items-center gap-1.5">
               <Micro>{data.metricLabel} · by store</Micro>

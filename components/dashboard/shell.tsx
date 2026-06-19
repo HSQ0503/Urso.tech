@@ -16,37 +16,44 @@ import type { Role } from "@/lib/auth";
 import { signOut } from "@/app/login/actions";
 import { Modal } from "./modal";
 import { ThemeToggle } from "./theme-toggle";
+import {
+  Home,
+  FileText,
+  Activity,
+  Banknote,
+  ArrowRightLeft,
+  Package,
+  Target,
+  Flag,
+  Store,
+  Users,
+  Scissors,
+  Star,
+  type LucideIcon,
+} from "lucide-react";
 
 type IconName = "home" | "brief" | "activity" | "money" | "spark" | "store" | "users" | "scissors" | "star" | "compare" | "box" | "event";
 
+// Brand packet §11: hairline geometric line icons on a 24px grid — Lucide is the
+// approved set. Mapped here so the nav data keeps using stable string keys.
+const ICONS: Record<IconName, LucideIcon> = {
+  home: Home,
+  brief: FileText,
+  activity: Activity,
+  money: Banknote,
+  spark: Target,
+  store: Store,
+  users: Users,
+  scissors: Scissors,
+  star: Star,
+  compare: ArrowRightLeft,
+  box: Package,
+  event: Flag,
+};
+
 function Icon({ name }: { name: IconName }) {
-  const common = { width: 18, height: 18, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.75, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
-  switch (name) {
-    case "home":
-      return <svg {...common}><path d="M3 10.5 12 3l9 7.5" /><path d="M5 9.5V20a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9.5" /><path d="M9.5 21v-6.5h5V21" /></svg>;
-    case "brief":
-      return <svg {...common}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" /><path d="M14 2v6h6" /><path d="M9 13h6M9 17h6M9 9h1" /></svg>;
-    case "activity":
-      return <svg {...common}><path d="M22 12h-4l-3 9L9 3l-3 9H2" /></svg>;
-    case "money":
-      return <svg {...common}><rect x="2" y="6" width="20" height="12" rx="2.5" /><circle cx="12" cy="12" r="2.5" /><path d="M6 12h.01M18 12h.01" /></svg>;
-    case "spark":
-      return <svg {...common}><path d="M11.4 3.3a.65.65 0 0 1 1.2 0l1.27 4.13a2 2 0 0 0 1.32 1.32l4.13 1.27a.65.65 0 0 1 0 1.24l-4.13 1.27a2 2 0 0 0-1.32 1.32l-1.27 4.13a.65.65 0 0 1-1.2 0l-1.27-4.13a2 2 0 0 0-1.32-1.32L4.68 11.5a.65.65 0 0 1 0-1.24l4.13-1.27a2 2 0 0 0 1.32-1.32Z" /><path d="M19 3.5v3M20.5 5h-3" /></svg>;
-    case "store":
-      return <svg {...common}><path d="M4 8 6 4h12l2 4" /><path d="M4 8h16" /><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8" /><path d="M9.5 20v-5h5v5" /></svg>;
-    case "users":
-      return <svg {...common}><path d="M16 21v-1.8a4 4 0 0 0-4-4H6.5a4 4 0 0 0-4 4V21" /><circle cx="9.25" cy="7" r="3.75" /><path d="M21.5 21v-1.8a4 4 0 0 0-3-3.85" /><path d="M16 3.6a3.75 3.75 0 0 1 0 7.3" /></svg>;
-    case "scissors":
-      return <svg {...common}><circle cx="6" cy="6.5" r="2.75" /><circle cx="6" cy="17.5" r="2.75" /><path d="M8.2 8.4 20 19.5" /><path d="M20 4.5 8.2 15.6" /><path d="M12 12h.01" /></svg>;
-    case "star":
-      return <svg {...common}><path d="M12 3.2l2.62 5.32 5.88.86-4.25 4.14 1 5.86L12 16.77 6.75 19.4l1-5.86L3.5 9.4l5.88-.86Z" /></svg>;
-    case "compare":
-      return <svg {...common}><path d="M3 6.5h13" /><path d="M13 3.5l3 3-3 3" /><path d="M21 17.5H8" /><path d="M11 14.5l-3 3 3 3" /></svg>;
-    case "box":
-      return <svg {...common}><path d="M21 8.2 12 3 3 8.2v7.6L12 21l9-5.2Z" /><path d="M3.3 8.4 12 13.4l8.7-5" /><path d="M12 21v-7.6" /></svg>;
-    case "event":
-      return <svg {...common}><path d="M5 21V4" /><path d="M5 4h13l-2.2 4L18 12H5" /></svg>;
-  }
+  const Glyph = ICONS[name];
+  return <Glyph size={18} strokeWidth={1.75} aria-hidden />;
 }
 
 // `roles` omitted = visible to everyone in the shell (owner + manager). Owner-only
@@ -134,13 +141,23 @@ function ShellChrome({ qs, role, storeId, clientName, userName, email, streak, m
       {/* Sidebar — sticky so it stays pinned while the page scrolls. (Can't use
           `fixed` here: the .wipe-page-wrap ancestor sets will-change:transform,
           which makes a fixed element resolve against the wrapper, not the viewport.) */}
-      <aside className="sticky top-0 z-30 hidden h-screen w-[228px] shrink-0 flex-col overflow-y-auto border-r border-edge bg-sidebar px-4 py-5 lg:flex">
-        <Link href={withQs("/dashboard")} className="flex items-center gap-2.5 px-1">
-          <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-orange-soft font-mono text-[12px] font-medium text-orange">{orgInitials}</span>
-          <span className="text-[15px] font-medium leading-[1.15] tracking-[-0.01em] text-ink">{clientName}</span>
+      <aside
+        className="sticky top-0 z-30 hidden h-screen w-[228px] shrink-0 flex-col overflow-y-auto border-r border-edge px-4 py-5 lg:flex"
+        style={{ background: "var(--sidebar-bg)" }}
+      >
+        <Link
+          href={withQs("/dashboard")}
+          className="group flex items-center gap-3 rounded-none px-1 outline-none focus-visible:ring-2 focus-visible:ring-orange/50"
+        >
+          <span className="grid size-9 shrink-0 place-items-center rounded-none border border-[rgba(254,81,0,0.25)] bg-orange-soft font-mono text-[12px] font-medium text-orange shadow-[inset_0_1px_0_0_rgba(255,255,255,0.14)]">
+            {orgInitials}
+          </span>
+          <span className="text-[15px] font-semibold leading-[1.15] tracking-[-0.01em] text-ink">{clientName}</span>
         </Link>
 
-        <nav className="mt-8 flex flex-col gap-5">
+        <div className="mt-5 h-px bg-edge" />
+
+        <nav className="mt-6 flex flex-col gap-5">
           {groups.map((g) => (
             <div key={g.group} className="flex flex-col gap-1">
               <div className="px-3 pb-1 font-mono text-[9.5px] uppercase tracking-[0.16em] text-ink-dimmer">{g.group}</div>
@@ -150,11 +167,12 @@ function ShellChrome({ qs, role, storeId, clientName, userName, email, streak, m
                   <Link
                     key={n.href}
                     href={withQs(n.href)}
-                    className={`group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-[14px] transition-colors ${
-                      active ? "bg-raise-strong text-ink" : "text-ink-dim hover:bg-raise hover:text-ink"
+                    aria-current={active ? "page" : undefined}
+                    className={`group relative flex items-center gap-3 rounded-none px-3 py-2.5 text-[14px] outline-none transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-orange/50 ${
+                      active ? "bg-orange-soft font-medium text-ink" : "text-ink-dim hover:bg-raise hover:text-ink"
                     }`}
                   >
-                    {active && <span className="absolute left-0 top-1/2 h-5 w-[2.5px] -translate-y-1/2 rounded-full bg-orange" />}
+                    {active && <span className="absolute left-0 top-1/2 h-6 w-[3px] -translate-y-1/2 rounded-none bg-orange" />}
                     <span className={active ? "text-orange" : "text-ink-dimmer group-hover:text-ink-dim"}>
                       <Icon name={n.icon} />
                     </span>
@@ -171,9 +189,9 @@ function ShellChrome({ qs, role, storeId, clientName, userName, email, streak, m
           <div className="flex items-center gap-2">
             <button
               onClick={() => setAccountOpen(true)}
-              className="group flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 rounded-xl border border-edge bg-raise px-2.5 py-2 text-left transition-colors hover:border-edge-strong hover:bg-raise"
+              className="dash-pill group flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 rounded-none px-2.5 py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-orange/50"
             >
-              <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-orange-soft font-mono text-[11px] text-orange">{initials}</span>
+              <span className="grid size-8 shrink-0 place-items-center rounded-none bg-orange-soft font-mono text-[11px] text-orange">{initials}</span>
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-[12.5px] text-ink">{userName}</span>
                 <span className="block truncate font-mono text-[9px] uppercase tracking-[0.12em] text-ink-dimmer">{roleLabel} · account</span>
@@ -184,7 +202,7 @@ function ShellChrome({ qs, role, storeId, clientName, userName, email, streak, m
             </button>
           </div>
           <ThemeToggle />
-          <div className="rounded-xl border border-dashed border-edge-strong p-3">
+          <div className="rounded-none border border-dashed border-edge-strong p-3">
             <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-dimmer">Pilot · mock data</div>
             <p className="mt-1.5 text-[11.5px] leading-[1.45] text-ink-dim">Shaped like the live FranPOS, Twilio &amp; Google feeds.</p>
           </div>
@@ -200,7 +218,10 @@ function ShellChrome({ qs, role, storeId, clientName, userName, email, streak, m
 
       <div className="min-w-0 flex-1">
         {/* Top bar */}
-        <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-edge bg-bg/75 px-5 py-3 backdrop-blur-md md:px-8">
+        <header
+          className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-edge px-5 py-3 backdrop-blur-xl md:px-8"
+          style={{ background: "var(--topbar-bg)" }}
+        >
           <div className="flex min-w-0 items-center gap-2 font-mono text-[11px] uppercase tracking-[0.14em] text-ink-dimmer">
             <span className="truncate text-[14px] font-medium normal-case tracking-normal text-ink sm:hidden">{clientName}</span>
             <span className="hidden sm:inline">{clientName}</span>
@@ -218,32 +239,32 @@ function ShellChrome({ qs, role, storeId, clientName, userName, email, streak, m
               <Link
                 key={n.href}
                 href={withQs(n.href)}
-                className={`shrink-0 rounded-full px-3 py-1.5 text-[13px] ${active ? "bg-raise-strong text-ink" : "text-ink-dim"}`}
+                className={`shrink-0 rounded-none px-3 py-1.5 text-[13px] transition-colors ${active ? "bg-orange-soft text-ink" : "text-ink-dim hover:text-ink"}`}
               >
                 {n.label}
               </Link>
             );
           })}
           <form action={signOut} className="ml-auto shrink-0">
-            <button type="submit" className="cursor-pointer rounded-full px-3 py-1.5 font-mono text-[10.5px] uppercase tracking-[0.1em] text-ink-dimmer">
+            <button type="submit" className="cursor-pointer rounded-none px-3 py-1.5 font-mono text-[10.5px] uppercase tracking-[0.1em] text-ink-dimmer">
               Sign out
             </button>
           </form>
         </nav>
 
-        <main className="mx-auto max-w-[1200px] px-5 py-8 md:px-8 md:py-10">{children}</main>
+        <main className="mx-auto max-w-[1200px] px-5 py-6 md:px-8 md:py-8">{children}</main>
       </div>
 
       <Modal open={accountOpen} onClose={() => setAccountOpen(false)} eyebrow="Account" title={userName} maxWidth={420}>
         <div className="space-y-5">
           <div className="flex items-center gap-3">
-            <span className="grid size-12 place-items-center rounded-full bg-orange-soft font-mono text-[15px] text-orange">{initials}</span>
+            <span className="grid size-12 place-items-center rounded-none bg-orange-soft font-mono text-[15px] text-orange">{initials}</span>
             <div className="min-w-0">
               <div className="text-[15px] text-ink">{userName}</div>
               <div className="truncate font-mono text-[11px] text-ink-dimmer">{email}</div>
             </div>
           </div>
-          <dl className="grid grid-cols-1 gap-px overflow-hidden rounded-xl border border-edge bg-edge">
+          <dl className="grid grid-cols-1 gap-px overflow-hidden rounded-none border border-edge bg-edge">
             <AccountRow k="Role" v={roleLabel} />
             <AccountRow k="Client" v={clientName} />
             {lockedStore && <AccountRow k="Store" v={scopeLabel(lockedStore)} />}
@@ -256,7 +277,7 @@ function ShellChrome({ qs, role, storeId, clientName, userName, email, streak, m
           <form action={signOut}>
             <button
               type="submit"
-              className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg border border-edge-strong py-2.5 text-[13px] text-ink transition-colors hover:bg-raise"
+              className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-none border border-edge-strong py-2.5 text-[13px] text-ink transition-colors hover:bg-raise"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M15 4h3a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-3" /><path d="M10 17l-5-5 5-5" /><path d="M5 12h11" /></svg>
               Sign out
@@ -297,7 +318,7 @@ function FilterBar({ qs, pathname, lockedStore }: { qs: string; pathname: string
   return (
     <div className="flex items-center gap-2">
       {lockedStore ? (
-        <span className="inline-flex items-center gap-1.5 rounded-full border border-edge bg-raise px-3 py-1.5 text-[11.5px] text-ink-dim">
+        <span className="dash-pill inline-flex items-center gap-1.5 rounded-none px-3 py-1.5 text-[11.5px] text-ink-dim">
           <span className="text-ink-dimmer">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M4 9V5h16v4" /><path d="M4 9h16l-1 11H5L4 9Z" /></svg>
           </span>
@@ -316,7 +337,7 @@ function FilterBar({ qs, pathname, lockedStore }: { qs: string; pathname: string
         // it scopes that page when it doesn't.
         <span
           title="The Compare page uses its own period picker below — the global month filter doesn't apply there."
-          className="inline-flex cursor-not-allowed items-center gap-1.5 rounded-full border border-edge bg-raise px-3 py-1.5 text-[11.5px] text-ink-dimmer opacity-60"
+          className="inline-flex cursor-not-allowed items-center gap-1.5 rounded-none border border-edge bg-raise px-3 py-1.5 text-[11.5px] text-ink-dimmer opacity-60"
         >
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="3.5" y="5" width="17" height="15" rx="2" /><path d="M3.5 9.5h17M8 3.5v3M16 3.5v3" /></svg>
           <span className="font-medium">Dates set below</span>
@@ -354,7 +375,7 @@ function FilterSelect<T extends string>({
         onClick={() => setOpen((o) => !o)}
         aria-haspopup="listbox"
         aria-expanded={open}
-        className="inline-flex items-center gap-1.5 rounded-full border border-edge bg-raise px-3 py-1.5 text-[11.5px] text-ink-dim transition-colors hover:border-edge-strong hover:text-ink"
+        className="dash-pill inline-flex cursor-pointer items-center gap-1.5 rounded-none px-3 py-1.5 text-[11.5px] text-ink-dim outline-none transition-colors hover:text-ink focus-visible:ring-2 focus-visible:ring-orange/50"
       >
         <span className="text-ink-dimmer">
           {glyph === "store" ? (
@@ -364,7 +385,20 @@ function FilterSelect<T extends string>({
           )}
         </span>
         <span className="max-w-[120px] truncate font-medium text-ink">{current.label}</span>
-        <span className={`text-ink-dimmer transition-transform ${open ? "rotate-180" : ""}`}>▾</span>
+        <svg
+          width="11"
+          height="11"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden
+          className={`text-ink-dimmer transition-transform duration-200 ${open ? "rotate-180" : ""}`}
+        >
+          <path d="m6 9 6 6 6-6" />
+        </svg>
       </button>
 
       {open && (
@@ -372,7 +406,7 @@ function FilterSelect<T extends string>({
           <button type="button" aria-label="Close" className="fixed inset-0 z-30 cursor-default" onClick={() => setOpen(false)} />
           <div
             role="listbox"
-            className="absolute right-0 z-40 mt-2 max-h-[320px] w-[200px] overflow-y-auto rounded-xl border border-edge bg-surface p-1 shadow-[0_18px_40px_-16px_rgba(0,0,0,0.8)]"
+            className="absolute right-0 z-40 mt-2 max-h-[320px] w-[200px] overflow-y-auto rounded-none border border-edge bg-surface p-1 shadow-[0_18px_40px_-16px_rgba(0,0,0,0.8)]"
           >
             {options.map((o) => {
               const sel = o.value === value;
@@ -385,7 +419,7 @@ function FilterSelect<T extends string>({
                     onChange(o.value);
                     setOpen(false);
                   }}
-                  className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-[12.5px] transition-colors ${
+                  className={`flex w-full items-center justify-between rounded-none px-3 py-2 text-left text-[12.5px] transition-colors ${
                     sel ? "bg-raise-strong text-ink" : "text-ink-dim hover:bg-raise hover:text-ink"
                   }`}
                 >

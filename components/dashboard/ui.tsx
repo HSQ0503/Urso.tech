@@ -58,7 +58,7 @@ export function Card({
   pad?: boolean;
 }) {
   return (
-    <div className={`rounded-2xl border border-edge bg-panel ${pad ? "p-5" : ""} ${className}`}>
+    <div className={`rounded-none border border-edge bg-panel ${pad ? "p-5" : ""} ${className}`}>
       {children}
     </div>
   );
@@ -75,7 +75,7 @@ export function Skeleton({ className = "" }: { className?: string }) {
 }
 
 export function SkeletonCard({ className = "", children }: { className?: string; children?: ReactNode }) {
-  return <div className={`rounded-2xl border border-edge bg-panel p-5 ${className}`}>{children}</div>;
+  return <div className={`rounded-none border border-edge bg-panel p-5 ${className}`}>{children}</div>;
 }
 
 export function PageHeader({
@@ -83,24 +83,24 @@ export function PageHeader({
   title,
   sub,
   right,
+  period = false,
 }: {
   eyebrow: string;
   title: ReactNode;
   sub?: string;
   right?: ReactNode;
+  period?: boolean;
 }) {
   return (
-    <header className="relative mb-8 overflow-hidden">
-      <div
-        aria-hidden
-        className="pointer-events-none absolute -top-24 left-0 h-48 w-[420px] rounded-full opacity-50 blur-3xl"
-        style={{ background: "radial-gradient(circle, rgba(254,81,0,0.16), transparent 70%)" }}
-      />
-      <div className="relative flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
+    <header className="mb-6">
+      <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div className="max-w-[680px]">
           <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-ink-dimmer">{eyebrow}</div>
-          <h1 className="mt-3 text-[clamp(28px,4.4vw,44px)] font-medium leading-[1.08] tracking-[-0.02em]">{title}</h1>
-          {sub && <p className="mt-3 max-w-[560px] text-[14.5px] leading-[1.55] text-ink-dim">{sub}</p>}
+          <h1 className="mt-2 text-[clamp(23px,3vw,30px)] font-semibold leading-[1.12] tracking-[-0.025em] text-ink">
+            {title}
+            {period && <span className="text-orange">.</span>}
+          </h1>
+          {sub && <p className="mt-2 max-w-[560px] text-[13.5px] leading-[1.5] text-ink-dim">{sub}</p>}
         </div>
         {right && <div className="shrink-0">{right}</div>}
       </div>
@@ -171,8 +171,8 @@ export function Tag({ children, tone = "muted" }: { children: ReactNode; tone?: 
 // ---- Horizontal meter ------------------------------------------------------
 export function Meter({ value, color = ORANGE, track = "var(--color-track)" }: { value: number; color?: string; track?: string }) {
   return (
-    <div className="h-1.5 w-full overflow-hidden rounded-full" style={{ background: track }}>
-      <div className="h-full rounded-full" style={{ width: `${Math.min(100, value * 100)}%`, background: color }} />
+    <div className="h-1.5 w-full overflow-hidden rounded-none" style={{ background: track }}>
+      <div className="h-full rounded-none" style={{ width: `${Math.min(100, value * 100)}%`, background: color }} />
     </div>
   );
 }
@@ -227,7 +227,7 @@ export function StreakPill({ streak }: { streak: number }) {
 export function WelcomeBanner({ name, streak }: { name: string; streak: number }) {
   const first = name.split(" ")[0];
   return (
-    <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+    <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
       <div className="text-[13.5px] text-ink-dim">
         Welcome back, <span className="font-medium text-ink">{first}</span>.
       </div>

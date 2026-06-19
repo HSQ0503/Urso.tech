@@ -53,10 +53,11 @@ export function ActionItemCard({
             setOpen(true);
           }
         }}
-        className="group relative flex cursor-pointer flex-col justify-center overflow-hidden rounded-2xl border border-[rgba(254,81,0,0.28)] p-6 transition-colors hover:border-[rgba(254,81,0,0.45)] focus:outline-none focus-visible:ring-2 focus-visible:ring-orange/50"
+        className="dash-raise group relative flex cursor-pointer flex-col justify-center overflow-hidden rounded-none border border-[rgba(254,81,0,0.28)] p-6 transition-all duration-200 hover:-translate-y-px hover:border-[rgba(254,81,0,0.45)] focus:outline-none focus-visible:ring-2 focus-visible:ring-orange/50"
         style={{ background: "linear-gradient(158deg, rgba(254,81,0,0.12) 0%, rgba(254,81,0,0.035) 48%, rgba(254,81,0,0) 100%)" }}
       >
         <div aria-hidden className="pointer-events-none absolute -right-20 -top-20 h-48 w-48 rounded-full opacity-60 blur-3xl" style={{ background: "radial-gradient(circle, rgba(254,81,0,0.22), transparent 70%)" }} />
+        <div aria-hidden className="dash-grain pointer-events-none absolute inset-0" />
 
         <div className="relative flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
@@ -68,7 +69,7 @@ export function ActionItemCard({
           </span>
         </div>
 
-        <h2 className="relative mt-4 text-[20px] font-medium leading-[1.2] tracking-[-0.015em]">{title}</h2>
+        <h2 className="relative mt-4 text-[19px] font-semibold leading-[1.25] tracking-[-0.015em] text-ink">{title}</h2>
         <p className="relative mt-3 max-w-[640px] text-[13.5px] leading-[1.6] text-ink-dim">{detail}</p>
 
         <div className="relative mt-5 flex flex-wrap items-center gap-2">
@@ -80,7 +81,7 @@ export function ActionItemCard({
           <a
             href={MAILTO}
             onClick={(e) => e.stopPropagation()}
-            className="rounded-lg bg-orange px-4 py-2 text-[13px] font-medium text-white transition hover:brightness-110"
+            className="rounded-lg bg-orange px-4 py-2 text-[13px] font-medium text-[#070707] transition hover:bg-[#FF6A1F]"
           >
             {cta}
           </a>
@@ -94,7 +95,7 @@ export function ActionItemCard({
         eyebrow="Proposed fix"
         title={title}
         footer={
-          <a href={MAILTO} className="flex w-full items-center justify-center rounded-lg bg-orange px-4 py-2.5 text-[13px] font-medium text-white transition hover:brightness-110">
+          <a href={MAILTO} className="flex w-full items-center justify-center rounded-lg bg-orange px-4 py-2.5 text-[13px] font-medium text-[#070707] transition hover:bg-[#FF6A1F]">
             {cta} →
           </a>
         }

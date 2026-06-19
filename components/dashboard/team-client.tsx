@@ -61,10 +61,10 @@ export function TeamClient({ roster, scopeName, period }: { roster: TeamRow[]; s
           </div>
           <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-dimmer">{roster.length} groomers</span>
         </div>
-        <BarRanking data={ranking} valueFmt={(n) => fmtMoney(n)} labelWidth={130} valueLabel="Service revenue" />
+        <BarRanking data={ranking} valueFmt={(n) => fmtMoney(n)} labelWidth={150} valueLabel="Service revenue" />
       </Card>
 
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.45fr_1fr]">
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-[1.45fr_1fr]">
         {/* Scorecard */}
         <Card pad={false}>
           <div className="px-5 pb-3 pt-5">
@@ -128,7 +128,7 @@ export function TeamClient({ roster, scopeName, period }: { roster: TeamRow[]; s
           </div>
 
           {selected.rebook != null && selected.rebook < 0.45 && (
-            <div className="flex items-center gap-2 rounded-xl border border-[rgba(254,81,0,0.35)] bg-orange-soft px-3.5 py-2.5">
+            <div className="flex items-center gap-2 rounded-none border border-[rgba(254,81,0,0.35)] bg-orange-soft px-3.5 py-2.5">
               <span className="size-1.5 rounded-full bg-orange" />
               <span className="text-[12.5px] text-ink">Return rate ({pct(selected.rebook)}) is below the team floor — the clearest single thing to address.</span>
             </div>
@@ -145,7 +145,7 @@ export function TeamClient({ roster, scopeName, period }: { roster: TeamRow[]; s
         </Card>
       </div>
 
-      <p className="-mt-4 text-[13px] leading-[1.6] text-ink-dim">
+      <p className="mt-3 text-[13px] leading-[1.6] text-ink-dim">
         Revenue, appointments and avg ticket reflect the selected period; return and attach are lifetime shares from the full FranPOS history ({dash} means too little history to say). Revenue per labour hour returns once labour-hours data is available — FranPOS timeclocks today, payroll as the fallback.
       </p>
     </div>
@@ -154,7 +154,7 @@ export function TeamClient({ roster, scopeName, period }: { roster: TeamRow[]; s
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-edge bg-raise px-3 py-2.5">
+    <div className="rounded-none border border-edge bg-raise px-3 py-2.5">
       <Micro>{label}</Micro>
       <div className="mt-1 font-mono text-[15px] text-ink">{value}</div>
     </div>

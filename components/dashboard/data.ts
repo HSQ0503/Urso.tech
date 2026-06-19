@@ -1217,10 +1217,10 @@ export const COMPARE_MODES: { value: CompareMode; label: string }[] = [
 ];
 
 export const COMPARE_PRESETS: { value: ComparePreset; label: string }[] = [
-  { value: "mom", label: "vs last month" },
-  { value: "yoy", label: "vs last year" },
-  { value: "years", label: "This month · each year" },
-  { value: "30d", label: "Last 30 days" },
+  { value: "mom", label: "This month vs last month" },
+  { value: "yoy", label: "This month vs a year ago" },
+  { value: "years", label: "Same month, each year" },
+  { value: "30d", label: "Last 30 days vs prior 30" },
   { value: "custom", label: "Custom dates" },
 ];
 

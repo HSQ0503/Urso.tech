@@ -68,7 +68,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
   const arrow = (col: ProductSort) => (sort === col ? (dir === "asc" ? " ↑" : " ↓") : "");
 
   return (
-    <div className="animate-stage-in space-y-6">
+    <div className="animate-stage-in space-y-3">
       <PageHeader
         eyebrow={`Products · ${scopeLabel(scope)} · ${period}`}
         title="Products"

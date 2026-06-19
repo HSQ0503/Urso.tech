@@ -83,7 +83,7 @@ function Message({ role, parts, live = false }: { role: string; parts: { type: s
     const text = parts.filter((p) => p.type === "text").map((p) => p.text ?? "").join("");
     return (
       <div className="flex justify-end">
-        <div className="max-w-[85%] rounded-2xl rounded-br-md border border-[rgba(254,81,0,0.28)] bg-orange-wash px-3.5 py-2.5 text-[14px] leading-[1.55] text-ink">{text}</div>
+        <div className="max-w-[85%] rounded-none border border-[rgba(254,81,0,0.28)] bg-orange-wash px-3.5 py-2.5 text-[14px] leading-[1.55] text-ink">{text}</div>
       </div>
     );
   }
@@ -122,7 +122,7 @@ function EmptyState({ firstName, briefHeadline, onPick, busy }: { firstName: str
         style={{ background: "radial-gradient(circle, rgba(254,81,0,0.16), transparent 70%)" }}
       />
       <div className="relative">
-        <span className="mx-auto grid size-12 place-items-center rounded-2xl border border-[rgba(254,81,0,0.35)] bg-orange-soft text-orange">
+        <span className="mx-auto grid size-12 place-items-center rounded-none border border-[rgba(254,81,0,0.35)] bg-orange-soft text-orange">
           <Spark className="size-5" />
         </span>
         <h2 className="mt-4 text-[20px] font-medium tracking-[-0.01em] text-ink">Good to see you, {firstName}.</h2>
@@ -130,7 +130,7 @@ function EmptyState({ firstName, briefHeadline, onPick, busy }: { firstName: str
           I’m your data analyst. Ask me what’s working, what’s leaking, and what to do next — I’ll pull the real numbers and come back with a plan. I remember our past conversations.
         </p>
         {briefHeadline && (
-          <div className="mt-4 inline-block max-w-full rounded-xl border border-edge bg-raise px-3.5 py-2.5 text-left">
+          <div className="mt-4 inline-block max-w-full rounded-none border border-edge bg-raise px-3.5 py-2.5 text-left">
             <div className="font-mono text-[9.5px] uppercase tracking-[0.14em] text-orange">This week</div>
             <div className="mt-1 text-[12.5px] leading-[1.5] text-ink">{briefHeadline}</div>
           </div>
@@ -141,7 +141,7 @@ function EmptyState({ firstName, briefHeadline, onPick, busy }: { firstName: str
               key={s}
               onClick={() => onPick(s)}
               disabled={busy}
-              className="group flex items-center justify-between gap-3 rounded-xl border border-edge bg-raise px-4 py-3 text-[13.5px] text-ink-dim transition-colors hover:border-[rgba(254,81,0,0.4)] hover:text-ink disabled:opacity-50"
+              className="group flex items-center justify-between gap-3 rounded-none border border-edge bg-raise px-4 py-3 text-[13.5px] text-ink-dim transition-colors hover:border-[rgba(254,81,0,0.4)] hover:text-ink disabled:opacity-50"
             >
               <span>{s}</span>
               <span className="text-ink-dimmer transition-colors group-hover:text-orange"><Spark /></span>
@@ -216,7 +216,7 @@ function ThreadRail({
         <button
           onClick={onNew}
           disabled={busy}
-          className="flex w-full items-center justify-center gap-2 rounded-xl border border-[rgba(254,81,0,0.4)] bg-orange-soft px-3 py-2 text-[13px] font-medium text-orange transition-colors hover:bg-[rgba(254,81,0,0.18)] disabled:opacity-50"
+          className="flex w-full items-center justify-center gap-2 rounded-none border border-[rgba(254,81,0,0.4)] bg-orange-soft px-3 py-2 text-[13px] font-medium text-orange transition-colors hover:bg-[rgba(254,81,0,0.18)] disabled:opacity-50"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" aria-hidden><path d="M12 5v14M5 12h14" /></svg>
           New conversation
@@ -341,7 +341,7 @@ function ChatPanel({
               e.preventDefault();
               submit(input);
             }}
-            className="flex items-end gap-2 rounded-2xl border border-edge bg-raise px-3 py-2 transition-colors focus-within:border-[rgba(254,81,0,0.45)]"
+            className="flex items-end gap-2 rounded-none border border-edge bg-raise px-3 py-2 transition-colors focus-within:border-[rgba(254,81,0,0.45)]"
           >
             <textarea
               ref={taRef}
@@ -367,7 +367,7 @@ function ChatPanel({
                 type="button"
                 onClick={() => stop()}
                 aria-label="Stop"
-                className="grid size-9 shrink-0 place-items-center rounded-xl border border-edge text-ink-dim transition-colors hover:border-edge-strong hover:text-ink"
+                className="grid size-9 shrink-0 place-items-center rounded-none border border-edge text-ink-dim transition-colors hover:border-edge-strong hover:text-ink"
               >
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
               </button>
@@ -376,7 +376,7 @@ function ChatPanel({
                 type="submit"
                 disabled={!input.trim()}
                 aria-label="Send"
-                className="grid size-9 shrink-0 place-items-center rounded-xl border border-[rgba(254,81,0,0.4)] bg-orange-soft text-orange transition-colors hover:bg-[rgba(254,81,0,0.18)] disabled:cursor-default disabled:opacity-40"
+                className="grid size-9 shrink-0 place-items-center rounded-none border border-[rgba(254,81,0,0.4)] bg-orange-soft text-orange transition-colors hover:bg-[rgba(254,81,0,0.18)] disabled:cursor-default disabled:opacity-40"
               >
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M12 19V5M6 11l6-6 6 6" /></svg>
               </button>
@@ -580,7 +580,7 @@ export function AnalystConsole({ userName, briefHeadline }: { userName: string; 
     return createPortal(
       <div className="theme-scope fixed inset-0 z-[60] bg-bg">
         <div className="mx-auto flex h-full max-w-[1180px] flex-col p-3 md:p-6">
-          <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-edge bg-panel shadow-[0_24px_64px_-24px_rgba(0,0,0,0.85)]">{body}</div>
+          <div className="flex h-full flex-col overflow-hidden rounded-none border border-edge bg-panel shadow-[0_24px_64px_-24px_rgba(0,0,0,0.85)]">{body}</div>
         </div>
       </div>,
       document.body,
@@ -588,7 +588,7 @@ export function AnalystConsole({ userName, briefHeadline }: { userName: string; 
   }
 
   return (
-    <div className="h-[72vh] min-h-[560px] overflow-hidden rounded-2xl border border-edge bg-panel shadow-[0_30px_80px_-40px_rgba(0,0,0,0.7)]">
+    <div className="h-[72vh] min-h-[560px] overflow-hidden rounded-none border border-edge bg-panel shadow-[0_30px_80px_-40px_rgba(0,0,0,0.7)]">
       {body}
     </div>
   );

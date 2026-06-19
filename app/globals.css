@@ -109,6 +109,71 @@
   --color-orange-wash: rgba(254, 81, 0, 0.05);
 }
 
+/* ===== Dashboard chrome — premium materials (theme-aware) =====
+   The dashboard lives inside .theme-scope and supports BOTH themes, so the
+   homepage's dark-only glass/gradient devices are expressed as tokens that
+   flip per theme. Dark values are the .theme-scope default; the light block
+   overrides them. Components reference these vars, so a single element renders
+   correct glass in either mode with no flash. */
+.theme-scope {
+  --sidebar-bg:
+    radial-gradient(130% 30% at 16% 0%, rgba(254, 81, 0, 0.07) 0%, transparent 56%),
+    linear-gradient(180deg, #080706 0%, #060606 58%, #050505 100%);
+  --topbar-bg: rgba(7, 7, 7, 0.72);
+  --pill-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.07) 0%, rgba(255, 255, 255, 0.025) 100%);
+  --pill-bg-hover: linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.04) 100%);
+  --pill-edge: rgba(255, 255, 255, 0.1);
+  --pill-edge-hover: rgba(255, 255, 255, 0.18);
+  --pill-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.08), 0 1px 2px 0 rgba(0, 0, 0, 0.55);
+  --grain-opacity: 0.06;
+  --card-highlight: inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
+  --card-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
+}
+
+:root[data-theme="light"] .theme-scope {
+  --sidebar-bg:
+    radial-gradient(130% 30% at 16% 0%, rgba(254, 81, 0, 0.05) 0%, transparent 56%),
+    linear-gradient(180deg, #f7f8fa 0%, #eef0f3 100%);
+  --topbar-bg: rgba(246, 247, 249, 0.72);
+  --pill-bg: linear-gradient(180deg, #ffffff 0%, #f6f7f9 100%);
+  --pill-bg-hover: linear-gradient(180deg, #ffffff 0%, #eef1f4 100%);
+  --pill-edge: rgba(15, 18, 22, 0.1);
+  --pill-edge-hover: rgba(15, 18, 22, 0.2);
+  --pill-shadow: inset 0 1px 0 0 #ffffff, 0 1px 2px 0 rgba(15, 18, 22, 0.07);
+  --grain-opacity: 0.035;
+  --card-highlight: inset 0 1px 0 0 #ffffff;
+  --card-shadow: 0 1px 2px 0 rgba(15, 18, 22, 0.06), 0 6px 20px -10px rgba(15, 18, 22, 0.1);
+}
+
+/* Tactile glass pill — filter dropdowns, the account button, any chrome control.
+   Reads correct in both themes via the tokens above. */
+.dash-pill {
+  background: var(--pill-bg);
+  border: 1px solid var(--pill-edge);
+  box-shadow: var(--pill-shadow);
+  transition:
+    background 200ms var(--ease-out),
+    border-color 200ms var(--ease-out);
+}
+.dash-pill:hover {
+  background: var(--pill-bg-hover);
+  border-color: var(--pill-edge-hover);
+}
+
+/* Film grain overlay for premium / feature surfaces — flips intensity per theme. */
+.dash-grain {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 150px 150px;
+  mix-blend-mode: soft-light;
+  opacity: var(--grain-opacity);
+}
+
+/* Restrained elevation for cards — borders still carry structure; this adds a
+   soft lift (a whisper on dark, a real shadow on light). */
+.dash-raise {
+  box-shadow: var(--card-highlight), var(--card-shadow);
+}
+
 .slide-sheen {
   position: relative;
 }
@@ -384,5 +449,53 @@ body {
   }
   .ledger-panel {
     transition: none;
+  }
+}
+
+/* ===== Print / PDF export =====
+   The standalone /brief-print page renders the report on a forced-light "paper"
+   surface so it exports cleanly to PDF regardless of the dashboard theme. */
+.report-light {
+  color-scheme: light;
+  --color-bg: #f3f4f6;
+  --color-panel: #ffffff;
+  --color-panel-strong: #ffffff;
+  --color-edge: rgba(15, 18, 22, 0.12);
+  --color-edge-strong: rgba(15, 18, 22, 0.18);
+  --color-ink: #14171c;
+  --color-ink-dim: rgba(20, 23, 28, 0.66);
+  --color-ink-dimmer: rgba(20, 23, 28, 0.46);
+  --color-surface: #ffffff;
+  --color-cell: #ffffff;
+  --color-raise: rgba(15, 18, 22, 0.045);
+  --color-raise-strong: rgba(15, 18, 22, 0.08);
+  --color-track: rgba(15, 18, 22, 0.1);
+  --color-good: #11935a;
+  --color-orange-soft: rgba(254, 81, 0, 0.1);
+  /* dash-raise reads these — give the sheet a soft document shadow on screen. */
+  --card-highlight: inset 0 1px 0 0 #ffffff;
+  --card-shadow: 0 1px 2px 0 rgba(15, 18, 22, 0.06), 0 18px 40px -24px rgba(15, 18, 22, 0.22);
+  background: var(--color-bg);
+  color: var(--color-ink);
+}
+
+@media print {
+  @page { margin: 14mm; }
+  html, body { background: #ffffff !important; }
+  .report-light {
+    background: #ffffff !important;
+    min-height: 0 !important;
+    padding: 0 !important;
+  }
+  .brief-report {
+    max-width: 100% !important;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+  }
+  .no-print { display: none !important; }
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 }

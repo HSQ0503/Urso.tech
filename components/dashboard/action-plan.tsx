@@ -12,7 +12,7 @@ function SectionLabel({ children, className = "" }: { children: React.ReactNode;
 
 function PlanList({ title, items, accent = false }: { title: string; items: string[]; accent?: boolean }) {
   return (
-    <div className="rounded-xl border border-edge bg-raise p-4">
+    <div className="rounded-none border border-edge bg-raise p-4">
       <SectionLabel>{title}</SectionLabel>
       <ol className="mt-3 space-y-2.5">
         {items.map((it, i) => (
@@ -45,7 +45,7 @@ export function ActionPlanBody({ plan, metric }: { plan: ActionPlan; metric?: st
         <p className="mt-2 text-[13.5px] leading-[1.6] text-ink-dim">{plan.problem}</p>
       </div>
 
-      <div className="rounded-xl border border-[rgba(254,81,0,0.3)] bg-orange-wash p-4">
+      <div className="rounded-none border border-[rgba(254,81,0,0.3)] bg-orange-wash p-4">
         <SectionLabel className="!text-orange">Urso&apos;s fix</SectionLabel>
         <div className="mt-2 text-[13.5px] font-medium text-ink">{plan.system}</div>
         <p className="mt-1.5 text-[13px] leading-[1.55] text-ink-dim">{plan.proposal}</p>

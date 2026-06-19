@@ -17,6 +17,7 @@ import {
 } from "@/components/dashboard/data.server";
 import {
   Card,
+  PageHeader,
   Micro,
   Tag,
   Delta,
@@ -52,21 +53,20 @@ export async function OwnerHome({ searchParams, userName, streak }: { searchPara
   const labels = series.labels;
 
   return (
-    <div className="animate-stage-in">
-      <WelcomeBanner name={userName} streak={streak} />
-
-      <header className="mb-7">
-        <Micro>Overview · {scopeLabel(scope)} · {periodLabel}</Micro>
-        <h1 className="mt-2.5 text-[clamp(26px,3.6vw,34px)] font-medium tracking-[-0.02em]">Performance overview</h1>
-        <p className="mt-2 max-w-[560px] text-[14px] leading-[1.5] text-ink-dim">
-          Revenue, demand and conversion {scope === "all" ? "across all four locations" : `for ${scopeLabel(scope)}`}. Use the store and month filters in the top bar to change this view.
-        </p>
-      </header>
+    <div>
+      <div className="animate-stage-in">
+        <WelcomeBanner name={userName} streak={streak} />
+        <PageHeader
+          eyebrow={`Overview · ${scopeLabel(scope)} · ${periodLabel}`}
+          title="Performance overview"
+          sub={`Revenue, demand and conversion ${scope === "all" ? "across all four locations" : `for ${scopeLabel(scope)}`}. Use the store and month filters in the top bar to change this view.`}
+        />
+      </div>
 
       {/* KPI row — all six are live FranPOS metrics with real period-over-period
           deltas (chips hide when no honest prior period exists). Calls answered
           and no-show join the row when Twilio / the booking feed go live. */}
-      <section className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-edge bg-edge md:grid-cols-3 xl:grid-cols-6">
+      <section className="dash-raise mt-2 grid animate-stage-in grid-cols-2 gap-px overflow-hidden rounded-none border border-edge bg-edge md:grid-cols-3 xl:grid-cols-6" style={{ animationDelay: "50ms" }}>
         <Kpi label="Revenue" value={fmtMoney(m.revenue)} delta={deltas.revenue} />
         <Kpi label="Bookings" value={m.bookings.toLocaleString()} delta={deltas.bookings} />
         <Kpi label="Avg visit" value={fmtMoney(m.avgTicket)} delta={deltas.avgTicket} />
@@ -76,7 +76,7 @@ export async function OwnerHome({ searchParams, userName, streak }: { searchPara
       </section>
 
       {/* One action item + revenue */}
-      <section className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-[1fr_1.25fr]">
+      <section className="mt-3 grid animate-stage-in grid-cols-1 gap-3 lg:grid-cols-[1fr_1.25fr]" style={{ animationDelay: "110ms" }}>
         <ActionItemCard
           eyebrow="Action item · what to fix first"
           title={action.title}
@@ -86,7 +86,7 @@ export async function OwnerHome({ searchParams, userName, streak }: { searchPara
           planKey={action.planKey}
         />
 
-        <Card>
+        <Card className="dash-raise">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div>
               <div className="flex items-center gap-2">
@@ -114,78 +114,92 @@ export async function OwnerHome({ searchParams, userName, streak }: { searchPara
       </section>
 
       {/* Calls + Traffic */}
-      <section className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-2">
-        <Card>
-          <div className="mb-4 flex items-start justify-between gap-3">
-            <div>
-              <div className="flex items-center gap-2">
-                <Micro>Inbound calls</Micro>
-                <AskAi
-                  topic="Inbound call capture"
-                  topicId="callsAnsweredMissed"
-                  pending
-                  suggestions={["What would call tracking tell me?", "What's measurable today instead?"]}
-                />
-                <ChartInfo id="callsAnsweredMissed" />
+      <section className="mt-3 grid animate-stage-in grid-cols-1 gap-3 xl:grid-cols-2" style={{ animationDelay: "170ms" }}>
+        <Card className="dash-raise">
+          <div className="mb-4 flex items-center gap-2">
+            <Micro>Inbound calls</Micro>
+            <AskAi
+              topic="Inbound call capture"
+              topicId="callsAnsweredMissed"
+              pending
+              suggestions={["What would call tracking tell me?", "What's measurable today instead?"]}
+            />
+            <ChartInfo id="callsAnsweredMissed" />
+          </div>
+          {cs.total === 0 ? (
+            <EmptyFeed
+              title="Call tracking goes live with Twilio"
+              detail="Once connected, you'll see answered vs missed calls each month — and the revenue behind every missed one."
+              tag="Call tracking pending"
+            />
+          ) : (
+            <>
+              <div className="mb-4 flex items-start justify-between gap-3">
+                <div className="text-[22px] font-medium tracking-[-0.01em]">{cs.total.toLocaleString()} <span className="text-[13px] text-ink-dim">calls</span></div>
+                <div className="text-right">
+                  <div className="text-[20px] font-medium text-orange">{pct(cs.missedPct)}</div>
+                  <Micro>missed</Micro>
+                </div>
               </div>
-              <div className="mt-1.5 text-[22px] font-medium tracking-[-0.01em]">{cs.total.toLocaleString()} <span className="text-[13px] text-ink-dim">calls</span></div>
-            </div>
-            <div className="text-right">
-              <div className="text-[20px] font-medium text-orange">{pct(cs.missedPct)}</div>
-              <Micro>missed</Micro>
-            </div>
-          </div>
-          <CallsBars labels={labels} total={series.callsTotal} missed={series.callsMissed} />
-          <div className="mt-3 flex items-center justify-between">
-            <Legend items={[{ label: "Answered", color: "var(--color-series)" }, { label: "Missed", color: "#fe5100" }]} />
-            <Tag tone="muted">Call tracking pending</Tag>
-          </div>
+              <CallsBars labels={labels} total={series.callsTotal} missed={series.callsMissed} />
+              <div className="mt-3">
+                <Legend items={[{ label: "Answered", color: "var(--color-series)" }, { label: "Missed", color: "#fe5100" }]} />
+              </div>
+            </>
+          )}
         </Card>
 
-        <Card>
-          <div className="mb-4 flex items-start justify-between gap-3">
-            <div>
-              <div className="flex items-center gap-2">
-                <Micro>Website traffic vs bookings</Micro>
-                <AskAi
-                  topic="Website traffic vs bookings"
-                  topicId="webTraffic"
-                  pending
-                  suggestions={["What would web tracking tell me?", "What's measurable today instead?"]}
-                />
-                <ChartInfo id="webTraffic" />
+        <Card className="dash-raise">
+          <div className="mb-4 flex items-center gap-2">
+            <Micro>Website traffic vs bookings</Micro>
+            <AskAi
+              topic="Website traffic vs bookings"
+              topicId="webTraffic"
+              pending
+              suggestions={["What would web tracking tell me?", "What's measurable today instead?"]}
+            />
+            <ChartInfo id="webTraffic" />
+          </div>
+          {ws.visits === 0 ? (
+            <EmptyFeed
+              title="Website analytics connect next"
+              detail="With analytics linked, you'll track visits, online bookings, and exactly where the booking funnel leaks."
+              tag="Analytics pending"
+            />
+          ) : (
+            <>
+              <div className="mb-4 flex items-start justify-between gap-3">
+                <div className="text-[22px] font-medium tracking-[-0.01em]">{ws.visits.toLocaleString()} <span className="text-[13px] text-ink-dim">visits</span></div>
+                <div className="text-right">
+                  <div className="text-[20px] font-medium text-orange">{pct(ws.convRate, 1)}</div>
+                  <Micro>book online</Micro>
+                </div>
               </div>
-              <div className="mt-1.5 text-[22px] font-medium tracking-[-0.01em]">{ws.visits.toLocaleString()} <span className="text-[13px] text-ink-dim">visits</span></div>
-            </div>
-            <div className="text-right">
-              <div className="text-[20px] font-medium text-orange">{pct(ws.convRate, 1)}</div>
-              <Micro>book online</Micro>
-            </div>
-          </div>
-          <TrafficChart labels={labels} visits={series.webVisits} bookings={series.webBookings} />
-          <div className="mt-3 flex items-center justify-between gap-3">
-            <Legend items={[{ label: "Visits", color: "var(--color-series)" }, { label: "Became bookings", color: "#fe5100" }]} />
-            <Tag tone="muted">Analytics pending</Tag>
-          </div>
+              <TrafficChart labels={labels} visits={series.webVisits} bookings={series.webBookings} />
+              <div className="mt-3">
+                <Legend items={[{ label: "Visits", color: "var(--color-series)" }, { label: "Became bookings", color: "#fe5100" }]} />
+              </div>
+            </>
+          )}
         </Card>
       </section>
 
       {/* Store performance */}
-      <section className="mt-5">
+      <section className="mt-3 animate-stage-in" style={{ animationDelay: "230ms" }}>
         <div className="mb-4 flex items-end justify-between">
           <div>
             <Micro>By location</Micro>
-            <h2 className="mt-1.5 text-[17px] font-medium tracking-[-0.01em]">Store performance</h2>
+            <h2 className="mt-1.5 text-[16px] font-semibold tracking-[-0.01em] text-ink">Store performance</h2>
           </div>
           <Link href="/dashboard/stores" className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-dim transition-colors hover:text-orange">
             Compare →
           </Link>
         </div>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {stores.map((s) => {
             const sm = cards[s.id];
             return (
-              <Card key={s.id} className="flex flex-col gap-4">
+              <Card key={s.id} className="dash-raise flex flex-col gap-4 transition-all duration-200 hover:-translate-y-px">
                 <div className="flex items-start justify-between">
                   <div>
                     <div className="text-[14.5px] text-ink">{s.name}</div>
@@ -199,7 +213,7 @@ export async function OwnerHome({ searchParams, userName, streak }: { searchPara
                     <Micro>Return</Micro>
                     <span className="font-mono text-[11px] text-ink-dim">{pct(sm.rebook)}</span>
                   </div>
-                  <Meter value={sm.rebook} />
+                  <Meter value={sm.rebook} color="var(--color-ink-dim)" />
                 </div>
                 <div className="flex items-center justify-between border-t border-edge pt-3">
                   <Micro>Retail attach</Micro>
@@ -210,6 +224,27 @@ export async function OwnerHome({ searchParams, userName, streak }: { searchPara
           })}
         </div>
       </section>
+    </div>
+  );
+}
+
+// Pending-feed empty state — a premium "coming online" moment (serif line + a
+// faint warm bloom) rather than a dead chart at zero. Used until Twilio / web
+// analytics go live.
+function EmptyFeed({ title, detail, tag }: { title: string; detail: string; tag: string }) {
+  return (
+    <div className="relative flex min-h-[176px] flex-col items-center justify-center overflow-hidden rounded-none px-6 py-8 text-center">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0"
+        style={{ background: "radial-gradient(60% 70% at 50% 32%, var(--color-orange-wash), transparent 72%)" }}
+      />
+      <div aria-hidden className="dash-grain pointer-events-none absolute inset-0" />
+      <p className="relative text-[15px] font-semibold leading-[1.25] tracking-[-0.01em] text-ink">{title}</p>
+      <p className="relative mt-2 max-w-[300px] text-[12.5px] leading-[1.5] text-ink-dim">{detail}</p>
+      <div className="relative mt-4">
+        <Tag tone="muted">{tag}</Tag>
+      </div>
     </div>
   );
 }

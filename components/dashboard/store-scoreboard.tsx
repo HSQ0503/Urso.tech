@@ -51,7 +51,7 @@ export function StoreScoreboard({
   const max = rows[0]?.score ?? 100;
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-edge bg-panel">
+    <div className="overflow-hidden rounded-none border border-edge bg-panel">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-edge px-5 py-4">
         <div className="flex items-center gap-1.5">
           <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-dimmer">Scoreboard · ranked by overall score</span>

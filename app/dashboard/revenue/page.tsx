@@ -40,7 +40,7 @@ export default async function RevenueMapPage({ searchParams }: { searchParams: P
   const repeatShare = nvr.repeat / (nvr.repeat + nvr.fresh);
 
   return (
-    <div className="animate-stage-in space-y-8">
+    <div className="animate-stage-in space-y-3">
       <PageHeader
         eyebrow={`Revenue map · ${scopeLabel(scope)} · ${period}`}
         title="Where the money comes from"
@@ -48,7 +48,7 @@ export default async function RevenueMapPage({ searchParams }: { searchParams: P
       />
 
       {/* Headline strip */}
-      <section className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-edge bg-edge md:grid-cols-4">
+      <section className="grid grid-cols-2 gap-px overflow-hidden rounded-none border border-edge bg-edge md:grid-cols-4">
         <Kpi label="Total revenue" value={fmtMoney(m.revenue)} />
         <Kpi label="Avg ticket" value={fmtMoney(m.avgTicket)} />
         <Kpi label="Buy both" value={pct(xs.both)} />
@@ -56,7 +56,7 @@ export default async function RevenueMapPage({ searchParams }: { searchParams: P
       </section>
 
       {/* Location + line */}
-      <section className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+      <section className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <Card>
           <div className="flex items-center gap-1.5">
             <Micro>By location</Micro>
@@ -114,7 +114,7 @@ export default async function RevenueMapPage({ searchParams }: { searchParams: P
       </section>
 
       {/* Service + groomer */}
-      <section className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+      <section className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <Card>
           <Micro>By service</Micro>
           <h2 className="mb-3 mt-1.5 text-[17px] font-medium tracking-[-0.01em]">Top revenue lines</h2>
@@ -145,7 +145,7 @@ export default async function RevenueMapPage({ searchParams }: { searchParams: P
         </Card>
       </section>
 
-      <p className="-mt-6 text-[13px] leading-[1.6] text-ink-dim">
+      <p className="mt-3 text-[13px] leading-[1.6] text-ink-dim">
         Retail attaches to grooming visits, so grooming share and retail attach move together. The clearest revenue lever is converting grooming-only customers into retail buyers at checkout.
       </p>
     </div>

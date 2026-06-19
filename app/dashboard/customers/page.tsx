@@ -74,7 +74,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
       </section>
 
       {trend && (
-        <Card className="mt-5">
+        <Card className="mt-3">
           <div className="flex items-center gap-1.5">
             <Micro>Return rate · by month, trailing year</Micro>
             <AskAi
@@ -90,7 +90,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
         </Card>
       )}
 
-      <div className="mt-8 grid grid-cols-1 gap-5 lg:grid-cols-2">
+      <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
         <Card className="flex flex-col gap-6">
           <div>
             <div className="flex items-center gap-1.5">
@@ -152,7 +152,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
       </div>
 
       {/* Grooming cycle */}
-      <Card className="mt-5">
+      <Card className="mt-3">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <div className="flex items-center gap-1.5">
@@ -179,7 +179,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
       </Card>
 
       {/* Customer intelligence */}
-      <section className="mt-8">
+      <section className="mt-3">
         <div className="mb-4 flex items-end justify-between gap-3">
           <div>
             <Micro>Customer intelligence</Micro>
@@ -188,7 +188,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
           <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-dimmer">Avg LTV {fmtMoney(intel.avgLtv)} · all history</span>
         </div>
 
-        <div className={`grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-edge bg-edge ${segCells.length === 5 ? "md:grid-cols-5" : "md:grid-cols-4"}`}>
+        <div className={`grid grid-cols-2 gap-px overflow-hidden rounded-none border border-edge bg-edge ${segCells.length === 5 ? "md:grid-cols-5" : "md:grid-cols-4"}`}>
           {segCells.map((s) => {
             const risk = s.segment === "At risk" || s.segment === "Lapsed";
             return (
@@ -200,7 +200,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
           })}
         </div>
 
-        <Card pad={false} className="mt-5">
+        <Card pad={false} className="mt-3">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[680px] border-collapse text-[13.5px]">
               <thead>

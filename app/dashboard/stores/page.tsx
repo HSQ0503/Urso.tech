@@ -97,7 +97,7 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
       </Card>
 
       {/* Ranked comparisons */}
-      <section className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+      <section className="grid grid-cols-1 gap-3 lg:grid-cols-3">
         <Card>
           <div className="flex items-center gap-1.5">
             <Micro>Revenue</Micro>
@@ -139,7 +139,7 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
         </Card>
       </section>
 
-      <p className="-mt-6 text-[13px] text-ink-dim">
+      <p className="mt-3 text-[13px] text-ink-dim">
         {scope === "all"
           ? "Return rate and retail attach are the two levers every store controls today — the ranked bars show where coaching pays off first. Call capture joins the comparison once tracking is live."
           : `Showing ${scopeLabel(scope)} highlighted against the other locations.`}

@@ -96,7 +96,7 @@ export function EventsClient({
   };
 
   return (
-    <div className="animate-stage-in space-y-8">
+    <div className="animate-stage-in space-y-3">
       <PageHeader
         eyebrow="Context log"
         title="Events"
@@ -104,12 +104,12 @@ export function EventsClient({
       />
 
       {error && (
-        <div className="rounded-xl border border-[rgba(226,75,74,0.4)] bg-[rgba(226,75,74,0.08)] px-4 py-3 text-[13px] text-ink">{error}</div>
+        <div className="rounded-none border border-[rgba(226,75,74,0.4)] bg-[rgba(226,75,74,0.08)] px-4 py-3 text-[13px] text-ink">{error}</div>
       )}
 
       <Card>
         <form onSubmit={submit} className="space-y-4">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <label className="block">
               <Micro>Type</Micro>
               <select value={type} onChange={(e) => setType(e.target.value as EventType)} className={`${inputCls} mt-1.5`}>
@@ -148,7 +148,7 @@ export function EventsClient({
             <input value={detail} onChange={(e) => setDetail(e.target.value)} placeholder="Anything that helps explain a move" className={`${inputCls} mt-1.5`} />
           </label>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <label className="block">
               <Micro>Start date</Micro>
               <input type="date" value={start} onChange={(e) => setStart(e.target.value)} className={`${inputCls} mt-1.5`} />

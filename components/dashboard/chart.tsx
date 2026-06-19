@@ -81,7 +81,7 @@ export function ChartTooltipContent({
   const { config } = useChart();
   if (!active || !payload?.length) return null;
   return (
-    <div className="min-w-[8rem] rounded-lg border border-edge bg-surface px-3 py-2 shadow-[0_12px_32px_-12px_rgba(0,0,0,0.75)]">
+    <div className="min-w-[8rem] rounded-none border border-edge bg-surface px-3 py-2 shadow-[0_12px_32px_-12px_rgba(0,0,0,0.75)]">
       {!hideLabel && (
         <div className="mb-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-ink-dimmer">
           {labelFormatter ? labelFormatter(label ?? "") : label}

@@ -81,7 +81,7 @@ export async function ManagerHome({ store, month, userName, streak }: { store: S
         <div className="mb-5">
           <StoreScoreboard rows={scores} highlightId={store} variant="manager" />
         </div>
-        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
           <RateRankCard title="Return rate" ranking={rebookRank} storeId={store} />
           <RateRankCard title="Retail attach" ranking={attachRank} storeId={store} />
         </div>
@@ -93,7 +93,7 @@ export async function ManagerHome({ store, month, userName, streak }: { store: S
           <Micro>Your scorecard</Micro>
           <h2 className="mt-1.5 text-[18px] font-medium tracking-[-0.01em]">How you&apos;re doing — and versus the group average</h2>
         </div>
-        <div className="grid grid-cols-1 gap-px overflow-hidden rounded-2xl border border-edge bg-edge md:grid-cols-3">
+        <div className="grid grid-cols-1 gap-px overflow-hidden rounded-none border border-edge bg-edge md:grid-cols-3">
           {scorecard.map((s) => (
             <div key={s.label} className="bg-cell p-4">
               <div className="flex items-center justify-between gap-2">

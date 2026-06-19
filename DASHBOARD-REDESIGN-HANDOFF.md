@@ -22,19 +22,31 @@ the legibility a dense data product needs.** Same law as marketing:
 
 ---
 
-## 1. The governing philosophy — "Premium operating system"
+## 1. The governing philosophy — "Executive operating system"
 
-A landing page is **scrolled**; a dashboard is **read**. Do not blind-copy marketing
-devices onto data. The translation rule:
+A landing page is **scrolled**; a dashboard is **read** by a business owner who has to
+take it seriously. Do not blind-copy marketing devices onto data.
 
-- **Editorial luxury at the chrome** — page headers, hero/summary moments, empty
-  states, feature cards, AI/analyst cards, section openers, the one big single stat →
-  **Fraunces serif, the orange period, layered depth, glass, refined motion.**
+> **DIRECTION CORRECTION (2026-06-17) — READ THIS.** The dashboard is **EXECUTIVE /
+> CORPORATE**, not editorial. Han reviewed a serif-title pass and rejected it:
+> *"bring the font back to the original… it does not look corporate enough… make it
+> look more executive."* So: **NO Fraunces serif and NO orange period anywhere in the
+> dashboard.** Keep the original **Inter sans** — semibold for headings, tabular for
+> data, Roboto Mono for micro-labels. The premium comes from **material, depth,
+> restraint, and tight/dense executive spacing** — never from editorial typography.
+> (Fraunces + the orange period stay a MARKETING-only signature.) Also: **keep the top
+> tight** — no big airy headers or decorative blooms eating vertical space.
+
+The translation rule:
+
+- **Premium = material + restraint, in sans.** Page headers, feature/AI cards, empty
+  states → layered depth, subtle glass/grain, refined motion, **tight dense spacing** —
+  all in Inter. "Premium" here means *crisp, aligned, authoritative*, never airy or
+  decorated.
 - **Uncompromised legibility in the data** — KPI grids, tables, dense rows, charts →
-  **stay sans + tabular numerals + mono labels + hairline structure.** Here, premium
-  means *crisp, aligned, quiet* — never decorated.
-- Net feel: the homepage's **calmer, working sibling.** Same family, same materials,
-  tuned for density and daily use.
+  sans + tabular numerals + mono labels + hairline structure.
+- Net feel: a **serious enterprise operating system** (Bloomberg / Linear density and
+  calm), not a consumer landing page. Dense beats airy; restraint reads as executive.
 
 The **Brand Packet §16** (Product/UI rules) remains the **floor**: dense, quiet,
 trustworthy; orange ≤ 10%; AI insight = *2px orange left rule + mono "INSIGHT" label +
@@ -65,9 +77,9 @@ soft-light grain, dark cinematic gradients). Therefore:
 
 | Element | Now (OS look) | Target (premium) |
 |---|---|---|
-| **Page title** (`PageHeader` h1) | Inter `font-medium` | **Fraunces serif** (italic-first optional) + **orange period**; mono eyebrow above |
+| **Page title** (`PageHeader` h1) | Inter `font-medium` | **Inter semibold**, tight (clamp 23–30px), NO serif, NO orange period; mono eyebrow above |
 | **Eyebrow / section index** | mono uppercase | **keep** — already on-language (matches homepage mono caps) |
-| **Hero / single big stat** | Inter 40px | **Fraunces** for the one hero number; delta chip stays |
+| **Hero / single big stat** | Inter 40px | **Inter** tabular — NO serif |
 | **KPI-grid values** | Inter tabular | **keep** Inter/sans tabular — alignment + scan speed win over serif here |
 | **Tables / rows** | sans tabular, hairline | **keep**; refine — tighter rhythm, better hover, mono column heads |
 | **Data cards** | `rounded-2xl border-edge bg-panel` | **keep flat**; just polish spacing + hover |
@@ -77,7 +89,7 @@ soft-light grain, dark cinematic gradients). Therefore:
 | **Section dividers** | hairline | hairline or mono eyebrow; **never** decorative waves/blobs |
 | **Motion** | minimal | `Reveal`-style fade + 12px translate, staggered, 200–400ms ease-out, reduced-motion respected; **never** block or delay data |
 | **Depth** | borders only | borders stay primary; add **restrained** elevation (inset top highlight + soft shadow) only on raised/featured surfaces |
-| **Empty / loading states** | plain | a premium moment — serif line + subtle bloom + a clear next action ("what will appear and how to get it") |
+| **Empty / loading states** | plain | a premium moment — sans-semibold line + faint bloom + a clear next action ("what will appear and how to get it") |
 
 ---
 

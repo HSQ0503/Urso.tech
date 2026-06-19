@@ -33,10 +33,13 @@ try {
 
 // ── args ─────────────────────────────────────────────────────────────────────
 const arg = (name, def) => {
-  const hit = process.argv.find((a) => a === `--${name}` || a.startsWith(`--${name}=`));
-  if (!hit) return def;
-  const eq = hit.indexOf("=");
-  return eq === -1 ? true : hit.slice(eq + 1);
+  const i = process.argv.findIndex((a) => a === `--${name}` || a.startsWith(`--${name}=`));
+  if (i === -1) return def;
+  const a = process.argv[i];
+  const eq = a.indexOf("=");
+  if (eq !== -1) return a.slice(eq + 1); // --name=value
+  const next = process.argv[i + 1];
+  return next && !next.startsWith("--") ? next : true; // --name value  |  --name (flag)
 };
 const CLIENT = arg("client", "woof-gang");
 const DO_SYNC = !!arg("sync", false);

@@ -111,7 +111,7 @@ export function AskAi({
             {messages.map((m) => (
               <div key={m.id} className={m.role === "user" ? "flex justify-end" : ""}>
                 {m.role === "user" ? (
-                  <div className="max-w-[85%] rounded-2xl rounded-br-md border border-[rgba(254,81,0,0.28)] bg-orange-wash px-3.5 py-2 text-[13.5px] leading-[1.55] text-ink">
+                  <div className="max-w-[85%] rounded-none border border-[rgba(254,81,0,0.28)] bg-orange-wash px-3.5 py-2 text-[13.5px] leading-[1.55] text-ink">
                     {m.parts.map((p, i) => (p.type === "text" ? <span key={i}>{p.text}</span> : null))}
                   </div>
                 ) : (
@@ -156,12 +156,12 @@ export function AskAi({
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder="Ask about this data…"
-              className="h-9 flex-1 rounded-xl border border-edge bg-transparent px-3 text-[13.5px] text-ink outline-none placeholder:text-ink-dimmer focus:border-[rgba(254,81,0,0.45)]"
+              className="h-9 flex-1 rounded-none border border-edge bg-transparent px-3 text-[13.5px] text-ink outline-none placeholder:text-ink-dimmer focus:border-[rgba(254,81,0,0.45)]"
             />
             <button
               type="submit"
               disabled={busy || !input.trim()}
-              className="inline-grid size-9 shrink-0 cursor-pointer place-items-center rounded-xl border border-[rgba(254,81,0,0.35)] bg-orange-soft text-orange transition-colors hover:bg-[rgba(254,81,0,0.18)] disabled:cursor-default disabled:opacity-40"
+              className="inline-grid size-9 shrink-0 cursor-pointer place-items-center rounded-none border border-[rgba(254,81,0,0.35)] bg-orange-soft text-orange transition-colors hover:bg-[rgba(254,81,0,0.18)] disabled:cursor-default disabled:opacity-40"
               aria-label="Send"
             >
               <Spark />

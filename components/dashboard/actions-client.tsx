@@ -90,7 +90,7 @@ export function ActionsClient({ initialActions, showHeader = true }: { initialAc
   };
 
   return (
-    <div className="animate-stage-in space-y-8">
+    <div className="animate-stage-in space-y-3">
       {showHeader && (
         <PageHeader
           eyebrow="AI action center"
@@ -100,7 +100,7 @@ export function ActionsClient({ initialActions, showHeader = true }: { initialAc
       )}
 
       {error && (
-        <div className="rounded-xl border border-[rgba(226,75,74,0.4)] bg-[rgba(226,75,74,0.08)] px-4 py-3 text-[13px] text-ink">
+        <div className="rounded-none border border-[rgba(226,75,74,0.4)] bg-[rgba(226,75,74,0.08)] px-4 py-3 text-[13px] text-ink">
           Couldn’t save that change — {error}. Please try again.
         </div>
       )}
@@ -140,7 +140,7 @@ export function ActionsClient({ initialActions, showHeader = true }: { initialAc
           <Micro>Pipeline · most urgent first</Micro>
           <InfoTip text="Every action moves left to right: the AI suggests it, you approve, the agent runs it, then it completes with a result. The list above is ordered by what needs you most." />
         </div>
-        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-edge bg-edge md:grid-cols-4">
+        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-none border border-edge bg-edge md:grid-cols-4">
           {ACTION_FLOW.map((s, i) => (
             <div key={s} className="relative bg-cell p-4">
               <div className="flex items-center justify-between">
@@ -237,7 +237,7 @@ function ActionCard({ action: a, onApprove, onDismiss }: { action: ActionWithPla
       </div>
 
       {a.result && (
-        <div className="flex items-center gap-2 rounded-xl border border-[rgba(70,209,138,0.3)] bg-raise px-3.5 py-2.5">
+        <div className="flex items-center gap-2 rounded-none border border-[rgba(70,209,138,0.3)] bg-raise px-3.5 py-2.5">
           <span className="size-1.5 rounded-full bg-[var(--color-good)]" />
           <span className="text-[12.5px] text-ink">{a.result}</span>
         </div>

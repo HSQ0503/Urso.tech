@@ -83,7 +83,7 @@ export function ReviewsClient({
       />
 
       {/* Reputation per store */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {reputation.map((r, i) => {
           const find = findability[i];
           const sel = r.store === store;
@@ -91,7 +91,7 @@ export function ReviewsClient({
             <button
               key={r.store}
               onClick={() => setStore(r.store)}
-              className={`flex flex-col gap-4 rounded-2xl border bg-panel p-5 text-left transition-colors hover:border-edge-strong ${sel ? "border-edge-strong bg-raise-strong" : "border-edge"}`}
+              className={`flex flex-col gap-4 rounded-none border bg-panel p-5 text-left transition-colors hover:border-edge-strong ${sel ? "border-edge-strong bg-raise-strong" : "border-edge"}`}
             >
               <div className="flex items-start justify-between">
                 <div className="text-[14.5px] text-ink">{r.store}</div>
@@ -122,7 +122,7 @@ export function ReviewsClient({
       </div>
 
       {/* Review browser */}
-      <section className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[1fr_1.6fr]">
+      <section className="grid grid-cols-1 items-start gap-3 lg:grid-cols-[1fr_1.6fr]">
         <Card className="flex h-fit flex-col gap-5 lg:sticky lg:top-[84px]">
           <div>
             <div className="flex items-center gap-1.5">
@@ -198,7 +198,7 @@ export function ReviewsClient({
       </section>
 
       {/* Explainers */}
-      <section className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+      <section className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <Card className="flex flex-col gap-3">
           <div className="flex items-center gap-2">
             <span className="size-2 rounded-full bg-orange" />

@@ -23,7 +23,7 @@ export function ChartInfo({ id, align = "left" }: { id: GuideId; align?: keyof t
       </span>
       <span
         role="tooltip"
-        className={`pointer-events-none absolute bottom-[calc(100%+8px)] z-50 w-[266px] rounded-xl border border-edge bg-surface p-3.5 text-left opacity-0 shadow-[0_18px_44px_-16px_rgba(0,0,0,0.85)] transition-opacity duration-150 group-hover/ci:opacity-100 group-focus-within/ci:opacity-100 motion-reduce:transition-none ${ALIGN[align]}`}
+        className={`pointer-events-none absolute bottom-[calc(100%+8px)] z-50 w-[266px] rounded-none border border-edge bg-surface p-3.5 text-left opacity-0 shadow-[0_18px_44px_-16px_rgba(0,0,0,0.85)] transition-opacity duration-150 group-hover/ci:opacity-100 group-focus-within/ci:opacity-100 motion-reduce:transition-none ${ALIGN[align]}`}
       >
         <span className="block font-mono text-[9px] uppercase tracking-[0.16em] text-ink-dimmer">How to read this</span>
         <span className="mt-2 block font-sans text-[12px] font-medium normal-case leading-[1.45] tracking-normal text-ink">{g.summary}</span>

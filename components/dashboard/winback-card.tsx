@@ -15,7 +15,7 @@ export function WinbackCard({ list, winbackCount }: { list: Inactive[]; winbackC
   const [launched, setLaunched] = useState(false);
 
   return (
-    <Card pad={false} className="mt-5 flex flex-col">
+    <Card pad={false} className="mt-3 flex flex-col">
       <div className="flex items-center justify-between gap-3 px-5 pb-4 pt-5">
         <div>
           <Micro>Retention</Micro>

@@ -73,7 +73,7 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
           title="Inbound call handling"
           right={<Tag tone="muted">Call tracking pending</Tag>}
         />
-        <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.7fr_1fr]">
+        <div className="grid grid-cols-1 gap-3 xl:grid-cols-[1.7fr_1fr]">
           <Card>
             <div className="mb-4 flex items-start justify-between">
               <div>
@@ -114,7 +114,7 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
             <div className="mt-1 grid place-items-center">
               <RadialGauge value={cs.answeredPct} caption="answered" />
             </div>
-            <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-edge bg-edge">
+            <div className="grid grid-cols-2 gap-px overflow-hidden rounded-none border border-edge bg-edge">
               <div className="bg-panel p-3.5">
                 <Micro>Answered</Micro>
                 <div className="mt-1.5 font-mono text-[16px] text-ink">{(cs.total - cs.missed).toLocaleString()}</div>
@@ -130,7 +130,7 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
           </Card>
         </div>
 
-        <Card className="mt-5">
+        <Card className="mt-3">
           <SubHead
             eyebrow="When calls are missed"
             title="Calls by hour, with after-hours band"
@@ -160,7 +160,7 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
           title="Booking conversion"
           right={<Tag tone="muted">Analytics pending</Tag>}
         />
-        <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
           <Card>
             <div className="mb-4 flex items-end justify-between">
               <div>
@@ -219,7 +219,7 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
           title="Revenue and mix"
           right={<Tag tone="good">Measurable now</Tag>}
         />
-        <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.5fr_1fr]">
+        <div className="grid grid-cols-1 gap-3 xl:grid-cols-[1.5fr_1fr]">
           <Card>
             <div className="mb-4 flex items-end justify-between">
               <div>

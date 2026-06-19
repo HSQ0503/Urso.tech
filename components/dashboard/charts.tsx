@@ -63,6 +63,41 @@ function axisFor(token: ValueFormat): (n: number) => string {
   return formatFor(token);
 }
 
+// Truncate a category label to a single line with an ellipsis. Long names
+// ("Sergio Leon-Sanchez", product strings) otherwise word-wrap into a 2–3 line
+// mess on the axis. Tooltips and the exact-figures tables keep the full name.
+const truncName = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s);
+
+// X-axis tick that wraps a multi-word category onto two centered lines so store
+// names ("Winter Park", "Lakeside Village") stop colliding in the columns
+// layout. Fill + size come from the ChartContainer axis CSS.
+function WrapTick({ x, y, payload }: { x?: number; y?: number; payload?: { value?: string | number } }) {
+  const raw = String(payload?.value ?? "");
+  const parts = raw.split(" ");
+  const lines = parts.length > 1 ? [parts[0], parts.slice(1).join(" ")] : [raw];
+  return (
+    <text x={x} y={y} dy={12} textAnchor="middle" style={{ fontSize: "11px", fill: "var(--color-axis)" }}>
+      {lines.map((ln, i) => (
+        <tspan key={i} x={x} dy={i === 0 ? 0 : 12}>
+          {ln}
+        </tspan>
+      ))}
+    </text>
+  );
+}
+
+// Single-line Y-axis tick for the ranking chart. Recharts' default tick word-
+// wraps long names ("Sergio Leon-Sanchez") onto two lines; rendering our own
+// <text> with no width prop keeps it to one line and truncates to fit instead.
+function RankTick({ x, y, payload, max = 18 }: { x?: number; y?: number; payload?: { value?: string | number }; max?: number }) {
+  const raw = String(payload?.value ?? "");
+  return (
+    <text x={x} y={y} dy="0.32em" textAnchor="end" style={{ fontSize: "11px", fill: "var(--color-axis)" }}>
+      {truncName(raw, max)}
+    </text>
+  );
+}
+
 // ---- Revenue area chart ----------------------------------------------------
 export function AreaChart({
   data,
@@ -97,7 +132,7 @@ export function AreaChart({
         <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} interval={tickEvery(labels.length)} />
         <YAxis tickLine={false} axisLine={false} width={42} tickFormatter={axis} />
         <ChartTooltip cursor={{ strokeDasharray: "3 3" }} content={<ChartTooltipContent valueFormatter={(v) => fmt(v)} />} />
-        <Area dataKey="value" type="monotone" stroke="var(--color-value)" strokeWidth={2} fill={`url(#${gid})`} dot={false} activeDot={{ r: 3 }} />
+        <Area dataKey="value" type="linear" stroke="var(--color-value)" strokeWidth={2} fill={`url(#${gid})`} dot={false} activeDot={{ r: 3 }} />
       </RAreaChart>
     </ChartContainer>
   );
@@ -129,8 +164,8 @@ export function CallsBars({
         <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} interval={tickEvery(labels.length)} />
         <YAxis tickLine={false} axisLine={false} width={30} />
         <ChartTooltip content={<ChartTooltipContent />} />
-        <Bar dataKey="answered" stackId="a" fill="var(--color-answered)" radius={[0, 0, 2, 2]} />
-        <Bar dataKey="missed" stackId="a" fill="var(--color-missed)" radius={[2, 2, 0, 0]} />
+        <Bar dataKey="answered" stackId="a" fill="var(--color-answered)" radius={0} />
+        <Bar dataKey="missed" stackId="a" fill="var(--color-missed)" radius={0} />
       </BarChart>
     </ChartContainer>
   );
@@ -163,8 +198,8 @@ export function TrafficChart({
         <YAxis yAxisId="left" tickLine={false} axisLine={false} width={34} />
         <YAxis yAxisId="right" orientation="right" tickLine={false} axisLine={false} width={26} />
         <ChartTooltip content={<ChartTooltipContent />} />
-        <Bar yAxisId="left" dataKey="visits" fill="var(--color-visits)" radius={[2, 2, 0, 0]} barSize={13} />
-        <Line yAxisId="right" dataKey="bookings" type="monotone" stroke="var(--color-bookings)" strokeWidth={2} dot={{ r: 2, fill: color }} activeDot={{ r: 3.5 }} />
+        <Bar yAxisId="left" dataKey="visits" fill="var(--color-visits)" radius={0} barSize={13} />
+        <Line yAxisId="right" dataKey="bookings" type="linear" stroke="var(--color-bookings)" strokeWidth={2} dot={false} activeDot={{ r: 3.5 }} />
       </ComposedChart>
     </ChartContainer>
   );
@@ -197,8 +232,8 @@ export function CallsChart({
         <YAxis tickLine={false} axisLine={false} width={24} />
         <ReferenceArea x1={closeHour} x2={startHour + hourly.length - 1} fill={ORANGE} fillOpacity={0.07} ifOverflow="extendDomain" />
         <ChartTooltip content={<ChartTooltipContent labelFormatter={(h) => fmtHour(Number(h))} />} />
-        <Bar dataKey="answered" stackId="a" fill="var(--color-answered)" radius={[0, 0, 1, 1]} />
-        <Bar dataKey="missed" stackId="a" fill="var(--color-missed)" radius={[1, 1, 0, 0]} />
+        <Bar dataKey="answered" stackId="a" fill="var(--color-answered)" radius={0} />
+        <Bar dataKey="missed" stackId="a" fill="var(--color-missed)" radius={0} />
       </BarChart>
     </ChartContainer>
   );
@@ -228,8 +263,8 @@ export function StackedArea({ data }: { data: { m: string; grooming: number; ret
         <XAxis dataKey="m" tickLine={false} axisLine={false} tickMargin={8} />
         <YAxis tickLine={false} axisLine={false} width={28} />
         <ChartTooltip content={<ChartTooltipContent />} />
-        <Area dataKey="grooming" type="monotone" stackId="1" stroke="var(--color-grooming)" strokeWidth={1.5} fill={`url(#${gid}-g)`} />
-        <Area dataKey="retail" type="monotone" stackId="1" stroke="var(--color-retail)" strokeWidth={1.5} fill={`url(#${gid}-r)`} />
+        <Area dataKey="grooming" type="linear" stackId="1" stroke="var(--color-grooming)" strokeWidth={1.5} fill={`url(#${gid}-g)`} />
+        <Area dataKey="retail" type="linear" stackId="1" stroke="var(--color-retail)" strokeWidth={1.5} fill={`url(#${gid}-r)`} />
       </RAreaChart>
     </ChartContainer>
   );
@@ -268,7 +303,7 @@ export function DonutSplit({ a, b, labelA, labelB }: { a: number; b: number; lab
 function LegendRow({ color, label, value }: { color: string; label: string; value: string }) {
   return (
     <div className="flex items-center gap-2 text-[12px]">
-      <span className="size-2 rounded-full" style={{ background: color }} />
+      <span className="size-2 rounded-none" style={{ background: color }} />
       <span className="text-ink">{label}</span>
       <span className="font-mono text-ink-dim">{value}</span>
     </div>
@@ -322,7 +357,7 @@ export function CohortCurve({ data, label = "months since first visit" }: { data
           <XAxis dataKey="x" tickLine={false} axisLine={false} tickMargin={6} />
           <YAxis tickLine={false} axisLine={false} width={28} domain={[0, 100]} tickFormatter={(v) => `${v}%`} />
           <ChartTooltip content={<ChartTooltipContent labelFormatter={(x) => `Month ${x}`} valueFormatter={(v) => `${v}%`} />} />
-          <Area dataKey="value" type="monotone" stroke="var(--color-value)" strokeWidth={1.75} fill={`url(#${gid})`} dot={{ r: 2, fill: ORANGE }} />
+          <Area dataKey="value" type="linear" stroke="var(--color-value)" strokeWidth={1.75} fill={`url(#${gid})`} dot={false} />
         </RAreaChart>
       </ChartContainer>
       <div className="mt-1.5 font-mono text-[10px] uppercase tracking-[0.1em] text-ink-dimmer">{label}</div>
@@ -347,7 +382,7 @@ export function RateTrend({ data, seriesLabel = "Return rate" }: { data: { label
         <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={6} interval="preserveStartEnd" />
         <YAxis tickLine={false} axisLine={false} width={34} domain={[0, 100]} tickFormatter={(v) => `${v}%`} />
         <ChartTooltip content={<ChartTooltipContent valueFormatter={(v) => `${v}%`} />} />
-        <Area dataKey="value" type="monotone" stroke="var(--color-value)" strokeWidth={1.75} fill={`url(#${gid})`} dot={{ r: 2, fill: ORANGE }} />
+        <Area dataKey="value" type="linear" stroke="var(--color-value)" strokeWidth={1.75} fill={`url(#${gid})`} dot={false} />
       </RAreaChart>
     </ChartContainer>
   );
@@ -367,9 +402,9 @@ export function ConversionFunnel({ steps }: { steps: FunnelStep[] }) {
               <span className="ml-1.5 text-ink-dimmer">{(s.pct * 100).toLocaleString("en-US", { maximumFractionDigits: 1 })}% of top</span>
             </span>
           </div>
-          <div className="h-8 w-full overflow-hidden rounded-md bg-raise">
+          <div className="h-8 w-full overflow-hidden rounded-none bg-raise">
             <div
-              className="h-full rounded-md"
+              className="h-full rounded-none"
               style={{ width: `${Math.max(5, (s.value / max) * 100)}%`, background: s.leak ? "rgba(254,81,0,0.42)" : "var(--color-series-soft)" }}
             />
           </div>
@@ -397,7 +432,7 @@ export function RadialGauge({ value, caption, color = ORANGE, height = 168 }: { 
       <ChartContainer config={config} style={{ height }}>
         <RadialBarChart data={data} startAngle={220} endAngle={-40} innerRadius="74%" outerRadius="100%">
           <PolarAngleAxis type="number" domain={[0, 100]} angleAxisId={0} tick={false} />
-          <RadialBar background={{ fill: "var(--color-track)" }} dataKey="value" cornerRadius={10} fill="var(--color-value)" angleAxisId={0} />
+          <RadialBar background={{ fill: "var(--color-track)" }} dataKey="value" cornerRadius={0} fill="var(--color-value)" angleAxisId={0} />
         </RadialBarChart>
       </ChartContainer>
       <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
@@ -436,9 +471,17 @@ export function BarRanking({
       <BarChart data={data} layout="vertical" margin={{ left: 4, right: 44, top: 2, bottom: 2 }} barCategoryGap={12}>
         <CartesianGrid horizontal={false} />
         <XAxis type="number" hide />
-        <YAxis type="category" dataKey="name" width={labelWidth} tickLine={false} axisLine={false} />
+        <YAxis
+          type="category"
+          dataKey="name"
+          width={labelWidth}
+          tickLine={false}
+          axisLine={false}
+          interval={0}
+          tick={<RankTick max={Math.max(6, Math.floor(labelWidth / 7))} />}
+        />
         <ChartTooltip cursor={{ fill: "var(--color-raise)" }} content={<ChartTooltipContent hideLabel valueFormatter={(v) => fmt(v)} />} />
-        <Bar dataKey="value" radius={[0, 3, 3, 0]} isAnimationActive={false}>
+        <Bar dataKey="value" radius={0} isAnimationActive={false}>
           {data.map((d, i) => (
             <Cell key={i} fill={d.highlight ? color : track} />
           ))}
@@ -462,10 +505,10 @@ export function StackedShareBar({ segments }: { segments: { label: string; value
           return (
             <div
               key={i}
-              className={`group/seg relative min-w-[2px] cursor-default transition-[width,filter] hover:brightness-110 ${i === 0 ? "rounded-l-lg" : ""} ${i === last ? "rounded-r-lg" : ""}`}
+              className={`group/seg relative min-w-[2px] cursor-default transition-[width,filter] hover:brightness-110 ${i === 0 ? "rounded-none" : ""} ${i === last ? "rounded-none" : ""}`}
               style={{ width: `${(s.value / total) * 100}%`, background: s.color }}
             >
-              <span className="pointer-events-none absolute bottom-[calc(100%+8px)] left-1/2 z-20 -translate-x-1/2 whitespace-nowrap rounded-lg border border-edge bg-surface px-3 py-2 opacity-0 shadow-[0_12px_32px_-12px_rgba(0,0,0,0.6)] transition-opacity duration-150 group-hover/seg:opacity-100">
+              <span className="pointer-events-none absolute bottom-[calc(100%+8px)] left-1/2 z-20 -translate-x-1/2 whitespace-nowrap rounded-none border border-edge bg-surface px-3 py-2 opacity-0 shadow-[0_12px_32px_-12px_rgba(0,0,0,0.6)] transition-opacity duration-150 group-hover/seg:opacity-100">
                 <span className="flex items-center gap-2 text-[11.5px]">
                   <span className="size-2 rounded-[2px]" style={{ background: s.color }} />
                   <span className="text-ink-dim">{s.label}</span>
@@ -500,8 +543,8 @@ export function RatingBars({ stars, counts }: { stars: number[]; counts: number[
         return (
           <div key={star} className="flex items-center gap-2.5">
             <span className="w-7 shrink-0 font-mono text-[11px] text-ink-dim">{star}★</span>
-            <div className="h-3 flex-1 overflow-hidden rounded-full bg-raise">
-              <div className="h-full rounded-full" style={{ width: `${(c / max) * 100}%`, background: star >= 4 ? "var(--color-series)" : ORANGE }} />
+            <div className="h-3 flex-1 overflow-hidden rounded-none bg-raise">
+              <div className="h-full rounded-none" style={{ width: `${(c / max) * 100}%`, background: star >= 4 ? "var(--color-series)" : ORANGE }} />
             </div>
             <span className="w-9 shrink-0 text-right font-mono text-[11px] text-ink-dim">{c}</span>
           </div>
@@ -512,11 +555,6 @@ export function RatingBars({ stars, counts }: { stars: number[]; counts: number[
 }
 
 // ---- Compare page: period-vs-period charts ----------------------------------
-
-// Category axes get one line per name: long product names ("ONLINE SERVICE
-// (#1) - DOG - Full Groom") otherwise wrap into a 3-line mess. Tooltips and
-// the exact-figures table keep the full name.
-const truncName = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s);
 
 // Grouped now-vs-before bars. layout="columns" (few entities, e.g. stores)
 // renders vertical columns; layout="rows" (many named entities, e.g. groomers)
@@ -568,9 +606,9 @@ export function CompareBars({
           <YAxis type="category" dataKey="name" width={118} tickLine={false} axisLine={false} interval={0} tick={{ fontSize: 11 }} tickFormatter={(v) => truncName(String(v), 16)} />
           <ChartTooltip cursor={{ fill: "var(--color-raise)" }} content={<ChartTooltipContent valueFormatter={(v) => fmt(v)} />} />
           {orderedKeys.map((k) => (
-            <Bar key={k} dataKey={k} fill={`var(--color-${k})`} radius={[0, 3, 3, 0]} barSize={8} isAnimationActive={false} />
+            <Bar key={k} dataKey={k} fill={`var(--color-${k})`} radius={0} barSize={8} isAnimationActive={false} />
           ))}
-          <Bar dataKey="a" fill="var(--color-a)" radius={[0, 3, 3, 0]} barSize={8} isAnimationActive={false}>
+          <Bar dataKey="a" fill="var(--color-a)" radius={0} barSize={8} isAnimationActive={false}>
             <LabelList dataKey="a" position="right" fill="var(--color-ink-dim)" fontSize={10.5} formatter={fmtLabel} />
           </Bar>
         </BarChart>
@@ -582,13 +620,13 @@ export function CompareBars({
     <ChartContainer config={config} style={{ height: height ?? 250 }}>
       <BarChart data={chartData} margin={{ left: 4, right: 8, top: 20, bottom: 0 }} barCategoryGap="26%" barGap={5}>
         <CartesianGrid vertical={false} />
-        <XAxis dataKey="name" tickLine={false} axisLine={false} tickMargin={8} interval={0} />
+        <XAxis dataKey="name" tickLine={false} axisLine={false} interval={0} height={40} tick={<WrapTick />} />
         <YAxis tickLine={false} axisLine={false} width={46} tickFormatter={axis} />
         <ChartTooltip cursor={{ fill: "var(--color-raise)" }} content={<ChartTooltipContent valueFormatter={(v) => fmt(v)} />} />
         {orderedKeys.map((k) => (
-          <Bar key={k} dataKey={k} fill={`var(--color-${k})`} radius={[3, 3, 0, 0]} isAnimationActive={false} />
+          <Bar key={k} dataKey={k} fill={`var(--color-${k})`} radius={0} isAnimationActive={false} />
         ))}
-        <Bar dataKey="a" fill="var(--color-a)" radius={[3, 3, 0, 0]} isAnimationActive={false}>
+        <Bar dataKey="a" fill="var(--color-a)" radius={0} isAnimationActive={false}>
           <LabelList dataKey="a" position="top" fill="var(--color-ink-dim)" fontSize={10.5} formatter={fmtLabel} />
         </Bar>
       </BarChart>
@@ -620,7 +658,7 @@ export function CompareDiverging({
         <YAxis type="category" dataKey="name" width={126} tickLine={false} axisLine={false} interval={0} tick={{ fontSize: 11 }} tickFormatter={(v) => truncName(String(v), 17)} />
         <ReferenceLine x={0} stroke="var(--color-edge-strong)" />
         <ChartTooltip cursor={{ fill: "var(--color-raise)" }} content={<ChartTooltipContent hideLabel valueFormatter={(v) => signed(v)} />} />
-        <Bar dataKey="delta" radius={3} isAnimationActive={false}>
+        <Bar dataKey="delta" radius={0} isAnimationActive={false}>
           {data.map((d, i) => (
             <Cell key={i} fill={d.delta >= 0 ? "var(--color-good)" : ORANGE} />
           ))}
@@ -684,10 +722,10 @@ export function ComparePace({
           content={<ChartTooltipContent labelFormatter={(l) => `Day ${l}`} valueFormatter={(v) => fmt(v)} />}
         />
         {more.map((_, i) => (
-          <Line key={i} dataKey={`m${i}`} type="monotone" stroke={`var(--color-m${i})`} strokeWidth={1.5} strokeDasharray="3 4" dot={false} />
+          <Line key={i} dataKey={`m${i}`} type="linear" stroke={`var(--color-m${i})`} strokeWidth={1.5} strokeDasharray="3 4" dot={false} />
         ))}
-        <Line dataKey="b" type="monotone" stroke="var(--color-b)" strokeWidth={1.75} strokeDasharray="5 4" dot={false} />
-        <Line dataKey="a" type="monotone" stroke="var(--color-a)" strokeWidth={2.25} dot={false} activeDot={{ r: 3 }} />
+        <Line dataKey="b" type="linear" stroke="var(--color-b)" strokeWidth={1.75} strokeDasharray="5 4" dot={false} />
+        <Line dataKey="a" type="linear" stroke="var(--color-a)" strokeWidth={2.25} dot={false} activeDot={{ r: 3 }} />
       </LineChart>
     </ChartContainer>
   );
@@ -713,7 +751,7 @@ export function HistogramBars({
         <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} interval={0} tick={{ fontSize: 11 }} />
         <YAxis hide />
         <ChartTooltip cursor={{ fill: "var(--color-raise)" }} content={<ChartTooltipContent valueFormatter={(v) => `${(v * 100).toLocaleString("en-US", { maximumFractionDigits: 1 })}%`} />} />
-        <Bar dataKey="value" fill="var(--color-value)" radius={[3, 3, 0, 0]} isAnimationActive={false}>
+        <Bar dataKey="value" fill="var(--color-value)" radius={0} isAnimationActive={false}>
           <LabelList dataKey="value" position="top" fill="var(--color-ink-dim)" fontSize={10.5} formatter={(v) => `${(Number(v) * 100).toLocaleString("en-US", { maximumFractionDigits: 1 })}%`} />
         </Bar>
       </BarChart>
