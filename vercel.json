@@ -3,6 +3,7 @@
     { "path": "/api/franpos/sync", "schedule": "0 17 * * *" },
     { "path": "/api/franpos/sync", "schedule": "30 0 * * *" },
     { "path": "/api/quickbooks/sync", "schedule": "0 6 * * *" },
+    { "path": "/api/quickbooks/sync?months=14", "schedule": "0 9 5 * *" },
     { "path": "/api/ai/weekly", "schedule": "0 11 * * 1" }
   ]
 }
