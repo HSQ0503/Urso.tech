@@ -799,62 +799,94 @@ function Segmented<T extends string>({ options, value, onChange }: { options: re
 
 // ---- Profit waterfall ------------------------------------------------------
 // Revenue → −COGS → Gross profit → −Payroll → −Rent → −Royalty → −Other → Net.
-// Cost steps render as floating bars (a transparent base + the visible delta).
-function WaterfallTip(props: { active?: boolean; payload?: Array<{ payload?: { name?: string; value?: number } }> }) {
-  const { active, payload } = props;
-  if (!active || !payload?.length) return null;
-  const p = payload[0]?.payload;
-  if (!p) return null;
-  return (
-    <div className="min-w-[7rem] rounded-none border border-edge bg-surface px-3 py-2 shadow-[0_12px_32px_-12px_rgba(0,0,0,0.75)]">
-      <div className="mb-1 font-mono text-[10px] uppercase tracking-[0.12em] text-ink-dimmer">{p.name}</div>
-      <div className="font-mono text-[12px] tabular-nums text-ink">{money0(p.value ?? 0)}</div>
-    </div>
-  );
-}
-
-// Floating-bar geometry for the waterfall — kept a pure function so the running
-// total isn't a reassigned variable inside the component's render.
-function waterfallBars(steps: WaterfallStep[]) {
+// Hand-drawn SVG so each step's bar, its connector to the running total, and the
+// value label sit exactly where they should — recharts floating-stacked bars
+// crowd the labels and can't draw the connecting flow.
+type WBar = { label: string; value: number; kind: WaterfallStep["kind"]; lo: number; hi: number; after: number };
+function waterfallGeometry(steps: WaterfallStep[]): WBar[] {
   let run = 0;
   return steps.map((s) => {
-    let base: number, bar: number;
+    let lo: number, hi: number;
     if (s.kind === "subtract") {
-      const top = run;
-      const bottom = run + s.amount;
-      run = bottom;
-      base = Math.min(top, bottom);
-      bar = Math.abs(s.amount);
+      const before = run;
+      const after = run + s.amount;
+      run = after;
+      lo = Math.min(before, after);
+      hi = Math.max(before, after);
     } else {
       run = s.amount;
-      base = Math.min(0, s.amount);
-      bar = Math.abs(s.amount);
+      lo = Math.min(0, s.amount);
+      hi = Math.max(0, s.amount);
     }
-    return { name: s.label, base, bar, value: s.amount, kind: s.kind };
+    return { label: s.label, value: s.amount, kind: s.kind, lo, hi, after: run };
   });
 }
 
-export function ProfitWaterfall({ steps, height = 300 }: { steps: WaterfallStep[]; height?: number }) {
-  const t = useT();
-  const data = waterfallBars(steps);
-  const config = { bar: { label: t("Amount"), color: ORANGE } } satisfies ChartConfig;
-  const fill = (k: WaterfallStep["kind"], v: number) => (k === "subtract" ? MUTED : v >= 0 ? ORANGE : "#e0492e");
+// Round axis ticks to a "nice" step covering [lo, hi] with ~5 lines.
+function niceTicks(lo: number, hi: number): number[] {
+  const range = hi - lo || 1;
+  const raw = range / 5;
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const norm = raw / mag;
+  const step = (norm < 1.5 ? 1 : norm < 3 ? 2 : norm < 7 ? 5 : 10) * mag;
+  const ticks: number[] = [];
+  for (let v = Math.ceil(lo / step) * step; v <= hi + step * 1e-6; v += step) ticks.push(v);
+  return ticks.length ? ticks : [0];
+}
+
+export function ProfitWaterfall({ steps }: { steps: WaterfallStep[]; height?: number }) {
+  const bars = waterfallGeometry(steps);
+  const W = 600, H = 320, padL = 48, padR = 14, padT = 24, padB = 48;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const slot = plotW / bars.length;
+  const barW = Math.min(46, slot * 0.6);
+  const hiMax = Math.max(0, ...bars.map((b) => b.hi));
+  const loMin = Math.min(0, ...bars.map((b) => b.lo));
+  const ticks = niceTicks(loMin, hiMax);
+  const domMin = Math.min(loMin, ticks[0]);
+  const domMax = Math.max(hiMax, ticks[ticks.length - 1]);
+  const yOf = (v: number) => padT + plotH * (1 - (v - domMin) / (domMax - domMin || 1));
+  const cx = (i: number) => padL + slot * i + slot / 2;
+
   return (
-    <ChartContainer config={config} style={{ height }}>
-      <BarChart data={data} margin={{ left: 4, right: 8, top: 16, bottom: 4 }} barCategoryGap="16%">
-        <CartesianGrid vertical={false} />
-        <XAxis dataKey="name" tickLine={false} axisLine={false} tickMargin={8} interval={0} height={42} tick={<WrapTick />} />
-        <YAxis tickLine={false} axisLine={false} width={46} tickFormatter={(n) => moneyK(Number(n))} />
-        <ChartTooltip cursor={{ fill: "var(--color-raise)" }} content={<WaterfallTip />} />
-        <Bar dataKey="base" stackId="w" fill="transparent" isAnimationActive={false} />
-        <Bar dataKey="bar" stackId="w" radius={0} isAnimationActive={false}>
-          {data.map((d, i) => (
-            <Cell key={i} fill={fill(d.kind, d.value)} />
-          ))}
-          <LabelList dataKey="value" position="top" fill="var(--color-ink-dim)" fontSize={10} formatter={(v) => moneyK(Number(v))} />
-        </Bar>
-      </BarChart>
-    </ChartContainer>
+    <div className="w-full font-mono">
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ height: "auto", display: "block" }} preserveAspectRatio="xMidYMid meet">
+        {ticks.map((v, i) => (
+          <g key={`t${i}`}>
+            <line x1={padL} y1={yOf(v)} x2={W - padR} y2={yOf(v)} stroke="var(--color-grid)" strokeWidth={1} />
+            <text x={padL - 8} y={yOf(v)} dy="0.32em" textAnchor="end" fontSize={10.5} fill="var(--color-axis)">{moneyK(v)}</text>
+          </g>
+        ))}
+        {bars.slice(0, -1).map((b, i) => (
+          <line key={`c${i}`} x1={cx(i) + barW / 2} y1={yOf(b.after)} x2={cx(i + 1) - barW / 2} y2={yOf(b.after)} stroke="var(--color-edge-strong)" strokeWidth={1} />
+        ))}
+        {bars.map((b, i) => {
+          const yTop = yOf(b.hi), yBot = yOf(b.lo);
+          const isTotal = b.kind !== "subtract";
+          const fill = isTotal ? (b.value >= 0 ? ORANGE : "#e0492e") : MUTED;
+          return (
+            <g key={`b${i}`}>
+              <title>{`${b.label}: ${money0(b.value)}`}</title>
+              <rect x={cx(i) - barW / 2} y={yTop} width={barW} height={Math.max(1.5, yBot - yTop)} fill={fill} />
+              <text x={cx(i)} y={yTop - 6} textAnchor="middle" fontSize={11} fontWeight={isTotal ? 600 : 400} fill={isTotal ? "var(--color-ink)" : "var(--color-ink-dim)"}>
+                {moneyK(b.value)}
+              </text>
+            </g>
+          );
+        })}
+        {bars.map((b, i) => {
+          const words = b.label.split(" ");
+          const lines = words.length > 1 ? [words[0], words.slice(1).join(" ")] : [b.label];
+          return (
+            <text key={`x${i}`} x={cx(i)} y={padT + plotH + 16} textAnchor="middle" fontSize={11} fill="var(--color-axis)">
+              {lines.map((ln, k) => (
+                <tspan key={k} x={cx(i)} dy={k === 0 ? 0 : 12}>{ln}</tspan>
+              ))}
+            </text>
+          );
+        })}
+      </svg>
+    </div>
   );
 }
 
