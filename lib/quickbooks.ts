@@ -220,22 +220,47 @@ function parsePnl(report: Record<string, unknown>): PnlSummary {
   return { months, rows, totals };
 }
 
-// Pull the P&L summarized by month and upsert into quickbooks_pnl.
-export async function syncQuickbooks(clientId = "woof-gang", monthsBack = 3, accountingMethod: "Accrual" | "Cash" = "Accrual") {
+// QBO companies that hold more than one store under a single set of books,
+// separated by QBO "class". We pull each store-class as its own class-filtered
+// P&L and store it under that store's id (wm / lv) so the dashboard shows real
+// per-store profit. The parent (wm-lv) is ALSO synced unfiltered as the company
+// total — it carries any "Not Specified" (unclassed) amounts that can't be
+// attributed to a store, so: company total = store splits + unallocated.
+// Class ids are stable QBO identifiers for the Windermere+Lakeside books.
+const CLASS_SPLITS: Record<string, { storeId: string; classId: string; className: string }[]> = {
+  "wm-lv": [
+    { storeId: "wm", classId: "200000000001071848", className: "Summerport" },
+    { storeId: "lv", classId: "200000000001071846", className: "Lakeside" },
+  ],
+};
+
+// Pull the P&L summarized by month — optionally filtered to a single QBO class —
+// and upsert it under `writeClientId`. Returns the (possibly token-rotated)
+// connection so a multi-store company can chain several pulls without
+// re-refreshing the token between them.
+async function pullAndStorePnl(
+  conn: QboConnection,
+  writeClientId: string,
+  monthsBack: number,
+  accountingMethod: "Accrual" | "Cash",
+  classId?: string,
+): Promise<{ conn: QboConnection; summary: Record<string, unknown> }> {
   const started = Date.now();
-  let conn = await getFreshConnection(clientId);
 
   const today = new Date();
   const start = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - (monthsBack - 1), 1));
   const startDate = start.toISOString().slice(0, 10);
   const endDate = today.toISOString().slice(0, 10);
 
-  const { json, conn: c2 } = await qboGet(conn, "/reports/ProfitAndLoss", {
+  const params: Record<string, string> = {
     start_date: startDate,
     end_date: endDate,
     summarize_column_by: "Month",
     accounting_method: accountingMethod, // explicit, so numbers match what the owner sees
-  });
+  };
+  if (classId) params.class = classId; // one store's class, for a multi-store company
+
+  const { json, conn: c2 } = await qboGet(conn, "/reports/ProfitAndLoss", params);
   conn = c2;
 
   const pnl = parsePnl(json);
@@ -256,7 +281,7 @@ export async function syncQuickbooks(clientId = "woof-gang", monthsBack = 3, acc
   if (rows.length) {
     const { error } = await supabase.from("quickbooks_pnl").upsert(
       rows.map((r) => ({
-        client_id: clientId,
+        client_id: writeClientId,
         realm_id: conn.realm_id,
         month: r.month,
         section: r.section,
@@ -267,7 +292,7 @@ export async function syncQuickbooks(clientId = "woof-gang", monthsBack = 3, acc
       })),
       { onConflict: "client_id,realm_id,month,section,account,accounting_method" },
     );
-    if (error) throw new Error(`quickbooks_pnl upsert failed: ${error.message}`);
+    if (error) throw new Error(`quickbooks_pnl upsert failed (${writeClientId}): ${error.message}`);
   }
 
   // Persist QuickBooks' OWN top-level P&L summary lines (depth 0): Total Income,
@@ -287,7 +312,7 @@ export async function syncQuickbooks(clientId = "woof-gang", monthsBack = 3, acc
   if (totalRows.length) {
     const { error } = await supabase.from("quickbooks_pnl_totals").upsert(
       totalRows.map((t) => ({
-        client_id: clientId,
+        client_id: writeClientId,
         realm_id: conn.realm_id,
         month: t.month,
         label: t.label,
@@ -297,21 +322,62 @@ export async function syncQuickbooks(clientId = "woof-gang", monthsBack = 3, acc
       })),
       { onConflict: "client_id,realm_id,month,label,accounting_method" },
     );
-    if (error) throw new Error(`quickbooks_pnl_totals upsert failed: ${error.message}`);
+    if (error) throw new Error(`quickbooks_pnl_totals upsert failed (${writeClientId}): ${error.message}`);
   }
 
   const netIncome = pnl.totals.filter((t) => t.depth === 0 && /net income/i.test(t.label));
   return {
+    conn,
+    summary: {
+      writeClientId,
+      class: classId ?? null,
+      range: { startDate, endDate },
+      months: pnl.months,
+      accounts: rows.length,
+      totalsStored: totalRows.length,
+      netIncome,
+      totals: pnl.totals.filter((t) => t.depth === 0),
+      ms: Date.now() - started,
+    },
+  };
+}
+
+// Sync one QBO company. For a multi-store company (CLASS_SPLITS) this writes each
+// store's class-filtered P&L (under wm / lv) AND the unfiltered company total
+// (under the parent id); otherwise just the single company P&L. Pulls are
+// sequential so the rotating refresh token is threaded safely between them.
+export async function syncQuickbooks(
+  clientId = "woof-gang",
+  monthsBack = 3,
+  accountingMethod: "Accrual" | "Cash" = "Accrual",
+) {
+  let conn = await getFreshConnection(clientId);
+  const splits = CLASS_SPLITS[clientId];
+  const writes: Record<string, unknown>[] = [];
+
+  if (splits) {
+    for (const s of splits) {
+      const r = await pullAndStorePnl(conn, s.storeId, monthsBack, accountingMethod, s.classId);
+      conn = r.conn;
+      writes.push({ ...r.summary, className: s.className });
+    }
+    // Unfiltered company total last — includes the unclassed "Not Specified" bucket.
+    const r = await pullAndStorePnl(conn, clientId, monthsBack, accountingMethod);
+    conn = r.conn;
+    writes.push(r.summary);
+  } else {
+    const r = await pullAndStorePnl(conn, clientId, monthsBack, accountingMethod);
+    conn = r.conn;
+    writes.push(r.summary);
+  }
+
+  return {
+    client_id: clientId,
     environment: conn.environment,
     realm_id: conn.realm_id,
-    range: { startDate, endDate },
     accountingMethod,
-    months: pnl.months,
-    accounts: rows.length,
-    totalsStored: totalRows.length,
-    netIncome,
-    totals: pnl.totals.filter((t) => t.depth === 0),
-    ms: Date.now() - started,
+    split: Boolean(splits),
+    writes,
   };
 }
 
@@ -331,7 +397,7 @@ export async function syncAllQuickbooks(
   const results: Array<Record<string, unknown>> = [];
   for (const clientId of clients) {
     try {
-      results.push({ client_id: clientId, ...(await syncQuickbooks(clientId, monthsBack, accountingMethod)) });
+      results.push(await syncQuickbooks(clientId, monthsBack, accountingMethod));
     } catch (e) {
       results.push({ client_id: clientId, error: e instanceof Error ? e.message : String(e) });
     }

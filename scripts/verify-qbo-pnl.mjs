@@ -115,9 +115,14 @@ if (DO_SYNC) {
     fail(`Could not reach the sync route — is \`npm run dev\` running on port ${PORT}?\n  ${e.message}`);
   }
   if (!res.ok) fail(`Sync route returned ${res.status}: ${JSON.stringify(body)}`);
-  console.log(`✓ Sync ok — env=${body.environment}, realm=${body.realm_id}, months=${(body.months || []).join(", ")}, accounts=${body.accounts}, ${body.ms}ms`);
-  routeTotals = body.totals || [];
-  syncMonths = body.months || [];
+  // syncQuickbooks now returns { ..., writes: [{ writeClientId, totals, months, ... }] }
+  // (a multi-store company writes per-store class splits + the company total).
+  // Reconcile against the write whose id matches CLIENT — for wm-lv that's the
+  // unfiltered company total, which is what client_id=wm-lv stores in the DB.
+  const mine = (body.writes || []).find((w) => w.writeClientId === CLIENT) || (body.writes || [])[0] || body;
+  console.log(`✓ Sync ok — env=${body.environment}, realm=${body.realm_id}, months=${(mine.months || []).join(", ")}, accounts=${mine.accounts}, ${mine.ms}ms`);
+  routeTotals = mine.totals || [];
+  syncMonths = mine.months || [];
 }
 
 // ── 3. read stored rows + reconcile ──────────────────────────────────────────
