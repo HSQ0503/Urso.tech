@@ -22,6 +22,14 @@ import {
   getAllAgentActions,
   getCrossSell,
   getEventsInRange,
+  getMoneyOverview,
+  getProfitDeltas,
+  getCostBreakdown,
+  getCostBenchmark,
+  getProfitPerBooking,
+  getServiceLineMargin,
+  getBreakeven,
+  getCostSpikes,
 } from "@/components/dashboard/data.server";
 import { stores, type Scope, type StoreId, type MonthValue } from "@/components/dashboard/data";
 import { BUSINESS_SECTIONS, BUSINESS_SECTION_KEYS, getBusinessSection } from "@/lib/ai/business";
@@ -411,6 +419,95 @@ export function buildAnalystTools(allowed: Scope, cross: Scope = allowed) {
         endDate: dateSchema.describe("last day of the window, YYYY-MM-DD"),
       }),
       execute: ({ startDate, endDate }) => getEventsInRange(allowed, startDate, endDate),
+    }),
+
+    // ── Money / profit (QuickBooks) ─────────────────────────────────────────
+    profit_and_loss: tool({
+      description:
+        "QuickBooks profit & loss for the allowed scope in one period: revenue, cost of goods, gross profit & margin, operating expenses, net profit & margin, and labor cost ratio — plus deltas vs the prior comparable period. This is REAL accrual accounting (the cost/profit side the POS can't see). Caveats: the current calendar month's books aren't closed, so an open month's net is provisional; per-store Windermere (wm) and Lakeside (lv) exclude a little company-level unallocated cost.",
+      inputSchema: z.object({ month: monthSchema }),
+      execute: async ({ month }) => {
+        const [o, d] = await Promise.all([
+          getMoneyOverview(allowed, month as MonthValue),
+          getProfitDeltas(allowed, month as MonthValue),
+        ]);
+        return {
+          revenue: r0(o.revenue), costOfGoods: r0(o.cogs), grossProfit: r0(o.grossProfit), grossMargin: r3(o.grossMargin),
+          operatingExpenses: r0(o.expenses), netProfit: r0(o.netIncome), netMargin: r3(o.netMargin), laborRatio: r3(o.laborRatio),
+          monthsCovered: o.monthsCovered, openMonthProvisional: o.openMonth, deltasVsPriorPeriod: d,
+        };
+      },
+    }),
+
+    cost_breakdown: tool({
+      description:
+        "Operating costs split into categories (payroll, rent, royalty, cost of goods, merchant fees, marketing, supplies, utilities, insurance, repairs), each as dollars and a share of revenue — normalized across each store's differently-named chart of accounts. Use for 'where does the money go' and which cost line is biggest.",
+      inputSchema: z.object({ month: monthSchema }),
+      execute: async ({ month }) => {
+        const lines = await getCostBreakdown(allowed, month as MonthValue);
+        return lines.map((l) => ({ category: l.category, amount: r0(l.amount), pctOfRevenue: r3(l.pctOfRevenue) }));
+      },
+    }),
+
+    cost_benchmark: tool({
+      description:
+        "Side-by-side cost structure for every store the user may see: each store's COGS, labor, rent, royalty and other costs as a % of its own revenue, plus net margin. The fastest way to see WHICH store has WHICH cost problem (e.g. rent 13% here vs 9% there). Use for cross-store profitability questions.",
+      inputSchema: z.object({ month: monthSchema }),
+      execute: async ({ month }) => {
+        const rows = await getCostBenchmark(month as MonthValue);
+        const allow = new Set<string>(crossIds);
+        return rows
+          .filter((r) => allow.has(r.id))
+          .map((r) => ({
+            store: r.name, revenue: r0(r.revenue), grossMargin: r3(r.grossMargin), netMargin: r3(r.netMargin),
+            cogsPct: r3(r.cogsPct), laborPct: r3(r.laborPct), rentPct: r3(r.rentPct), royaltyPct: r3(r.royaltyPct), otherPct: r3(r.otherPct),
+          }));
+      },
+    }),
+
+    profit_per_booking: tool({
+      description:
+        "Unit economics: QuickBooks net and gross profit per grooming booking and per visit — ties the money layer to operational volume. Answers 'how much does each groom actually net after all costs?'",
+      inputSchema: z.object({ month: monthSchema }),
+      execute: async ({ month }) => {
+        const p = await getProfitPerBooking(allowed, month as MonthValue);
+        return { netProfit: r0(p.netIncome), bookings: p.bookings, netPerBooking: r0(p.netPerBooking), netPerVisit: r0(p.netPerVisit), grossPerBooking: r0(p.grossPerBooking) };
+      },
+    }),
+
+    service_line_margin: tool({
+      description:
+        "True gross margin by service line — grooming vs retail — from QuickBooks revenue and cost of goods. Use when comparing grooming vs retail profitability or whether retail attach helps margin. Gross margin only (operating costs aren't split by line).",
+      inputSchema: z.object({ month: monthSchema }),
+      execute: async ({ month }) => {
+        const lines = await getServiceLineMargin(allowed, month as MonthValue);
+        return lines.map((l) => ({ line: l.line, revenue: r0(l.revenue), costOfGoods: r0(l.cogs), grossProfit: r0(l.grossProfit), marginPct: r3(l.marginPct) }));
+      },
+    }),
+
+    breakeven: tool({
+      description:
+        "Break-even analysis (directional, per month): fixed costs, contribution margin, the monthly revenue needed to break even, and how many more grooms/month that implies at the current average ticket. Payroll/COGS/royalty/fees/supplies are treated as variable; rent/insurance/utilities/repairs as fixed.",
+      inputSchema: z.object({ month: monthSchema }),
+      execute: async ({ month }) => {
+        const b = await getBreakeven(allowed, month as MonthValue);
+        return {
+          fixedCostsMonthly: r0(b.fixedMonthly), contributionMargin: r3(b.contributionMargin),
+          breakevenRevenueMonthly: b.breakevenRevenue == null ? null : r0(b.breakevenRevenue),
+          monthlyRevenue: r0(b.monthlyRevenue), avgTicket: r0(b.avgTicket),
+          extraGroomsToBreakeven: b.bookingsToBreakeven == null ? null : Math.round(b.bookingsToBreakeven),
+        };
+      },
+    }),
+
+    cost_spikes: tool({
+      description:
+        "Expense categories that jumped month-over-month across the two most recent closed months (e.g. repairs 3×, utilities doubled) — for spotting cost anomalies worth explaining. Pair with events_in_range to check whether a logged event explains a spike.",
+      inputSchema: z.object({}),
+      execute: async () => {
+        const spikes = await getCostSpikes(allowed);
+        return spikes.map((s) => ({ category: s.category, prior: r0(s.prevAmount), current: r0(s.curAmount), pctJump: r3(s.pctJump) }));
+      },
     }),
   };
 }

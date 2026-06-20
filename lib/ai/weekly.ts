@@ -12,7 +12,8 @@ import { METRIC_DEFINITIONS } from "@/lib/ai/analyst";
 import { FULL_BUSINESS_CONTEXT } from "@/lib/ai/business";
 import { gatherVerifiedOutcomes, verifiedOutcomesBlock } from "@/lib/ai/outcomes";
 import { gatherEvents, eventLabel, type EventRecord } from "@/lib/ai/events";
-import { stores, scopeLabel, actionPlans, SOLUTION_KEYS, type Scope, type StoreId } from "@/components/dashboard/data";
+import { getCostSpikes } from "@/components/dashboard/data.server";
+import { stores, scopeLabel, actionPlans, SOLUTION_KEYS, type Scope, type StoreId, type CostSpike } from "@/components/dashboard/data";
 
 const nyToday = () => new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
 function addDays(iso: string, days: number): string {
@@ -192,6 +193,17 @@ function eventsBlock(events: EventRecord[]): string {
   );
 }
 
+// Prompt fragment: QuickBooks expense categories that jumped month-over-month, so
+// the brief can flag a real cost risk (live accrual data, not POS).
+function costSpikesBlock(spikes: CostSpike[]): string {
+  if (!spikes.length) return "";
+  return (
+    `\n\n--- Cost alerts (QuickBooks: month-over-month jumps in expense categories, two most recent closed months) ---\n` +
+    spikes.map((s) => `- ${s.category}: $${Math.round(s.prevAmount).toLocaleString("en-US")} → $${Math.round(s.curAmount).toLocaleString("en-US")} (+${Math.round(s.pctJump * 100)}%)`).join("\n") +
+    `\nIf a jump is material, flag it as a risk with the numbers; a logged event may explain it.`
+  );
+}
+
 // Normalized title for code-level dedup (belt-and-suspenders to the prompt rule).
 const normTitle = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 
@@ -247,6 +259,7 @@ Rules:
 - Every suggested action is an Urso solution we implement WITH the owner — pick the matching "solution" key from the Urso solutions catalog (listed below). Title it as the Urso build (e.g. "Set up automated rebooking reminders"); the detail is the evidence + what Urso ships. Never pricing, hiring/firing, or anything irreversible; never promise recovered dollars.
 - The brief's biggest-lever and recommendation should point to the Urso solution that addresses it, not generic advice.
 - Phone calls, website funnel and Google reviews are NOT tracked yet — never reference them as data.
+- A "Cost alerts" section (when present) lists QuickBooks expense categories that jumped month-over-month — costs ARE live now. If a jump is material, surface it as a risk with the exact numbers (and note if a logged event explains it); never invent cost figures beyond what's listed.
 
 Memory & continuity:
 - If last week's brief is provided, open by briefly noting whether last week's recommendation played out — compare this week's numbers to last week's. One clause, then move on; don't force it if nothing's comparable.
@@ -293,6 +306,7 @@ export async function runWeekly(): Promise<{ briefs: number; actions: number; we
               groomers: data.groomers.filter((g) => g.store === scope),
             };
       const scopedEvents = scope === "all" ? weekEvents : weekEvents.filter((e) => e.storeId === scope || e.storeId === null);
+      const scopedSpikes = await getCostSpikes(scope).catch(() => [] as CostSpike[]);
       try {
         const { object } = await generateObject({
           model: reportModel(),
@@ -304,6 +318,7 @@ export async function runWeekly(): Promise<{ briefs: number; actions: number; we
             priorBriefBlock(scope, priorBriefs.get(scope)) +
             `\n\nData:\n${JSON.stringify(scoped, null, 1)}` +
             eventsBlock(scopedEvents) +
+            costSpikesBlock(scopedSpikes) +
             (scope === "all"
               ? `${actionMemoryBlock(actionMemory)}${verifiedOutcomesBlock(verifiedOutcomes)}${solutionsCatalogBlock()}\n\nAlso produce the ranked suggested actions.`
               : ""),

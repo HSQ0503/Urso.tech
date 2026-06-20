@@ -32,10 +32,11 @@ import {
   Users,
   Scissors,
   Star,
+  PiggyBank,
   type LucideIcon,
 } from "lucide-react";
 
-type IconName = "home" | "brief" | "activity" | "money" | "spark" | "store" | "users" | "scissors" | "star" | "compare" | "box" | "event";
+type IconName = "home" | "brief" | "activity" | "money" | "profit" | "spark" | "store" | "users" | "scissors" | "star" | "compare" | "box" | "event";
 
 // Brand packet §11: hairline geometric line icons on a 24px grid — Lucide is the
 // approved set. Mapped here so the nav data keeps using stable string keys.
@@ -44,6 +45,7 @@ const ICONS: Record<IconName, LucideIcon> = {
   brief: FileText,
   activity: Activity,
   money: Banknote,
+  profit: PiggyBank,
   spark: Target,
   store: Store,
   users: Users,
@@ -78,6 +80,7 @@ const navGroups: NavGroup[] = [
     items: [
       { href: "/dashboard/performance", label: "Performance", icon: "activity", roles: ["owner"] },
       { href: "/dashboard/revenue", label: "Revenue map", icon: "money", roles: ["owner"] },
+      { href: "/dashboard/money", label: "Money", icon: "profit", roles: ["owner"] },
       { href: "/dashboard/compare", label: "Compare", icon: "compare", roles: ["owner"] },
       { href: "/dashboard/products", label: "Products", icon: "box", roles: ["owner"] },
       { href: "/dashboard/actions", label: "AI actions", icon: "spark", roles: ["owner"] },

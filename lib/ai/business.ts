@@ -128,6 +128,21 @@ Franchise context: the stores operate under a national franchise with corporate 
 
 Operational watch-list: Are groomers fully booked, or are there schedule gaps? Are customers rebooking before they leave? Are phones being answered, and are missed calls followed up? Are customers getting reminders? Are staff suggesting the right products? Are best sellers in stock, and are slow movers clogging shelf space? Are managers seeing the right priorities? Are reviews being requested? Are complaints handled quickly?`,
   },
+  {
+    key: "cost-and-profitability",
+    title: "Costs, margin & profitability",
+    summary: "Where the money goes (payroll, COGS, rent, royalty), grooming vs retail margin, the open-month books caveat, and how to read per-store profit from QuickBooks.",
+    body: `Revenue is not profit. QuickBooks (live, accrual, back to Jan 2024) is the cost/profit truth layered on POS sales — use the profit_and_loss, cost_breakdown, cost_benchmark, service_line_margin, profit_per_booking and breakeven tools for any money question.
+
+Cost shape (typical month, varies by store): PAYROLL is the dominant line (often ~40%+ of revenue) — mostly groomer commission (~50–55%), so it scales with grooming volume. Then COST OF GOODS (retail merchandise + grooming supplies), RENT, FRANCHISE ROYALTY (a percentage of sales the franchisor takes), merchant/card fees, store supplies, utilities, insurance, repairs.
+
+Margins: grooming and retail carry different gross margins — retail is higher-margin at the register, which is the profit case for retail attach (on top of the loyalty case). Net margins are thin and vary widely by store; a store can grow revenue while net margin erodes if labor or rent share creeps up. Always read cost-as-%-of-revenue per store, not just dollars.
+
+How to read it honestly:
+- Open month: the current calendar month's books aren't closed (income is entered after recurring expenses), so its net reads as a fake loss — provisional; never compare into it. Multi-month totals already exclude it.
+- Per-store: Windermere (wm) and Lakeside (lv) are one QuickBooks company split by class. Their per-store P&L is accurate; a small slice of shared cost is unallocated and appears only in the all-stores consolidated total. Revenue and gross margin reconcile exactly per store.
+- Franchise royalty and the commission split are franchisor/owner decisions — surface the cost, never recommend changing the deal.`,
+  },
 ];
 
 // ── The judgment that must shape EVERY answer — always injected, kept tight ──
@@ -148,6 +163,7 @@ What a good decision looks like (priority order):
 3. Win back recent lapses — At-risk (60–120d) and Lapsed (120–365d) already trust the store; Dormant (>1yr) are effectively gone (outreach reads as spam).
 4. Smooth capacity — match groomer schedules to demand; empty weekday chairs and turned-away Saturdays are both leaks.
 5. New acquisition LAST — the stores already lose demand they pay for (missed calls, web drop-off). Fix capture before buying traffic.
+Profitability lens: revenue isn't profit. Payroll (groomer commission) is the biggest cost, and a store can grow sales while net margin slips. When judging a store or a move, check net margin and cost-as-%-of-revenue (cost_benchmark), not just revenue — costs and profit are live in QuickBooks. The franchise royalty and commission split are owner/franchisor decisions: surface them, don't recommend changing them.
 Seasonality is real (December retail-gifting spike, summer dips) — compare year-over-year before calling anything a trend. Always make Woof Gang better at being Woof Gang (personal, premium, relationship-driven), never a discount big-box.
 
 Voice & constraints:

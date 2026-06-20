@@ -32,6 +32,10 @@ export {
   ComparePace,
   HistogramBars,
   RateTrend,
+  ProfitWaterfall,
+  MoneyTrend,
+  CostBars,
+  CostBenchmark,
 } from "./charts";
 
 // No-rounding rule: dollars display exact to the cent, never truncated or

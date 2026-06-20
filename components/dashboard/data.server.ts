@@ -4,12 +4,14 @@
 // NEVER be imported by a client component.
 
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import {
   stores,
   STORE_OPTIONS,
   scopeLabel,
   groomerShare,
   COMPARE_METRICS,
+  COST_BUCKETS,
   type CompareMode,
   type ComparePreset,
   type CompareFormat,
@@ -29,6 +31,19 @@ import {
   type SortDir,
   PRODUCT_PAGE_SIZE,
   type ServiceLine,
+  type PnlTotals,
+  type CostBucket,
+  type CostLine,
+  type WaterfallStep,
+  type MarginTrend,
+  type MoneyOverview,
+  type StoreCostBenchmark,
+  type ConsolidatedPnl,
+  type ProfitPerUnit,
+  type ServiceLineMargin,
+  type Breakeven,
+  type ProfitDeltas,
+  type CostSpike,
   type WeeklyBrief,
   type BriefChange,
   type FunnelStep,
@@ -1491,4 +1506,389 @@ export async function getEventsInRange(scope: Scope, start: string, end: string)
   const { data, error } = await q;
   if (error) throw new Error(`business_events range read failed: ${error.message}`);
   return ((data ?? []) as unknown as EventRow[]).map(toBusinessEvent);
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Money layer — QuickBooks P&L (revenue, cost, profit, margin)
+// ════════════════════════════════════════════════════════════════════════════
+// Reads quickbooks_pnl_totals (authoritative monthly summary lines) and
+// quickbooks_pnl (account-level leaves) directly and aggregates in JS. Store ids
+// map 1:1 to QBO client_ids after the wm-lv class split (wp/wg/wm/lv); the wm-lv
+// company row is the combined Windermere+Lakeside total and carries any costs the
+// class split can't attribute to a single store. These tables are RLS-on /
+// no-policies, so they MUST be read with the service-role admin client.
+const QBO_BASIS = "Accrual";
+const MONEY_START = "2024-01-01";
+const PNL_LABEL = {
+  revenue: "Total Income",
+  cogs: "Total Cost of Goods Sold",
+  grossProfit: "Gross Profit",
+  expenses: "Total Expenses",
+  operatingIncome: "Net Operating Income",
+  otherNet: "Net Other Income",
+  netIncome: "Net Income",
+} as const;
+const PNL_LABELS = Object.values(PNL_LABEL);
+const STORE_QBO_IDS: StoreId[] = ["wp", "wg", "wm", "lv"];
+const curMonthFirst = () => `${nyToday().slice(0, 7)}-01`;
+const storeShort = (id: StoreId) => STORE_OPTIONS.find((o) => o.value === id)!.short;
+// For a true consolidated total, the wm-lv company row carries unclassed costs
+// the per-store split drops — use it for "all"; the store id otherwise.
+const qboTotalIds = (scope: Scope): string[] => (scope === "all" ? ["wp", "wg", "wm-lv"] : [scope]);
+
+type PnlTotalRow = { client_id: string; month: string; label: string; amount: number };
+type PnlLeafRow = { client_id: string; month: string; section: string; account: string; amount: number };
+
+async function loadPnlTotals(ids: string[], range: { start: string; end: string } | null, labels?: readonly string[]): Promise<PnlTotalRow[]> {
+  const supabase = createAdminClient();
+  let q = supabase.from("quickbooks_pnl_totals").select("client_id, month, label, amount").in("client_id", ids).eq("accounting_method", QBO_BASIS);
+  if (range) q = q.gte("month", range.start).lt("month", range.end);
+  if (labels) q = q.in("label", labels as string[]);
+  const { data, error } = await q;
+  if (error) throw new Error(`quickbooks_pnl_totals read failed: ${error.message}`);
+  return (data ?? []) as unknown as PnlTotalRow[];
+}
+
+async function loadPnlLeaves(ids: string[], range: { start: string; end: string } | null): Promise<PnlLeafRow[]> {
+  const supabase = createAdminClient();
+  const out: PnlLeafRow[] = [];
+  // Per-id to stay under PostgREST's 1,000-row cap (a year × ~40 accounts × 4
+  // stores would overflow a single request).
+  for (const id of ids) {
+    let q = supabase.from("quickbooks_pnl").select("client_id, month, section, account, amount").eq("client_id", id).eq("accounting_method", QBO_BASIS);
+    if (range) q = q.gte("month", range.start).lt("month", range.end);
+    const { data, error } = await q;
+    if (error) throw new Error(`quickbooks_pnl read failed (${id}): ${error.message}`);
+    out.push(...((data ?? []) as unknown as PnlLeafRow[]));
+  }
+  return out;
+}
+
+// Normalize a leaf expense account into one bucket, store-agnostically — each
+// store names/numbers the same account differently (validated to reconcile to
+// QuickBooks' own Total Expenses to the dollar). Returns null for non-operating
+// rows (income, COGS, below-the-line "other").
+function classifyExpense(section: string, account: string): CostBucket | null {
+  const s = section.toLowerCase();
+  const a = account.toLowerCase();
+  if (/sales|income|revenue/.test(s)) return null;
+  if (/cost of goods|cogs/.test(s)) return null;
+  if (/other (income|expense)/.test(s)) return null;
+  if (/payroll/.test(s) || /\bwages?\b|payroll tax/.test(a)) return "Payroll";
+  if (/contractor|contract labor/.test(a)) return "Contract labor";
+  if (/royalt|franchise/.test(a)) return "Royalty";
+  if (/\brent\b|storage rental/.test(a)) return "Rent";
+  if (/merchant|bank service|credit card/.test(a)) return "Merchant fees";
+  if (/advertis|marketing|promotion/.test(a)) return "Marketing";
+  if (/suppl|packaging|shipping|boxes/.test(a)) return "Supplies";
+  if (/utilit|internet|telephone|computer|software/.test(a)) return "Utilities";
+  if (/insurance|liabilit|compensation|aflac/.test(a)) return "Insurance";
+  if (/repair|maintenance|cleaning/.test(a)) return "Repairs";
+  return "Other";
+}
+const cogsLine = (account: string): ServiceLine | null => {
+  const a = account.toLowerCase();
+  if (/groom|dental|vet/.test(a)) return "Grooming";
+  if (/merchand|product|boxes|shipping|expired/.test(a)) return "Retail";
+  return null;
+};
+const revLine = (account: string): ServiceLine | null => {
+  const a = account.toLowerCase();
+  if (/groom/.test(a)) return "Grooming";
+  if (/merchand/.test(a)) return "Retail";
+  return null;
+};
+const emptyBuckets = (): Record<CostBucket, number> => Object.fromEntries(COST_BUCKETS.map((b) => [b, 0])) as Record<CostBucket, number>;
+
+type MoneyData = {
+  totals: PnlTotals;
+  buckets: Record<CostBucket, number>;
+  cogsSplit: Record<ServiceLine, number>;
+  revSplit: Record<ServiceLine, number>;
+  monthsIncluded: number;
+  openMonths: string[]; // YYYY-MM
+};
+
+// The shared aggregator: pull a period's totals + leaf breakdown for a set of QBO
+// client ids. `excludeOpen` drops the current (unclosed) calendar month so an
+// incomplete books month never drags a multi-month total into a fake loss.
+async function loadMoney(ids: string[], range: { start: string; end: string } | null, excludeOpen: boolean): Promise<MoneyData> {
+  const [totalRows, leafRows] = await Promise.all([loadPnlTotals(ids, range), loadPnlLeaves(ids, range)]);
+  const open = curMonthFirst();
+  const skip = (month: string) => excludeOpen && month === open;
+
+  const totals: PnlTotals = { revenue: 0, cogs: 0, grossProfit: 0, expenses: 0, operatingIncome: 0, otherNet: 0, netIncome: 0 };
+  const fieldByLabel: Record<string, keyof PnlTotals> = {
+    [PNL_LABEL.revenue]: "revenue", [PNL_LABEL.cogs]: "cogs", [PNL_LABEL.grossProfit]: "grossProfit",
+    [PNL_LABEL.expenses]: "expenses", [PNL_LABEL.operatingIncome]: "operatingIncome",
+    [PNL_LABEL.otherNet]: "otherNet", [PNL_LABEL.netIncome]: "netIncome",
+  };
+  const months = new Set<string>();
+  const openMonths = new Set<string>();
+  for (const r of totalRows) {
+    if (r.month === open) openMonths.add(r.month.slice(0, 7));
+    if (skip(r.month)) continue;
+    months.add(r.month.slice(0, 7));
+    const f = fieldByLabel[r.label];
+    if (f) totals[f] += Number(r.amount);
+  }
+
+  const buckets = emptyBuckets();
+  const cogsSplit: Record<ServiceLine, number> = { Grooming: 0, Retail: 0 };
+  const revSplit: Record<ServiceLine, number> = { Grooming: 0, Retail: 0 };
+  for (const r of leafRows) {
+    if (skip(r.month)) continue;
+    const s = r.section.toLowerCase();
+    if (/cost of goods|cogs/.test(s)) {
+      const l = cogsLine(r.account);
+      if (l) cogsSplit[l] += Number(r.amount);
+      continue;
+    }
+    if (/sales|income|revenue/.test(s) && !/other (income|expense)/.test(s)) {
+      const l = revLine(r.account);
+      if (l) revSplit[l] += Number(r.amount);
+      continue;
+    }
+    const b = classifyExpense(r.section, r.account);
+    if (b) buckets[b] += Number(r.amount);
+  }
+  // Tie the bucket sum to QuickBooks' own Total Expenses (validated to reconcile
+  // exactly today; this only absorbs future chart-of-accounts drift).
+  const drift = totals.expenses - COST_BUCKETS.reduce((s, b) => s + buckets[b], 0);
+  if (Math.abs(drift) > 1) buckets.Other += drift;
+
+  return { totals, buckets, cogsSplit, revSplit, monthsIncluded: months.size, openMonths: [...openMonths] };
+}
+
+const moneyFor = (scope: Scope, month: MonthValue) =>
+  loadMoney(qboTotalIds(scope), monthRange(month), month === "all" || isYear(month));
+
+// FranPOS read window aligned to the QBO closed-month window. "all" is the
+// trailing 12 months INCLUDING the open current month on the POS side, but the
+// QBO side excludes that open month — so for "all" clamp the POS end to the first
+// of the current month. This keeps profit-per-booking and break-even from
+// dividing a closed-month QBO numerator by a longer POS denominator.
+function franposRange(month: MonthValue): { start: string; end: string } | null {
+  const r = monthRange(month);
+  if (month === "all" && r) return { start: r.start, end: curMonthFirst() };
+  return r;
+}
+
+// ── public: money overview (KPI strip) ──────────────────────────────────────
+export async function getMoneyOverview(scope: Scope, month: MonthValue): Promise<MoneyOverview> {
+  const d = await moneyFor(scope, month);
+  const rev = d.totals.revenue;
+  let unallocated: number | null = null;
+  if (scope === "all") {
+    const rows = await loadPnlTotals(["wm", "lv", "wm-lv"], monthRange(month), [PNL_LABEL.netIncome]);
+    const open = curMonthFirst();
+    const excludeOpen = month === "all" || isYear(month);
+    const net = (id: string) => rows.filter((r) => r.client_id === id && !(excludeOpen && r.month === open)).reduce((s, r) => s + Number(r.amount), 0);
+    unallocated = net("wm-lv") - net("wm") - net("lv");
+  }
+  return {
+    revenue: rev, cogs: d.totals.cogs, grossProfit: d.totals.grossProfit,
+    grossMargin: rev ? d.totals.grossProfit / rev : 0,
+    expenses: d.totals.expenses, netIncome: d.totals.netIncome,
+    netMargin: rev ? d.totals.netIncome / rev : 0,
+    laborRatio: rev ? d.buckets.Payroll / rev : 0,
+    monthsCovered: d.monthsIncluded,
+    openMonth: d.openMonths[0] ?? null,
+    classedOnly: scope === "wm" || scope === "lv",
+    unallocated,
+  };
+}
+
+// ── public: profit waterfall (Revenue → −COGS → … → Net) ────────────────────
+export async function getProfitWaterfall(scope: Scope, month: MonthValue): Promise<WaterfallStep[]> {
+  const d = await moneyFor(scope, month);
+  const { revenue, cogs, grossProfit, netIncome } = d.totals;
+  const payroll = d.buckets.Payroll, rent = d.buckets.Rent, royalty = d.buckets.Royalty;
+  const other = grossProfit - payroll - rent - royalty - netIncome; // all remaining costs — ties the bar to Net
+  return [
+    { label: "Revenue", amount: revenue, kind: "start" },
+    { label: "Cost of goods", amount: -cogs, kind: "subtract" },
+    { label: "Gross profit", amount: grossProfit, kind: "total" },
+    { label: "Payroll", amount: -payroll, kind: "subtract" },
+    { label: "Rent", amount: -rent, kind: "subtract" },
+    { label: "Royalty", amount: -royalty, kind: "subtract" },
+    { label: "Other costs", amount: -other, kind: "subtract" },
+    { label: "Net profit", amount: netIncome, kind: "total" },
+  ];
+}
+
+// ── public: cost as % of revenue (ranked) ───────────────────────────────────
+export async function getCostBreakdown(scope: Scope, month: MonthValue): Promise<CostLine[]> {
+  const d = await moneyFor(scope, month);
+  const rev = d.totals.revenue || 1;
+  const lines: CostLine[] = [
+    { category: "Cost of goods", amount: d.totals.cogs, pctOfRevenue: d.totals.cogs / rev },
+    ...COST_BUCKETS.map((b) => ({ category: b, amount: d.buckets[b], pctOfRevenue: d.buckets[b] / rev })),
+  ];
+  return lines.filter((l) => l.amount > 0).sort((a, b) => b.amount - a.amount);
+}
+
+// ── public: margin trend over all closed months ─────────────────────────────
+export async function getMarginTrend(scope: Scope): Promise<MarginTrend> {
+  const rows = await loadPnlTotals(qboTotalIds(scope), { start: MONEY_START, end: curMonthFirst() }, [PNL_LABEL.revenue, PNL_LABEL.grossProfit, PNL_LABEL.netIncome]);
+  const byMonth = new Map<string, { rev: number; gross: number; net: number }>();
+  for (const r of rows) {
+    const m = byMonth.get(r.month) ?? { rev: 0, gross: 0, net: 0 };
+    if (r.label === PNL_LABEL.revenue) m.rev += Number(r.amount);
+    else if (r.label === PNL_LABEL.grossProfit) m.gross += Number(r.amount);
+    else if (r.label === PNL_LABEL.netIncome) m.net += Number(r.amount);
+    byMonth.set(r.month, m);
+  }
+  const months = [...byMonth.keys()].sort();
+  return {
+    labels: months.map((m) => `${MONTH_ABBR[Number(m.slice(5, 7)) - 1]} ${m.slice(2, 4)}`),
+    revenue: months.map((m) => byMonth.get(m)!.rev),
+    grossMargin: months.map((m) => { const v = byMonth.get(m)!; return v.rev ? v.gross / v.rev : 0; }),
+    netMargin: months.map((m) => { const v = byMonth.get(m)!; return v.rev ? v.net / v.rev : 0; }),
+  };
+}
+
+// ── public: profit period-over-period deltas ────────────────────────────────
+export async function getProfitDeltas(scope: Scope, month: MonthValue): Promise<ProfitDeltas> {
+  const NULLD: ProfitDeltas = { revenue: null, netIncome: null, netMargin: null, expenses: null };
+  let prev: MonthValue | null = null;
+  if (month === "all") return NULLD; // trailing-12 has no clean prior window here
+  if (isYear(month)) prev = String(Number(month) - 1);
+  else {
+    const [y, m] = month.split("-").map(Number);
+    prev = m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, "0")}`;
+  }
+  const openYM = curMonthFirst().slice(0, 7);
+  if (month === openYM || prev === openYM) return NULLD; // open books → no honest delta
+  const [a, b] = await Promise.all([moneyFor(scope, month), moneyFor(scope, prev)]);
+  if (b.totals.revenue === 0) return NULLD;
+  const d = (x: number, y: number) => (y !== 0 ? (x - y) / Math.abs(y) : null);
+  const marginA = a.totals.revenue ? a.totals.netIncome / a.totals.revenue : 0;
+  const marginB = b.totals.revenue ? b.totals.netIncome / b.totals.revenue : 0;
+  return {
+    revenue: d(a.totals.revenue, b.totals.revenue),
+    netIncome: d(a.totals.netIncome, b.totals.netIncome),
+    netMargin: marginA - marginB, // delta in margin points
+    expenses: d(a.totals.expenses, b.totals.expenses),
+  };
+}
+
+// ── public: cross-store cost benchmark ──────────────────────────────────────
+export async function getCostBenchmark(month: MonthValue): Promise<StoreCostBenchmark[]> {
+  const range = monthRange(month);
+  const excludeOpen = month === "all" || isYear(month);
+  const out = await Promise.all(
+    STORE_QBO_IDS.map(async (id) => {
+      const d = await loadMoney([id], range, excludeOpen);
+      const rev = d.totals.revenue || 1;
+      const other = d.totals.expenses - d.buckets.Payroll - d.buckets.Rent - d.buckets.Royalty;
+      return {
+        id, name: storeShort(id), revenue: d.totals.revenue,
+        grossMargin: d.totals.grossProfit / rev, netMargin: d.totals.netIncome / rev,
+        cogsPct: d.totals.cogs / rev, laborPct: d.buckets.Payroll / rev,
+        rentPct: d.buckets.Rent / rev, royaltyPct: d.buckets.Royalty / rev, otherPct: other / rev,
+      } as StoreCostBenchmark;
+    }),
+  );
+  return out.sort((a, b) => b.netMargin - a.netMargin);
+}
+
+// ── public: consolidated owner P&L (all stores) ─────────────────────────────
+export async function getConsolidatedPnl(month: MonthValue): Promise<ConsolidatedPnl> {
+  const range = monthRange(month);
+  const excludeOpen = month === "all" || isYear(month);
+  const open = curMonthFirst();
+  const rows = await loadPnlTotals(["wp", "wg", "wm", "lv", "wm-lv"], range, PNL_LABELS);
+  const sum = (ids: string[], label: string) =>
+    rows.filter((r) => ids.includes(r.client_id) && r.label === label && !(excludeOpen && r.month === open)).reduce((s, r) => s + Number(r.amount), 0);
+  const company = ["wp", "wg", "wm-lv"];
+  const totals: PnlTotals = {
+    revenue: sum(company, PNL_LABEL.revenue), cogs: sum(company, PNL_LABEL.cogs),
+    grossProfit: sum(company, PNL_LABEL.grossProfit), expenses: sum(company, PNL_LABEL.expenses),
+    operatingIncome: sum(company, PNL_LABEL.operatingIncome), otherNet: sum(company, PNL_LABEL.otherNet),
+    netIncome: sum(company, PNL_LABEL.netIncome),
+  };
+  const perStore = STORE_QBO_IDS.map((id) => {
+    const r = sum([id], PNL_LABEL.revenue), n = sum([id], PNL_LABEL.netIncome);
+    return { id, name: storeShort(id), revenue: r, netIncome: n, netMargin: r ? n / r : 0 };
+  });
+  const unallocated = sum(["wm-lv"], PNL_LABEL.netIncome) - sum(["wm"], PNL_LABEL.netIncome) - sum(["lv"], PNL_LABEL.netIncome);
+  return {
+    totals,
+    grossMargin: totals.revenue ? totals.grossProfit / totals.revenue : 0,
+    netMargin: totals.revenue ? totals.netIncome / totals.revenue : 0,
+    perStore, unallocated,
+  };
+}
+
+// ── public: profit per booking / visit (QBO net × FranPOS volume) ───────────
+export async function getProfitPerBooking(scope: Scope, month: MonthValue): Promise<ProfitPerUnit> {
+  const fr = franposRange(month);
+  const [d, byStore] = await Promise.all([moneyFor(scope, month), loadDailyRange(fr?.start ?? null, fr?.end ?? null)]);
+  const a = sumScope(byStore, scopeIds(scope));
+  return {
+    netIncome: d.totals.netIncome, grossProfit: d.totals.grossProfit, bookings: a.bookings, tickets: a.tickets,
+    netPerBooking: a.bookings ? d.totals.netIncome / a.bookings : 0,
+    netPerVisit: a.tickets ? d.totals.netIncome / a.tickets : 0,
+    grossPerBooking: a.bookings ? d.totals.grossProfit / a.bookings : 0,
+  };
+}
+
+// ── public: true margin by service line (grooming vs retail) ────────────────
+export async function getServiceLineMargin(scope: Scope, month: MonthValue): Promise<ServiceLineMargin[]> {
+  const d = await moneyFor(scope, month);
+  return (["Grooming", "Retail"] as ServiceLine[]).map((line) => {
+    const revenue = d.revSplit[line], cogs = d.cogsSplit[line];
+    return { line, revenue, cogs, grossProfit: revenue - cogs, marginPct: revenue ? (revenue - cogs) / revenue : 0 };
+  });
+}
+
+// ── public: break-even (directional) ────────────────────────────────────────
+// Variable costs scale with sales (COGS, commission payroll, royalty %, card
+// fees, supplies, contract labor); fixed costs are the rest (rent, insurance,
+// utilities, repairs, etc.). Break-even revenue = fixed ÷ contribution margin.
+export async function getBreakeven(scope: Scope, month: MonthValue): Promise<Breakeven> {
+  const fr = franposRange(month);
+  const [d, byStore] = await Promise.all([moneyFor(scope, month), loadDailyRange(fr?.start ?? null, fr?.end ?? null)]);
+  const a = sumScope(byStore, scopeIds(scope));
+  const months = Math.max(1, d.monthsIncluded);
+  const rev = d.totals.revenue;
+  const variableCost = d.totals.cogs + d.buckets.Payroll + d.buckets.Royalty + d.buckets["Merchant fees"] + d.buckets.Supplies + d.buckets["Contract labor"];
+  const fixed = d.totals.expenses - (d.buckets.Payroll + d.buckets.Royalty + d.buckets["Merchant fees"] + d.buckets.Supplies + d.buckets["Contract labor"]);
+  const monthlyRevenue = rev / months;
+  const fixedMonthly = fixed / months;
+  const variableRatio = rev ? variableCost / rev : 0;
+  const contributionMargin = 1 - variableRatio;
+  const breakevenRevenue = contributionMargin > 0 ? fixedMonthly / contributionMargin : null;
+  const avgTicket = a.bookings ? a.bookingRev / a.bookings : 0;
+  const surplus = breakevenRevenue === null ? 0 : monthlyRevenue - breakevenRevenue;
+  const bookingsToBreakeven = breakevenRevenue === null || avgTicket === 0 ? null : (breakevenRevenue - monthlyRevenue) / avgTicket;
+  return { fixedMonthly, variableRatio, contributionMargin, breakevenRevenue, monthlyRevenue, surplus, avgTicket, bookingsToBreakeven };
+}
+
+// ── public: cost spikes (MoM jumps in expense categories) for the AI brief ──
+export async function getCostSpikes(scope: Scope = "all", minPct = 0.25, minAbs = 400): Promise<CostSpike[]> {
+  const base = new Date(`${curMonthFirst()}T00:00:00Z`);
+  const ym = (back: number) => new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth() - back, 1)).toISOString().slice(0, 10);
+  const curM = ym(1), prevM = ym(2); // the two most recent CLOSED months
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("quickbooks_pnl")
+    .select("month, section, account, amount")
+    .in("client_id", qboTotalIds(scope))
+    .in("month", [prevM, curM])
+    .eq("accounting_method", QBO_BASIS);
+  if (error) throw new Error(`cost spikes read failed: ${error.message}`);
+  const cur = emptyBuckets(), prev = emptyBuckets();
+  for (const r of (data ?? []) as unknown as PnlLeafRow[]) {
+    const b = classifyExpense(r.section, r.account);
+    if (!b) continue;
+    (r.month === curM ? cur : prev)[b] += Number(r.amount);
+  }
+  const spikes: CostSpike[] = [];
+  for (const b of COST_BUCKETS) {
+    const c = cur[b], p = prev[b];
+    if (p > 0 && c - p >= minAbs && (c - p) / p >= minPct) spikes.push({ category: b, prevAmount: p, curAmount: c, pctJump: (c - p) / p });
+  }
+  return spikes.sort((x, y) => y.curAmount - y.prevAmount - (x.curAmount - x.prevAmount));
 }

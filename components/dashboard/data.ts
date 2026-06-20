@@ -1282,3 +1282,96 @@ export function parseSortDir(v: string | null | undefined, sort: ProductSort): S
   if (v === "asc" || v === "desc") return v;
   return sort === "name" ? "asc" : "desc";
 }
+
+// ── Money / profit (QuickBooks P&L layer) ───────────────────────────────────
+// Cost categories normalize each store's differently-named chart of accounts
+// (e.g. "6700 Rent Expense" / "671 Rent Expense" / "Expenses" all → Rent) into
+// one set that means the same thing across every store — the legibility layer.
+export const COST_BUCKETS = [
+  "Payroll", "Rent", "Royalty", "Merchant fees", "Marketing",
+  "Supplies", "Utilities", "Insurance", "Repairs", "Contract labor", "Other",
+] as const;
+export type CostBucket = (typeof COST_BUCKETS)[number];
+
+// QuickBooks' authoritative monthly P&L summary lines, summed over a period.
+export type PnlTotals = {
+  revenue: number; // Total Income
+  cogs: number; // Total Cost of Goods Sold
+  grossProfit: number; // Gross Profit
+  expenses: number; // Total Expenses (operating)
+  operatingIncome: number; // Net Operating Income
+  otherNet: number; // Net Other Income
+  netIncome: number; // Net Income
+};
+
+export type CostLine = { category: string; amount: number; pctOfRevenue: number };
+export type WaterfallStep = { label: string; amount: number; kind: "start" | "subtract" | "total" };
+export type MarginTrend = { labels: string[]; revenue: number[]; grossMargin: number[]; netMargin: number[] };
+
+export type MoneyOverview = {
+  revenue: number;
+  cogs: number;
+  grossProfit: number;
+  grossMargin: number; // 0..1
+  expenses: number;
+  netIncome: number;
+  netMargin: number; // 0..1
+  laborRatio: number; // payroll ÷ revenue
+  monthsCovered: number;
+  openMonth: string | null; // YYYY-MM if the period includes incomplete (unclosed) books
+  classedOnly: boolean; // wm/lv single-store: net excludes company-level unallocated costs
+  unallocated: number | null; // "all" scope: wm-lv company costs the class split can't tag to a store
+};
+
+export type StoreCostBenchmark = {
+  id: StoreId;
+  name: string;
+  revenue: number;
+  grossMargin: number;
+  netMargin: number;
+  cogsPct: number;
+  laborPct: number;
+  rentPct: number;
+  royaltyPct: number;
+  otherPct: number;
+};
+
+export type ConsolidatedPnl = {
+  totals: PnlTotals;
+  grossMargin: number;
+  netMargin: number;
+  perStore: { id: StoreId; name: string; revenue: number; netIncome: number; netMargin: number }[];
+  unallocated: number; // wm-lv company net minus (wm + lv) — costs not attributable to a store
+};
+
+export type ProfitPerUnit = {
+  netIncome: number;
+  grossProfit: number;
+  bookings: number;
+  tickets: number;
+  netPerBooking: number;
+  netPerVisit: number;
+  grossPerBooking: number;
+};
+
+export type ServiceLineMargin = { line: ServiceLine; revenue: number; cogs: number; grossProfit: number; marginPct: number };
+
+export type Breakeven = {
+  fixedMonthly: number;
+  variableRatio: number; // variable costs ÷ revenue
+  contributionMargin: number; // 1 − variableRatio
+  breakevenRevenue: number | null; // per month; null if contribution margin ≤ 0
+  monthlyRevenue: number;
+  surplus: number; // monthlyRevenue − breakevenRevenue (negative = below break-even)
+  avgTicket: number;
+  bookingsToBreakeven: number | null; // extra grooms/month to break even (negative = cushion)
+};
+
+export type ProfitDeltas = {
+  revenue: number | null;
+  netIncome: number | null;
+  netMargin: number | null; // points (not %): current minus prior margin
+  expenses: number | null;
+};
+
+export type CostSpike = { category: string; prevAmount: number; curAmount: number; pctJump: number };

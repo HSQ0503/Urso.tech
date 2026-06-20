@@ -4,7 +4,7 @@
 // Same export signatures as the previous hand-drawn SVG versions, so pages
 // don't need to change. Theming flows through ChartConfig color vars.
 
-import { useId } from "react";
+import { useId, useState } from "react";
 import {
   Area,
   AreaChart as RAreaChart,
@@ -27,7 +27,7 @@ import {
   YAxis,
 } from "recharts";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "./chart";
-import type { FunnelStep } from "./data";
+import type { FunnelStep, WaterfallStep, CostLine, MarginTrend, StoreCostBenchmark } from "./data";
 import { useT } from "@/components/dashboard/locale-provider";
 
 const ORANGE = "#fe5100";
@@ -769,5 +769,227 @@ export function HistogramBars({
         </Bar>
       </BarChart>
     </ChartContainer>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Money / profit charts
+// ════════════════════════════════════════════════════════════════════════════
+const money0 = (n: number) => `${n < 0 ? "−" : ""}$${Math.abs(n).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+const moneyK = (n: number) => `${n < 0 ? "−" : ""}$${(Math.abs(n) / 1000).toLocaleString("en-US", { maximumFractionDigits: Math.abs(n) >= 100000 ? 0 : 1 })}k`;
+const pct1 = (n: number) => `${(n * 100).toLocaleString("en-US", { maximumFractionDigits: 1 })}%`;
+
+// Segmented pill control (Revenue / Profit / Margin …).
+function Segmented<T extends string>({ options, value, onChange }: { options: readonly { k: T; label: string }[]; value: T; onChange: (k: T) => void }) {
+  return (
+    <div className="inline-flex items-center gap-0.5 rounded-full border border-[var(--pill-edge)] bg-[var(--pill-bg)] p-0.5">
+      {options.map((o) => (
+        <button
+          key={o.k}
+          type="button"
+          onClick={() => onChange(o.k)}
+          className={`rounded-full px-3 py-1 font-mono text-[10px] uppercase tracking-[0.1em] transition-colors ${value === o.k ? "bg-orange text-white" : "text-ink-dim hover:text-ink"}`}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ---- Profit waterfall ------------------------------------------------------
+// Revenue → −COGS → Gross profit → −Payroll → −Rent → −Royalty → −Other → Net.
+// Cost steps render as floating bars (a transparent base + the visible delta).
+function WaterfallTip(props: { active?: boolean; payload?: Array<{ payload?: { name?: string; value?: number } }> }) {
+  const { active, payload } = props;
+  if (!active || !payload?.length) return null;
+  const p = payload[0]?.payload;
+  if (!p) return null;
+  return (
+    <div className="min-w-[7rem] rounded-none border border-edge bg-surface px-3 py-2 shadow-[0_12px_32px_-12px_rgba(0,0,0,0.75)]">
+      <div className="mb-1 font-mono text-[10px] uppercase tracking-[0.12em] text-ink-dimmer">{p.name}</div>
+      <div className="font-mono text-[12px] tabular-nums text-ink">{money0(p.value ?? 0)}</div>
+    </div>
+  );
+}
+
+// Floating-bar geometry for the waterfall — kept a pure function so the running
+// total isn't a reassigned variable inside the component's render.
+function waterfallBars(steps: WaterfallStep[]) {
+  let run = 0;
+  return steps.map((s) => {
+    let base: number, bar: number;
+    if (s.kind === "subtract") {
+      const top = run;
+      const bottom = run + s.amount;
+      run = bottom;
+      base = Math.min(top, bottom);
+      bar = Math.abs(s.amount);
+    } else {
+      run = s.amount;
+      base = Math.min(0, s.amount);
+      bar = Math.abs(s.amount);
+    }
+    return { name: s.label, base, bar, value: s.amount, kind: s.kind };
+  });
+}
+
+export function ProfitWaterfall({ steps, height = 300 }: { steps: WaterfallStep[]; height?: number }) {
+  const t = useT();
+  const data = waterfallBars(steps);
+  const config = { bar: { label: t("Amount"), color: ORANGE } } satisfies ChartConfig;
+  const fill = (k: WaterfallStep["kind"], v: number) => (k === "subtract" ? MUTED : v >= 0 ? ORANGE : "#e0492e");
+  return (
+    <ChartContainer config={config} style={{ height }}>
+      <BarChart data={data} margin={{ left: 4, right: 8, top: 16, bottom: 4 }} barCategoryGap="16%">
+        <CartesianGrid vertical={false} />
+        <XAxis dataKey="name" tickLine={false} axisLine={false} tickMargin={8} interval={0} height={42} tick={<WrapTick />} />
+        <YAxis tickLine={false} axisLine={false} width={46} tickFormatter={(n) => moneyK(Number(n))} />
+        <ChartTooltip cursor={{ fill: "var(--color-raise)" }} content={<WaterfallTip />} />
+        <Bar dataKey="base" stackId="w" fill="transparent" isAnimationActive={false} />
+        <Bar dataKey="bar" stackId="w" radius={0} isAnimationActive={false}>
+          {data.map((d, i) => (
+            <Cell key={i} fill={fill(d.kind, d.value)} />
+          ))}
+          <LabelList dataKey="value" position="top" fill="var(--color-ink-dim)" fontSize={10} formatter={(v) => moneyK(Number(v))} />
+        </Bar>
+      </BarChart>
+    </ChartContainer>
+  );
+}
+
+// ---- Money trend with Revenue / Gross / Net / Margin toggle ----------------
+export function MoneyTrend({ trend, height = 248 }: { trend: MarginTrend; height?: number }) {
+  const t = useT();
+  const [metric, setMetric] = useState<"revenue" | "gross" | "net" | "margin">("revenue");
+  const gross$ = trend.revenue.map((r, i) => r * trend.grossMargin[i]);
+  const net$ = trend.revenue.map((r, i) => r * trend.netMargin[i]);
+  const options = [
+    { k: "revenue", label: t("Revenue") },
+    { k: "gross", label: t("Gross profit") },
+    { k: "net", label: t("Net profit") },
+    { k: "margin", label: t("Margin") },
+  ] as const;
+  const series = metric === "revenue" ? trend.revenue : metric === "gross" ? gross$ : net$;
+  return (
+    <div>
+      <div className="mb-3 flex justify-end">
+        <Segmented options={options} value={metric} onChange={setMetric} />
+      </div>
+      {metric === "margin" ? (
+        <MarginLines labels={trend.labels} gross={trend.grossMargin} net={trend.netMargin} height={height} />
+      ) : (
+        <MoneyArea labels={trend.labels} data={series} label={options.find((o) => o.k === metric)!.label} height={height} />
+      )}
+    </div>
+  );
+}
+
+function MoneyArea({ labels, data, label, height }: { labels: string[]; data: number[]; label: string; height: number }) {
+  const gid = "money-" + useId().replace(/:/g, "");
+  const chartData = data.map((v, i) => ({ label: labels[i], value: v }));
+  const config = { value: { label, color: ORANGE } } satisfies ChartConfig;
+  return (
+    <ChartContainer config={config} style={{ height }}>
+      <RAreaChart data={chartData} margin={{ left: 4, right: 10, top: 8, bottom: 0 }}>
+        <defs>
+          <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="var(--color-value)" stopOpacity={0.3} />
+            <stop offset="100%" stopColor="var(--color-value)" stopOpacity={0} />
+          </linearGradient>
+        </defs>
+        <CartesianGrid vertical={false} />
+        <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} interval={tickEvery(labels.length)} />
+        <YAxis tickLine={false} axisLine={false} width={46} tickFormatter={(n) => moneyK(Number(n))} />
+        <ReferenceLine y={0} stroke="var(--color-edge-strong)" />
+        <ChartTooltip cursor={{ strokeDasharray: "3 3" }} content={<ChartTooltipContent valueFormatter={(v) => money0(Number(v))} />} />
+        <Area dataKey="value" type="monotone" stroke="var(--color-value)" strokeWidth={2} fill={`url(#${gid})`} dot={false} activeDot={{ r: 3 }} />
+      </RAreaChart>
+    </ChartContainer>
+  );
+}
+
+function MarginLines({ labels, gross, net, height }: { labels: string[]; gross: number[]; net: number[]; height: number }) {
+  const t = useT();
+  const data = labels.map((l, i) => ({ label: l, gross: gross[i] * 100, net: net[i] * 100 }));
+  const config = {
+    gross: { label: t("Gross margin"), color: MUTED },
+    net: { label: t("Net margin"), color: ORANGE },
+  } satisfies ChartConfig;
+  return (
+    <ChartContainer config={config} style={{ height }}>
+      <LineChart data={data} margin={{ left: 4, right: 10, top: 8, bottom: 0 }}>
+        <CartesianGrid vertical={false} />
+        <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} interval={tickEvery(labels.length)} />
+        <YAxis tickLine={false} axisLine={false} width={40} tickFormatter={(n) => `${Math.round(Number(n))}%`} />
+        <ReferenceLine y={0} stroke="var(--color-edge-strong)" />
+        <ChartTooltip cursor={{ strokeDasharray: "3 3" }} content={<ChartTooltipContent valueFormatter={(v) => `${Number(v).toLocaleString("en-US", { maximumFractionDigits: 1 })}%`} />} />
+        <Line dataKey="gross" type="monotone" stroke="var(--color-gross)" strokeWidth={2} dot={false} />
+        <Line dataKey="net" type="monotone" stroke="var(--color-net)" strokeWidth={2} dot={false} />
+      </LineChart>
+    </ChartContainer>
+  );
+}
+
+// ---- Cost-as-%-of-revenue ranked list --------------------------------------
+export function CostBars({ lines }: { lines: CostLine[] }) {
+  const max = Math.max(...lines.map((l) => l.pctOfRevenue), 0.01);
+  return (
+    <div className="flex flex-col gap-2">
+      {lines.map((l) => (
+        <div key={l.category} className="flex items-center gap-3">
+          <div className="w-[104px] shrink-0 truncate font-mono text-[11px] text-ink-dim">{l.category}</div>
+          <div className="relative h-[18px] flex-1 overflow-hidden rounded-[2px] bg-[var(--color-track)]">
+            <div className="h-full bg-orange" style={{ width: `${(l.pctOfRevenue / max) * 100}%` }} />
+          </div>
+          <div className="w-[124px] shrink-0 text-right font-mono text-[11px] tabular-nums text-ink">
+            {money0(l.amount)} <span className="text-ink-dimmer">· {pct1(l.pctOfRevenue)}</span>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ---- Cross-store cost benchmark heatmap ------------------------------------
+export function CostBenchmark({ rows }: { rows: StoreCostBenchmark[] }) {
+  const cols = [
+    { k: "cogsPct", label: "COGS" },
+    { k: "laborPct", label: "Labor" },
+    { k: "rentPct", label: "Rent" },
+    { k: "royaltyPct", label: "Royalty" },
+    { k: "otherPct", label: "Other" },
+  ] as const;
+  const colMax: Record<string, number> = {};
+  for (const c of cols) colMax[c.k] = Math.max(...rows.map((r) => r[c.k]), 0.0001);
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full border-collapse text-[11.5px]">
+        <thead>
+          <tr className="font-mono text-[9.5px] uppercase tracking-[0.1em] text-ink-dimmer">
+            <th className="py-1.5 pr-3 text-left font-medium">Store</th>
+            {cols.map((c) => (
+              <th key={c.k} className="px-2 py-1.5 text-right font-medium">{c.label}</th>
+            ))}
+            <th className="px-2 py-1.5 text-right font-medium">Net margin</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.id} className="border-t border-edge">
+              <td className="py-2 pr-3 text-ink">{r.name}</td>
+              {cols.map((c) => (
+                <td key={c.k} className="px-2 py-2 text-right font-mono tabular-nums text-ink-dim" style={{ background: `rgba(254,81,0,${(r[c.k] / colMax[c.k]) * 0.2})` }}>
+                  {pct1(r[c.k])}
+                </td>
+              ))}
+              <td className="px-2 py-2 text-right font-mono tabular-nums" style={{ color: r.netMargin >= 0 ? "var(--color-good)" : ORANGE }}>
+                {pct1(r.netMargin)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
