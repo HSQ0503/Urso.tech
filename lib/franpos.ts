@@ -38,16 +38,26 @@ const daysAgo = (n: number) => {
 };
 
 async function fetchJson(u: string, calls: { n: number }): Promise<Record<string, unknown>> {
-  for (let attempt = 1; ; attempt++) {
-    const res = await fetch(u, { signal: AbortSignal.timeout(30_000) });
-    const body = (await res.json().catch(() => null)) as Record<string, unknown> | null;
-    if (res.ok && body) {
-      calls.n++;
-      return body;
+  const ATTEMPTS = 4;
+  let lastErr: Error | null = null;
+  for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
+    try {
+      const res = await fetch(u, { signal: AbortSignal.timeout(40_000) });
+      const body = (await res.json().catch(() => null)) as Record<string, unknown> | null;
+      if (res.ok && body) {
+        calls.n++;
+        return body;
+      }
+      lastErr = new Error(`franpos ${res.status}: ${JSON.stringify(body)?.slice(0, 150)}`);
+    } catch (e) {
+      // A network drop or the request timeout ("operation was aborted due to
+      // timeout") THROWS here — it must be caught so it's retried like an HTTP
+      // error, not bubbled straight up and failing the whole sync on one blip.
+      lastErr = e instanceof Error ? e : new Error(String(e));
     }
-    if (attempt >= 3) throw new Error(`franpos ${res.status}: ${JSON.stringify(body)?.slice(0, 150)}`);
-    await new Promise((r) => setTimeout(r, 800 * attempt));
+    if (attempt < ATTEMPTS) await new Promise((r) => setTimeout(r, 1000 * attempt));
   }
+  throw lastErr ?? new Error("franpos fetch failed (unknown)");
 }
 
 // Page through a datadump endpoint. Pages are 0-INDEXED (pages:3 = 0..2).
