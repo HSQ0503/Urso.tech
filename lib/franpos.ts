@@ -38,11 +38,13 @@ const daysAgo = (n: number) => {
 };
 
 async function fetchJson(u: string, calls: { n: number }): Promise<Record<string, unknown>> {
-  const ATTEMPTS = 4;
+  // 60s per request; 3 attempts caps the worst case at ~3×60s + backoff < the
+  // route's 300s maxDuration, so a hung endpoint can't blow the whole budget.
+  const ATTEMPTS = 3;
   let lastErr: Error | null = null;
   for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
     try {
-      const res = await fetch(u, { signal: AbortSignal.timeout(40_000) });
+      const res = await fetch(u, { signal: AbortSignal.timeout(60_000) });
       const body = (await res.json().catch(() => null)) as Record<string, unknown> | null;
       if (res.ok && body) {
         calls.n++;
