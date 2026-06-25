@@ -10,7 +10,7 @@ import { WipeLink } from "./wipe-link";
 // textareas, centered submit. Skinned in Urso's dark panel/edge/ink/orange.
 // Only name + email are required.
 
-const LOCATION_BANDS = ["1", "2–3", "4–9", "10–24", "25+"];
+const LOCATION_BANDS = ["None / online", "1", "2–3", "4–9", "10–24", "25+"];
 
 const REVENUE_BANDS = [
   "Under $50k/mo",
@@ -211,7 +211,7 @@ export function DiscoveryForm() {
           </Field>
         </div>
         <div className="mt-6">
-          <Field label="How many locations?">
+          <Field label="How many locations, if any?">
             <Pills value={form.locations} onChange={setVal("locations")} options={LOCATION_BANDS} />
           </Field>
         </div>
