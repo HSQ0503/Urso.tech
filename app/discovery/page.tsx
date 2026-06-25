@@ -8,8 +8,6 @@ export const metadata: Metadata = {
   title: "Before we meet",
   description:
     "A few questions about how the business runs, so we can do our homework before we talk.",
-  // A link we send to warm prospects — not a public funnel page.
-  robots: { index: false, follow: false },
 };
 
 export default function DiscoveryPage() {

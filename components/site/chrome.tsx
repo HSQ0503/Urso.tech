@@ -78,7 +78,7 @@ export function SiteNav() {
               Log in
             </WipeLink>
             <WipeLink
-              href="/contact"
+              href="/discovery"
               className="group hidden items-center gap-2 whitespace-nowrap rounded-full bg-orange px-5 py-2.5 font-mono text-[11px] uppercase tracking-[0.12em] text-[#070707] transition-colors duration-200 hover:bg-[#FF6A1F] active:bg-[#E04800] md:inline-flex"
             >
               Get started
@@ -129,11 +129,11 @@ export function SiteNav() {
           </nav>
           <div className="mt-auto">
             <WipeLink
-              href="/contact"
+              href="/discovery"
               onNavigate={() => setOpen(false)}
               className="flex w-full items-center justify-center rounded-lg bg-orange px-6 py-4 text-[16px] font-medium tracking-[-0.01em] text-[#070707]"
             >
-              Start the conversation
+              Get started
             </WipeLink>
           </div>
         </div>
