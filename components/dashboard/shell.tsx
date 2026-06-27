@@ -159,9 +159,9 @@ function ShellChrome({ qs, role, storeId, clientName, userName, email, streak, m
       >
         <Link
           href={withQs("/dashboard")}
-          className="group flex items-center gap-3 rounded-none px-1 outline-none focus-visible:ring-2 focus-visible:ring-orange/50"
+          className="group flex items-center gap-3 rounded-lg px-1 outline-none focus-visible:ring-2 focus-visible:ring-orange/50"
         >
-          <span className="grid size-9 shrink-0 place-items-center rounded-none border border-[rgba(254,81,0,0.25)] bg-orange-soft font-mono text-[12px] font-medium text-orange shadow-[inset_0_1px_0_0_rgba(255,255,255,0.14)]">
+          <span className="grid size-9 shrink-0 place-items-center rounded-lg border border-[rgba(254,81,0,0.25)] bg-orange-soft font-mono text-[12px] font-medium text-orange shadow-[inset_0_1px_0_0_rgba(255,255,255,0.14)]">
             {orgInitials}
           </span>
           <span className="text-[15px] font-semibold leading-[1.15] tracking-[-0.01em] text-ink">{clientName}</span>
@@ -180,12 +180,11 @@ function ShellChrome({ qs, role, storeId, clientName, userName, email, streak, m
                     key={n.href}
                     href={withQs(n.href)}
                     aria-current={active ? "page" : undefined}
-                    className={`group relative flex items-center gap-3 rounded-none px-3 py-2.5 text-[14px] outline-none transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-orange/50 ${
-                      active ? "bg-orange-soft font-medium text-ink" : "text-ink-dim hover:bg-raise hover:text-ink"
+                    className={`group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-[14px] outline-none transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-orange/50 ${
+                      active ? "bg-raise-strong font-medium text-ink" : "text-ink-dim hover:bg-raise hover:text-ink"
                     }`}
                   >
-                    {active && <span className="absolute left-0 top-1/2 h-6 w-[3px] -translate-y-1/2 rounded-none bg-orange" />}
-                    <span className={active ? "text-orange" : "text-ink-dimmer group-hover:text-ink-dim"}>
+                    <span className={active ? "text-ink" : "text-ink-dimmer group-hover:text-ink-dim"}>
                       <Icon name={n.icon} />
                     </span>
                     {t(n.label)}
@@ -198,12 +197,19 @@ function ShellChrome({ qs, role, storeId, clientName, userName, email, streak, m
 
         {/* Identity (click → account) + sign out */}
         <div className="mt-auto flex flex-col gap-3 pt-5">
+          <Link
+            href={withQs("/dashboard/actions")}
+            className="dash-pill flex items-center justify-center gap-2 rounded-full px-3 py-2.5 text-[13px] text-ink-dim outline-none transition-colors hover:text-ink focus-visible:ring-2 focus-visible:ring-orange/50"
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" aria-hidden className="text-orange"><path d="M12 3l1.7 4.8L18 9.5l-4.3 1.7L12 16l-1.7-4.8L6 9.5l4.3-1.7L12 3Z" /></svg>
+            {t("Ask urso.ai")}
+          </Link>
           <div className="flex items-center gap-2">
             <button
               onClick={() => setAccountOpen(true)}
-              className="dash-pill group flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 rounded-none px-2.5 py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-orange/50"
+              className="dash-pill group flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-orange/50"
             >
-              <span className="grid size-8 shrink-0 place-items-center rounded-none bg-orange-soft font-mono text-[11px] text-orange">{initials}</span>
+              <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-orange-soft font-mono text-[11px] text-orange">{initials}</span>
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-[12.5px] text-ink">{userName}</span>
                 <span className="block truncate font-mono text-[9px] uppercase tracking-[0.12em] text-ink-dimmer">{t(roleLabel)} · {t("account")}</span>
@@ -214,7 +220,7 @@ function ShellChrome({ qs, role, storeId, clientName, userName, email, streak, m
             </button>
           </div>
           <ThemeToggle />
-          <div className="rounded-none border border-dashed border-edge-strong p-3">
+          <div className="rounded-lg border border-dashed border-edge-strong p-3">
             <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-dimmer">{t("Pilot · mock data")}</div>
             <p className="mt-1.5 text-[11.5px] leading-[1.45] text-ink-dim">{t("Shaped like the live FranPOS, Twilio & Google feeds.")}</p>
           </div>
@@ -254,14 +260,14 @@ function ShellChrome({ qs, role, storeId, clientName, userName, email, streak, m
               <Link
                 key={n.href}
                 href={withQs(n.href)}
-                className={`shrink-0 rounded-none px-3 py-1.5 text-[13px] transition-colors ${active ? "bg-orange-soft text-ink" : "text-ink-dim hover:text-ink"}`}
+                className={`shrink-0 rounded-lg px-3 py-1.5 text-[13px] transition-colors ${active ? "bg-raise-strong text-ink" : "text-ink-dim hover:text-ink"}`}
               >
                 {t(n.label)}
               </Link>
             );
           })}
           <form action={signOut} className="ml-auto shrink-0">
-            <button type="submit" className="cursor-pointer rounded-none px-3 py-1.5 font-mono text-[10.5px] uppercase tracking-[0.1em] text-ink-dimmer">
+            <button type="submit" className="cursor-pointer rounded-lg px-3 py-1.5 font-mono text-[10.5px] uppercase tracking-[0.1em] text-ink-dimmer">
               {t("Sign out")}
             </button>
           </form>
@@ -273,13 +279,13 @@ function ShellChrome({ qs, role, storeId, clientName, userName, email, streak, m
       <Modal open={accountOpen} onClose={() => setAccountOpen(false)} eyebrow={t("Account")} title={userName} maxWidth={420}>
         <div className="space-y-5">
           <div className="flex items-center gap-3">
-            <span className="grid size-12 place-items-center rounded-none bg-orange-soft font-mono text-[15px] text-orange">{initials}</span>
+            <span className="grid size-12 place-items-center rounded-lg bg-orange-soft font-mono text-[15px] text-orange">{initials}</span>
             <div className="min-w-0">
               <div className="text-[15px] text-ink">{userName}</div>
               <div className="truncate font-mono text-[11px] text-ink-dimmer">{email}</div>
             </div>
           </div>
-          <dl className="grid grid-cols-1 gap-px overflow-hidden rounded-none border border-edge bg-edge">
+          <dl className="grid grid-cols-1 gap-px overflow-hidden rounded-lg border border-edge bg-edge">
             <AccountRow k={t("Role")} v={t(roleLabel)} />
             <AccountRow k={t("Client")} v={clientName} />
             {lockedStore && <AccountRow k={t("Store")} v={scopeLabel(lockedStore)} />}
@@ -292,7 +298,7 @@ function ShellChrome({ qs, role, storeId, clientName, userName, email, streak, m
           <form action={signOut}>
             <button
               type="submit"
-              className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-none border border-edge-strong py-2.5 text-[13px] text-ink transition-colors hover:bg-raise"
+              className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg border border-edge-strong py-2.5 text-[13px] text-ink transition-colors hover:bg-raise"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M15 4h3a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-3" /><path d="M10 17l-5-5 5-5" /><path d="M5 12h11" /></svg>
               {t("Sign out")}
@@ -334,7 +340,7 @@ function FilterBar({ qs, pathname, lockedStore }: { qs: string; pathname: string
   return (
     <div className="flex items-center gap-2">
       {lockedStore ? (
-        <span className="dash-pill inline-flex items-center gap-1.5 rounded-none px-3 py-1.5 text-[11.5px] text-ink-dim">
+        <span className="dash-pill inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11.5px] text-ink-dim">
           <span className="text-ink-dimmer">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M4 9V5h16v4" /><path d="M4 9h16l-1 11H5L4 9Z" /></svg>
           </span>
@@ -353,7 +359,7 @@ function FilterBar({ qs, pathname, lockedStore }: { qs: string; pathname: string
         // it scopes that page when it doesn't.
         <span
           title={t("The Compare page uses its own period picker below — the global month filter doesn't apply there.")}
-          className="inline-flex cursor-not-allowed items-center gap-1.5 rounded-none border border-edge bg-raise px-3 py-1.5 text-[11.5px] text-ink-dimmer opacity-60"
+          className="inline-flex cursor-not-allowed items-center gap-1.5 rounded-lg border border-edge bg-raise px-3 py-1.5 text-[11.5px] text-ink-dimmer opacity-60"
         >
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="3.5" y="5" width="17" height="15" rx="2" /><path d="M3.5 9.5h17M8 3.5v3M16 3.5v3" /></svg>
           <span className="font-medium">{t("Dates set below")}</span>
@@ -391,7 +397,7 @@ function FilterSelect<T extends string>({
         onClick={() => setOpen((o) => !o)}
         aria-haspopup="listbox"
         aria-expanded={open}
-        className="dash-pill inline-flex cursor-pointer items-center gap-1.5 rounded-none px-3 py-1.5 text-[11.5px] text-ink-dim outline-none transition-colors hover:text-ink focus-visible:ring-2 focus-visible:ring-orange/50"
+        className="dash-pill inline-flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11.5px] text-ink-dim outline-none transition-colors hover:text-ink focus-visible:ring-2 focus-visible:ring-orange/50"
       >
         <span className="text-ink-dimmer">
           {glyph === "store" ? (
@@ -422,7 +428,7 @@ function FilterSelect<T extends string>({
           <button type="button" aria-label="Close" className="fixed inset-0 z-30 cursor-default" onClick={() => setOpen(false)} />
           <div
             role="listbox"
-            className="absolute right-0 z-40 mt-2 max-h-[320px] w-[200px] overflow-y-auto rounded-none border border-edge bg-surface p-1 shadow-[0_18px_40px_-16px_rgba(0,0,0,0.8)]"
+            className="absolute right-0 z-40 mt-2 max-h-[320px] w-[200px] overflow-y-auto rounded-lg border border-edge bg-surface p-1 shadow-[0_18px_40px_-16px_rgba(0,0,0,0.8)]"
           >
             {options.map((o) => {
               const sel = o.value === value;
@@ -435,7 +441,7 @@ function FilterSelect<T extends string>({
                     onChange(o.value);
                     setOpen(false);
                   }}
-                  className={`flex w-full items-center justify-between rounded-none px-3 py-2 text-left text-[12.5px] transition-colors ${
+                  className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-[12.5px] transition-colors ${
                     sel ? "bg-raise-strong text-ink" : "text-ink-dim hover:bg-raise hover:text-ink"
                   }`}
                 >

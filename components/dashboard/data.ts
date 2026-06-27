@@ -1375,3 +1375,29 @@ export type ProfitDeltas = {
 };
 
 export type CostSpike = { category: string; prevAmount: number; curAmount: number; pctJump: number };
+
+// Itemized tickets for a store/day window (the "what actually sold" AI tool).
+export type DayTicketLine = {
+  name: string;
+  sku: string | null;
+  qty: number;
+  revenue: number; // line price × qty − discount
+  line: ServiceLine; // "Grooming" | "Retail"
+  groomer: string | null; // the SalesPerson who rang the line
+};
+export type DayTicket = {
+  orderId: number;
+  store: StoreId;
+  time: string | null; // "HH:MM" store-local, or null
+  customer: string; // resolved owner name, or "Walk-in" / "Unknown"
+  pet: string | null;
+  segment: string | null;
+  isWalkin: boolean; // anonymous house account (counts as revenue, not a person)
+  total: number;
+  grooming: number;
+  retail: number;
+  hasService: boolean;
+  hasRetail: boolean;
+  lines: DayTicketLine[];
+};
+export type DayTickets = { tickets: DayTicket[]; lineCount: number; truncated: boolean };

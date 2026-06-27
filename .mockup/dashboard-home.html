@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Urso — Home (Origin replica mockup)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;1,9..144,400;1,9..144,500&display=swap" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.7.0/dist/tabler-icons.min.css" rel="stylesheet">
+<style>
+:root{
+  --bg:#070707; --card:#0c0c0c;
+  --edge:rgba(255,255,255,0.08); --edge-2:rgba(255,255,255,0.12);
+  --ink:#fff; --ink-dim:rgba(255,255,255,0.56); --ink-dimmer:rgba(255,255,255,0.34);
+  --orange:#fe5100; --good:#46d18a;
+  --sans:'IBM Plex Sans',system-ui,sans-serif; --serif:'Fraunces',Georgia,serif; --mono:'IBM Plex Mono',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased;width:1440px}
+.app{display:flex;min-height:1120px}
+.eyebrow{font-family:var(--mono);font-size:11.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-dimmer);display:flex;align-items:center;gap:5px}
+.italic{font-style:italic}
+
+/* ---------- sidebar ---------- */
+.side{width:268px;flex-shrink:0;background:#060606;border-right:1px solid var(--edge);padding:30px 20px;display:flex;flex-direction:column}
+.logo{display:flex;align-items:center;gap:11px;padding:0 8px;margin-bottom:40px}
+.logo .mark{width:32px;height:32px;border-radius:9px;background:rgba(255,255,255,0.04);border:1px solid var(--edge-2);display:grid;place-items:center;color:var(--orange);font-size:18px}
+.logo .word{font-size:19px;font-weight:500;letter-spacing:-.01em}
+.navgroup{margin-bottom:26px}
+.navgroup .glabel{font-family:var(--mono);font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-dimmer);padding:0 12px;margin-bottom:10px}
+.nav{display:flex;align-items:center;gap:13px;padding:10px 12px;border-radius:10px;font-size:14.5px;color:var(--ink-dim);text-decoration:none;margin-bottom:2px}
+.nav i{font-size:20px;opacity:.85}
+.nav.on{background:rgba(255,255,255,0.06);color:#fff}
+.nav.on i{opacity:1;color:#fff}
+.ask{margin-top:auto;display:flex;align-items:center;justify-content:center;gap:9px;padding:13px;border:1px solid var(--edge-2);border-radius:999px;font-size:14px;color:var(--ink-dim)}
+.ask i{color:var(--orange);font-size:18px}
+
+/* ---------- main ---------- */
+.main{flex:1;min-width:0;padding:30px 34px}
+.topbar{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:28px}
+.greet{font-size:33px;font-weight:500;letter-spacing:-.02em}
+.greet b{font-weight:600}
+.iconrow{display:flex;align-items:center;gap:10px}
+.iconbtn{width:38px;height:38px;border-radius:999px;border:1px solid var(--edge);display:grid;place-items:center;color:var(--ink-dim);font-size:19px}
+.avatar{width:38px;height:38px;border-radius:999px;background:rgba(254,81,0,0.14);color:var(--orange);display:grid;place-items:center;font-family:var(--mono);font-size:13px}
+.tabs{display:flex;gap:8px;margin-bottom:22px}
+.tab{padding:9px 18px;border-radius:10px;font-size:14.5px;color:var(--ink-dimmer)}
+.tab.on{background:rgba(255,255,255,0.07);color:#fff}
+
+.content{display:grid;grid-template-columns:1fr 404px;gap:22px;align-items:start}
+.col{display:flex;flex-direction:column;gap:22px}
+.card{background:var(--card);border:1px solid var(--edge);border-radius:22px;padding:26px}
+
+/* hero */
+.hero-head{display:flex;align-items:flex-start;justify-content:space-between}
+.hpill{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--edge-2);border-radius:999px;padding:8px 14px;font-size:13px;color:var(--ink-dim)}
+.bignum{font-size:48px;font-weight:500;letter-spacing:-.03em;margin-top:14px;line-height:1}
+.delta{display:inline-flex;align-items:center;gap:5px;color:var(--good);font-size:15px;margin-top:12px}
+.toggle{display:flex;gap:4px;justify-content:center;margin:8px auto 0;background:rgba(255,255,255,0.04);border:1px solid var(--edge);border-radius:12px;padding:4px;width:max-content}
+.tg{font-size:13.5px;color:var(--ink-dim);padding:7px 18px;border-radius:9px}
+.tg.on{background:rgba(255,255,255,0.09);color:#fff}
+.fullbtn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;margin-top:20px;border:1px solid var(--edge-2);border-radius:14px;padding:15px;font-size:14.5px;color:var(--ink-dim)}
+.fullbtn i{color:var(--orange);font-size:17px}
+
+/* spent / activity */
+.split{display:grid;grid-template-columns:1.15fr 1fr;gap:28px;margin-top:20px}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+.day{aspect-ratio:1;border-radius:8px;padding:6px;display:flex;flex-direction:column;justify-content:space-between}
+.day .dn{font-size:11px;color:var(--ink-dimmer)}
+.day .da{font-size:10px;font-family:var(--mono);color:var(--ink-dim)}
+.txn{display:flex;align-items:center;gap:12px;padding:11px 0;border-top:1px solid var(--edge)}
+.txn:first-of-type{border-top:0;padding-top:0}
+.tic{width:34px;height:34px;border-radius:999px;background:rgba(255,255,255,0.05);display:grid;place-items:center;color:var(--ink-dim);font-size:17px}
+.tname{font-size:14px}
+.tsub{font-size:12px;color:var(--ink-dimmer);margin-top:1px}
+.tamt{margin-left:auto;font-size:14px;font-family:var(--mono)}
+
+/* rail */
+.rcard{border-radius:20px;padding:22px;position:relative;overflow:hidden}
+.rcard.plain{background:var(--card);border:1px solid var(--edge)}
+.rcard .x{position:absolute;top:18px;right:18px;color:var(--ink-dimmer);font-size:17px}
+.rcard .rtitle{font-family:var(--serif);font-weight:400;font-size:30px;line-height:1.06;margin-top:14px;letter-spacing:-.015em}
+.rcard .rsub{font-size:14px;color:var(--ink-dim);margin-top:10px;line-height:1.45}
+.ember{background:linear-gradient(150deg,#1c0a02 0%,#7a2600 55%,#fe5100 135%);border:1px solid rgba(254,81,0,0.3)}
+.ember .eyebrow{color:rgba(255,255,255,0.72)}
+.ember .rtitle{color:#fff}
+.tagpill{display:inline-flex;align-items:center;gap:8px;margin-top:18px;background:rgba(0,0,0,0.28);border:1px solid rgba(255,255,255,0.2);border-radius:999px;padding:9px 14px;font-size:12.5px;color:#fff}
+.glowtop{position:absolute;top:-50%;left:15%;width:70%;height:90%;background:radial-gradient(50% 50% at 50% 50%,rgba(254,81,0,0.13),transparent 70%);pointer-events:none}
+.linkrow{display:inline-flex;align-items:center;gap:6px;margin-top:18px;color:var(--orange);font-size:13.5px}
+.whitebtn{display:block;text-align:center;margin-top:18px;background:#fff;color:#070707;border-radius:12px;padding:13px;font-size:14px;font-weight:500}
+.stars{color:var(--orange);font-size:17px;letter-spacing:2px}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- SIDEBAR -->
+  <aside class="side">
+    <div class="logo"><span class="mark"><i class="ti ti-paw-filled"></i></span><span class="word">Woof Gang</span></div>
+
+    <div class="navgroup">
+      <div class="glabel">Today</div>
+      <a class="nav on"><i class="ti ti-home"></i>Home</a>
+      <a class="nav"><i class="ti ti-file-text"></i>Weekly brief</a>
+    </div>
+    <div class="navgroup">
+      <div class="glabel">Intelligence</div>
+      <a class="nav"><i class="ti ti-activity"></i>Performance</a>
+      <a class="nav"><i class="ti ti-cash"></i>Revenue map</a>
+      <a class="nav"><i class="ti ti-coin"></i>Money</a>
+      <a class="nav"><i class="ti ti-arrows-left-right"></i>Compare</a>
+      <a class="nav"><i class="ti ti-target"></i>AI actions</a>
+    </div>
+    <div class="navgroup">
+      <div class="glabel">Operations</div>
+      <a class="nav"><i class="ti ti-building-store"></i>Stores</a>
+      <a class="nav"><i class="ti ti-scissors"></i>Team</a>
+      <a class="nav"><i class="ti ti-star"></i>Reviews</a>
+    </div>
+
+    <div class="ask"><i class="ti ti-sparkles"></i>Ask urso.ai</div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main">
+    <div class="topbar">
+      <div class="greet">Good afternoon, <b>Han</b></div>
+      <div class="iconrow">
+        <span class="iconbtn"><i class="ti ti-bell"></i></span>
+        <span class="iconbtn"><i class="ti ti-plus"></i></span>
+        <span class="iconbtn"><i class="ti ti-help"></i></span>
+        <span class="iconbtn"><i class="ti ti-settings"></i></span>
+        <span class="avatar">HH</span>
+      </div>
+    </div>
+
+    <div class="tabs">
+      <div class="tab on">Overview</div>
+      <div class="tab">Revenue map</div>
+    </div>
+
+    <div class="content">
+      <!-- left column -->
+      <div class="col">
+
+        <!-- HERO: revenue -->
+        <div class="card">
+          <div class="hero-head">
+            <div>
+              <div class="eyebrow">Revenue <i class="ti ti-chevron-right" style="font-size:13px"></i></div>
+              <div class="bignum">$2,814,920</div>
+              <div class="delta"><i class="ti ti-arrow-up-right"></i> $218,400 (8.4%) · last 12 months</div>
+            </div>
+            <div class="hpill">Forecast <i class="ti ti-chevron-right" style="font-size:13px"></i></div>
+          </div>
+
+          <svg viewBox="0 0 920 240" width="100%" height="240" style="margin:18px 0 4px;display:block" role="img" aria-label="Revenue trend">
+            <line x1="30" y1="62" x2="840" y2="62" stroke="rgba(255,255,255,0.05)"/>
+            <line x1="30" y1="141" x2="840" y2="141" stroke="rgba(255,255,255,0.05)"/>
+            <line x1="30" y1="220" x2="840" y2="220" stroke="rgba(255,255,255,0.07)"/>
+            <path d="M30,186 L107,166 L185,142 L262,129 L339,151 L417,113 L494,90 L571,101 L649,78 L726,62 L803,84 L880,45 L880,220 L30,220 Z" fill="rgba(254,81,0,0.13)"/>
+            <path d="M30,186 L107,166 L185,142 L262,129 L339,151 L417,113 L494,90 L571,101 L649,78 L726,62 L803,84 L880,45" fill="none" stroke="#fe5100" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+            <circle cx="880" cy="45" r="11" fill="rgba(254,81,0,0.22)"/>
+            <circle cx="880" cy="45" r="5.5" fill="#fe5100"/>
+            <text x="852" y="50" fill="rgba(255,255,255,0.34)" font-size="12" font-family="IBM Plex Mono">$2.8M</text>
+            <text x="852" y="145" fill="rgba(255,255,255,0.34)" font-size="12" font-family="IBM Plex Mono">$2.0M</text>
+            <text x="852" y="224" fill="rgba(255,255,255,0.34)" font-size="12" font-family="IBM Plex Mono">$1.2M</text>
+          </svg>
+
+          <div class="toggle">
+            <span class="tg">1M</span><span class="tg">3M</span><span class="tg">6M</span><span class="tg on">12M</span><span class="tg">ALL</span>
+          </div>
+
+          <div class="fullbtn"><i class="ti ti-sparkles"></i>Ask urso.ai about this revenue</div>
+        </div>
+
+        <!-- SPENT / ACTIVITY -->
+        <div class="card">
+          <div class="eyebrow">Revenue in June <i class="ti ti-chevron-right" style="font-size:13px"></i></div>
+          <div class="bignum" style="font-size:38px">$234,910</div>
+          <div class="split">
+            <div class="cal" id="cal"></div>
+            <div>
+              <div class="eyebrow" style="margin-bottom:12px">Recent activity</div>
+              <div class="txn"><span class="tic"><i class="ti ti-scissors"></i></span><div><div class="tname">Grooming · Dr. Phillips</div><div class="tsub">Jun 22</div></div><span class="tamt" style="color:var(--good)">+$1,240.00</span></div>
+              <div class="txn"><span class="tic"><i class="ti ti-shopping-bag"></i></span><div><div class="tname">Retail · Winter Park</div><div class="tsub">Jun 22</div></div><span class="tamt">$86.40</span></div>
+              <div class="txn"><span class="tic"><i class="ti ti-scissors"></i></span><div><div class="tname">Grooming · Lake Nona</div><div class="tsub">Jun 21</div></div><span class="tamt" style="color:var(--good)">+$642.00</span></div>
+              <div class="txn"><span class="tic"><i class="ti ti-paw"></i></span><div><div class="tname">Daycare · Waterford Lakes</div><div class="tsub">Jun 21</div></div><span class="tamt">$310.00</span></div>
+              <div class="txn"><span class="tic"><i class="ti ti-shopping-bag"></i></span><div><div class="tname">Retail · Dr. Phillips</div><div class="tsub">Jun 20</div></div><span class="tamt">$128.90</span></div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- right rail -->
+      <div class="col">
+
+        <div class="rcard ember">
+          <span class="x"><i class="ti ti-x"></i></span>
+          <div class="eyebrow">Call tracking</div>
+          <div class="rtitle">Going <span class="italic">live</span> soon</div>
+          <div class="tagpill"><i class="ti ti-clock"></i> Twilio connects to your phones next</div>
+        </div>
+
+        <div class="rcard plain">
+          <div class="glowtop"></div>
+          <span class="x"><i class="ti ti-x"></i></span>
+          <div class="eyebrow">Weekly brief</div>
+          <div class="rtitle">Your weekly brief</div>
+          <div class="rsub">June 16th to June 22nd · written by urso.ai</div>
+          <div class="linkrow">Read brief <i class="ti ti-arrow-right"></i></div>
+        </div>
+
+        <div class="rcard plain">
+          <span class="x"><i class="ti ti-x"></i></span>
+          <div class="eyebrow">Action item · fix first</div>
+          <div class="rtitle">Recover <span class="italic">$1,340</span> a month</div>
+          <div class="rsub">Waterford retail attach is 9% vs 17% across the group.</div>
+          <div class="linkrow">See the plan <i class="ti ti-arrow-right"></i></div>
+        </div>
+
+        <div class="rcard plain">
+          <div class="eyebrow">Reputation this month <i class="ti ti-chevron-right" style="font-size:13px"></i></div>
+          <div class="rtitle" style="display:flex;align-items:baseline;gap:10px">4.8 <span class="stars">★★★★★</span></div>
+          <div class="rsub">312 reviews across 4 stores · 4 new this week</div>
+          <a class="whitebtn">See reviews</a>
+        </div>
+
+        <div class="rcard plain" style="opacity:.55">
+          <div class="eyebrow">Grooming share <i class="ti ti-chevron-right" style="font-size:13px"></i></div>
+        </div>
+
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+const cal=document.getElementById('cal');
+const amts={2:140,5:90,8:210,9:60,12:180,15:120,16:300,19:80,22:260,23:150,26:90,29:130,30:200};
+for(let d=1;d<=31;d++){
+  const v=amts[d]||0;
+  const op=v?(0.10+Math.min(v,300)/300*0.5).toFixed(2):0;
+  const cell=document.createElement('div');
+  cell.className='day';
+  cell.style.background=v?`rgba(254,81,0,${op})`:'rgba(255,255,255,0.03)';
+  cell.style.border='1px solid '+(v?'rgba(254,81,0,0.3)':'rgba(255,255,255,0.08)');
+  cell.innerHTML=`<span class="dn">${d}</span>`+(v?`<span class="da">$${(v*100).toLocaleString()}</span>`:'');
+  cal.appendChild(cell);
+}
+</script>
+</body>
+</html>

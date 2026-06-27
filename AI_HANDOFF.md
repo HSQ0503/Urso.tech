@@ -15,6 +15,54 @@ one brain: the **graph chats** (orange spark buttons), the **weekly brief** (Mon
 the owner just talks to. Memory layer + metric-verified learning + the events "why" layer are all live
 (migrations 0017 / 0019 / 0020 applied). Committed on `main`; pushing to `main` deploys to Vercel prod.
 
+## What changed 2026-06-26 (this session) — ticket-level tool + Money tab fix
+
+Two things: the analyst got a **ticket / line-item tool**, and the **Money tab's open-month render** was fixed.
+
+- **New tool `store_day_tickets` (tool #26).** The analyst can now pull the ACTUAL tickets + line items that
+  sold at a store on a day (or ≤7-day window): per-ticket lines (name, qty, line revenue, retail-vs-grooming
+  tag, groomer), the time, the customer when known (Walk-in / Unknown otherwise), plus a summary with the
+  day's top retail items by revenue (the reorder-cycle signal). Answers "what sold at Windermere yesterday?",
+  "what did this customer buy?", "itemize this day" — which the aggregated tools (monthly product rankings,
+  daily store totals) physically can't reach. Files:
+  - **`supabase/migrations/0025_store_day_lineitems.sql`** — a **SECURITY DEFINER** RPC `store_day_lineitems`
+    that reads the RLS-locked raw staging (`franpos_order_items`) and reuses the EXACT iron-rule helpers
+    (`franpos_item_is_passthrough` exclude deposits/gift cards · `franpos_item_is_service` retail-vs-service ·
+    `franpos_walkin_accounts` TAG anonymous house tickets), so ticket sums reconcile with headline revenue.
+    `p_end` is INCLUSIVE (a single day = p_start = p_end — do NOT addDays here, unlike the other range RPCs).
+    **⚠️ NEEDS MANUAL APPLY** — this machine's `.env` has the service key but no `SUPABASE_ACCESS_TOKEN`, so
+    `node scripts/apply-migration.mjs 0025` can't run here. Apply via the Supabase SQL editor (or with an
+    access token). **The app is SAFE until then:** the loader returns null on "function does not exist" and
+    the tool replies "ticket-level data isn't available yet (pending deploy)."
+  - `getStoreDayLineItems(scope, startDate, endDate)` in `data.server.ts` — groups lines → tickets, resolves
+    owner names via the `customers` temp-read table, flags `truncated` at the 1,000-row PostgREST cap and
+    drops a possibly-partial last ticket.
+  - `store_day_tickets` tool in `lib/ai/tools.ts` — **scope-locked**: an optional `store` arg is validated
+    against `crossIds` (owner = any visible store, manager = their store only); default scope = the current
+    filter. 7-day window cap, top-30 tickets + summary, rounds dollars, keeps fractional units.
+  - Prompt wiring in `analyst.ts` (graph-chat closing + console strategist tool list); types
+    `DayTicket`/`DayTicketLine`/`DayTickets` in `data.ts`.
+  - **Verified against LIVE data** (service-role probe replicating the RPC): wm 2026-06-25 → 37 tickets,
+    $3,801 ($1,708 retail); top baskets were food stock-ups (a $324 ticket of 6× Small Batch pork 5#) —
+    exactly the reorder-cycle evidence the tool is meant to surface.
+  - This is NOT the deferred "free-text customer-name lookup" — it's day/store-scoped itemization (no
+    person-history search), consistent with `top_customers`/`winback_targets` already exposing names.
+
+- **Money / profit tab fix.** Root cause of "the profit tab is not working": the open current month
+  (2026-06) has `Total Income = 0` but real expenses in `quickbooks_pnl_totals`, so selecting it rendered a
+  misleading **$0 revenue / large net loss**. Fix in `app/dashboard/money/page.tsx`: a `provisionalEmpty`
+  guard (`openSelected && overview.revenue === 0`) shows an honest "books still open — income posts after
+  expenses; pick a closed month / Last 12 months" notice instead of the numbers. Closed months and the
+  default "Last 12 months" view are unaffected (the default already excludes the open month). The data path
+  was otherwise sound — `quickbooks_pnl` (5,100 rows) / `quickbooks_pnl_totals` (1,350 rows) are fresh, all
+  reads use the service-role admin client, build/lint green.
+  - Also hardened `components/dashboard/chart.tsx`: `ResponsiveContainer` now takes a `minHeight` from the
+    wrapper's numeric height — kills the Recharts `width(-1)/height(-1)` blank-flash on the trend chart.
+    Additive: charts without a numeric style height are unchanged.
+  - **NOT an auth problem.** The dev log's `Invalid Refresh Token` is a revoked/cleared session cookie
+    (re-login fixes it), not a code bug — the middleware (`updateSession`) already refreshes tokens and writes
+    the cookies back. No auth code was changed (would risk breaking working auth).
+
 ## What changed 2026-06-17 (this session)
 
 - **General analyst console** — `/dashboard/actions` leads with an open-ended urso.ai analyst as the

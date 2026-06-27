@@ -68,7 +68,7 @@ export function Card({
   pad?: boolean;
 }) {
   return (
-    <div className={`rounded-none border border-edge bg-panel ${pad ? "p-5" : ""} ${className}`}>
+    <div className={`rounded-2xl border border-edge bg-panel ${pad ? "p-5" : ""} ${className}`}>
       {children}
     </div>
   );
@@ -85,7 +85,7 @@ export function Skeleton({ className = "" }: { className?: string }) {
 }
 
 export function SkeletonCard({ className = "", children }: { className?: string; children?: ReactNode }) {
-  return <div className={`rounded-none border border-edge bg-panel p-5 ${className}`}>{children}</div>;
+  return <div className={`rounded-2xl border border-edge bg-panel p-5 ${className}`}>{children}</div>;
 }
 
 export function PageHeader({

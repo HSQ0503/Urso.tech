@@ -27,6 +27,11 @@ export function ChartContainer({
 }: React.ComponentProps<"div"> & { config: ChartConfig; children: React.ReactElement }) {
   const uid = React.useId();
   const chartId = `chart-${uid.replace(/:/g, "")}`;
+  // When the wrapper has a known numeric height, hand it to ResponsiveContainer
+  // as a minHeight so it never measures its parent as -1 on first paint (the
+  // "width(-1) and height(-1)" Recharts warning + a blank-chart flash). Charts
+  // that size via className stay on the default (undefined) — no behavior change.
+  const styleHeight = typeof props.style?.height === "number" ? props.style.height : undefined;
   return (
     <ChartContext.Provider value={{ config }}>
       <div
@@ -44,7 +49,7 @@ export function ChartContainer({
         {...props}
       >
         <ChartStyle id={chartId} config={config} />
-        <RechartsPrimitive.ResponsiveContainer width="100%" height="100%">
+        <RechartsPrimitive.ResponsiveContainer width="100%" height="100%" minHeight={styleHeight}>
           {children}
         </RechartsPrimitive.ResponsiveContainer>
       </div>

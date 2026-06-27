@@ -56,6 +56,10 @@ export default async function MoneyPage({ searchParams }: { searchParams: Promis
 
   const hasData = overview.revenue !== 0 || overview.expenses !== 0;
   const openSelected = overview.openMonth && /^\d{4}-\d{2}$/.test(month) && month === overview.openMonth;
+  // Open-books month with no income yet: QuickBooks records income after
+  // expenses, so this month would render $0 revenue against real costs — a
+  // misleading "loss". Show an honest provisional notice instead of the numbers.
+  const provisionalEmpty = !!openSelected && overview.revenue === 0;
 
   return (
     <div className="animate-stage-in space-y-3">
@@ -76,6 +80,15 @@ export default async function MoneyPage({ searchParams }: { searchParams: Promis
       {!hasData ? (
         <Card>
           <p className="py-8 text-center text-[13.5px] text-ink-dim">{t("No QuickBooks data for this period.")}</p>
+        </Card>
+      ) : provisionalEmpty ? (
+        <Card>
+          <div className="py-8 text-center">
+            <p className="text-[14px] text-ink">{t("{month}'s books are still open.", { month: period })}</p>
+            <p className="mx-auto mt-2 max-w-[480px] text-[13px] leading-[1.6] text-ink-dim">
+              {t("In QuickBooks, income posts after expenses, so an open month shows costs with no matching revenue yet — its profit isn't meaningful until the books close. Pick a closed month or “Last 12 months” for an accurate picture.")}
+            </p>
+          </div>
         </Card>
       ) : (
         <>
