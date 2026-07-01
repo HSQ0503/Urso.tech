@@ -101,7 +101,7 @@ export function ActionsClient({ initialActions, showHeader = true }: { initialAc
       )}
 
       {error && (
-        <div className="rounded-none border border-[rgba(226,75,74,0.4)] bg-[rgba(226,75,74,0.08)] px-4 py-3 text-[13px] text-ink">
+        <div className="rounded-lg border border-bad/40 bg-bad/10 px-4 py-3 text-sm text-ink">
           {t("Couldn’t save that change —")} {error}. {t("Please try again.")}
         </div>
       )}
@@ -114,7 +114,7 @@ export function ActionsClient({ initialActions, showHeader = true }: { initialAc
             <button
               key={f.value}
               onClick={() => setFilter(f.value)}
-              className={`shrink-0 cursor-pointer rounded-full border px-3.5 py-1.5 text-[12.5px] transition-colors ${
+              className={`shrink-0 cursor-pointer rounded-full border px-3.5 py-1.5 text-xs transition-colors ${
                 active ? "border-edge-strong bg-raise-strong text-ink" : "border-edge text-ink-dim hover:text-ink"
               }`}
             >
@@ -128,7 +128,7 @@ export function ActionsClient({ initialActions, showHeader = true }: { initialAc
       <div className="space-y-4">
         {list.length === 0 ? (
           <Card>
-            <p className="text-center text-[13px] text-ink-dim">{t("No actions in this stage.")}</p>
+            <p className="text-center text-sm text-ink-dim">{t("No actions in this stage.")}</p>
           </Card>
         ) : (
           list.map((a) => <ActionCard key={a.id} action={a} onApprove={() => approve(a.id)} onDismiss={() => dismiss(a.id)} />)
@@ -141,17 +141,17 @@ export function ActionsClient({ initialActions, showHeader = true }: { initialAc
           <Micro>{t("Pipeline · most urgent first")}</Micro>
           <InfoTip text={t("Every action moves left to right: the AI suggests it, you approve, the agent runs it, then it completes with a result. The list above is ordered by what needs you most.")} />
         </div>
-        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-none border border-edge bg-edge md:grid-cols-4">
+        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-edge bg-edge md:grid-cols-4">
           {ACTION_FLOW.map((s, i) => (
             <div key={s} className="relative bg-cell p-4">
               <div className="flex items-center justify-between">
                 <Micro>{t(actionStatusLabel[s])}</Micro>
-                <span className="font-mono text-[10px] text-ink-dimmer">{i + 1}/4</span>
+                <span className="font-mono text-2xs text-ink-dimmer">{i + 1}/4</span>
               </div>
-              <div className="mt-2.5 text-[24px] font-bold leading-none tracking-[-0.02em]" style={{ color: s === "suggested" && count(s) > 0 ? "#fe5100" : undefined }}>
+              <div className="mt-2.5 text-2xl font-semibold leading-none tracking-[-0.01em] tabular-nums" style={{ color: s === "suggested" && count(s) > 0 ? "var(--color-orange)" : undefined }}>
                 {count(s)}
               </div>
-              <p className="mt-2 text-[11px] leading-[1.4] text-ink-dimmer">{t(stageHelp[s])}</p>
+              <p className="mt-2 text-xs leading-[1.4] text-ink-dimmer">{t(stageHelp[s])}</p>
             </div>
           ))}
         </div>
@@ -170,8 +170,8 @@ export function ActionsClient({ initialActions, showHeader = true }: { initialAc
               <div key={a.key} className={`flex flex-wrap items-center justify-between gap-3 px-5 py-3.5 ${i > 0 ? "border-t border-edge" : ""}`}>
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className={`size-1.5 rounded-full ${st.active ? "bg-[var(--color-good)]" : "bg-ink-dimmer"}`} />
-                    <span className="text-[14px] text-ink">{t(a.key)} {t("agent")}</span>
+                    <span className={`size-1.5 rounded-full ${st.active ? "bg-good" : "bg-ink-dimmer"}`} />
+                    <span className="text-sm text-ink">{t(a.key)} {t("agent")}</span>
                   </div>
                   <Micro className="mt-0.5 !normal-case !tracking-normal">{t(a.desc)}</Micro>
                 </div>
@@ -183,8 +183,8 @@ export function ActionsClient({ initialActions, showHeader = true }: { initialAc
                   />
                   <button
                     onClick={() => setAgents((p) => ({ ...p, [a.key]: { ...p[a.key], active: !p[a.key].active } }))}
-                    className={`w-[78px] cursor-pointer rounded-full border px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] transition-colors ${
-                      st.active ? "border-[rgba(70,209,138,0.3)] text-[var(--color-good)]" : "border-edge text-ink-dim hover:text-ink"
+                    className={`w-[78px] cursor-pointer rounded-full border px-3 py-1.5 font-mono text-2xs uppercase tracking-[0.12em] transition-colors ${
+                      st.active ? "border-good/30 text-good" : "border-edge text-ink-dim hover:text-ink"
                     }`}
                   >
                     {st.active ? t("Active") : t("Paused")}
@@ -212,17 +212,17 @@ function ActionCard({ action: a, onApprove, onDismiss }: { action: ActionWithPla
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-dimmer">{a.agent} {t("agent")}</span>
+            <span className="font-mono text-2xs uppercase tracking-[0.12em] text-ink-dimmer">{a.agent} {t("agent")}</span>
             <span className="text-edge-strong">·</span>
-            <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-dimmer">{a.store}</span>
+            <span className="font-mono text-2xs uppercase tracking-[0.12em] text-ink-dimmer">{a.store}</span>
             {a.pending && <Tag tone="muted">{t("Pending data")}</Tag>}
           </div>
-          <h2 className="mt-2 text-[16px] font-medium tracking-[-0.01em] text-ink">{a.title}</h2>
+          <h2 className="mt-2 text-base font-semibold tracking-[-0.01em] text-ink">{a.title}</h2>
         </div>
         <Tag tone={statusTone[a.status]}>{t(actionStatusLabel[a.status])}</Tag>
       </div>
 
-      <p className="text-[13.5px] leading-[1.55] text-ink-dim">{a.detail}</p>
+      <p className="text-sm leading-relaxed text-ink-dim">{a.detail}</p>
 
       {/* Lifecycle progress */}
       <div className="flex items-center gap-1.5">
@@ -231,7 +231,7 @@ function ActionCard({ action: a, onApprove, onDismiss }: { action: ActionWithPla
         ))}
       </div>
       <div className="flex items-center justify-between gap-3">
-        <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-dimmer">
+        <span className="font-mono text-2xs uppercase tracking-[0.12em] text-ink-dimmer">
           {t(actionStatusLabel[a.status])}
           {next ? ` → ${next}` : ""}
         </span>
@@ -239,24 +239,24 @@ function ActionCard({ action: a, onApprove, onDismiss }: { action: ActionWithPla
       </div>
 
       {a.result && (
-        <div className="flex items-center gap-2 rounded-none border border-[rgba(70,209,138,0.3)] bg-raise px-3.5 py-2.5">
-          <span className="size-1.5 rounded-full bg-[var(--color-good)]" />
-          <span className="text-[12.5px] text-ink">{a.result}</span>
+        <div className="flex items-center gap-2 rounded-lg border border-good/30 bg-raise px-3.5 py-2.5">
+          <span className="size-1.5 rounded-full bg-good" />
+          <span className="text-xs text-ink">{a.result}</span>
         </div>
       )}
 
       <div className="flex flex-wrap items-center gap-2">
         {isSuggested ? (
           <>
-            <button onClick={() => setOpen(true)} className="cursor-pointer rounded-lg bg-orange px-4 py-2 text-[13px] font-medium text-white transition hover:brightness-110">
+            <button onClick={() => setOpen(true)} className="cursor-pointer rounded-lg bg-orange px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange/90">
               {t("Review & approve")}
             </button>
-            <button onClick={onDismiss} className="cursor-pointer rounded-lg border border-edge-strong px-4 py-2 text-[13px] text-ink transition-colors hover:bg-raise">
+            <button onClick={onDismiss} className="cursor-pointer rounded-lg border border-edge-strong px-4 py-2 text-sm text-ink transition-colors hover:bg-raise">
               {t("Dismiss")}
             </button>
           </>
         ) : (
-          <button onClick={() => setOpen(true)} className="cursor-pointer rounded-lg border border-edge-strong px-4 py-2 text-[13px] text-ink transition-colors hover:bg-raise">
+          <button onClick={() => setOpen(true)} className="cursor-pointer rounded-lg border border-edge-strong px-4 py-2 text-sm text-ink transition-colors hover:bg-raise">
             {t("View plan")}
           </button>
         )}
@@ -275,7 +275,7 @@ function ActionCard({ action: a, onApprove, onDismiss }: { action: ActionWithPla
                   onApprove();
                   setOpen(false);
                 }}
-                className="flex-1 cursor-pointer rounded-lg bg-orange px-4 py-2.5 text-[13px] font-medium text-white transition hover:brightness-110"
+                className="flex-1 cursor-pointer rounded-lg bg-orange px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-orange/90"
               >
                 {t("Approve & start")}
               </button>
@@ -284,13 +284,13 @@ function ActionCard({ action: a, onApprove, onDismiss }: { action: ActionWithPla
                   onDismiss();
                   setOpen(false);
                 }}
-                className="cursor-pointer rounded-lg border border-edge-strong px-4 py-2.5 text-[13px] text-ink transition-colors hover:bg-raise"
+                className="cursor-pointer rounded-lg border border-edge-strong px-4 py-2.5 text-sm text-ink transition-colors hover:bg-raise"
               >
                 {t("Dismiss")}
               </button>
             </div>
           ) : (
-            <a href="mailto:han@urso.tech?subject=Urso%20%E2%80%94%20action" className="flex w-full items-center justify-center rounded-lg border border-edge-strong px-4 py-2.5 text-[13px] text-ink transition-colors hover:bg-raise">
+            <a href="mailto:han@urso.tech?subject=Urso%20%E2%80%94%20action" className="flex w-full items-center justify-center rounded-lg border border-edge-strong px-4 py-2.5 text-sm text-ink transition-colors hover:bg-raise">
               {t("Have Urso fix this")} →
             </a>
           )

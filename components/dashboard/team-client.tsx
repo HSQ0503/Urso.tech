@@ -58,9 +58,9 @@ export function TeamClient({ roster, scopeName, period }: { roster: TeamRow[]; s
               />
               <ChartInfo id="productivityRank" />
             </div>
-            <h2 className="mt-1.5 text-[17px] font-medium tracking-[-0.01em]">{t("Service revenue per groomer")}</h2>
+            <h2 className="mt-1.5 text-base font-semibold tracking-[-0.01em]">{t("Service revenue per groomer")}</h2>
           </div>
-          <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-dimmer">{roster.length} {t("groomers")}</span>
+          <span className="font-mono text-2xs uppercase tracking-[0.12em] text-ink-dimmer">{roster.length} {t("groomers")}</span>
         </div>
         <BarRanking data={ranking} valueFmt={(n) => fmtMoney(n)} labelWidth={150} valueLabel={t("Service revenue")} />
       </Card>
@@ -71,15 +71,15 @@ export function TeamClient({ roster, scopeName, period }: { roster: TeamRow[]; s
           <div className="px-5 pb-3 pt-5">
             <Micro>{t("Scorecard")}</Micro>
             <div className="mt-1.5 flex items-center gap-1.5">
-              <h2 className="text-[18px] font-medium tracking-[-0.01em]">{t("Groomer scorecard")}</h2>
+              <h2 className="text-base font-semibold tracking-[-0.01em]">{t("Groomer scorecard")}</h2>
               <InfoTip text={groomerColHelp(t)} />
             </div>
           </div>
           {/* Scrolls past ~8 rows so the card stays level with the profile. */}
           <div className="max-h-[480px] overflow-x-auto overflow-y-auto">
-            <table className="w-full min-w-[520px] border-collapse text-[13.5px]">
+            <table className="w-full min-w-[520px] border-collapse text-sm">
               <thead>
-                <tr className="font-mono text-[10px] uppercase tracking-[0.1em] text-ink-dimmer">
+                <tr className="font-mono text-2xs uppercase tracking-[0.12em] text-ink-dimmer">
                   {["Groomer", "Revenue", "Appts", "Avg ticket", "Return", "Attach"].map((h, i) => (
                     <th key={h} className={`sticky top-0 bg-panel px-5 py-2.5 font-normal shadow-[inset_0_1px_0_var(--color-edge),inset_0_-1px_0_var(--color-edge)] ${i === 0 ? "text-left" : "text-right"}`}>{t(h)}</th>
                   ))}
@@ -99,15 +99,15 @@ export function TeamClient({ roster, scopeName, period }: { roster: TeamRow[]; s
                         <div className="flex items-center gap-2">
                           <span className="text-ink">{g.name}</span>
                           {g.flag === "star" && <Tag tone="good">{t("Top")}</Tag>}
-                          {g.flag === "coach" && <Tag tone="orange">{t("Coach")}</Tag>}
+                          {g.flag === "coach" && <Tag tone="warn">{t("Coach")}</Tag>}
                         </div>
                         <Micro className="mt-0.5">{g.store}</Micro>
                       </td>
                       <td className="px-5 py-3 text-right font-mono text-ink">{fmtMoney(g.revenue)}</td>
                       <td className="px-5 py-3 text-right font-mono text-ink-dim">{g.appts}</td>
                       <td className="px-5 py-3 text-right font-mono text-ink-dim">{fmtMoney(g.avgTicket)}</td>
-                      <td className="px-5 py-3 text-right font-mono" style={{ color: g.rebook != null && g.rebook < 0.45 ? "#fe5100" : undefined }}>{pctOr(g.rebook)}</td>
-                      <td className="px-5 py-3 text-right font-mono" style={{ color: g.attach != null && g.attach < 0.25 ? "#fe5100" : undefined }}>{pctOr(g.attach)}</td>
+                      <td className="px-5 py-3 text-right font-mono" style={{ color: g.rebook != null && g.rebook < 0.45 ? "var(--color-bad)" : undefined }}>{pctOr(g.rebook)}</td>
+                      <td className="px-5 py-3 text-right font-mono" style={{ color: g.attach != null && g.attach < 0.25 ? "var(--color-bad)" : undefined }}>{pctOr(g.attach)}</td>
                     </tr>
                   );
                 })}
@@ -119,19 +119,19 @@ export function TeamClient({ roster, scopeName, period }: { roster: TeamRow[]; s
         {/* Profile — hugs its content instead of stretching to the table's height */}
         <Card className="flex flex-col gap-5 self-start">
           <div className="flex items-center gap-3">
-            <div className="grid size-12 place-items-center rounded-full bg-orange-soft font-mono text-[15px] text-orange">{initials}</div>
+            <div className="grid size-12 place-items-center rounded-full bg-orange-soft font-mono text-sm text-orange">{initials}</div>
             <div className="min-w-0 flex-1">
-              <div className="text-[16px] text-ink">{selected.name}</div>
+              <div className="text-base text-ink">{selected.name}</div>
               <Micro className="mt-0.5">{selected.store}</Micro>
             </div>
             {selected.flag === "star" && <Tag tone="good">{t("Top groomer")}</Tag>}
-            {selected.flag === "coach" && <Tag tone="orange">{t("Coach")}</Tag>}
+            {selected.flag === "coach" && <Tag tone="warn">{t("Coach")}</Tag>}
           </div>
 
           {selected.rebook != null && selected.rebook < 0.45 && (
-            <div className="flex items-center gap-2 rounded-none border border-[rgba(254,81,0,0.35)] bg-orange-soft px-3.5 py-2.5">
-              <span className="size-1.5 rounded-full bg-orange" />
-              <span className="text-[12.5px] text-ink">{t("Return rate")} ({pct(selected.rebook)}) {t("is below the team floor — the clearest single thing to address.")}</span>
+            <div className="flex items-center gap-2 rounded-lg border border-bad/35 bg-bad/10 px-3.5 py-2.5">
+              <span className="size-1.5 rounded-full bg-bad" />
+              <span className="text-xs text-ink">{t("Return rate")} ({pct(selected.rebook)}) {t("is below the team floor — the clearest single thing to address.")}</span>
             </div>
           )}
 
@@ -146,7 +146,7 @@ export function TeamClient({ roster, scopeName, period }: { roster: TeamRow[]; s
         </Card>
       </div>
 
-      <p className="mt-3 text-[13px] leading-[1.6] text-ink-dim">
+      <p className="mt-3 text-sm leading-relaxed text-ink-dim">
         {t("Revenue, appointments and avg ticket reflect the selected period; return and attach are lifetime shares from the full FranPOS history (")}{dash}{t(" means too little history to say). Revenue per labour hour returns once labour-hours data is available — FranPOS timeclocks today, payroll as the fallback.")}
       </p>
     </div>
@@ -155,9 +155,9 @@ export function TeamClient({ roster, scopeName, period }: { roster: TeamRow[]; s
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-none border border-edge bg-raise px-3 py-2.5">
+    <div className="rounded-lg border border-edge bg-raise px-3 py-2.5">
       <Micro>{label}</Micro>
-      <div className="mt-1 font-mono text-[15px] text-ink">{value}</div>
+      <div className="mt-1 font-mono text-sm text-ink">{value}</div>
     </div>
   );
 }

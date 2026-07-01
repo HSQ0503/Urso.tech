@@ -57,9 +57,9 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
       {/* Comparison table */}
       <Card pad={false}>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[860px] border-collapse text-[13.5px]">
+          <table className="w-full min-w-[860px] border-collapse text-sm">
             <thead>
-              <tr className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-dimmer">
+              <tr className="font-mono text-2xs uppercase tracking-[0.1em] text-ink-dimmer">
                 {COLS.map((h) => (
                   <th key={h} className={`px-5 py-3 font-normal ${h === "Location" ? "text-left" : "text-right"}`}>{t(h)}</th>
                 ))}
@@ -88,7 +88,7 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
                         <span className="font-mono text-ink-dim">{pct(m.rebook)}</span>
                       </div>
                     </td>
-                    <td className="px-5 py-3.5 text-right font-mono" style={{ color: m.attach < 0.15 ? "#fe5100" : "var(--color-ink-dim)" }}>{pct(m.attach)}</td>
+                    <td className="px-5 py-3.5 text-right font-mono" style={{ color: m.attach < 0.15 ? "var(--color-bad)" : "var(--color-ink-dim)" }}>{pct(m.attach)}</td>
                   </tr>
                 );
               })}
@@ -109,7 +109,7 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
             />
             <ChartInfo id="revenueByLocation" />
           </div>
-          <h2 className="mt-1.5 mb-4 text-[16px] font-medium tracking-[-0.01em]">{t("By location")}</h2>
+          <h2 className="mt-1.5 mb-4 text-base font-semibold tracking-[-0.01em]">{t("By location")}</h2>
           <BarRanking data={rank((r) => r.m.revenue)} format="moneyK" labelWidth={104} valueLabel={t("Revenue")} />
         </Card>
         <Card>
@@ -122,7 +122,7 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
             />
             <ChartInfo id="storeRankRebook" />
           </div>
-          <h2 className="mt-1.5 mb-4 text-[16px] font-medium tracking-[-0.01em]">{t("By location")}</h2>
+          <h2 className="mt-1.5 mb-4 text-base font-semibold tracking-[-0.01em]">{t("By location")}</h2>
           <BarRanking data={rank((r) => Math.round(r.m.rebook * 1000) / 10)} format="pct" labelWidth={104} valueLabel={t("Return rate")} />
         </Card>
         <Card>
@@ -135,12 +135,12 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
             />
             <ChartInfo id="storeRankAttach" />
           </div>
-          <h2 className="mt-1.5 mb-4 text-[16px] font-medium tracking-[-0.01em]">{t("By location")}</h2>
+          <h2 className="mt-1.5 mb-4 text-base font-semibold tracking-[-0.01em]">{t("By location")}</h2>
           <BarRanking data={rank((r) => Math.round(r.m.attach * 1000) / 10)} format="pct" labelWidth={104} valueLabel={t("Retail attach")} />
         </Card>
       </section>
 
-      <p className="mt-3 text-[13px] text-ink-dim">
+      <p className="mt-3 text-sm text-ink-dim">
         {scope === "all"
           ? t("Return rate and retail attach are the two levers every store controls today — the ranked bars show where coaching pays off first. Call capture joins the comparison once tracking is live.")
           : `${t("Showing")} ${scopeLabel(scope)} ${t("highlighted against the other locations.")}`}

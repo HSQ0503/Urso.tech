@@ -69,7 +69,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
           <Stat label={t("Grooming cycle")} value={retention.cycle.medianDays ? `${retention.cycle.medianDays} ${t("days")}` : "—"} sub={t("median time between grooms")} />
           <Stat label={t("Single-visit")} value={retention.oneAndDone.toLocaleString()} sub={t("came once, no return in 90+ days")} accent />
         </div>
-        <p className="mt-5 font-mono text-[10px] uppercase tracking-[0.12em] text-ink-dimmer">
+        <p className="mt-5 font-mono text-2xs uppercase tracking-[0.12em] text-ink-dimmer">
           {t("Returning, cycle & single-visit cover all recorded history (Jan 2024 →) · Return rate follows the month filter")}
         </p>
       </section>
@@ -118,7 +118,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
               <ChartInfo id="cohortRetention" />
             </div>
             <CohortCurve data={retention.cohort} />
-            <p className="mt-3 text-[13px] leading-[1.55] text-ink-dim">
+            <p className="mt-3 text-sm leading-relaxed text-ink-dim">
               {pct(retention.cohort[retention.cohort.length - 1] / 100)} {t("of new customers are still returning")} {retention.cohort.length - 1} {t("months after their first visit. The curve deepens as history accumulates; improving it is the most durable driver of recurring revenue.")}
             </p>
           </div>
@@ -135,15 +135,15 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
               />
               <ChartInfo id="crossSellMix" />
             </div>
-            <h2 className="mt-1.5 text-[18px] font-medium tracking-[-0.01em]">{t("Retail & grooming overlap")}</h2>
-            <p className="mt-2 text-[13px] leading-[1.55] text-ink-dim">
+            <h2 className="mt-1.5 text-base font-semibold tracking-[-0.01em]">{t("Retail & grooming overlap")}</h2>
+            <p className="mt-2 text-sm leading-relaxed text-ink-dim">
               {t("Customers who buy both spend materially more per visit. The largest opportunity is converting grooming-only customers into retail buyers at checkout.")}
             </p>
           </div>
           <div className="mt-auto">
             <StackedShareBar
               segments={[
-                { label: t("Both"), value: xs.both, color: "#fe5100" },
+                { label: t("Both"), value: xs.both, color: "var(--color-orange)" },
                 { label: t("Grooming only"), value: xs.groomingOnly, color: "var(--color-series)" },
                 { label: t("Retail only"), value: xs.retailOnly, color: "var(--color-series-soft)" },
               ]}
@@ -165,16 +165,16 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
               />
               <ChartInfo id="groomingCycle" />
             </div>
-            <h2 className="mt-1.5 text-[18px] font-medium tracking-[-0.01em]">{t("How often customers come back")}</h2>
+            <h2 className="mt-1.5 text-base font-semibold tracking-[-0.01em]">{t("How often customers come back")}</h2>
           </div>
-          <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-dimmer">
+          <span className="font-mono text-2xs uppercase tracking-[0.12em] text-ink-dimmer">
             {retention.cycle.gapCount.toLocaleString()} {t("return visits measured")}
           </span>
         </div>
         <div className="mt-4">
           <HistogramBars data={retention.cycle.histogram} seriesLabel={t("Share of return gaps")} />
         </div>
-        <p className="mt-3 max-w-[720px] text-[13px] leading-[1.55] text-ink-dim">
+        <p className="mt-3 max-w-[720px] text-sm leading-relaxed text-ink-dim">
           {t("The median customer returns every")} {retention.cycle.medianDays} {t("days, and")} {pct(retention.cycle.recurringPct)} {t("of returning customers hold a recurring cycle of 60 days or less")} ({retention.cycle.recurringCount.toLocaleString()} {t("of")} {retention.cycle.cycleCustomers.toLocaleString()}). {t("Everything right of the 8-week bars is a customer drifting off cadence — the moment a rebooking nudge earns its keep. True checkout rebooking (booked the next visit before leaving) arrives with the FranPOS booking feed.")}
         </p>
       </Card>
@@ -184,18 +184,18 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
         <div className="mb-4 flex items-end justify-between gap-3">
           <div>
             <Micro>{t("Customer intelligence")}</Micro>
-            <h2 className="mt-1.5 text-[18px] font-medium tracking-[-0.01em]">{t("Value, risk & next action")}</h2>
+            <h2 className="mt-1.5 text-base font-semibold tracking-[-0.01em]">{t("Value, risk & next action")}</h2>
           </div>
-          <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-dimmer">{t("Avg LTV")} {fmtMoney(intel.avgLtv)} · {t("all history")}</span>
+          <span className="font-mono text-2xs uppercase tracking-[0.12em] text-ink-dimmer">{t("Avg LTV")} {fmtMoney(intel.avgLtv)} · {t("all history")}</span>
         </div>
 
-        <div className={`grid grid-cols-2 gap-px overflow-hidden rounded-none border border-edge bg-edge ${segCells.length === 5 ? "md:grid-cols-5" : "md:grid-cols-4"}`}>
+        <div className={`grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-edge bg-edge ${segCells.length === 5 ? "md:grid-cols-5" : "md:grid-cols-4"}`}>
           {segCells.map((s) => {
             const risk = s.segment === "At risk" || s.segment === "Lapsed";
             return (
               <div key={s.segment} className="bg-cell p-4">
                 <Micro>{t(s.segment)}</Micro>
-                <div className="mt-2.5 text-[24px] font-bold leading-none tracking-[-0.02em]" style={{ color: risk ? "#fe5100" : undefined }}>{s.count}</div>
+                <div className="mt-2.5 text-2xl font-semibold leading-none tracking-[-0.01em] tabular-nums" style={{ color: risk ? "var(--color-bad)" : undefined }}>{s.count}</div>
               </div>
             );
           })}
@@ -203,9 +203,9 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
 
         <Card pad={false} className="mt-3">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[680px] border-collapse text-[13.5px]">
+            <table className="w-full min-w-[680px] border-collapse text-sm">
               <thead>
-                <tr className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-dimmer">
+                <tr className="font-mono text-2xs uppercase tracking-[0.1em] text-ink-dimmer">
                   {["Customer", "Store", "Visits", "Lifetime value", "Last visit", "Next action"].map((h, i) => (
                     <th key={h} className={`px-5 py-3 font-normal ${i === 2 || i === 3 ? "text-right" : "text-left"}`}>{t(h)}</th>
                   ))}
@@ -226,7 +226,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
                       <td className="px-5 py-3.5 text-ink-dim">{c.store}</td>
                       <td className="px-5 py-3.5 text-right font-mono text-ink-dim">{c.visits}</td>
                       <td className="px-5 py-3.5 text-right font-mono text-ink">{fmtMoney(c.ltv)}</td>
-                      <td className="px-5 py-3.5 font-mono" style={{ color: c.lastVisit > 60 ? "#fe5100" : "var(--color-ink-dim)" }}>{c.lastVisit}d {t("ago")}</td>
+                      <td className="px-5 py-3.5 font-mono" style={{ color: c.lastVisit > 60 ? "var(--color-bad)" : "var(--color-ink-dim)" }}>{c.lastVisit}d {t("ago")}</td>
                       <td className="px-5 py-3.5 text-ink-dim">{t(c.next)}</td>
                     </tr>
                   );
@@ -235,7 +235,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
             </table>
           </div>
         </Card>
-        <p className="mt-2.5 text-[11.5px] leading-[1.5] text-ink-dimmer">
+        <p className="mt-2.5 text-xs leading-relaxed text-ink-dimmer">
           {t("Customers without a name on file (incomplete FranPOS profiles, house accounts) are excluded from this list and the win-back queue — their revenue still counts everywhere else.")}
         </p>
       </section>
@@ -245,15 +245,15 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
   );
 }
 
-function Stat({ label, value, sub, accent, delta }: { label: string; value: string; sub: string; accent?: boolean; delta?: number | null }) {
+function Stat({ label, value, sub, delta }: { label: string; value: string; sub: string; accent?: boolean; delta?: number | null }) {
   return (
     <div>
       <Micro>{label}</Micro>
-      <div className={`mt-2 flex items-baseline gap-2 text-[34px] font-bold leading-none tracking-[-0.02em] ${accent ? "text-orange" : "text-ink"}`}>
+      <div className="mt-2 flex items-baseline gap-2 text-3xl font-semibold leading-none tracking-[-0.01em] tabular-nums text-ink">
         {value}
         {delta != null && <Delta value={delta} />}
       </div>
-      <div className="mt-1.5 text-[12.5px] text-ink-dim">{sub}</div>
+      <div className="mt-1.5 text-xs text-ink-dim">{sub}</div>
     </div>
   );
 }

@@ -50,7 +50,7 @@ export function HomeSkeleton() {
         <Skeleton className="h-8 w-72" />
         <Skeleton className="h-4 w-80" />
       </div>
-      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-none border border-edge bg-edge md:grid-cols-3 xl:grid-cols-6">
+      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-edge bg-edge md:grid-cols-3 xl:grid-cols-6">
         {Array.from({ length: 6 }).map((_, i) => (
           <div key={i} className="space-y-3 bg-cell p-4">
             <Skeleton className="h-3 w-16" />
@@ -66,7 +66,7 @@ export function HomeSkeleton() {
           <Skeleton className="h-3 w-[70%]" />
         </SkeletonCard>
         <SkeletonCard className="space-y-4">
-          <div className="flex justify-between"><Skeleton className="h-7 w-40" /><Skeleton className="h-8 w-48 rounded-full" /></div>
+          <div className="flex justify-between"><Skeleton className="h-7 w-40" /><Skeleton className="h-8 w-48 rounded-lg" /></div>
           <Skeleton className="h-48 w-full" />
         </SkeletonCard>
       </div>
@@ -182,7 +182,7 @@ export function TeamSkeleton() {
             <div className="flex-1 space-y-2"><Skeleton className="h-4 w-32" /><Skeleton className="h-3 w-20" /></div>
           </div>
           <div className="grid grid-cols-3 gap-2.5">
-            {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-14 w-full rounded-none" />)}
+            {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-14 w-full rounded-lg" />)}
           </div>
           <Skeleton className="h-20 w-full" />
         </SkeletonCard>
@@ -195,7 +195,7 @@ export function RevenueSkeleton() {
   return (
     <div className="space-y-12">
       <Header />
-      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-none border border-edge bg-edge md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-edge bg-edge md:grid-cols-4">
         {Array.from({ length: 4 }).map((_, i) => (
           <div key={i} className="space-y-3 bg-cell p-4"><Skeleton className="h-3 w-20" /><Skeleton className="h-6 w-24" /></div>
         ))}
@@ -215,7 +215,7 @@ export function ActionsSkeleton() {
   return (
     <div className="space-y-8">
       <Header />
-      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-none border border-edge bg-edge md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-edge bg-edge md:grid-cols-4">
         {Array.from({ length: 4 }).map((_, i) => (
           <div key={i} className="space-y-3 bg-cell p-4"><Skeleton className="h-3 w-20" /><Skeleton className="h-6 w-10" /></div>
         ))}
@@ -238,7 +238,7 @@ export function BriefSkeleton() {
     <div className="space-y-8">
       <Header />
       <SkeletonCard className="space-y-3"><Skeleton className="h-3 w-24" /><Skeleton className="h-6 w-[80%]" /></SkeletonCard>
-      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-none border border-edge bg-edge md:grid-cols-5">
+      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-edge bg-edge md:grid-cols-5">
         {Array.from({ length: 5 }).map((_, i) => (
           <div key={i} className="space-y-3 bg-cell p-4"><Skeleton className="h-3 w-16" /><Skeleton className="h-6 w-16" /></div>
         ))}

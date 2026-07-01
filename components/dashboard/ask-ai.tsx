@@ -83,7 +83,7 @@ export function AskAi({
         onClick={() => setOpen(true)}
         title={t(label)}
         aria-label={t(label)}
-        className="inline-grid size-6 shrink-0 cursor-pointer place-items-center rounded-full border border-[rgba(254,81,0,0.35)] bg-orange-soft text-orange transition-colors hover:border-[rgba(254,81,0,0.55)] hover:bg-[rgba(254,81,0,0.18)]"
+        className="inline-grid size-6 shrink-0 cursor-pointer place-items-center rounded-full border border-orange-edge bg-orange-soft text-orange transition-colors hover:border-orange-edge-strong hover:bg-orange/15"
       >
         <Spark />
       </button>
@@ -93,7 +93,7 @@ export function AskAi({
           <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto pr-1">
             {messages.length === 0 && (
               <div className="space-y-3">
-                <p className="text-[13.5px] leading-[1.6] text-ink-dim">
+                <p className="text-sm leading-relaxed text-ink-dim">
                   {t("Ask anything about this data — what changed, why, and what to do about it. Answers come live from your numbers.")}
                 </p>
                 <div className="flex flex-wrap gap-2">
@@ -101,7 +101,7 @@ export function AskAi({
                     <button
                       key={s}
                       onClick={() => ask(s)}
-                      className="cursor-pointer rounded-full border border-edge px-3 py-1.5 text-[12.5px] text-ink-dim transition-colors hover:border-[rgba(254,81,0,0.45)] hover:text-ink"
+                      className="cursor-pointer rounded-full border border-edge px-3 py-1.5 text-xs text-ink-dim transition-colors hover:border-orange-edge-strong hover:text-ink"
                     >
                       {t(s)}
                     </button>
@@ -113,18 +113,18 @@ export function AskAi({
             {messages.map((m) => (
               <div key={m.id} className={m.role === "user" ? "flex justify-end" : ""}>
                 {m.role === "user" ? (
-                  <div className="max-w-[85%] rounded-none border border-[rgba(254,81,0,0.28)] bg-orange-wash px-3.5 py-2 text-[13.5px] leading-[1.55] text-ink">
+                  <div className="max-w-[85%] rounded-lg border border-orange-edge bg-orange-wash px-3.5 py-2 text-sm leading-relaxed text-ink">
                     {m.parts.map((p, i) => (p.type === "text" ? <span key={i}>{p.text}</span> : null))}
                   </div>
                 ) : (
                   <div className="space-y-2">
                     {m.parts.some((p) => p.type.startsWith("tool-")) && (
-                      <div className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-ink-dimmer">
+                      <div className="flex items-center gap-1.5 font-mono text-2xs uppercase tracking-[0.12em] text-ink-dimmer">
                         <Spark /> {t("checked the numbers")}
                       </div>
                     )}
                     <RichText
-                      className="text-[13.5px] text-ink"
+                      className="text-sm text-ink"
                       text={m.parts.map((p) => (p.type === "text" ? p.text : "")).join("")}
                     />
                   </div>
@@ -133,13 +133,13 @@ export function AskAi({
             ))}
 
             {status === "submitted" && (
-              <div className="flex items-center gap-2 text-[12.5px] text-ink-dimmer">
+              <div className="flex items-center gap-2 text-xs text-ink-dimmer">
                 <span className="inline-block size-1.5 animate-pulse rounded-full bg-orange" />
                 {t("thinking")}…
               </div>
             )}
             {error && (
-              <p className="text-[12.5px] leading-[1.5] text-ink-dim">
+              <p className="text-xs leading-relaxed text-ink-dim">
                 {error.message.includes("API_KEY")
                   ? t("The AI key isn't configured yet.")
                   : error.message.trim() || t("Something went wrong — try asking again.")}
@@ -158,18 +158,18 @@ export function AskAi({
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder={t("Ask about this data…")}
-              className="h-9 flex-1 rounded-none border border-edge bg-transparent px-3 text-[13.5px] text-ink outline-none placeholder:text-ink-dimmer focus:border-[rgba(254,81,0,0.45)]"
+              className="h-9 flex-1 rounded-lg border border-edge bg-transparent px-3 text-sm text-ink outline-none placeholder:text-ink-dimmer focus:border-orange-edge-strong"
             />
             <button
               type="submit"
               disabled={busy || !input.trim()}
-              className="inline-grid size-9 shrink-0 cursor-pointer place-items-center rounded-none border border-[rgba(254,81,0,0.35)] bg-orange-soft text-orange transition-colors hover:bg-[rgba(254,81,0,0.18)] disabled:cursor-default disabled:opacity-40"
+              className="inline-grid size-9 shrink-0 cursor-pointer place-items-center rounded-lg border border-orange-edge bg-orange-soft text-orange transition-colors hover:bg-orange/15 disabled:cursor-default disabled:opacity-40"
               aria-label={t("Send")}
             >
               <Spark />
             </button>
           </form>
-          <p className="mt-2 text-[10.5px] leading-[1.4] text-ink-dimmer">
+          <p className="mt-2 text-xs leading-[1.4] text-ink-dimmer">
             {t("urso.ai reads live dashboard data and can make mistakes — cross-check anything that drives a real decision.")}
           </p>
         </div>

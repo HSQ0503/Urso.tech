@@ -53,15 +53,15 @@ export function StoreScoreboard({
   const max = rows[0]?.score ?? 100;
 
   return (
-    <div className="overflow-hidden rounded-none border border-edge bg-panel">
+    <div className="overflow-hidden rounded-xl border border-edge bg-panel">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-edge px-5 py-4">
         <div className="flex items-center gap-1.5">
-          <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-dimmer">{t("Scoreboard · ranked by overall score")}</span>
+          <span className="font-mono text-2xs uppercase tracking-[0.12em] text-ink-dimmer">{t("Scoreboard · ranked by overall score")}</span>
           <InfoTip text={criteria(t)} />
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="font-mono text-[9.5px] uppercase tracking-[0.14em] text-ink-dimmer">{t("Prize")}</span>
+          <span className="font-mono text-2xs uppercase tracking-[0.12em] text-ink-dimmer">{t("Prize")}</span>
           {editing && canEdit ? (
             <input
               autoFocus
@@ -71,13 +71,13 @@ export function StoreScoreboard({
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === "Escape") setEditing(false);
               }}
-              className="w-[200px] rounded-full border border-orange/50 bg-bg px-3 py-1 text-[12px] text-ink outline-none"
+              className="w-[200px] rounded-full border border-orange-edge-strong bg-bg px-3 py-1 text-xs text-ink outline-none"
             />
           ) : (
             <button
               onClick={() => canEdit && setEditing(true)}
               disabled={!canEdit}
-              className={`inline-flex items-center gap-1.5 rounded-full border border-[rgba(254,81,0,0.35)] bg-orange-soft px-3 py-1 text-[12px] text-orange ${canEdit ? "cursor-pointer hover:bg-[rgba(254,81,0,0.18)]" : "cursor-default"}`}
+              className={`inline-flex items-center gap-1.5 rounded-full border border-orange-edge bg-orange-soft px-3 py-1 text-xs text-orange ${canEdit ? "cursor-pointer hover:bg-orange/15" : "cursor-default"}`}
             >
               <Trophy className="size-3.5" />
               {prize}
@@ -101,29 +101,29 @@ export function StoreScoreboard({
             >
               {mine && <span className="absolute left-0 top-1/2 h-7 w-[2.5px] -translate-y-1/2 rounded-full bg-orange" />}
 
-              <div className={`grid shrink-0 place-items-center rounded-full font-mono ${isLeader ? "size-9 bg-orange text-[15px] text-white" : "size-8 border border-edge-strong text-[13px] text-ink-dim"}`}>
+              <div className={`grid shrink-0 place-items-center rounded-full font-mono ${isLeader ? "size-9 bg-orange text-sm text-white" : "size-8 border border-edge-strong text-sm text-ink-dim"}`}>
                 {r.rank}
               </div>
 
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <span className={`truncate ${isLeader ? "text-[15px] text-ink" : "text-[14px] text-ink-dim"}`}>{r.name}</span>
+                  <span className={`truncate text-sm ${isLeader ? "font-medium text-ink" : "text-ink-dim"}`}>{r.name}</span>
                   {isLeader && (
                     <span className="inline-flex items-center gap-1 text-orange">
                       <Trophy className="size-3.5" />
-                      <span className="font-mono text-[9px] uppercase tracking-[0.14em]">{t("Leader")}</span>
+                      <span className="font-mono text-2xs uppercase tracking-[0.12em]">{t("Leader")}</span>
                     </span>
                   )}
-                  {mine && <span className="rounded-full border border-edge-strong px-1.5 py-[1px] font-mono text-[9px] uppercase tracking-[0.12em] text-ink">{t("You")}</span>}
+                  {mine && <span className="rounded-full border border-edge-strong px-1.5 py-[1px] font-mono text-2xs uppercase tracking-[0.12em] text-ink">{t("You")}</span>}
                 </div>
                 <div className="mt-1.5 h-1.5 w-full max-w-[260px] overflow-hidden rounded-full bg-track">
-                  <div className="h-full rounded-full" style={{ width: `${width}%`, background: isLeader || mine ? "#fe5100" : "var(--color-series)" }} />
+                  <div className="h-full rounded-full" style={{ width: `${width}%`, background: isLeader || mine ? "var(--color-orange)" : "var(--color-series)" }} />
                 </div>
               </div>
 
               <div className="shrink-0 text-right">
-                <div className={`font-bold leading-none tracking-[-0.02em] ${isLeader ? "text-[30px] text-orange" : "text-[22px] text-ink"}`}>{r.score}</div>
-                <div className="mt-1 font-mono text-[9px] uppercase tracking-[0.14em] text-ink-dimmer">{t("score")}</div>
+                <div className={`font-semibold leading-none tracking-[-0.01em] tabular-nums ${isLeader ? "text-3xl text-orange" : "text-2xl text-ink"}`}>{r.score}</div>
+                <div className="mt-1 font-mono text-2xs uppercase tracking-[0.12em] text-ink-dimmer">{t("score")}</div>
               </div>
             </div>
           );

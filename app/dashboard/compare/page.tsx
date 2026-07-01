@@ -78,7 +78,7 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
   const EXTRA_LEGEND_COLORS = ["var(--color-series-soft)", "var(--color-track)"];
   const extraLabels = extras.map((r) => rangeLabel(r, true));
   const legend = [
-    { label: `${t("Now")} · ${rangeLabel(a, true)}`, color: "#fe5100" },
+    { label: `${t("Now")} · ${rangeLabel(a, true)}`, color: "var(--color-orange)" },
     { label: `${t("Before")} · ${rangeLabel(b, true)}`, color: "var(--color-series)" },
     ...extras.map((r, i) => ({ label: rangeLabel(r, true), color: EXTRA_LEGEND_COLORS[i % EXTRA_LEGEND_COLORS.length] })),
   ];
@@ -100,14 +100,14 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
       <CompareControls key={[a, ...bs].map((r) => `${r.start}${r.end}`).join("")} mode={mode} preset={preset} metric={metricKey} a={a} bs={bs} minDate={bounds.min} maxDate={bounds.max} />
 
       {warnings.map((w, i) => (
-        <p key={i} className="flex items-start gap-2 text-[13px] leading-[1.5] text-ink-dim">
-          <span className="mt-[5px] size-1.5 shrink-0 rounded-full bg-orange" />
+        <p key={i} className="flex items-start gap-2 text-sm leading-relaxed text-ink-dim">
+          <span className="mt-[5px] size-1.5 shrink-0 rounded-full bg-warn" />
           {w}
         </p>
       ))}
 
       {/* Headline: revenue across every period, oldest first */}
-      <section className={`grid grid-cols-2 gap-px overflow-hidden rounded-none border border-edge bg-edge ${headlineCols}`}>
+      <section className={`grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-edge bg-edge ${headlineCols}`}>
         {[...extras].reverse().map((r, i) => (
           <Period key={`x${i}`} label={r.start.slice(0, 4)} range={r} value={revenue.bs[extras.length - i]} days={dayInfo.bs[extras.length - i]} t={t} />
         ))}
@@ -116,13 +116,13 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
         <div className="col-span-2 bg-cell p-4 md:col-span-1">
           <Micro>{t("Revenue change")}{extras.length > 0 ? ` · ${t("vs previous")}` : ""}</Micro>
           <div className="mt-2.5 flex items-baseline gap-2.5">
-            <span className="text-[26px] font-bold leading-none tracking-[-0.02em]">
+            <span className="text-2xl font-semibold leading-none tracking-[-0.01em] tabular-nums">
               {revDelta == null ? "—" : `${revDelta >= 0 ? "+" : "−"}${Math.abs(revDelta * 100).toFixed(1)}%`}
             </span>
-            {dayInfo.a !== dayInfo.bs[0] && <span className="text-[11.5px] text-ink-dim">{t("totals · lengths differ")}</span>}
+            {dayInfo.a !== dayInfo.bs[0] && <span className="text-xs text-ink-dim">{t("totals · lengths differ")}</span>}
           </div>
           {dayInfo.a !== dayInfo.bs[0] && revB > 0 && (
-            <div className="mt-2 text-[12px] text-ink-dim">
+            <div className="mt-2 text-xs text-ink-dim">
               {t("Per day")}: {fmtMoney(revenue.a / dayInfo.a)} {t("vs")} {fmtMoney(revB / dayInfo.bs[0])}
             </div>
           )}
@@ -135,7 +135,7 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
           <div className="mb-4 flex items-end justify-between gap-3">
             <div>
               <Micro>{t("All metrics")} · {t("totals for")} {scopeLabel(scope)}</Micro>
-              <h2 className="mt-1.5 text-[17px] font-medium tracking-[-0.01em]">{t("Every metric, period by period")}</h2>
+              <h2 className="mt-1.5 text-base font-semibold tracking-[-0.01em]">{t("Every metric, period by period")}</h2>
             </div>
           </div>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -143,7 +143,7 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
               <MetricPanel key={m.key} label={t(m.label)} format={m.format} values={m.values} periods={[a, ...bs]} t={t} />
             ))}
           </div>
-          <p className="mt-3 text-[12.5px] leading-[1.5] text-ink-dimmer">
+          <p className="mt-3 text-xs leading-relaxed text-ink-dimmer">
             {t("Each panel totals the selected scope across the periods, oldest at the top; the chip is the change vs the previous period.")} {t("Pick a single metric above for the per-{entity} breakdown, charts and exact figures.").replace("{entity}", t(entityLabel).toLowerCase())}
           </p>
         </section>
@@ -155,7 +155,7 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
           <Micro className="!text-orange">{t("What stands out")}</Micro>
           <ul className="space-y-2">
             {data.insights.map((s, i) => (
-              <li key={i} className="text-[14px] leading-[1.55] text-ink">{s}</li>
+              <li key={i} className="text-sm leading-relaxed text-ink">{s}</li>
             ))}
           </ul>
         </Card>
@@ -175,7 +175,7 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
               />
               <ChartInfo id="compareTable" />
             </div>
-            <h2 className="mb-4 text-[17px] font-medium tracking-[-0.01em]">{t("Side by side")}</h2>
+            <h2 className="mb-4 text-base font-semibold tracking-[-0.01em]">{t("Side by side")}</h2>
             <CompareBars data={scaled} labelA={`${t("Now")} · ${rangeLabel(a, true)}`} labelB={`${t("Before")} · ${rangeLabel(b, true)}`} moreLabels={extraLabels} format={chartFormat} />
             <div className="mt-3"><Legend items={legend} /></div>
           </Card>
@@ -191,9 +191,9 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
                 />
                 <ChartInfo id="comparePace" />
               </div>
-              <h2 className="mb-4 text-[17px] font-medium tracking-[-0.01em]">{t("Is this period ahead or behind?")}</h2>
+              <h2 className="mb-4 text-base font-semibold tracking-[-0.01em]">{t("Is this period ahead or behind?")}</h2>
               <ComparePace a={data.pace.a} b={data.pace.bs[0]} more={data.pace.bs.slice(1)} labelA={`${t("Now")} · ${rangeLabel(a, true)}`} labelB={`${t("Before")} · ${rangeLabel(b, true)}`} moreLabels={extraLabels} />
-              <p className="mt-3 text-[12.5px] leading-[1.5] text-ink-dim">
+              <p className="mt-3 text-xs leading-relaxed text-ink-dim">
                 {t("Each line adds up revenue day by day. When the orange line sits above the dashed one, this period is ahead of the comparison at the same point.")}
               </p>
             </Card>
@@ -213,7 +213,7 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
             />
             <ChartInfo id="compareTable" />
           </div>
-          <h2 className="mb-4 text-[17px] font-medium tracking-[-0.01em]">{t("Now vs before, ranked")}</h2>
+          <h2 className="mb-4 text-base font-semibold tracking-[-0.01em]">{t("Now vs before, ranked")}</h2>
           <CompareBars layout="rows" data={scaled} labelA={`${t("Now")} · ${rangeLabel(a, true)}`} labelB={`${t("Before")} · ${rangeLabel(b, true)}`} moreLabels={extraLabels} format={chartFormat} />
           <div className="mt-3"><Legend items={legend} /></div>
         </Card>
@@ -231,9 +231,9 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
             />
             <ChartInfo id="compareDiverging" />
           </div>
-          <h2 className="mb-4 text-[17px] font-medium tracking-[-0.01em]">{t("Winners and losers")}</h2>
+          <h2 className="mb-4 text-base font-semibold tracking-[-0.01em]">{t("Winners and losers")}</h2>
           <CompareDiverging data={movers} format={deltaFormat} />
-          <p className="mt-3 text-[12.5px] leading-[1.5] text-ink-dim">
+          <p className="mt-3 text-xs leading-relaxed text-ink-dim">
             {data.pointDelta
               ? t("The biggest margin moves across every item, in percentage points — right improved, left slipped. Changes under 1 point are left out.")
               : t("The biggest moves across every item — right of the line sold more than in the comparison period, left sold less. Small changes are left out; the table below has the exact figures for your top sellers.")}
@@ -248,9 +248,9 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
           <Micro>{t("Exact figures")} · {t(data.metricLabel).toLowerCase()}</Micro>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[560px] border-collapse text-[13.5px]">
+          <table className="w-full min-w-[560px] border-collapse text-sm">
             <thead>
-              <tr className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-dimmer">
+              <tr className="font-mono text-2xs uppercase tracking-[0.1em] text-ink-dimmer">
                 <th className="px-5 py-3 text-left font-normal">{t(entityLabel)}</th>
                 {[...extras].reverse().map((r, i) => (
                   <th key={`xh${i}`} className="px-5 py-3 text-right font-normal">{rangeLabel(r, true)} · {r.start.slice(0, 4)}</th>
@@ -284,7 +284,7 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
               ))}
               {data.rows.length === 0 && (
                 <tr className="border-t border-edge">
-                  <td colSpan={4 + extras.length} className="px-5 py-8 text-center text-[13.5px] text-ink-dim">
+                  <td colSpan={4 + extras.length} className="px-5 py-8 text-center text-sm text-ink-dim">
                     {t("No data in these periods — try widening the dates (history starts {date}).").replace("{date}", new Date(`${bounds.min}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" }))}
                   </td>
                 </tr>
@@ -296,7 +296,7 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
       )}
 
       {data && mode === "products" && (
-        <p className="-mt-2 text-[13px]">
+        <p className="-mt-2 text-sm">
           <Link href="/dashboard/products" className="text-orange transition-opacity hover:opacity-80">
             {t("Browse the full product list")} →
           </Link>
@@ -304,7 +304,7 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
       )}
 
       {(data?.notes ?? []).map((n, i) => (
-        <p key={i} className="-mt-2 text-[12.5px] leading-[1.5] text-ink-dimmer">{n}</p>
+        <p key={i} className="-mt-2 text-xs leading-relaxed text-ink-dimmer">{n}</p>
       ))}
     </div>
   );
@@ -353,7 +353,7 @@ function MetricPanel({ label, format, values, periods, t }: { label: string; for
           const focus = idx === 0;
           return (
             <div key={idx} className="flex items-center gap-3">
-              <span className="w-[88px] shrink-0 truncate font-mono text-[10px] uppercase tracking-[0.06em] text-ink-dimmer" title={rangeLabel(periods[idx])}>
+              <span className="w-[88px] shrink-0 truncate font-mono text-2xs uppercase tracking-[0.06em] text-ink-dimmer" title={rangeLabel(periods[idx])}>
                 {rowLabel(idx)}
               </span>
               <div className="h-[14px] flex-1 overflow-hidden rounded bg-raise">
@@ -361,12 +361,12 @@ function MetricPanel({ label, format, values, periods, t }: { label: string; for
                   className="h-full rounded"
                   style={{
                     width: `${v == null || max <= 0 ? 0 : Math.max(2, (v / max) * 100)}%`,
-                    background: focus ? "#fe5100" : "var(--color-series)",
+                    background: focus ? "var(--color-orange)" : "var(--color-series)",
                     opacity: focus ? 1 : 0.55,
                   }}
                 />
               </div>
-              <span className={`w-[72px] shrink-0 text-right font-mono text-[11.5px] tabular-nums ${focus ? "text-ink" : "text-ink-dim"}`}>
+              <span className={`w-[72px] shrink-0 text-right font-mono text-xs tabular-nums ${focus ? "text-ink" : "text-ink-dim"}`}>
                 {v == null ? "—" : f(v)}
               </span>
             </div>
@@ -381,8 +381,8 @@ function Period({ label, range, value, days, accent, t }: { label: string; range
   return (
     <div className="bg-cell p-4">
       <Micro className={accent ? "!text-orange" : undefined}>{label}</Micro>
-      <div className="mt-2.5 text-[26px] font-bold leading-none tracking-[-0.02em]">{fmtMoney(value)}</div>
-      <div className="mt-2 text-[12px] text-ink-dim">
+      <div className="mt-2.5 text-2xl font-semibold leading-none tracking-[-0.01em] tabular-nums">{fmtMoney(value)}</div>
+      <div className="mt-2 text-xs text-ink-dim">
         {rangeLabel(range)} · {days} {days === 1 ? t("day") : t("days")}
       </div>
     </div>
@@ -392,12 +392,12 @@ function Period({ label, range, value, days, accent, t }: { label: string; range
 function Change({ a, b, points, t }: { a: number | null; b: number | null; points: boolean; t: (s: string) => string }) {
   if (a != null && (b == null || b === 0)) return <Tag tone="orange">{t("New")}</Tag>;
   if ((a == null || a === 0) && b != null && b > 0) return <Tag tone="muted">{t("No sales")}</Tag>;
-  if (a == null || b == null || b === 0) return <span className="font-mono text-[12px] text-ink-dimmer">—</span>;
+  if (a == null || b == null || b === 0) return <span className="font-mono text-xs text-ink-dimmer">—</span>;
   if (points) {
     const d = (a - b) * 100;
     const good = d >= 0;
     return (
-      <span className="font-mono text-[12px] tabular-nums" style={{ color: good ? "var(--color-good)" : "#fe5100" }}>
+      <span className="font-mono text-xs tabular-nums" style={{ color: good ? "var(--color-good)" : "var(--color-bad)" }}>
         {good ? "+" : "−"}{Math.abs(d).toFixed(1)} {t("pts")}
       </span>
     );

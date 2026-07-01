@@ -86,18 +86,18 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
             name="q"
             defaultValue={q}
             placeholder={t("Search products…")}
-            className="w-64 rounded-lg border border-edge bg-transparent px-3 py-1.5 text-[13px] text-ink placeholder:text-ink-dimmer focus:border-orange/60 focus:outline-none"
+            className="w-64 rounded-lg border border-edge bg-transparent px-3 py-1.5 text-sm text-ink outline-none placeholder:text-ink-dimmer focus:border-orange-edge-strong"
           />
-          <button type="submit" className="rounded-lg border border-edge px-3 py-1.5 text-[12.5px] text-ink-dim transition-colors hover:border-orange/60 hover:text-ink">
+          <button type="submit" className="cursor-pointer rounded-lg border border-edge px-3 py-1.5 text-xs text-ink-dim transition-colors hover:border-edge-strong hover:text-ink">
             {t("Search")}
           </button>
           {q && (
-            <Link href={href({ q: undefined })} className="text-[12.5px] text-ink-dimmer transition-colors hover:text-ink">
+            <Link href={href({ q: undefined })} className="text-xs text-ink-dimmer transition-colors hover:text-ink">
               {t("Clear")}
             </Link>
           )}
         </form>
-        <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-dimmer">
+        <span className="font-mono text-2xs uppercase tracking-[0.12em] text-ink-dimmer">
           {total.toLocaleString("en-US")} {t("products")}{q ? ` ${t("matching")} “${q}”` : ""}
         </span>
       </div>
@@ -108,9 +108,9 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
           <InfoTip text={colHelp(t)} />
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[640px] border-collapse text-[13.5px]">
+          <table className="w-full min-w-[640px] border-collapse text-sm">
             <thead>
-              <tr className="font-mono text-[10px] uppercase tracking-[0.1em] text-ink-dimmer">
+              <tr className="font-mono text-2xs uppercase tracking-[0.1em] text-ink-dimmer">
                 <th className="px-5 py-2.5 text-left font-normal">
                   <Link href={sortHref("name")} className="transition-colors hover:text-ink">{t("Product")}{arrow("name")}</Link>
                 </th>
@@ -145,7 +145,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
               ))}
               {rows.length === 0 && (
                 <tr className="border-t border-edge">
-                  <td colSpan={6} className="px-5 py-8 text-center text-[13.5px] text-ink-dim">
+                  <td colSpan={6} className="px-5 py-8 text-center text-sm text-ink-dim">
                     {t("Nothing sold matches")}{q ? ` “${q}”` : ` ${t("this period")}`} — {t("try a different search or widen the period.")}
                   </td>
                 </tr>
@@ -154,16 +154,16 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
           </table>
         </div>
         <div className="flex items-center justify-between border-t border-edge px-5 py-3">
-          <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-dimmer">
+          <span className="font-mono text-2xs uppercase tracking-[0.12em] text-ink-dimmer">
             {first.toLocaleString("en-US")}–{last.toLocaleString("en-US")} {t("of")} {total.toLocaleString("en-US")}
           </span>
-          <div className="flex items-center gap-3 text-[12.5px]">
+          <div className="flex items-center gap-3 text-xs">
             {page > 1 ? (
               <Link href={href({ page: String(page - 1) })} className="text-ink-dim transition-colors hover:text-ink">← {t("Prev")}</Link>
             ) : (
               <span className="text-ink-dimmer/50">← {t("Prev")}</span>
             )}
-            <span className="font-mono text-[11px] text-ink-dimmer">{page} / {pages}</span>
+            <span className="font-mono text-xs text-ink-dimmer">{page} / {pages}</span>
             {page < pages ? (
               <Link href={href({ page: String(page + 1) })} className="text-ink-dim transition-colors hover:text-ink">{t("Next")} →</Link>
             ) : (
@@ -173,7 +173,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
         </div>
       </Card>
 
-      <p className="text-[12.5px] leading-[1.5] text-ink-dimmer">
+      <p className="text-xs leading-relaxed text-ink-dimmer">
         {t("Products that never sold in the period don’t appear — FranPOS doesn’t expose the full catalog yet (vendor request open). Margin uses the item cost FranPOS records at sale time.")}
       </p>
     </div>

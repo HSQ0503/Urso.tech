@@ -227,7 +227,7 @@ export function CallsChart({
   const data = hourly.map((v, i) => ({ hour: startHour + i, answered: v - missedHourly[i], missed: missedHourly[i] }));
   const config = {
     answered: { label: t("Answered"), color: "var(--color-series)" },
-    missed: { label: t("Missed"), color: ORANGE },
+    missed: { label: t("Missed"), color: "var(--color-bad)" },
   } satisfies ChartConfig;
   return (
     <ChartContainer config={config} style={{ height }}>
@@ -235,7 +235,7 @@ export function CallsChart({
         <CartesianGrid vertical={false} />
         <XAxis dataKey="hour" tickLine={false} axisLine={false} tickMargin={6} interval={1} tickFormatter={(h) => fmtHour(Number(h))} />
         <YAxis tickLine={false} axisLine={false} width={24} />
-        <ReferenceArea x1={closeHour} x2={startHour + hourly.length - 1} fill={ORANGE} fillOpacity={0.07} ifOverflow="extendDomain" />
+        <ReferenceArea x1={closeHour} x2={startHour + hourly.length - 1} fill="var(--color-series)" fillOpacity={0.1} ifOverflow="extendDomain" />
         <ChartTooltip content={<ChartTooltipContent labelFormatter={(h) => fmtHour(Number(h))} />} />
         <Bar dataKey="answered" stackId="a" fill="var(--color-answered)" radius={0} />
         <Bar dataKey="missed" stackId="a" fill="var(--color-missed)" radius={0} />
@@ -308,7 +308,7 @@ export function DonutSplit({ a, b, labelA, labelB }: { a: number; b: number; lab
 
 function LegendRow({ color, label, value }: { color: string; label: string; value: string }) {
   return (
-    <div className="flex items-center gap-2 text-[12px]">
+    <div className="flex items-center gap-2 text-xs">
       <span className="size-2 rounded-none" style={{ background: color }} />
       <span className="text-ink">{label}</span>
       <span className="font-mono text-ink-dim">{value}</span>
@@ -367,7 +367,7 @@ export function CohortCurve({ data, label = "months since first visit" }: { data
           <Area dataKey="value" type="linear" stroke="var(--color-value)" strokeWidth={1.75} fill={`url(#${gid})`} dot={false} />
         </RAreaChart>
       </ChartContainer>
-      <div className="mt-1.5 font-mono text-[10px] uppercase tracking-[0.1em] text-ink-dimmer">{t(label)}</div>
+      <div className="mt-1.5 font-mono text-2xs uppercase tracking-[0.1em] text-ink-dimmer">{t(label)}</div>
     </div>
   );
 }
@@ -404,7 +404,7 @@ export function ConversionFunnel({ steps }: { steps: FunnelStep[] }) {
     <div className="space-y-3">
       {steps.map((s, i) => (
         <div key={s.stage}>
-          <div className="mb-1.5 flex items-baseline justify-between text-[12.5px]">
+          <div className="mb-1.5 flex items-baseline justify-between text-xs">
             <span className="text-ink-dim">{s.stage}</span>
             <span className="font-mono text-ink">
               {s.value.toLocaleString()}
@@ -414,13 +414,13 @@ export function ConversionFunnel({ steps }: { steps: FunnelStep[] }) {
           <div className="h-8 w-full overflow-hidden rounded-none bg-raise">
             <div
               className="h-full rounded-none"
-              style={{ width: `${Math.max(5, (s.value / max) * 100)}%`, background: s.leak ? "rgba(254,81,0,0.42)" : "var(--color-series-soft)" }}
+              style={{ width: `${Math.max(5, (s.value / max) * 100)}%`, background: s.leak ? "color-mix(in srgb, var(--color-bad) 45%, transparent)" : "var(--color-series-soft)" }}
             />
           </div>
           {i > 0 && (
             <div
-              className="mt-1 text-right font-mono text-[10px] uppercase tracking-[0.1em]"
-              style={{ color: s.leak ? ORANGE : "var(--color-ink-dimmer)" }}
+              className="mt-1 text-right font-mono text-2xs uppercase tracking-[0.1em]"
+              style={{ color: s.leak ? "var(--color-bad)" : "var(--color-ink-dimmer)" }}
             >
               {(s.stepConv * 100).toLocaleString("en-US", { maximumFractionDigits: 1 })}% {t("continued")}{s.leak ? ` · ${t("leak")}` : ""}
             </div>
@@ -445,8 +445,8 @@ export function RadialGauge({ value, caption, color = ORANGE, height = 168 }: { 
         </RadialBarChart>
       </ChartContainer>
       <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-[30px] font-bold leading-none tracking-[-0.02em] text-ink">{pctVal}%</span>
-        {caption && <span className="mt-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-ink-dimmer">{caption}</span>}
+        <span className="text-3xl font-semibold leading-none tracking-[-0.01em] tabular-nums text-ink">{pctVal}%</span>
+        {caption && <span className="mt-1.5 font-mono text-2xs uppercase tracking-[0.12em] text-ink-dimmer">{caption}</span>}
       </div>
     </div>
   );
@@ -519,7 +519,7 @@ export function StackedShareBar({ segments }: { segments: { label: string; value
               style={{ width: `${(s.value / total) * 100}%`, background: s.color }}
             >
               <span className="pointer-events-none absolute bottom-[calc(100%+8px)] left-1/2 z-20 -translate-x-1/2 whitespace-nowrap rounded-none border border-edge bg-surface px-3 py-2 opacity-0 shadow-[0_12px_32px_-12px_rgba(0,0,0,0.6)] transition-opacity duration-150 group-hover/seg:opacity-100">
-                <span className="flex items-center gap-2 text-[11.5px]">
+                <span className="flex items-center gap-2 text-xs">
                   <span className="size-2 rounded-[2px]" style={{ background: s.color }} />
                   <span className="text-ink-dim">{s.label}</span>
                   <span className="font-mono tabular-nums text-ink">{share}%</span>
@@ -531,7 +531,7 @@ export function StackedShareBar({ segments }: { segments: { label: string; value
       </div>
       <div className="flex flex-wrap gap-x-5 gap-y-2">
         {segments.map((s, i) => (
-          <span key={i} className="inline-flex items-center gap-1.5 text-[12.5px]">
+          <span key={i} className="inline-flex items-center gap-1.5 text-xs">
             <span className="size-2.5 rounded-[3px]" style={{ background: s.color }} />
             <span className="text-ink-dim">{s.label}</span>
             <span className="font-mono text-ink">{((s.value / total) * 100).toLocaleString("en-US", { maximumFractionDigits: 1 })}%</span>
@@ -552,11 +552,11 @@ export function RatingBars({ stars, counts }: { stars: number[]; counts: number[
         const c = counts[idx];
         return (
           <div key={star} className="flex items-center gap-2.5">
-            <span className="w-7 shrink-0 font-mono text-[11px] text-ink-dim">{star}★</span>
+            <span className="w-7 shrink-0 font-mono text-xs text-ink-dim">{star}★</span>
             <div className="h-3 flex-1 overflow-hidden rounded-none bg-raise">
-              <div className="h-full rounded-none" style={{ width: `${(c / max) * 100}%`, background: star >= 4 ? "var(--color-series)" : ORANGE }} />
+              <div className="h-full rounded-none" style={{ width: `${(c / max) * 100}%`, background: star >= 4 ? "var(--color-series)" : "var(--color-bad)" }} />
             </div>
-            <span className="w-9 shrink-0 text-right font-mono text-[11px] text-ink-dim">{c}</span>
+            <span className="w-9 shrink-0 text-right font-mono text-xs tabular-nums text-ink-dim">{c}</span>
           </div>
         );
       })}
@@ -671,7 +671,7 @@ export function CompareDiverging({
         <ChartTooltip cursor={{ fill: "var(--color-raise)" }} content={<ChartTooltipContent hideLabel valueFormatter={(v) => signed(v)} />} />
         <Bar dataKey="delta" radius={0} isAnimationActive={false}>
           {data.map((d, i) => (
-            <Cell key={i} fill={d.delta >= 0 ? "var(--color-good)" : ORANGE} />
+            <Cell key={i} fill={d.delta >= 0 ? "var(--color-good)" : "var(--color-bad)"} />
           ))}
           <LabelList dataKey="delta" position="right" fill="var(--color-ink-dim)" fontSize={10.5} formatter={(v) => signed(Number(v))} />
         </Bar>
@@ -788,7 +788,7 @@ function Segmented<T extends string>({ options, value, onChange }: { options: re
           key={o.k}
           type="button"
           onClick={() => onChange(o.k)}
-          className={`rounded-full px-3 py-1 font-mono text-[10px] uppercase tracking-[0.1em] transition-colors ${value === o.k ? "bg-orange text-white" : "text-ink-dim hover:text-ink"}`}
+          className={`cursor-pointer rounded-full px-3 py-1 font-mono text-2xs uppercase tracking-[0.1em] transition-colors ${value === o.k ? "bg-raise-strong text-ink" : "text-ink-dim hover:text-ink"}`}
         >
           {o.label}
         </button>
@@ -863,7 +863,7 @@ export function ProfitWaterfall({ steps }: { steps: WaterfallStep[]; height?: nu
         {bars.map((b, i) => {
           const yTop = yOf(b.hi), yBot = yOf(b.lo);
           const isTotal = b.kind !== "subtract";
-          const fill = isTotal ? (b.value >= 0 ? ORANGE : "#e0492e") : MUTED;
+          const fill = isTotal ? (b.value >= 0 ? "var(--color-good)" : "var(--color-bad)") : MUTED;
           return (
             <g key={`b${i}`}>
               <title>{`${b.label}: ${money0(b.value)}`}</title>
@@ -970,11 +970,11 @@ export function CostBars({ lines }: { lines: CostLine[] }) {
     <div className="flex flex-col gap-2">
       {lines.map((l) => (
         <div key={l.category} className="flex items-center gap-3">
-          <div className="w-[104px] shrink-0 truncate font-mono text-[11px] text-ink-dim">{l.category}</div>
+          <div className="w-[104px] shrink-0 truncate font-mono text-xs text-ink-dim">{l.category}</div>
           <div className="relative h-[18px] flex-1 overflow-hidden rounded-[2px] bg-[var(--color-track)]">
             <div className="h-full bg-orange" style={{ width: `${(l.pctOfRevenue / max) * 100}%` }} />
           </div>
-          <div className="w-[124px] shrink-0 text-right font-mono text-[11px] tabular-nums text-ink">
+          <div className="w-[124px] shrink-0 text-right font-mono text-xs tabular-nums text-ink">
             {money0(l.amount)} <span className="text-ink-dimmer">· {pct1(l.pctOfRevenue)}</span>
           </div>
         </div>
@@ -996,9 +996,9 @@ export function CostBenchmark({ rows }: { rows: StoreCostBenchmark[] }) {
   for (const c of cols) colMax[c.k] = Math.max(...rows.map((r) => r[c.k]), 0.0001);
   return (
     <div className="overflow-x-auto">
-      <table className="w-full border-collapse text-[11.5px]">
+      <table className="w-full border-collapse text-xs">
         <thead>
-          <tr className="font-mono text-[9.5px] uppercase tracking-[0.1em] text-ink-dimmer">
+          <tr className="font-mono text-2xs uppercase tracking-[0.1em] text-ink-dimmer">
             <th className="py-1.5 pr-3 text-left font-medium">Store</th>
             {cols.map((c) => (
               <th key={c.k} className="px-2 py-1.5 text-right font-medium">{c.label}</th>
@@ -1015,7 +1015,7 @@ export function CostBenchmark({ rows }: { rows: StoreCostBenchmark[] }) {
                   {pct1(r[c.k])}
                 </td>
               ))}
-              <td className="px-2 py-2 text-right font-mono tabular-nums" style={{ color: r.netMargin >= 0 ? "var(--color-good)" : ORANGE }}>
+              <td className="px-2 py-2 text-right font-mono tabular-nums" style={{ color: r.netMargin >= 0 ? "var(--color-good)" : "var(--color-bad)" }}>
                 {pct1(r.netMargin)}
               </td>
             </tr>

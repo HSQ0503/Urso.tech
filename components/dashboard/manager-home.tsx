@@ -25,7 +25,7 @@ import { GROOMER_COL_HELP } from "@/components/dashboard/team-help";
 import { getI18n } from "@/lib/i18n.server";
 
 const GREEN = "var(--color-good)";
-const ORANGE = "#fe5100";
+const BAD = "var(--color-bad)";
 
 const statusTone: Record<ActionStatus, "muted" | "orange" | "good" | "warn"> = {
   suggested: "orange",
@@ -52,13 +52,13 @@ export async function ManagerHome({ store, month, userName, streak }: { store: S
   ]);
 
   return (
-    <div className="animate-stage-in space-y-10">
+    <div className="animate-stage-in space-y-8">
       <WelcomeBanner name={userName} streak={streak} />
 
       <header>
         <Micro>{t("Store dashboard")} · {storeName} · {t(period)}</Micro>
-        <h1 className="mt-2.5 text-[clamp(26px,3.6vw,34px)] font-medium tracking-[-0.02em]">{storeName}</h1>
-        <p className="mt-2 max-w-[560px] text-[14px] leading-[1.5] text-ink-dim">
+        <h1 className="mt-1.5 text-xl font-semibold tracking-[-0.01em]">{storeName}</h1>
+        <p className="mt-2 max-w-[560px] text-sm leading-relaxed text-ink-dim">
           {t("Welcome back,")} {userName.split(" ")[0]}. {t("Here is how")} {storeName} {t("is doing, how it compares to the other stores, and what to do next. Use the month filter in the top bar to change the period.")}
         </p>
       </header>
@@ -78,7 +78,7 @@ export async function ManagerHome({ store, month, userName, streak }: { store: S
       <section>
         <div className="mb-4">
           <Micro>{t("Where you stand")}</Micro>
-          <h2 className="mt-1.5 text-[18px] font-medium tracking-[-0.01em]">{t("How")} {storeName} {t("ranks across the four stores")}</h2>
+          <h2 className="mt-1.5 text-base font-semibold tracking-[-0.01em]">{t("How")} {storeName} {t("ranks across the four stores")}</h2>
         </div>
         <div className="mb-5">
           <StoreScoreboard rows={scores} highlightId={store} variant="manager" />
@@ -93,19 +93,19 @@ export async function ManagerHome({ store, month, userName, streak }: { store: S
       <section>
         <div className="mb-4">
           <Micro>{t("Your scorecard")}</Micro>
-          <h2 className="mt-1.5 text-[18px] font-medium tracking-[-0.01em]">{t("How you're doing — and versus the group average")}</h2>
+          <h2 className="mt-1.5 text-base font-semibold tracking-[-0.01em]">{t("How you're doing — and versus the group average")}</h2>
         </div>
-        <div className="grid grid-cols-1 gap-px overflow-hidden rounded-none border border-edge bg-edge md:grid-cols-3">
+        <div className="grid grid-cols-1 gap-px overflow-hidden rounded-xl border border-edge bg-edge md:grid-cols-3">
           {scorecard.map((s) => (
             <div key={s.label} className="bg-cell p-4">
               <div className="flex items-center justify-between gap-2">
                 <Micro>{t(s.label)}</Micro>
                 {s.delta != null && <Delta value={s.delta} invert={s.invert} />}
               </div>
-              <div className="mt-2.5 text-[24px] font-bold leading-none tracking-[-0.02em]">{s.value}</div>
-              <div className="mt-2.5 flex items-center justify-between gap-2 text-[11px]">
+              <div className="mt-2.5 text-2xl font-semibold leading-none tracking-[-0.01em] tabular-nums">{s.value}</div>
+              <div className="mt-2.5 flex items-center justify-between gap-2 text-xs">
                 <span className="font-mono text-ink-dimmer">{t("Group")} {s.avgLabel}</span>
-                <span className="font-mono" style={{ color: s.beatsAvg ? GREEN : ORANGE }}>{s.beatsAvg ? t("Ahead") : t("Behind")}</span>
+                <span className="font-mono" style={{ color: s.beatsAvg ? GREEN : BAD }}>{s.beatsAvg ? t("Ahead") : t("Behind")}</span>
               </div>
             </div>
           ))}
@@ -116,7 +116,7 @@ export async function ManagerHome({ store, month, userName, streak }: { store: S
       <section>
         <div className="mb-4">
           <Micro>{t("Your action queue")}</Micro>
-          <h2 className="mt-1.5 text-[18px] font-medium tracking-[-0.01em]">{t("The dashboard is working on these")}</h2>
+          <h2 className="mt-1.5 text-base font-semibold tracking-[-0.01em]">{t("The dashboard is working on these")}</h2>
         </div>
         <div className="space-y-3">
           {actions.map((a) => (
@@ -124,18 +124,18 @@ export async function ManagerHome({ store, month, userName, streak }: { store: S
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                    <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-dimmer">{a.agent} {t("agent")}</span>
+                    <span className="font-mono text-2xs uppercase tracking-[0.12em] text-ink-dimmer">{a.agent} {t("agent")}</span>
                     {a.pending && <Tag tone="muted">{t("Pending data")}</Tag>}
                   </div>
-                  <h3 className="mt-2 text-[15px] font-medium tracking-[-0.01em] text-ink">{a.title}</h3>
+                  <h3 className="mt-2 text-sm font-medium tracking-[-0.01em] text-ink">{a.title}</h3>
                 </div>
                 <Tag tone={statusTone[a.status]}>{t(actionStatusLabel[a.status])}</Tag>
               </div>
-              <p className="text-[13px] leading-[1.55] text-ink-dim">{a.detail}</p>
+              <p className="text-sm leading-relaxed text-ink-dim">{a.detail}</p>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <Tag tone="orange">{a.metric}</Tag>
                 {a.result && (
-                  <span className="inline-flex items-center gap-1.5 text-[12px] text-ink-dim">
+                  <span className="inline-flex items-center gap-1.5 text-xs text-ink-dim">
                     <span className="size-1.5 rounded-full" style={{ background: GREEN }} />
                     {a.result}
                   </span>
@@ -151,16 +151,16 @@ export async function ManagerHome({ store, month, userName, streak }: { store: S
         <div className="mb-4">
           <Micro>{t("Your team")}</Micro>
           <div className="mt-1.5 flex items-center gap-1.5">
-            <h2 className="text-[18px] font-medium tracking-[-0.01em]">{t("Groomer scorecards")}</h2>
+            <h2 className="text-base font-semibold tracking-[-0.01em]">{t("Groomer scorecards")}</h2>
             <InfoTip text={GROOMER_COL_HELP} />
           </div>
-          <p className="mt-1.5 max-w-[560px] text-[13px] leading-[1.5] text-ink-dim">{t("A coaching view — where each groomer is strong and where a conversation would help. Not a ranking against other stores.")}</p>
+          <p className="mt-1.5 max-w-[560px] text-sm leading-relaxed text-ink-dim">{t("A coaching view — where each groomer is strong and where a conversation would help. Not a ranking against other stores.")}</p>
         </div>
         <Card pad={false}>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[620px] border-collapse text-[13.5px]">
+            <table className="w-full min-w-[620px] border-collapse text-sm">
               <thead>
-                <tr className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-dimmer">
+                <tr className="font-mono text-2xs uppercase tracking-[0.1em] text-ink-dimmer">
                   {["Groomer", "Revenue", "Avg ticket", "Return", "Retail attach"].map((h, i) => (
                     <th key={h} className={`px-5 py-3 font-normal ${i === 0 ? "text-left" : "text-right"}`}>{t(h)}</th>
                   ))}
@@ -178,7 +178,7 @@ export async function ManagerHome({ store, month, userName, streak }: { store: S
                     </td>
                     <td className="px-5 py-3.5 text-right font-mono text-ink">{fmtMoney(g.revenue)}</td>
                     <td className="px-5 py-3.5 text-right font-mono text-ink-dim">{fmtMoney(g.avgTicket)}</td>
-                    <td className="px-5 py-3.5 text-right font-mono" style={{ color: g.rebook != null && g.rebook < 0.45 ? ORANGE : "var(--color-ink-dim)" }}>{g.rebook == null ? "—" : pct(g.rebook)}</td>
+                    <td className="px-5 py-3.5 text-right font-mono" style={{ color: g.rebook != null && g.rebook < 0.45 ? BAD : "var(--color-ink-dim)" }}>{g.rebook == null ? "—" : pct(g.rebook)}</td>
                     <td className="px-5 py-3.5 text-right font-mono text-ink-dim">{g.attach == null ? "—" : pct(g.attach)}</td>
                   </tr>
                 ))}
@@ -192,18 +192,18 @@ export async function ManagerHome({ store, month, userName, streak }: { store: S
       <section>
         <div className="mb-4">
           <Micro>{t("Customers needing attention")}</Micro>
-          <h2 className="mt-1.5 text-[18px] font-medium tracking-[-0.01em]">{t("Reach out before they lapse")}</h2>
+          <h2 className="mt-1.5 text-base font-semibold tracking-[-0.01em]">{t("Reach out before they lapse")}</h2>
         </div>
         {watch.length === 0 ? (
           <Card>
-            <p className="text-[13.5px] leading-[1.6] text-ink-dim">{t("No customers are flagged right now — your retention is on track. Keep prompting rebooking at checkout to stay ahead.")}</p>
+            <p className="text-sm leading-relaxed text-ink-dim">{t("No customers are flagged right now — your retention is on track. Keep prompting rebooking at checkout to stay ahead.")}</p>
           </Card>
         ) : (
           <Card pad={false}>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[620px] border-collapse text-[13.5px]">
+              <table className="w-full min-w-[620px] border-collapse text-sm">
                 <thead>
-                  <tr className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-dimmer">
+                  <tr className="font-mono text-2xs uppercase tracking-[0.1em] text-ink-dimmer">
                     {["Customer", "Status", "Last visit", "Suggested action"].map((h, i) => (
                       <th key={h} className={`px-5 py-3 font-normal ${i === 2 ? "text-right" : "text-left"}`}>{t(h)}</th>
                     ))}
@@ -219,7 +219,7 @@ export async function ManagerHome({ store, month, userName, streak }: { store: S
                       <td className="px-5 py-3.5">
                         <Tag tone="orange">{t(c.segment)}</Tag>
                       </td>
-                      <td className="px-5 py-3.5 text-right font-mono" style={{ color: c.lastVisit > 60 ? ORANGE : "var(--color-ink-dim)" }}>{c.lastVisit}{t("d ago")}</td>
+                      <td className="px-5 py-3.5 text-right font-mono" style={{ color: c.lastVisit > 60 ? BAD : "var(--color-ink-dim)" }}>{c.lastVisit}{t("d ago")}</td>
                       <td className="px-5 py-3.5 text-ink-dim">{t(c.next)}</td>
                     </tr>
                   ))}
@@ -252,7 +252,7 @@ function RateRankCard({ title, ranking, storeId, t }: { title: string; ranking: 
           />
           <ChartInfo id="managerRank" />
         </div>
-        <span className="font-mono text-[11px] text-ink-dim">
+        <span className="font-mono text-xs tabular-nums text-ink-dim">
           #{pos} {t("of")} {ranking.length}
           {pos > 1 ? ` · ${gap} ${t("pts behind")} ${shorten(leader.name)}` : ` · ${t("leading")}`}
         </span>

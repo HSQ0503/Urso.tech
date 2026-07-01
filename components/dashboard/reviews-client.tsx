@@ -78,8 +78,8 @@ export function ReviewsClient({
         title={t("Reputation & visibility")}
         right={
           <div className="flex gap-2">
-            <Tag tone="orange">{suspectedFakes} {t("suspected fakes")}</Tag>
-            <Tag tone="orange">{unanswered} {t("unanswered")}</Tag>
+            <Tag tone="warn">{suspectedFakes} {t("suspected fakes")}</Tag>
+            <Tag tone="warn">{unanswered} {t("unanswered")}</Tag>
           </div>
         }
       />
@@ -93,20 +93,20 @@ export function ReviewsClient({
             <button
               key={r.store}
               onClick={() => setStore(r.store)}
-              className={`flex flex-col gap-4 rounded-none border bg-panel p-5 text-left transition-colors hover:border-edge-strong ${sel ? "border-edge-strong bg-raise-strong" : "border-edge"}`}
+              className={`flex cursor-pointer flex-col gap-4 rounded-xl border bg-panel p-5 text-left transition-colors hover:border-edge-strong ${sel ? "border-edge-strong bg-raise-strong" : "border-edge"}`}
             >
               <div className="flex items-start justify-between">
-                <div className="text-[14.5px] text-ink">{r.store}</div>
-                {!find.bookButton && <Tag tone="orange">{t("No book button")}</Tag>}
+                <div className="text-sm text-ink">{r.store}</div>
+                {!find.bookButton && <Tag tone="warn">{t("No book button")}</Tag>}
               </div>
               <div className="flex items-end justify-between">
                 <div>
-                  <Display className="text-[30px] leading-none text-ink">{r.rating.toFixed(1)}<span className="text-star">★</span></Display>
+                  <Display className="text-3xl leading-none text-ink">{r.rating.toFixed(1)}<span className="text-star">★</span></Display>
                   <Micro className="mt-1.5">{r.volume} {t("reviews")}</Micro>
                 </div>
                 <div className="text-right">
-                  <Display className="text-[30px] leading-none">
-                    <span style={{ color: find.rank > 4 ? "#fe5100" : "var(--color-ink)" }}>#{find.rank}</span>
+                  <Display className="text-3xl leading-none">
+                    <span style={{ color: find.rank > 4 ? "var(--color-bad)" : "var(--color-ink)" }}>#{find.rank}</span>
                   </Display>
                   <Micro className="mt-1.5">{t("local rank")}</Micro>
                 </div>
@@ -114,9 +114,9 @@ export function ReviewsClient({
               <div className="border-t border-edge pt-3">
                 <div className="mb-1.5 flex items-center justify-between">
                   <Micro>{t("Reply rate")}</Micro>
-                  <span className="font-mono text-[11px] text-ink-dim">{pct(r.responseRate)} · {r.responseHrs}h {t("avg")}</span>
+                  <span className="font-mono text-2xs text-ink-dim">{pct(r.responseRate)} · {r.responseHrs}h {t("avg")}</span>
                 </div>
-                <Meter value={r.responseRate} color={r.responseRate < 0.6 ? "#fe5100" : "var(--color-good)"} />
+                <Meter value={r.responseRate} color={r.responseRate < 0.6 ? "var(--color-bad)" : "var(--color-good)"} />
               </div>
             </button>
           );
@@ -138,8 +138,8 @@ export function ReviewsClient({
               <ChartInfo id="ratingDistribution" />
             </div>
             <div className="mt-2 flex items-baseline gap-2.5">
-              <span className="text-[30px] font-bold leading-none tracking-[-0.02em]">{dist.rating.toFixed(1)}<span className="text-star">★</span></span>
-              <span className="text-[12.5px] text-ink-dim">{dist.total} {t("reviews")}</span>
+              <span className="text-3xl font-semibold leading-none tracking-[-0.01em] tabular-nums">{dist.rating.toFixed(1)}<span className="text-star">★</span></span>
+              <span className="text-xs text-ink-dim">{dist.total} {t("reviews")}</span>
             </div>
           </div>
           <RatingBars stars={dist.stars} counts={dist.counts} />
@@ -155,31 +155,31 @@ export function ReviewsClient({
           <div className="flex flex-wrap items-center justify-between gap-3 px-5 pb-3 pt-5">
             <div>
               <Micro>{t("Reviews")}</Micro>
-              <h2 className="mt-1.5 text-[18px] font-medium tracking-[-0.01em]">{store.replace("Village", "").trim()}</h2>
+              <h2 className="mt-1.5 text-base font-semibold tracking-[-0.01em]">{store.replace("Village", "").trim()}</h2>
             </div>
             <Segmented options={sortOpts} value={sort} onChange={setSort} />
           </div>
           {reviews.length === 0 ? (
-            <div className="border-t border-edge px-5 py-10 text-center text-[13px] text-ink-dim">{t("No reviews match this filter.")}</div>
+            <div className="border-t border-edge px-5 py-10 text-center text-sm text-ink-dim">{t("No reviews match this filter.")}</div>
           ) : (
             <>
               {shown.map((rev, i) => (
                 <div key={i} className="border-t border-edge px-5 py-4">
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2.5">
-                      <span className="font-mono text-[13px]" style={{ color: rev.rating <= 2 ? "#fe5100" : "var(--color-star)" }}>
+                      <span className="font-mono text-sm" style={{ color: rev.rating <= 2 ? "var(--color-bad)" : "var(--color-star)" }}>
                         {"★".repeat(rev.rating)}<span className="text-ink-dimmer">{"★".repeat(5 - rev.rating)}</span>
                       </span>
-                      <span className="text-[13.5px] text-ink-dim">{rev.author}</span>
-                      {rev.flagged && <Tag tone="orange">{t("Suspected fake")}</Tag>}
+                      <span className="text-sm text-ink-dim">{rev.author}</span>
+                      {rev.flagged && <Tag tone="warn">{t("Suspected fake")}</Tag>}
                     </div>
-                    <span className="font-mono text-[11px] text-ink-dimmer">{rev.days}d {t("ago")}</span>
+                    <span className="font-mono text-2xs text-ink-dimmer">{rev.days}d {t("ago")}</span>
                   </div>
-                  <p className="mt-2 text-[13.5px] leading-[1.55] text-ink-dim">{rev.text}</p>
+                  <p className="mt-2 text-sm leading-relaxed text-ink-dim">{rev.text}</p>
                   {rev.flagged && (
                     <button
                       onClick={() => setPlan({ title: t("Suspected fake review"), plan: actionPlans["fake-reviews"] })}
-                      className="mt-2.5 cursor-pointer rounded-lg border border-edge-strong px-3 py-1.5 text-[12px] text-ink transition-colors hover:bg-raise"
+                      className="mt-2.5 cursor-pointer rounded-lg border border-edge-strong px-3 py-1.5 text-xs text-ink transition-colors hover:bg-raise"
                     >
                       {t("Review the case")} →
                     </button>
@@ -189,7 +189,7 @@ export function ReviewsClient({
               {reviews.length > 5 && (
                 <button
                   onClick={() => setExpanded((v) => !v)}
-                  className="w-full cursor-pointer border-t border-edge px-5 py-3 text-center font-mono text-[11px] uppercase tracking-[0.12em] text-ink-dim transition-colors hover:text-orange"
+                  className="w-full cursor-pointer border-t border-edge px-5 py-3 text-center font-mono text-2xs uppercase tracking-[0.12em] text-ink-dim transition-colors hover:text-orange"
                 >
                   {expanded ? t("Show less") : `${t("Show all")} ${reviews.length} ${t("reviews")}`}
                 </button>
@@ -206,13 +206,13 @@ export function ReviewsClient({
             <span className="size-2 rounded-full bg-orange" />
             <Micro className="!text-orange">{t("Review integrity")}</Micro>
           </div>
-          <h2 className="text-[19px] font-medium tracking-[-0.01em]">{suspectedFakes} {t("one-star reviews with no matching customer on file")}</h2>
-          <p className="text-[14px] leading-[1.6] text-ink-dim">
+          <h2 className="text-xl font-semibold tracking-[-0.01em]">{suspectedFakes} {t("one-star reviews with no matching customer on file")}</h2>
+          <p className="text-sm leading-relaxed text-ink-dim">
             {t("We cross-reference each reviewer's name against your FranPOS customer records. When there's no matching customer, it's strong evidence the review is fake — enough to submit a one-click flag to Google. We can't delete them automatically, but we can hand you a proven case for each.")}
           </p>
           <button
             onClick={() => setPlan({ title: `${suspectedFakes} ${t("suspected fake reviews")}`, plan: actionPlans["fake-reviews"] })}
-            className="mt-1 w-fit cursor-pointer rounded-lg border border-edge-strong px-4 py-2 text-[13px] text-ink transition-colors hover:bg-raise"
+            className="mt-1 w-fit cursor-pointer rounded-lg border border-edge-strong px-4 py-2 text-sm text-ink transition-colors hover:bg-raise"
           >
             {t("Review the")} {suspectedFakes} {t("flagged")}
           </button>
@@ -223,13 +223,13 @@ export function ReviewsClient({
             <span className="size-2 rounded-full bg-orange" />
             <Micro className="!text-orange">{t("Search visibility")}</Micro>
           </div>
-          <h2 className="text-[19px] font-medium tracking-[-0.01em]">{t("Winter Park ranks #2 but has no booking link on Google")}</h2>
-          <p className="text-[14px] leading-[1.6] text-ink-dim">
+          <h2 className="text-xl font-semibold tracking-[-0.01em]">{t("Winter Park ranks #2 but has no booking link on Google")}</h2>
+          <p className="text-sm leading-relaxed text-ink-dim">
             {t("Your best store is missing the one button that turns a Google listing into a booking — so the easiest appointments never start. The newer stores also rank #5 and #6 locally, which is the single biggest lever on how many new customers find them at all.")}
           </p>
           <button
             onClick={() => setPlan({ title: t("Add the missing booking link"), plan: actionPlans["booking-link"] })}
-            className="mt-1 w-fit cursor-pointer rounded-lg bg-orange px-4 py-2 text-[13px] font-medium text-white transition hover:brightness-110"
+            className="mt-1 w-fit cursor-pointer rounded-lg bg-orange px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange/90"
           >
             {t("Fix Winter Park listing")}
           </button>
@@ -242,7 +242,7 @@ export function ReviewsClient({
         eyebrow={t("Proposed fix")}
         title={plan?.title ?? ""}
         footer={
-          <a href="mailto:han@urso.tech?subject=Urso%20%E2%80%94%20reviews" className="flex w-full items-center justify-center rounded-lg bg-orange px-4 py-2.5 text-[13px] font-medium text-white transition hover:brightness-110">
+          <a href="mailto:han@urso.tech?subject=Urso%20%E2%80%94%20reviews" className="flex w-full items-center justify-center rounded-lg bg-orange px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-orange/90">
             {t("Have Urso fix this")} →
           </a>
         }

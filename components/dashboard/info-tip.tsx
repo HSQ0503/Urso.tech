@@ -17,13 +17,13 @@ export function InfoTip({ text, className = "", align = "center", t = identity }
         tabIndex={0}
         role="button"
         aria-label={t("What this means")}
-        className="grid size-6 cursor-help select-none place-items-center rounded-full border border-edge-strong font-mono text-[13px] font-medium normal-case leading-none tracking-normal text-ink-dimmer transition-colors hover:border-orange hover:text-orange focus:outline-none focus-visible:border-orange focus-visible:text-orange"
+        className="grid size-6 cursor-help select-none place-items-center rounded-full border border-edge-strong font-mono text-sm font-medium normal-case leading-none tracking-normal text-ink-dimmer transition-colors hover:border-orange hover:text-orange focus:outline-none focus-visible:border-orange focus-visible:text-orange"
       >
         i
       </span>
       <span
         role="tooltip"
-        className={`pointer-events-none absolute bottom-[calc(100%+8px)] z-50 w-[230px] rounded-lg border border-edge bg-surface px-3 py-2.5 text-left font-sans text-[11.5px] normal-case leading-[1.5] tracking-normal text-ink-dim opacity-0 shadow-[0_14px_36px_-14px_rgba(0,0,0,0.85)] transition-opacity duration-150 group-hover/info:opacity-100 group-focus-within/info:opacity-100 ${pos}`}
+        className={`pointer-events-none absolute bottom-[calc(100%+8px)] z-50 w-[230px] rounded-lg border border-edge bg-panel-strong px-3 py-2.5 text-left font-sans text-xs normal-case leading-relaxed tracking-normal text-ink-dim opacity-0 shadow-[0_14px_36px_-14px_rgba(0,0,0,0.85)] transition-opacity duration-150 group-hover/info:opacity-100 group-focus-within/info:opacity-100 ${pos}`}
       >
         {text}
       </span>

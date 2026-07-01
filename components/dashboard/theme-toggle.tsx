@@ -55,7 +55,7 @@ export function ThemeToggle() {
   const theme = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
   return (
-    <div className="flex items-center gap-0.5 rounded-none border border-edge bg-raise p-0.5">
+    <div className="flex items-center gap-0.5 rounded-lg border border-edge bg-raise p-0.5">
       {opts.map((o) => {
         const active = theme === o.value;
         return (
@@ -63,7 +63,7 @@ export function ThemeToggle() {
             key={o.value}
             onClick={() => applyTheme(o.value)}
             aria-pressed={active}
-            className={`flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-none px-2.5 py-1.5 font-mono text-[10.5px] uppercase tracking-[0.1em] transition-colors ${
+            className={`flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-md px-2.5 py-1.5 font-mono text-2xs uppercase tracking-[0.1em] transition-colors ${
               active ? "bg-raise-strong text-ink" : "text-ink-dim hover:text-ink"
             }`}
           >

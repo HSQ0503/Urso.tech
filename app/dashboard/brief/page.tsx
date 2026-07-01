@@ -23,7 +23,7 @@ export default async function BriefPage({ searchParams }: { searchParams: Promis
           href={printHref}
           target="_blank"
           rel="noopener noreferrer"
-          className="dash-pill inline-flex items-center gap-2 rounded-sm px-3.5 py-2 font-mono text-[11px] uppercase tracking-[0.12em] text-ink-dim transition-colors hover:text-ink"
+          className="dash-pill inline-flex items-center gap-2 rounded-lg px-3.5 py-2 font-mono text-2xs uppercase tracking-[0.12em] text-ink-dim transition-colors hover:text-ink"
         >
           <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden>
             <path d="M8 2v8m0 0 3-3m-3 3L5 7M2.5 11v1.5A1.5 1.5 0 0 0 4 14h8a1.5 1.5 0 0 0 1.5-1.5V11" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />

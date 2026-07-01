@@ -38,7 +38,7 @@ export function ChartContainer({
         data-chart={chartId}
         className={cn(
           "w-full font-mono",
-          "[&_.recharts-cartesian-axis-tick_text]:fill-[var(--color-axis)] [&_.recharts-cartesian-axis-tick_text]:text-[10px]",
+          "[&_.recharts-cartesian-axis-tick_text]:fill-[var(--color-axis)] [&_.recharts-cartesian-axis-tick_text]:text-[11px]",
           "[&_.recharts-cartesian-grid_line]:stroke-[var(--color-grid)]",
           "[&_.recharts-cartesian-axis-line]:stroke-transparent [&_.recharts-cartesian-axis-tick-line]:stroke-transparent",
           "[&_.recharts-curve.recharts-tooltip-cursor]:stroke-[var(--color-edge-strong)]",
@@ -86,9 +86,9 @@ export function ChartTooltipContent({
   const { config } = useChart();
   if (!active || !payload?.length) return null;
   return (
-    <div className="min-w-[8rem] rounded-none border border-edge bg-surface px-3 py-2 shadow-[0_12px_32px_-12px_rgba(0,0,0,0.75)]">
+    <div className="min-w-[8rem] rounded-lg border border-edge bg-panel-strong px-3 py-2 shadow-[0_12px_32px_-12px_rgba(0,0,0,0.75)]">
       {!hideLabel && (
-        <div className="mb-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-ink-dimmer">
+        <div className="mb-1.5 font-mono text-2xs uppercase tracking-[0.12em] text-ink-dimmer">
           {labelFormatter ? labelFormatter(label ?? "") : label}
         </div>
       )}
@@ -101,7 +101,7 @@ export function ChartTooltipContent({
           // which is different from a measured zero.
           const value = item.value == null ? null : Number(item.value);
           return (
-            <div key={i} className="flex items-center justify-between gap-4 text-[11.5px]">
+            <div key={i} className="flex items-center justify-between gap-4 text-xs">
               <span className="flex items-center gap-1.5 font-sans text-ink-dim">
                 <span className="size-2 rounded-[2px]" style={{ background: color }} />
                 {cfg?.label ?? key}

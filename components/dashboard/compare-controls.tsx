@@ -109,7 +109,7 @@ export function CompareControls({ mode, preset, metric, a, bs, minDate, maxDate 
   const lengthNote = dA === dB ? `${dA} ${dA === 1 ? t("day") : t("days")} ${t("each")}` : `${dA} ${t("vs")} ${dB} ${t("days")}`;
 
   return (
-    <div className="space-y-5 rounded-none border border-edge bg-panel p-5">
+    <div className="space-y-5 rounded-xl border border-edge bg-panel p-5">
       {/* Step 1 — what to compare */}
       <div className="space-y-3">
         <StepLabel n="1" title={t("What to compare")} />
@@ -192,7 +192,7 @@ export function CompareControls({ mode, preset, metric, a, bs, minDate, maxDate 
                       <button
                         onClick={() => setDraftBs(draftBs.filter((_, j) => j !== i))}
                         aria-label={t("Remove this period")}
-                        className="rounded-sm border border-edge px-2 py-1.5 text-[12px] text-ink-dim transition-colors hover:border-edge-strong hover:text-ink"
+                        className="cursor-pointer rounded-lg border border-edge px-2 py-1.5 text-xs text-ink-dim transition-colors hover:border-edge-strong hover:text-ink"
                       >
                         ×
                       </button>
@@ -202,7 +202,7 @@ export function CompareControls({ mode, preset, metric, a, bs, minDate, maxDate 
               </div>
 
               {dirty && (
-                <p className="text-[12px] text-ink-dim">
+                <p className="text-xs text-ink-dim">
                   {t("Will compare")} <span className="font-medium text-orange">{fmtRange(draftA)}</span> {t("vs")}{" "}
                   <span className="font-medium text-ink">{fmtRange(draftBs[0])}</span>
                   <span className="text-ink-dimmer"> · {daysIn(draftA) === daysIn(draftBs[0]) ? `${daysIn(draftA)} ${t("days each")}` : `${daysIn(draftA)} ${t("vs")} ${daysIn(draftBs[0])} ${t("days")}`}</span>
@@ -213,8 +213,8 @@ export function CompareControls({ mode, preset, metric, a, bs, minDate, maxDate 
                 <button
                   onClick={() => applyRanges(draftA, draftBs)}
                   disabled={!dirty}
-                  className={`rounded-sm px-4 py-2 text-[13px] font-medium transition ${
-                    dirty ? "cursor-pointer bg-orange text-[#070707] hover:brightness-110" : "cursor-default border border-edge text-ink-dimmer"
+                  className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+                    dirty ? "cursor-pointer bg-orange text-white hover:bg-orange/90" : "cursor-default border border-edge text-ink-dimmer"
                   }`}
                 >
                   {dirty ? t("Apply") : t("Applied")}
@@ -222,7 +222,7 @@ export function CompareControls({ mode, preset, metric, a, bs, minDate, maxDate 
                 {draftBs.length < MAX_BASELINES && (
                   <button
                     onClick={() => setDraftBs([...draftBs, draftBs[draftBs.length - 1]])}
-                    className="cursor-pointer rounded-sm border border-edge px-3 py-2 text-[12.5px] text-ink-dim transition-colors hover:border-edge-strong hover:text-ink"
+                    className="cursor-pointer rounded-lg border border-edge px-3 py-2 text-xs text-ink-dim transition-colors hover:border-edge-strong hover:text-ink"
                   >
                     + {t("Add another period")}
                   </button>
@@ -237,13 +237,13 @@ export function CompareControls({ mode, preset, metric, a, bs, minDate, maxDate 
 
       {/* The resolved comparison — stated plainly so it's never left implicit. */}
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-        <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-dimmer">{t("Comparing")}</span>
-        <span className="text-[14px] font-medium tracking-[-0.01em] text-orange">{fmtRange(a)}</span>
-        <span className="text-[13px] text-ink-dim">{t("vs")}</span>
-        <span className="text-[14px] font-medium tracking-[-0.01em] text-ink">{fmtRange(bs[0])}</span>
-        {extras > 0 && <span className="text-[12.5px] text-ink-dim">+ {extras} {extras === 1 ? t("earlier period") : t("earlier periods")}</span>}
+        <span className="font-mono text-2xs uppercase tracking-[0.12em] text-ink-dimmer">{t("Comparing")}</span>
+        <span className="text-sm font-medium tracking-[-0.01em] text-orange">{fmtRange(a)}</span>
+        <span className="text-sm text-ink-dim">{t("vs")}</span>
+        <span className="text-sm font-medium tracking-[-0.01em] text-ink">{fmtRange(bs[0])}</span>
+        {extras > 0 && <span className="text-xs text-ink-dim">+ {extras} {extras === 1 ? t("earlier period") : t("earlier periods")}</span>}
         <span className="text-ink-dimmer">·</span>
-        <span className="text-[12.5px] text-ink-dim">{lengthNote}</span>
+        <span className="text-xs text-ink-dim">{lengthNote}</span>
       </div>
     </div>
   );
@@ -252,20 +252,20 @@ export function CompareControls({ mode, preset, metric, a, bs, minDate, maxDate 
 function StepLabel({ n, title }: { n: string; title: string }) {
   return (
     <div className="flex items-center gap-2">
-      <span className="grid size-[18px] place-items-center rounded-sm bg-orange-soft font-mono text-[10px] font-medium text-orange">{n}</span>
-      <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-dim">{title}</span>
+      <span className="grid size-[18px] place-items-center rounded-sm bg-orange-soft font-mono text-2xs font-medium text-orange">{n}</span>
+      <span className="font-mono text-2xs uppercase tracking-[0.12em] text-ink-dim">{title}</span>
     </div>
   );
 }
 
 function SubLabel({ children }: { children: React.ReactNode }) {
-  return <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-dimmer">{children}</div>;
+  return <div className="font-mono text-2xs uppercase tracking-[0.12em] text-ink-dimmer">{children}</div>;
 }
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <span className="w-[78px] shrink-0 font-mono text-[10px] uppercase tracking-[0.12em] text-ink-dimmer">{label}</span>
+      <span className="w-[78px] shrink-0 font-mono text-2xs uppercase tracking-[0.12em] text-ink-dimmer">{label}</span>
       {children}
     </div>
   );
@@ -275,9 +275,9 @@ function Chip({ active, onClick, children }: { active: boolean; onClick: () => v
   return (
     <button
       onClick={onClick}
-      className={`cursor-pointer rounded-sm border px-3 py-1.5 text-[12.5px] transition-colors ${
+      className={`cursor-pointer rounded-lg border px-3 py-1.5 text-xs transition-colors ${
         active
-          ? "border-[rgba(254,81,0,0.45)] bg-orange-soft text-orange"
+          ? "border-orange-edge-strong bg-orange-soft text-orange"
           : "border-edge text-ink-dim hover:border-edge-strong hover:text-ink"
       }`}
     >
@@ -290,12 +290,12 @@ function RangeInputs({ label, value, onChange, min, max }: { label: string; valu
   return (
     <div>
       <div className="mb-1.5 flex items-center gap-2">
-        <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-dimmer">{label}</span>
-        <span className="font-mono text-[10px] text-ink-dimmer">· {daysIn(value)}d</span>
+        <span className="font-mono text-2xs uppercase tracking-[0.12em] text-ink-dimmer">{label}</span>
+        <span className="font-mono text-2xs text-ink-dimmer">· {daysIn(value)}d</span>
       </div>
       <div className="flex items-center gap-2">
         <DateInput value={value.start} min={min} max={max} onChange={(start) => onChange({ ...value, start })} />
-        <span className="text-[12px] text-ink-dimmer">to</span>
+        <span className="text-xs text-ink-dimmer">to</span>
         <DateInput value={value.end} min={min} max={max} onChange={(end) => onChange({ ...value, end })} />
       </div>
     </div>
@@ -310,7 +310,7 @@ function DateInput({ value, min, max, onChange }: { value: string; min: string; 
       min={min}
       max={max}
       onChange={(e) => e.target.value && onChange(e.target.value)}
-      className="rounded-sm border border-edge bg-transparent px-2.5 py-1.5 font-mono text-[12.5px] text-ink focus:border-orange/60 focus:outline-none"
+      className="rounded-lg border border-edge bg-transparent px-2.5 py-1.5 font-mono text-xs text-ink focus:border-orange-edge-strong focus:outline-none"
     />
   );
 }

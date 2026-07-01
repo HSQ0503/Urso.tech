@@ -32,8 +32,6 @@ import {
 import { AskAi } from "@/components/dashboard/ask-ai";
 import { getI18n } from "@/lib/i18n.server";
 
-const ORANGE = "#fe5100";
-
 export default async function MoneyPage({ searchParams }: { searchParams: Promise<{ store?: string; month?: string }> }) {
   const sp = await searchParams;
   const { t } = await getI18n();
@@ -79,13 +77,13 @@ export default async function MoneyPage({ searchParams }: { searchParams: Promis
 
       {!hasData ? (
         <Card>
-          <p className="py-8 text-center text-[13.5px] text-ink-dim">{t("No QuickBooks data for this period.")}</p>
+          <p className="py-8 text-center text-sm text-ink-dim">{t("No QuickBooks data for this period.")}</p>
         </Card>
       ) : provisionalEmpty ? (
         <Card>
           <div className="py-8 text-center">
-            <p className="text-[14px] text-ink">{t("{month}'s books are still open.", { month: period })}</p>
-            <p className="mx-auto mt-2 max-w-[480px] text-[13px] leading-[1.6] text-ink-dim">
+            <p className="text-sm text-ink">{t("{month}'s books are still open.", { month: period })}</p>
+            <p className="mx-auto mt-2 max-w-[480px] text-sm leading-relaxed text-ink-dim">
               {t("In QuickBooks, income posts after expenses, so an open month shows costs with no matching revenue yet — its profit isn't meaningful until the books close. Pick a closed month or “Last 12 months” for an accurate picture.")}
             </p>
           </div>
@@ -93,7 +91,7 @@ export default async function MoneyPage({ searchParams }: { searchParams: Promis
       ) : (
         <>
           {/* KPI strip */}
-          <section className="grid grid-cols-2 gap-px overflow-hidden rounded-none border border-edge bg-edge md:grid-cols-3 xl:grid-cols-6">
+          <section className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-edge bg-edge md:grid-cols-3 xl:grid-cols-6">
             <Kpi label={t("Revenue")} value={fmtMoney(overview.revenue)} delta={deltas.revenue} />
             <Kpi label={t("Gross margin")} value={pct(overview.grossMargin)} />
             <Kpi
@@ -122,7 +120,7 @@ export default async function MoneyPage({ searchParams }: { searchParams: Promis
                   suggestions={[t("Is profitability improving or eroding?"), t("Which months are the most profitable?")]}
                 />
               </div>
-              <h2 className="mb-3 text-[17px] font-medium tracking-[-0.01em]">{t("Revenue, profit & margin over time")}</h2>
+              <h2 className="mb-3 text-base font-semibold tracking-[-0.01em]">{t("Revenue, profit & margin over time")}</h2>
               <MoneyTrend trend={trend} />
             </Card>
           </section>
@@ -138,12 +136,12 @@ export default async function MoneyPage({ searchParams }: { searchParams: Promis
                   suggestions={[t("What's my single biggest cost?"), t("What would lift net profit the most?")]}
                 />
               </div>
-              <h2 className="mb-2 text-[17px] font-medium tracking-[-0.01em]">{t("Revenue to net profit")}</h2>
+              <h2 className="mb-2 text-base font-semibold tracking-[-0.01em]">{t("Revenue to net profit")}</h2>
               <ProfitWaterfall steps={waterfall} />
             </Card>
             <Card>
               <Micro>{t("Cost as % of revenue")}</Micro>
-              <h2 className="mb-4 text-[17px] font-medium tracking-[-0.01em]">{t("Cost breakdown")}</h2>
+              <h2 className="mb-4 text-base font-semibold tracking-[-0.01em]">{t("Cost breakdown")}</h2>
               <CostBars lines={costs} />
             </Card>
           </section>
@@ -159,13 +157,13 @@ export default async function MoneyPage({ searchParams }: { searchParams: Promis
                   suggestions={[t("Which store has the worst cost problem?"), t("Why is one store less profitable than another?")]}
                 />
               </div>
-              <h2 className="mb-4 text-[17px] font-medium tracking-[-0.01em]">{t("Where each store's costs run high")}</h2>
+              <h2 className="mb-4 text-base font-semibold tracking-[-0.01em]">{t("Where each store's costs run high")}</h2>
               <CostBenchmark rows={benchmark} />
-              <p className="mt-4 text-[12.5px] leading-[1.6] text-ink-dim">
+              <p className="mt-4 text-xs leading-relaxed text-ink-dim">
                 {t("Every cost is shown as a share of that store's own revenue, so stores of different sizes compare fairly. Hotter cells are higher — they point to the specific line dragging a store's margin.")}
               </p>
               {scope === "all" && consolidated.unallocated !== 0 && (
-                <p className="mt-2 text-[12px] text-ink-dimmer">
+                <p className="mt-2 text-xs text-ink-dimmer">
                   {t("Note")}: {fmtMoney(Math.abs(consolidated.unallocated))} {t("of Windermere + Lakeside costs aren't tagged to a store in QuickBooks (kept in the consolidated total, not in either store above).")}
                 </p>
               )}
@@ -176,8 +174,8 @@ export default async function MoneyPage({ searchParams }: { searchParams: Promis
           <section className="grid grid-cols-1 gap-3 lg:grid-cols-2">
             <Card>
               <Micro>{scope === "all" ? t("Consolidated P&L") : t("Profit & loss")}</Micro>
-              <h2 className="mb-3 text-[17px] font-medium tracking-[-0.01em]">{scope === "all" ? t("All stores, this period") : scopeLabel(scope)}</h2>
-              <div className="divide-y divide-edge font-mono text-[13px]">
+              <h2 className="mb-3 text-base font-semibold tracking-[-0.01em]">{scope === "all" ? t("All stores, this period") : scopeLabel(scope)}</h2>
+              <div className="divide-y divide-edge font-mono text-sm">
                 <PnlRow label={t("Revenue")} value={fmtMoney(overview.revenue)} />
                 <PnlRow label={t("− Cost of goods")} value={fmtMoney(overview.cogs)} dim />
                 <PnlRow label={t("Gross profit")} value={fmtMoney(overview.grossProfit)} bold sub={pct(overview.grossMargin)} />
@@ -187,14 +185,14 @@ export default async function MoneyPage({ searchParams }: { searchParams: Promis
             </Card>
             <Card>
               <Micro>{t("Net margin by store")}</Micro>
-              <h2 className="mb-3 text-[17px] font-medium tracking-[-0.01em]">{t("Who's carrying the profit")}</h2>
+              <h2 className="mb-3 text-base font-semibold tracking-[-0.01em]">{t("Who's carrying the profit")}</h2>
               <div className="divide-y divide-edge">
                 {[...consolidated.perStore].sort((a, b) => b.netMargin - a.netMargin).map((s) => (
                   <div key={s.id} className="flex items-center justify-between py-2.5">
-                    <span className="text-[13.5px] text-ink">{s.name}</span>
+                    <span className="text-sm text-ink">{s.name}</span>
                     <div className="flex items-baseline gap-3">
-                      <span className="font-mono text-[12px] text-ink-dim">{fmtMoney(s.netIncome)}</span>
-                      <span className="w-14 text-right font-mono text-[13px] tabular-nums" style={{ color: s.netMargin >= 0 ? "var(--color-good)" : ORANGE }}>
+                      <span className="font-mono text-xs text-ink-dim">{fmtMoney(s.netIncome)}</span>
+                      <span className="w-14 text-right font-mono text-sm tabular-nums" style={{ color: s.netMargin >= 0 ? "var(--color-good)" : "var(--color-bad)" }}>
                         {pct(s.netMargin)}
                       </span>
                     </div>
@@ -215,15 +213,15 @@ export default async function MoneyPage({ searchParams }: { searchParams: Promis
                   suggestions={[t("Is grooming or retail more profitable?"), t("Does retail attach help or hurt margin?")]}
                 />
               </div>
-              <h2 className="mb-4 text-[17px] font-medium tracking-[-0.01em]">{t("Grooming vs retail")}</h2>
+              <h2 className="mb-4 text-base font-semibold tracking-[-0.01em]">{t("Grooming vs retail")}</h2>
               <div className="grid grid-cols-2 gap-3">
                 {serviceMargin.map((s) => (
-                  <div key={s.line} className="border border-edge bg-cell p-4">
+                  <div key={s.line} className="rounded-lg border border-edge bg-cell p-4">
                     <div className="flex items-center justify-between">
                       <Micro>{t(s.line)}</Micro>
-                      <span className="font-mono text-[15px] font-semibold text-orange">{pct(s.marginPct)}</span>
+                      <span className="font-mono text-base font-semibold text-ink">{pct(s.marginPct)}</span>
                     </div>
-                    <div className="mt-3 space-y-1.5 text-[11.5px]">
+                    <div className="mt-3 space-y-1.5 text-xs">
                       <div className="flex justify-between"><span className="text-ink-dimmer">{t("Revenue")}</span><span className="font-mono text-ink-dim">{fmtMoney(s.revenue)}</span></div>
                       <div className="flex justify-between"><span className="text-ink-dimmer">{t("Cost of goods")}</span><span className="font-mono text-ink-dim">{fmtMoney(s.cogs)}</span></div>
                       <div className="flex justify-between"><span className="text-ink-dimmer">{t("Gross profit")}</span><span className="font-mono text-ink">{fmtMoney(s.grossProfit)}</span></div>
@@ -231,7 +229,7 @@ export default async function MoneyPage({ searchParams }: { searchParams: Promis
                   </div>
                 ))}
               </div>
-              <p className="mt-4 text-[12px] leading-[1.6] text-ink-dim">
+              <p className="mt-4 text-xs leading-relaxed text-ink-dim">
                 {t("Gross margin only — service-line operating costs aren't split in QuickBooks. Retail is higher-margin at the register, so attach lifts both revenue and blended margin.")}
               </p>
             </Card>
@@ -244,7 +242,7 @@ export default async function MoneyPage({ searchParams }: { searchParams: Promis
                   suggestions={[t("How many more grooms to break even?"), t("What's my contribution margin?")]}
                 />
               </div>
-              <h2 className="mb-4 text-[17px] font-medium tracking-[-0.01em]">{t("What it takes to profit")}</h2>
+              <h2 className="mb-4 text-base font-semibold tracking-[-0.01em]">{t("What it takes to profit")}</h2>
               <div className="grid grid-cols-2 gap-4">
                 <Stat label={t("Break-even revenue")} value={breakeven.breakevenRevenue == null ? "—" : fmtMoney(breakeven.breakevenRevenue)} />
                 <Stat label={t("Monthly revenue")} value={fmtMoney(breakeven.monthlyRevenue)} />
@@ -253,18 +251,18 @@ export default async function MoneyPage({ searchParams }: { searchParams: Promis
               </div>
               <div className="mt-4 border-t border-edge pt-4">
                 {breakeven.bookingsToBreakeven == null ? (
-                  <p className="text-[13px] text-ink-dim">{t("Costs exceed revenue at every volume this period — fix the cost base before chasing volume.")}</p>
+                  <p className="text-sm text-ink-dim">{t("Costs exceed revenue at every volume this period — fix the cost base before chasing volume.")}</p>
                 ) : breakeven.bookingsToBreakeven <= 0 ? (
-                  <p className="text-[13px] text-ink-dim">
+                  <p className="text-sm text-ink-dim">
                     {t("Above break-even by")} <span className="font-mono text-[var(--color-good)]">{Math.round(-breakeven.bookingsToBreakeven)}</span> {t("grooms/month of cushion.")}
                   </p>
                 ) : (
-                  <p className="text-[13px] text-ink-dim">
-                    {t("Need")} <span className="font-mono text-orange">{Math.round(breakeven.bookingsToBreakeven)}</span> {t("more grooms/month")} ({t("at")} {fmtMoney(breakeven.avgTicket)} {t("avg")}) {t("to break even.")}
+                  <p className="text-sm text-ink-dim">
+                    {t("Need")} <span className="font-mono text-bad">{Math.round(breakeven.bookingsToBreakeven)}</span> {t("more grooms/month")} ({t("at")} {fmtMoney(breakeven.avgTicket)} {t("avg")}) {t("to break even.")}
                   </p>
                 )}
               </div>
-              <p className="mt-3 text-[11.5px] leading-[1.5] text-ink-dimmer">
+              <p className="mt-3 text-xs leading-relaxed text-ink-dimmer">
                 {t("Directional model: payroll, COGS, royalty, card fees and supplies treated as variable; rent, insurance, utilities and repairs as fixed.")}
               </p>
             </Card>
@@ -280,12 +278,12 @@ function Kpi({ label, value, delta, sub, tone }: { label: string; value: string;
     <div className="bg-cell p-4">
       <Micro>{label}</Micro>
       <div className="mt-2.5 flex items-baseline gap-2">
-        <div className="text-[22px] font-bold leading-none tracking-[-0.02em]" style={tone ? { color: tone === "good" ? "var(--color-good)" : ORANGE } : undefined}>
+        <div className="text-2xl font-semibold leading-none tracking-[-0.01em] tabular-nums" style={tone ? { color: tone === "good" ? "var(--color-good)" : "var(--color-bad)" } : undefined}>
           {value}
         </div>
         {delta != null && <Delta value={delta} />}
       </div>
-      {sub && <div className="mt-1.5 font-mono text-[10px] uppercase tracking-[0.1em] text-ink-dimmer">{sub}</div>}
+      {sub && <div className="mt-1.5 font-mono text-2xs uppercase tracking-[0.1em] text-ink-dimmer">{sub}</div>}
     </div>
   );
 }
@@ -295,10 +293,10 @@ function PnlRow({ label, value, bold, dim, accent, sub }: { label: string; value
     <div className="flex items-center justify-between py-2.5">
       <span className={`${bold ? "text-ink" : dim ? "text-ink-dimmer" : "text-ink-dim"}`}>{label}</span>
       <div className="flex items-baseline gap-2.5">
-        {sub && <span className="text-[11px] text-ink-dimmer">{sub}</span>}
+        {sub && <span className="text-xs text-ink-dimmer">{sub}</span>}
         <span
           className={`tabular-nums ${bold ? "font-semibold" : ""}`}
-          style={accent ? { color: accent === "good" ? "var(--color-good)" : ORANGE } : undefined}
+          style={accent ? { color: accent === "good" ? "var(--color-good)" : "var(--color-bad)" } : undefined}
         >
           {value}
         </span>
@@ -311,7 +309,7 @@ function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <Micro>{label}</Micro>
-      <div className="mt-1.5 font-mono text-[16px] text-ink">{value}</div>
+      <div className="mt-1.5 font-mono text-base text-ink">{value}</div>
     </div>
   );
 }

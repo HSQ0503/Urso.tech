@@ -32,7 +32,7 @@ const typeTone: Record<EventType, "muted" | "orange" | "good" | "warn"> = {
 };
 
 const inputCls =
-  "h-9 w-full rounded-lg border border-edge bg-transparent px-3 text-[13.5px] text-ink outline-none placeholder:text-ink-dimmer focus:border-[rgba(254,81,0,0.45)]";
+  "h-9 w-full rounded-lg border border-edge bg-transparent px-3 text-sm text-ink outline-none placeholder:text-ink-dimmer focus:border-orange-edge-strong";
 
 export function EventsClient({
   initialEvents,
@@ -105,7 +105,7 @@ export function EventsClient({
       />
 
       {error && (
-        <div className="rounded-none border border-[rgba(226,75,74,0.4)] bg-[rgba(226,75,74,0.08)] px-4 py-3 text-[13px] text-ink">{error}</div>
+        <div className="rounded-lg border border-bad/40 bg-bad/10 px-4 py-3 text-sm text-ink">{error}</div>
       )}
 
       <Card>
@@ -124,7 +124,7 @@ export function EventsClient({
             <label className="block">
               <Micro>{t("Store")}</Micro>
               {role === "manager" ? (
-                <div className="mt-1.5 flex h-9 items-center rounded-lg border border-edge bg-raise px-3 text-[13.5px] text-ink-dim">
+                <div className="mt-1.5 flex h-9 items-center rounded-lg border border-edge bg-raise px-3 text-sm text-ink-dim">
                   {storeId ? t(scopeLabel(storeId)) : "—"}
                 </div>
               ) : (
@@ -163,7 +163,7 @@ export function EventsClient({
           <button
             type="submit"
             disabled={pending}
-            className="cursor-pointer rounded-lg bg-orange px-4 py-2 text-[13px] font-medium text-white transition hover:brightness-110 disabled:cursor-default disabled:opacity-50"
+            className="cursor-pointer rounded-lg bg-orange px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange/90 disabled:cursor-default disabled:opacity-50"
           >
             {pending ? t("Saving…") : t("Log event")}
           </button>
@@ -175,7 +175,7 @@ export function EventsClient({
         <div className="mt-3 space-y-3">
           {events.length === 0 ? (
             <Card>
-              <p className="text-center text-[13px] text-ink-dim">{t("No events logged yet — add one above so urso.ai can reason about it.")}</p>
+              <p className="text-center text-sm text-ink-dim">{t("No events logged yet — add one above so urso.ai can reason about it.")}</p>
             </Card>
           ) : (
             events.map((ev) => (
@@ -183,17 +183,17 @@ export function EventsClient({
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                     <Tag tone={typeTone[ev.type]}>{t(EVENT_TYPE_LABELS[ev.type])}</Tag>
-                    <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-dimmer">{ev.store}</span>
+                    <span className="font-mono text-2xs uppercase tracking-[0.12em] text-ink-dimmer">{ev.store}</span>
                   </div>
-                  <h2 className="mt-1.5 text-[15px] font-medium text-ink">{ev.title}</h2>
-                  {ev.detail && <p className="mt-1 text-[13px] leading-[1.5] text-ink-dim">{ev.detail}</p>}
+                  <h2 className="mt-1.5 text-sm font-medium text-ink">{ev.title}</h2>
+                  {ev.detail && <p className="mt-1 text-sm leading-relaxed text-ink-dim">{ev.detail}</p>}
                   <Micro className="mt-1.5 !normal-case !tracking-normal">
                     {ev.end ? `${ev.start} → ${ev.end}` : `${t("Since")} ${ev.start} ${t("(ongoing)")}`}
                   </Micro>
                 </div>
                 <button
                   onClick={() => remove(ev.id)}
-                  className="shrink-0 cursor-pointer rounded-lg border border-edge-strong px-3 py-1.5 text-[12.5px] text-ink-dim transition-colors hover:bg-raise hover:text-ink"
+                  className="shrink-0 cursor-pointer rounded-lg border border-edge-strong px-3 py-1.5 text-xs text-ink-dim transition-colors hover:bg-raise hover:text-ink"
                 >
                   {t("Delete")}
                 </button>

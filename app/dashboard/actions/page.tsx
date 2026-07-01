@@ -41,8 +41,8 @@ export default async function ActionsPage({ searchParams }: { searchParams: Prom
       <section className="border-t border-edge pt-10">
         <div className="mb-6">
           <Micro>{t("AI suggested actions")}</Micro>
-          <h2 className="mt-2 text-[22px] font-bold tracking-[-0.02em] text-ink">{t("What the agents recommend")}</h2>
-          <p className="mt-1.5 max-w-[560px] text-[13.5px] leading-[1.55] text-ink-dim">
+          <h2 className="mt-2 text-xl font-semibold tracking-[-0.01em] text-ink">{t("What the agents recommend")}</h2>
+          <p className="mt-1.5 max-w-[560px] text-sm leading-relaxed text-ink-dim">
             {t("Each finding becomes a concrete action — you approve or dismiss; nothing runs without you.")}
           </p>
         </div>

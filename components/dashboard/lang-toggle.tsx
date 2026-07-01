@@ -28,7 +28,7 @@ export function LangToggle() {
   };
 
   return (
-    <div className="inline-flex items-center gap-0.5 rounded-none border border-edge bg-raise p-0.5" role="group" aria-label="Language">
+    <div className="inline-flex items-center gap-0.5 rounded-lg border border-edge bg-raise p-0.5" role="group" aria-label="Language">
       {LOCALES.map((l) => {
         const active = locale === l;
         return (
@@ -37,7 +37,7 @@ export function LangToggle() {
             onClick={() => set(l)}
             aria-pressed={active}
             title={l === "en" ? "English" : "Português"}
-            className={`cursor-pointer rounded-none px-2 py-1 font-mono text-[10.5px] uppercase tracking-[0.1em] transition-colors ${
+            className={`cursor-pointer rounded-md px-2 py-1 font-mono text-2xs uppercase tracking-[0.1em] transition-colors ${
               active ? "bg-raise-strong text-ink" : "text-ink-dim hover:text-ink"
             }`}
           >

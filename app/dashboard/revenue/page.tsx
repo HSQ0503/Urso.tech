@@ -49,7 +49,7 @@ export default async function RevenueMapPage({ searchParams }: { searchParams: P
       />
 
       {/* Headline strip */}
-      <section className="grid grid-cols-2 gap-px overflow-hidden rounded-none border border-edge bg-edge md:grid-cols-4">
+      <section className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-edge bg-edge md:grid-cols-4">
         <Kpi label={t("Total revenue")} value={fmtMoney(m.revenue)} />
         <Kpi label={t("Avg ticket")} value={fmtMoney(m.avgTicket)} />
         <Kpi label={t("Buy both")} value={pct(xs.both)} />
@@ -68,7 +68,7 @@ export default async function RevenueMapPage({ searchParams }: { searchParams: P
             />
             <ChartInfo id="revenueByLocation" />
           </div>
-          <h2 className="mb-4 mt-1.5 text-[17px] font-medium tracking-[-0.01em]">{t("Revenue by store")}</h2>
+          <h2 className="mb-4 mt-1.5 text-base font-semibold tracking-[-0.01em]">{t("Revenue by store")}</h2>
           <BarRanking data={byLocation} format="moneyK" labelWidth={104} valueLabel={t("Revenue")} />
         </Card>
         <Card className="flex flex-col gap-6">
@@ -82,11 +82,11 @@ export default async function RevenueMapPage({ searchParams }: { searchParams: P
               />
               <ChartInfo id="crossSellMix" />
             </div>
-            <h2 className="mt-1.5 text-[17px] font-medium tracking-[-0.01em]">{t("Grooming vs retail")}</h2>
+            <h2 className="mt-1.5 text-base font-semibold tracking-[-0.01em]">{t("Grooming vs retail")}</h2>
             <div className="mt-4">
               <StackedShareBar
                 segments={[
-                  { label: t("Both"), value: xs.both, color: "#fe5100" },
+                  { label: t("Both"), value: xs.both, color: "var(--color-orange)" },
                   { label: t("Grooming only"), value: xs.groomingOnly, color: "var(--color-series)" },
                   { label: t("Retail only"), value: xs.retailOnly, color: "var(--color-series-soft)" },
                 ]}
@@ -105,7 +105,7 @@ export default async function RevenueMapPage({ searchParams }: { searchParams: P
             </div>
             <StackedShareBar
               segments={[
-                { label: t("Repeat customers"), value: nvr.repeat, color: "#fe5100" },
+                { label: t("Repeat customers"), value: nvr.repeat, color: "var(--color-orange)" },
                 { label: t("New customers"), value: nvr.fresh, color: "var(--color-series)" },
                 { label: t("Walk-in (no profile)"), value: nvr.walkIn, color: "var(--color-series-soft)" },
               ]}
@@ -118,15 +118,15 @@ export default async function RevenueMapPage({ searchParams }: { searchParams: P
       <section className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <Card>
           <Micro>{t("By service")}</Micro>
-          <h2 className="mb-3 mt-1.5 text-[17px] font-medium tracking-[-0.01em]">{t("Top revenue lines")}</h2>
+          <h2 className="mb-3 mt-1.5 text-base font-semibold tracking-[-0.01em]">{t("Top revenue lines")}</h2>
           <div className="divide-y divide-edge">
             {byService.map((s) => (
               <div key={s.name} className="flex items-center justify-between py-2.5">
                 <div className="flex items-center gap-2.5">
-                  <span className="text-[13.5px] text-ink">{s.name}</span>
+                  <span className="text-sm text-ink">{s.name}</span>
                   <Tag tone={s.line === "Grooming" ? "orange" : "muted"}>{t(s.line)}</Tag>
                 </div>
-                <span className="font-mono text-[13px] text-ink-dim">{fmtMoney(s.value)}</span>
+                <span className="font-mono text-sm text-ink-dim">{fmtMoney(s.value)}</span>
               </div>
             ))}
           </div>
@@ -141,12 +141,12 @@ export default async function RevenueMapPage({ searchParams }: { searchParams: P
             />
             <ChartInfo id="revenueByGroomer" />
           </div>
-          <h2 className="mb-4 mt-1.5 text-[17px] font-medium tracking-[-0.01em]">{t("Service revenue performed")}</h2>
+          <h2 className="mb-4 mt-1.5 text-base font-semibold tracking-[-0.01em]">{t("Service revenue performed")}</h2>
           <BarRanking data={byGroomer} format="moneyK" labelWidth={130} valueLabel={t("Service revenue")} />
         </Card>
       </section>
 
-      <p className="mt-3 text-[13px] leading-[1.6] text-ink-dim">
+      <p className="mt-3 text-sm leading-relaxed text-ink-dim">
         {t("Retail attaches to grooming visits, so grooming share and retail attach move together. The clearest revenue lever is converting grooming-only customers into retail buyers at checkout.")}
       </p>
     </div>
@@ -157,7 +157,7 @@ function Kpi({ label, value }: { label: string; value: string }) {
   return (
     <div className="bg-cell p-4">
       <Micro>{label}</Micro>
-      <div className="mt-2.5 text-[22px] font-bold leading-none tracking-[-0.02em]">{value}</div>
+      <div className="mt-2.5 text-2xl font-semibold leading-none tracking-[-0.01em] tabular-nums">{value}</div>
     </div>
   );
 }

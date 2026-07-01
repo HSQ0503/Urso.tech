@@ -28,6 +28,16 @@
   --color-good: #46d18a;
   --color-star: #fe5100;
 
+  /* Semantic status + accent-edge tokens (dashboard; additive, marketing unaffected) */
+  --color-bad: #e5484d;
+  --color-warn: #edae49;
+  --color-orange-edge: rgba(254, 81, 0, 0.3);
+  --color-orange-edge-strong: rgba(254, 81, 0, 0.45);
+
+  /* Dashboard micro-label size — smallest legible step of the type scale */
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1rem;
+
   --font-sans: var(--font-ibm-plex-sans), system-ui, -apple-system, sans-serif;
   --font-serif: var(--font-fraunces), Georgia, "Times New Roman", serif;
   --font-mono: var(--font-ibm-plex-mono), ui-monospace, monospace;
@@ -85,28 +95,32 @@
    stays dark even when the user has light mode turned on. */
 :root[data-theme="light"] .theme-scope {
   color-scheme: light;
-  --color-bg: #eceef1;
+  --color-bg: #f1f3f5;
   --color-panel: #ffffff;
   --color-panel-strong: #ffffff;
   --color-edge: rgba(15, 18, 22, 0.1);
-  --color-edge-strong: rgba(15, 18, 22, 0.17);
-  --color-ink: #14171c;
-  --color-ink-dim: rgba(20, 23, 28, 0.62);
-  --color-ink-dimmer: rgba(20, 23, 28, 0.42);
+  --color-edge-strong: rgba(15, 18, 22, 0.16);
+  --color-ink: #16191e;
+  --color-ink-dim: rgba(22, 25, 30, 0.68);
+  --color-ink-dimmer: rgba(22, 25, 30, 0.52);
   --color-surface: #ffffff;
-  --color-sidebar: #f6f7f9;
+  --color-sidebar: #f7f8fa;
   --color-cell: #ffffff;
-  --color-raise: rgba(15, 18, 22, 0.045);
-  --color-raise-strong: rgba(15, 18, 22, 0.08);
+  --color-raise: rgba(15, 18, 22, 0.05);
+  --color-raise-strong: rgba(15, 18, 22, 0.09);
   --color-track: rgba(15, 18, 22, 0.1);
-  --color-series: rgba(20, 23, 28, 0.34);
-  --color-series-soft: rgba(20, 23, 28, 0.16);
-  --color-axis: rgba(20, 23, 28, 0.5);
-  --color-grid: rgba(20, 23, 28, 0.08);
-  --color-good: #11935a;
+  --color-series: rgba(22, 25, 30, 0.35);
+  --color-series-soft: rgba(22, 25, 30, 0.16);
+  --color-axis: rgba(22, 25, 30, 0.5);
+  --color-grid: rgba(22, 25, 30, 0.07);
+  --color-good: #0e8a55;
+  --color-bad: #ce2c31;
+  --color-warn: #9a6700;
   --color-star: #fe5100;
   --color-orange-soft: rgba(254, 81, 0, 0.1);
   --color-orange-wash: rgba(254, 81, 0, 0.05);
+  --color-orange-edge: rgba(254, 81, 0, 0.35);
+  --color-orange-edge-strong: rgba(254, 81, 0, 0.5);
 }
 
 /* ===== Dashboard chrome — premium materials (theme-aware) =====
@@ -116,33 +130,59 @@
    overrides them. Components reference these vars, so a single element renders
    correct glass in either mode with no flash. */
 .theme-scope {
-  --sidebar-bg:
-    radial-gradient(130% 30% at 16% 0%, rgba(254, 81, 0, 0.07) 0%, transparent 56%),
-    linear-gradient(180deg, #080706 0%, #060606 58%, #050505 100%);
-  --topbar-bg: rgba(7, 7, 7, 0.72);
-  --pill-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.07) 0%, rgba(255, 255, 255, 0.025) 100%);
-  --pill-bg-hover: linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.04) 100%);
+  /* Product dark palette — solid slate elevation ladder, scoped to the app so
+     the marketing site keeps its own black field. One step per surface:
+     bg → sidebar/surface → panel (cards) → raise (hover) → raise-strong (active). */
+  --color-bg: #0b0d11;
+  --color-surface: #0e1116;
+  --color-sidebar: #0d0f14;
+  --color-cell: #12151b;
+  --color-panel: #12151b;
+  --color-panel-strong: #171b22;
+  --color-raise: #1a1f28;
+  --color-raise-strong: #242b36;
+  --color-edge: rgba(255, 255, 255, 0.07);
+  --color-edge-strong: rgba(255, 255, 255, 0.13);
+  --color-ink: #e8eaed;
+  --color-ink-dim: rgba(232, 234, 237, 0.7);
+  --color-ink-dimmer: rgba(232, 234, 237, 0.55);
+  --color-track: rgba(232, 234, 237, 0.12);
+  --color-series: rgba(232, 234, 237, 0.34);
+  --color-series-soft: rgba(232, 234, 237, 0.16);
+  --color-axis: rgba(232, 234, 237, 0.45);
+  --color-grid: rgba(232, 234, 237, 0.06);
+  --color-good: #2fbe7a;
+
+  /* Chrome — flat and structural. No glow, no glass, no grain. */
+  --sidebar-bg: var(--color-sidebar);
+  --topbar-bg: rgba(11, 13, 17, 0.85);
+  --pill-bg: #141821;
+  --pill-bg-hover: #1a1f2a;
   --pill-edge: rgba(255, 255, 255, 0.1);
   --pill-edge-hover: rgba(255, 255, 255, 0.18);
-  --pill-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.08), 0 1px 2px 0 rgba(0, 0, 0, 0.55);
-  --grain-opacity: 0.06;
-  --card-highlight: inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
-  --card-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
+  --pill-shadow: none;
+  --grain-opacity: 0;
+  --card-highlight: 0 0 #0000;
+  --card-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.24);
+}
+
+/* One focus treatment for every interactive element in the product. */
+.theme-scope :is(a, button, [role="button"], input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-orange);
+  outline-offset: 2px;
 }
 
 :root[data-theme="light"] .theme-scope {
-  --sidebar-bg:
-    radial-gradient(130% 30% at 16% 0%, rgba(254, 81, 0, 0.05) 0%, transparent 56%),
-    linear-gradient(180deg, #f7f8fa 0%, #eef0f3 100%);
-  --topbar-bg: rgba(246, 247, 249, 0.72);
-  --pill-bg: linear-gradient(180deg, #ffffff 0%, #f6f7f9 100%);
-  --pill-bg-hover: linear-gradient(180deg, #ffffff 0%, #eef1f4 100%);
-  --pill-edge: rgba(15, 18, 22, 0.1);
-  --pill-edge-hover: rgba(15, 18, 22, 0.2);
-  --pill-shadow: inset 0 1px 0 0 #ffffff, 0 1px 2px 0 rgba(15, 18, 22, 0.07);
-  --grain-opacity: 0.035;
-  --card-highlight: inset 0 1px 0 0 #ffffff;
-  --card-shadow: 0 1px 2px 0 rgba(15, 18, 22, 0.06), 0 6px 20px -10px rgba(15, 18, 22, 0.1);
+  --sidebar-bg: var(--color-sidebar);
+  --topbar-bg: rgba(247, 248, 250, 0.85);
+  --pill-bg: #ffffff;
+  --pill-bg-hover: #f2f4f6;
+  --pill-edge: rgba(15, 18, 22, 0.12);
+  --pill-edge-hover: rgba(15, 18, 22, 0.22);
+  --pill-shadow: 0 1px 2px 0 rgba(15, 18, 22, 0.05);
+  --grain-opacity: 0;
+  --card-highlight: 0 0 #0000;
+  --card-shadow: 0 1px 2px 0 rgba(15, 18, 22, 0.05), 0 4px 12px -6px rgba(15, 18, 22, 0.08);
 }
 
 /* Tactile glass pill — filter dropdowns, the account button, any chrome control.
@@ -223,11 +263,11 @@
 }
 
 @keyframes stage-in {
-  from { opacity: 0; transform: translateY(8px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 .animate-stage-in {
-  animation: stage-in 0.36s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  animation: stage-in 0.2s ease-out backwards;
 }
 
 @media (prefers-reduced-motion: reduce) {

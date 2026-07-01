@@ -60,8 +60,8 @@ export async function OwnerHome({ searchParams, userName, streak }: { searchPara
   ]);
   const labels = series.labels;
 
-  // The single metric with the strongest positive move — surfaced in orange as a
-  // "win". Real data only: when nothing actually improved, nothing is shown.
+  // The single metric with the strongest positive move — stated plainly in the
+  // insight line. Real data only: when nothing actually improved, nothing shows.
   const WIN_LABELS: Record<string, string> = {
     revenue: "Revenue",
     bookings: "Bookings",
@@ -84,38 +84,38 @@ export async function OwnerHome({ searchParams, userName, streak }: { searchPara
     .sort((a, b) => b.d - a.d)[0];
 
   return (
-    <div className="space-y-5">
-      {/* Greeting — the Origin "Good afternoon" headline, in Urso's serif. */}
-      <header className="flex flex-wrap items-end justify-between gap-4 animate-stage-in">
+    <div className="animate-stage-in space-y-4">
+      {/* Greeting */}
+      <header className="flex flex-wrap items-end justify-between gap-4">
         <div className="min-w-0">
           <Micro>{t("Overview")} · {t(scopeLabel(scope))} · {t(periodLabel)}</Micro>
-          <h1 className="mt-2.5 font-serif text-[clamp(28px,4vw,40px)] font-medium leading-[1.04] tracking-[-0.02em] text-ink">
-            {t("Welcome back")}, {first}<span className="text-orange">.</span>
+          <h1 className="mt-1.5 text-xl font-semibold leading-snug tracking-[-0.01em] text-ink">
+            {t("Welcome back")}, {first}
           </h1>
         </div>
         <StreakPill streak={streak} t={t} />
       </header>
 
       {/* In-page tab links → the deeper views, filter preserved. */}
-      <nav className="flex flex-wrap gap-2 animate-stage-in" style={{ animationDelay: "40ms" }}>
-        <span className="rounded-lg bg-raise-strong px-4 py-2 text-[14px] text-ink">{t("Overview")}</span>
-        <Link href={`/dashboard/revenue${q}`} className="rounded-lg px-4 py-2 text-[14px] text-ink-dim transition-colors hover:bg-raise hover:text-ink">{t("Revenue map")}</Link>
-        <Link href={`/dashboard/compare${q}`} className="rounded-lg px-4 py-2 text-[14px] text-ink-dim transition-colors hover:bg-raise hover:text-ink">{t("Compare")}</Link>
+      <nav className="flex flex-wrap gap-1.5">
+        <span className="rounded-lg bg-raise-strong px-3 py-1.5 text-sm font-medium text-ink">{t("Overview")}</span>
+        <Link href={`/dashboard/revenue${q}`} className="rounded-lg px-3 py-1.5 text-sm text-ink-dim transition-colors duration-150 hover:bg-raise hover:text-ink">{t("Revenue map")}</Link>
+        <Link href={`/dashboard/compare${q}`} className="rounded-lg px-3 py-1.5 text-sm text-ink-dim transition-colors duration-150 hover:bg-raise hover:text-ink">{t("Compare")}</Link>
       </nav>
 
       {winner && (
-        <div className="flex items-center gap-2.5 rounded-xl border border-[rgba(254,81,0,0.25)] bg-orange-wash px-4 py-3 animate-stage-in" style={{ animationDelay: "70ms" }}>
-          <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-orange">urso.ai</span>
-          <span className="text-[13px] text-ink-dim">
-            <span className="font-semibold text-orange">{t(WIN_LABELS[winner.key])} {t("up")} {pct(winner.d)}</span> — {t("your strongest move this period.")}
+        <div className="flex items-center gap-2.5 rounded-xl border border-edge bg-panel px-4 py-3">
+          <span className="font-mono text-2xs uppercase tracking-[0.12em] text-orange">urso.ai</span>
+          <span className="text-sm text-ink-dim">
+            <span className="font-medium text-ink">{t(WIN_LABELS[winner.key])}</span>{" "}
+            <span className="font-medium text-good">{t("up")} {pct(winner.d)}</span> — {t("your strongest move this period.")}
           </span>
         </div>
       )}
 
-      {/* Hero row — the revenue chart (Origin's net-worth card) beside the
-          "what to fix first" action item (the rail card). */}
-      <section className="grid grid-cols-1 gap-5 animate-stage-in lg:grid-cols-[1.5fr_1fr]" style={{ animationDelay: "110ms" }}>
-        <div className="dash-raise rounded-3xl border border-edge bg-panel p-6 md:p-7">
+      {/* Hero row — revenue trend beside the "what to fix first" action item. */}
+      <section className="grid grid-cols-1 gap-4 lg:grid-cols-[1.5fr_1fr]">
+        <div className="dash-raise rounded-xl border border-edge bg-panel p-5">
           <div className="flex items-center gap-2">
             <Micro>{t("Revenue")}</Micro>
             <AskAi
@@ -130,12 +130,12 @@ export async function OwnerHome({ searchParams, userName, streak }: { searchPara
             <ChartInfo id="revenueTrend" />
           </div>
           <div className="mt-3 flex items-baseline gap-3">
-            <span className="text-[clamp(34px,5vw,46px)] font-medium leading-none tracking-[-0.03em] tabular-nums text-ink">
+            <span className="text-3xl font-semibold leading-none tracking-[-0.01em] tabular-nums text-ink">
               <CountUp value={m.revenue} format="money" />
             </span>
             {deltas.revenue != null && <Delta value={deltas.revenue} />}
           </div>
-          <div className="mt-1.5 text-[13px] text-ink-dim">{t(periodLabel)}</div>
+          <div className="mt-1.5 text-xs text-ink-dim">{t(periodLabel)}</div>
           <div className="mt-5">
             <AreaChart data={series.revenue} labels={labels} format="moneyK" height={240} />
           </div>
@@ -153,18 +153,18 @@ export async function OwnerHome({ searchParams, userName, streak }: { searchPara
 
       {/* KPI row — all six live FranPOS metrics with period-over-period deltas
           (chips hide when no honest prior period exists). */}
-      <section className="grid grid-cols-2 gap-3 animate-stage-in md:grid-cols-3 xl:grid-cols-6" style={{ animationDelay: "170ms" }}>
-        <Kpi label={t("Revenue")} raw={m.revenue} format="money" delta={deltas.revenue} accent={winner?.key === "revenue"} />
-        <Kpi label={t("Bookings")} raw={m.bookings} format="int" delta={deltas.bookings} accent={winner?.key === "bookings"} />
-        <Kpi label={t("Avg visit")} raw={m.avgTicket} format="money" delta={deltas.avgTicket} accent={winner?.key === "avgTicket"} />
-        <Kpi label={t("Return rate")} raw={m.rebook} format="pct" delta={deltas.rebook} accent={winner?.key === "rebook"} />
-        <Kpi label={t("Retail attach")} raw={m.attach} format="pct" delta={deltas.attach} accent={winner?.key === "attach"} />
-        <Kpi label={t("Grooming share")} raw={m.groomingShare} format="pct" delta={deltas.groomingShare} accent={winner?.key === "groomingShare"} />
+      <section className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+        <Kpi label={t("Revenue")} raw={m.revenue} format="money" delta={deltas.revenue} />
+        <Kpi label={t("Bookings")} raw={m.bookings} format="int" delta={deltas.bookings} />
+        <Kpi label={t("Avg visit")} raw={m.avgTicket} format="money" delta={deltas.avgTicket} />
+        <Kpi label={t("Return rate")} raw={m.rebook} format="pct" delta={deltas.rebook} />
+        <Kpi label={t("Retail attach")} raw={m.attach} format="pct" delta={deltas.attach} />
+        <Kpi label={t("Grooming share")} raw={m.groomingShare} format="pct" delta={deltas.groomingShare} />
       </section>
 
       {/* Calls + Traffic */}
-      <section className="grid grid-cols-1 gap-5 animate-stage-in xl:grid-cols-2" style={{ animationDelay: "230ms" }}>
-        <div className="dash-raise rounded-3xl border border-edge bg-panel p-6">
+      <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <div className="dash-raise rounded-xl border border-edge bg-panel p-5">
           <div className="mb-4 flex items-center gap-2">
             <Micro>{t("Inbound calls")}</Micro>
             <AskAi
@@ -184,21 +184,21 @@ export async function OwnerHome({ searchParams, userName, streak }: { searchPara
           ) : (
             <>
               <div className="mb-4 flex items-start justify-between gap-3">
-                <div className="text-[22px] font-semibold tracking-[-0.01em]">{cs.total.toLocaleString()} <span className="text-[13px] font-normal text-ink-dim">{t("calls")}</span></div>
+                <div className="text-xl font-semibold tabular-nums tracking-[-0.01em]">{cs.total.toLocaleString()} <span className="text-sm font-normal text-ink-dim">{t("calls")}</span></div>
                 <div className="text-right">
-                  <div className="text-[20px] font-semibold text-orange">{pct(cs.missedPct)}</div>
+                  <div className="text-xl font-semibold tabular-nums text-ink">{pct(cs.missedPct)}</div>
                   <Micro>{t("missed")}</Micro>
                 </div>
               </div>
               <CallsBars labels={labels} total={series.callsTotal} missed={series.callsMissed} />
               <div className="mt-3">
-                <Legend items={[{ label: t("Answered"), color: "var(--color-series)" }, { label: t("Missed"), color: "#fe5100" }]} />
+                <Legend items={[{ label: t("Answered"), color: "var(--color-series)" }, { label: t("Missed"), color: "var(--color-bad)" }]} />
               </div>
             </>
           )}
         </div>
 
-        <div className="dash-raise rounded-3xl border border-edge bg-panel p-6">
+        <div className="dash-raise rounded-xl border border-edge bg-panel p-5">
           <div className="mb-4 flex items-center gap-2">
             <Micro>{t("Website traffic vs bookings")}</Micro>
             <AskAi
@@ -218,15 +218,15 @@ export async function OwnerHome({ searchParams, userName, streak }: { searchPara
           ) : (
             <>
               <div className="mb-4 flex items-start justify-between gap-3">
-                <div className="text-[22px] font-semibold tracking-[-0.01em]">{ws.visits.toLocaleString()} <span className="text-[13px] font-normal text-ink-dim">{t("visits")}</span></div>
+                <div className="text-xl font-semibold tabular-nums tracking-[-0.01em]">{ws.visits.toLocaleString()} <span className="text-sm font-normal text-ink-dim">{t("visits")}</span></div>
                 <div className="text-right">
-                  <div className="text-[20px] font-semibold text-orange">{pct(ws.convRate, 1)}</div>
+                  <div className="text-xl font-semibold tabular-nums text-ink">{pct(ws.convRate, 1)}</div>
                   <Micro>{t("book online")}</Micro>
                 </div>
               </div>
               <TrafficChart labels={labels} visits={series.webVisits} bookings={series.webBookings} />
               <div className="mt-3">
-                <Legend items={[{ label: t("Visits"), color: "var(--color-series)" }, { label: t("Became bookings"), color: "#fe5100" }]} />
+                <Legend items={[{ label: t("Visits"), color: "var(--color-series)" }, { label: t("Became bookings"), color: "var(--color-orange)" }]} />
               </div>
             </>
           )}
@@ -234,39 +234,39 @@ export async function OwnerHome({ searchParams, userName, streak }: { searchPara
       </section>
 
       {/* Store performance */}
-      <section className="animate-stage-in" style={{ animationDelay: "290ms" }}>
-        <div className="mb-4 flex items-end justify-between">
+      <section>
+        <div className="mb-3 flex items-end justify-between">
           <div>
             <Micro>{t("By location")}</Micro>
-            <h2 className="mt-1.5 font-serif text-[20px] font-medium tracking-[-0.01em] text-ink">{t("Store performance")}</h2>
+            <h2 className="mt-1 text-base font-semibold tracking-[-0.01em] text-ink">{t("Store performance")}</h2>
           </div>
-          <Link href="/dashboard/stores" className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-dim transition-colors hover:text-orange">
+          <Link href="/dashboard/stores" className="font-mono text-2xs uppercase tracking-[0.1em] text-ink-dim transition-colors duration-150 hover:text-ink">
             {t("Compare")} →
           </Link>
         </div>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {stores.map((s) => {
             const sm = cards[s.id];
             return (
-              <div key={s.id} className="dash-raise flex flex-col gap-4 rounded-2xl border border-edge bg-panel p-5 transition-all duration-200 hover:-translate-y-px">
+              <div key={s.id} className="dash-raise flex flex-col gap-4 rounded-xl border border-edge bg-panel p-4 transition-colors duration-150 hover:border-edge-strong">
                 <div className="flex items-start justify-between">
                   <div>
-                    <div className="text-[14.5px] text-ink">{s.name}</div>
+                    <div className="text-sm font-medium text-ink">{s.name}</div>
                     <Micro className="mt-0.5">{t(s.tier)}</Micro>
                   </div>
-                  <span className="font-mono text-[12px] text-ink-dim">{fmtMoney(sm.avgTicket)} {t("avg")}</span>
+                  <span className="font-mono text-xs tabular-nums text-ink-dim">{fmtMoney(sm.avgTicket)} {t("avg")}</span>
                 </div>
-                <div className="text-[27px] font-semibold leading-none tracking-[-0.02em] tabular-nums"><CountUp value={sm.revenue} format="money" /></div>
+                <div className="text-2xl font-semibold leading-none tracking-[-0.01em] tabular-nums"><CountUp value={sm.revenue} format="money" /></div>
                 <div>
                   <div className="mb-1.5 flex items-center justify-between">
                     <Micro>{t("Return")}</Micro>
-                    <span className="font-mono text-[11px] text-ink-dim">{pct(sm.rebook)}</span>
+                    <span className="font-mono text-xs tabular-nums text-ink-dim">{pct(sm.rebook)}</span>
                   </div>
                   <Meter value={sm.rebook} color="var(--color-ink-dim)" />
                 </div>
                 <div className="flex items-center justify-between border-t border-edge pt-3">
                   <Micro>{t("Retail attach")}</Micro>
-                  <span className="font-mono text-[12px]" style={{ color: sm.attach < 0.15 ? "#fe5100" : "var(--color-ink-dim)" }}>{pct(sm.attach)}</span>
+                  <span className="font-mono text-xs tabular-nums" style={{ color: sm.attach < 0.15 ? "var(--color-bad)" : "var(--color-ink-dim)" }}>{pct(sm.attach)}</span>
                 </div>
               </div>
             );
@@ -277,35 +277,28 @@ export async function OwnerHome({ searchParams, userName, streak }: { searchPara
   );
 }
 
-// Pending-feed empty state — a premium "coming online" moment (serif line + a
-// faint warm bloom) rather than a dead chart at zero. Used until Twilio / web
-// analytics go live.
+// Pending-feed empty state — quiet and structural: what's coming, why it
+// matters, one status tag. Used until Twilio / web analytics go live.
 function EmptyFeed({ title, detail, tag }: { title: string; detail: string; tag: string }) {
   return (
-    <div className="relative flex min-h-[176px] flex-col items-center justify-center overflow-hidden rounded-2xl px-6 py-8 text-center">
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0"
-        style={{ background: "radial-gradient(60% 70% at 50% 32%, var(--color-orange-wash), transparent 72%)" }}
-      />
-      <div aria-hidden className="dash-grain pointer-events-none absolute inset-0" />
-      <p className="relative font-serif text-[17px] font-medium leading-[1.2] tracking-[-0.01em] text-ink">{title}</p>
-      <p className="relative mt-2 max-w-[300px] text-[12.5px] leading-[1.5] text-ink-dim">{detail}</p>
-      <div className="relative mt-4">
+    <div className="flex min-h-[176px] flex-col items-center justify-center rounded-lg border border-dashed border-edge-strong px-6 py-8 text-center">
+      <p className="text-sm font-medium leading-snug text-ink">{title}</p>
+      <p className="mt-1.5 max-w-[300px] text-xs leading-relaxed text-ink-dim">{detail}</p>
+      <div className="mt-3.5">
         <Tag tone="muted">{tag}</Tag>
       </div>
     </div>
   );
 }
 
-function Kpi({ label, raw, format, delta, deltaInvert, accent }: { label: string; raw: number; format: "money" | "pct" | "int"; delta: number | null; deltaInvert?: boolean; accent?: boolean }) {
+function Kpi({ label, raw, format, delta, deltaInvert }: { label: string; raw: number; format: "money" | "pct" | "int"; delta: number | null; deltaInvert?: boolean }) {
   return (
-    <div className="dash-raise rounded-2xl border border-edge bg-panel p-4">
+    <div className="dash-raise rounded-xl border border-edge bg-panel p-4">
       <div className="flex items-center justify-between gap-2">
         <Micro>{label}</Micro>
         {delta != null && <Delta value={delta} invert={deltaInvert} />}
       </div>
-      <div className={`mt-3 text-[22px] font-semibold leading-none tracking-[-0.02em] tabular-nums ${accent ? "text-orange" : "text-ink"}`}>
+      <div className="mt-3 text-xl font-semibold leading-none tracking-[-0.01em] tabular-nums text-ink">
         <CountUp value={raw} format={format} />
       </div>
     </div>
