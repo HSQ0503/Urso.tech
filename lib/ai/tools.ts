@@ -22,6 +22,7 @@ import {
   getAllAgentActions,
   getCrossSell,
   getEventsInRange,
+  getStoreDayLineItems,
   getMoneyOverview,
   getProfitDeltas,
   getCostBreakdown,
@@ -419,6 +420,84 @@ export function buildAnalystTools(allowed: Scope, cross: Scope = allowed) {
         endDate: dateSchema.describe("last day of the window, YYYY-MM-DD"),
       }),
       execute: ({ startDate, endDate }) => getEventsInRange(allowed, startDate, endDate),
+    }),
+
+    store_day_tickets: tool({
+      description:
+        "The ACTUAL tickets and line items that sold on a specific day (or a short window, max 7 days) — the itemized receipts the aggregated tools can't reach. Each ticket lists what was on it (product/service name, qty, line revenue, retail-vs-grooming tag, the groomer who rang it), its total, the time, and the customer when known (Walk-in / Unknown otherwise), plus a summary with the day's top retail items by revenue. Use this for what SPECIFICALLY sold, an itemized basket, what a customer bought, big retail baskets / stock-up runs, or to itemize a single day — product_performance and metrics_range only go to monthly or daily-total level. Deposits and gift-card sales are excluded. For one day, pass the same date for start and end. Returns the top 30 tickets by value. Data starts 2024-01-01.",
+      inputSchema: z.object({
+        startDate: dateSchema.describe("first day included, YYYY-MM-DD"),
+        endDate: dateSchema.describe("last day included, YYYY-MM-DD (same as startDate for a single day)"),
+        store: z
+          .enum(["all", "wp", "wg", "lv", "wm"])
+          .optional()
+          .describe('narrow to one store you can see (e.g. "wm" for Windermere/Summerport); omit to use the current scope'),
+      }),
+      execute: async ({ startDate, endDate, store }) => {
+        if (startDate > endDate) return { error: "startDate must be on or before endDate" };
+        const days = Math.round((Date.parse(`${endDate}T00:00:00Z`) - Date.parse(`${startDate}T00:00:00Z`)) / 86_400_000) + 1;
+        if (days > 7) return { error: "window too wide — itemized tickets are limited to 7 days; ask about a single day or a shorter range." };
+
+        // Scope-lock: a requested store must be one the session may see (cross =
+        // all stores for an owner, their own store for a manager). The model can
+        // narrow or pick another visible store, never widen past its scope. With
+        // no store given, default to the current view (allowed).
+        let queryScope: Scope = allowed;
+        if (store && store !== "all") {
+          if (!crossIds.includes(store as StoreId)) return { error: `you can only see: ${crossIds.join(", ")}` };
+          queryScope = store as StoreId;
+        } else if (store === "all") {
+          queryScope = cross;
+        }
+
+        const res = await getStoreDayLineItems(queryScope, startDate, endDate);
+        if (res === null) return { error: "ticket-level data isn't available yet (pending deploy)." };
+
+        const tickets = res.tickets;
+        const totalRevenue = r0(tickets.reduce((s, t) => s + t.total, 0));
+        const groomingRevenue = r0(tickets.reduce((s, t) => s + t.grooming, 0));
+        const retailRevenue = r0(tickets.reduce((s, t) => s + t.retail, 0));
+        const bookings = tickets.filter((t) => t.hasService).length;
+
+        // Top retail items by revenue across the window — the reorder-cycle signal.
+        const retailByName = new Map<string, { revenue: number; units: number }>();
+        for (const t of tickets)
+          for (const l of t.lines) {
+            if (l.line !== "Retail") continue;
+            const e = retailByName.get(l.name) ?? { revenue: 0, units: 0 };
+            e.revenue += l.revenue;
+            e.units += l.qty;
+            retailByName.set(l.name, e);
+          }
+        const topRetail = [...retailByName.entries()]
+          .sort((a, b) => b[1].revenue - a[1].revenue)
+          .slice(0, 10)
+          .map(([name, v]) => ({ name, revenue: r0(v.revenue), units: r3(v.units) }));
+
+        const CAP = 30;
+        const shaped = tickets.slice(0, CAP).map((t) => ({
+          ticket: t.orderId,
+          store: t.store,
+          time: t.time,
+          customer: t.customer,
+          pet: t.pet,
+          segment: t.segment,
+          total: r0(t.total),
+          grooming: r0(t.grooming),
+          retail: r0(t.retail),
+          lines: t.lines.map((l) => ({ name: l.name, qty: l.qty, revenue: r0(l.revenue), line: l.line, groomer: l.groomer })),
+        }));
+
+        return {
+          window: { startDate, endDate },
+          summary: { tickets: tickets.length, bookings, totalRevenue, groomingRevenue, retailRevenue, topRetail },
+          tickets: shaped,
+          ...(tickets.length > CAP ? { note: `showing the top ${CAP} of ${tickets.length} tickets by value` } : {}),
+          ...(res.truncated
+            ? { truncated: "the window hit the row cap and some lines were dropped — ask about a single store or a shorter window for complete coverage." }
+            : {}),
+        };
+      },
     }),
 
     // ── Money / profit (QuickBooks) ─────────────────────────────────────────

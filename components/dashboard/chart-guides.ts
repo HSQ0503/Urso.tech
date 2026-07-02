@@ -17,7 +17,8 @@ export type ChartGuide = {
   source?: string; // which feed fills it / honesty tag
 };
 
-const ORANGE = "#fe5100";
+const ORANGE = "var(--color-orange)";
+const BAD = "var(--color-bad)";
 const SERIES = "var(--color-series)";
 const SERIES_SOFT = "var(--color-series-soft)";
 const TRACK = "var(--color-track)";
@@ -39,7 +40,7 @@ export const CHART_GUIDES = {
     read: "Each bar is one period's total calls. The muted lower part is answered; the orange upper part is missed. More orange means more booking demand reaching no one.",
     legend: [
       { color: SERIES, label: "Answered" },
-      { color: ORANGE, label: "Missed", note: "usually a booking that goes to a competitor" },
+      { color: BAD, label: "Missed", note: "usually a booking that goes to a competitor" },
     ],
     source: TWILIO,
   },
@@ -63,8 +64,8 @@ export const CHART_GUIDES = {
     read: "The X axis is the hour, morning to night. Each bar splits answered from missed. The shaded band is after closing, when no one is at the desk — the clearest case for instant text-back.",
     legend: [
       { color: SERIES, label: "Answered" },
-      { color: ORANGE, label: "Missed" },
-      { color: "rgba(254,81,0,0.2)", label: "After hours", note: "store is closed" },
+      { color: BAD, label: "Missed" },
+      { color: SERIES_SOFT, label: "After hours", note: "store is closed" },
     ],
     source: TWILIO,
   },
@@ -73,7 +74,7 @@ export const CHART_GUIDES = {
     read: "Each bar is a stage; its width is how many people reach it. The percent below a bar is how many continued from the stage above. The widest drop — marked 'leak' in orange — is where the most bookings are lost.",
     legend: [
       { color: SERIES_SOFT, label: "Stage volume" },
-      { color: "rgba(254,81,0,0.55)", label: "Leak stage", note: "the largest drop-off" },
+      { color: BAD, label: "Leak stage", note: "the largest drop-off" },
     ],
     source: GA4,
   },
@@ -162,7 +163,7 @@ export const CHART_GUIDES = {
     read: "Each bar is the change for one item: green bars to the right sold more than in the comparison period, orange bars to the left sold less. Sorted biggest gain to biggest drop, so the top and bottom of the chart are the story.",
     legend: [
       { color: "var(--color-good)", label: "Gained" },
-      { color: ORANGE, label: "Declined" },
+      { color: BAD, label: "Declined" },
     ],
     source: FRANPOS,
   },
@@ -207,7 +208,7 @@ export const CHART_GUIDES = {
     read: "Each row is a star level and the bar is how many reviews sit there. A healthy profile is heavy on 4–5★ with few 1–2★. A cluster of 1★ with no matching customer is a sign of fakes.",
     legend: [
       { color: SERIES, label: "4–5★", note: "healthy" },
-      { color: ORANGE, label: "1–3★", note: "watch for fakes" },
+      { color: BAD, label: "1–3★", note: "watch for fakes" },
     ],
     source: GBP,
   },

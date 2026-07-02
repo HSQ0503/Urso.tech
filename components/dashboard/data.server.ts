@@ -50,6 +50,8 @@ import {
   type Review,
   type EventType,
   type BusinessEvent,
+  type DayTicket,
+  type DayTickets,
 } from "./data";
 
 // ── small helpers (kept local so this module stays self-contained) ──────────
@@ -465,6 +467,83 @@ export async function getRevenueByGroomer(scope: Scope, month: MonthValue) {
   return ((data ?? []) as unknown as Row[])
     .map((r) => ({ name: r.name, store: fullName(r.store_id), value: Number(r.revenue) }))
     .sort((a, b) => b.value - a.value);
+}
+
+// Itemized tickets + line items for a store/day window — the data behind the AI
+// "what actually sold" tool. Reads raw franpos_order_items via the
+// store_day_lineitems SECURITY DEFINER RPC (staging is RLS-locked), groups the
+// lines into tickets and resolves customer identity. Scope is bound by the
+// caller (lib/ai/tools.ts), never the model. Returns null if the RPC isn't
+// deployed yet (pre-0025) — same graceful fallback as getProductCatalog.
+export async function getStoreDayLineItems(
+  scope: Scope,
+  startDate: string,
+  endDate: string,
+  includePassthrough = false,
+): Promise<DayTickets | null> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("store_day_lineitems", {
+    p_store_ids: scopeIds(scope),
+    p_start: startDate,
+    p_end: endDate,
+    p_include_passthrough: includePassthrough,
+  });
+  if (error && /schema cache|does not exist/i.test(error.message)) return null;
+  if (error) throw new Error(`store_day_lineitems failed: ${error.message}`);
+
+  type Row = {
+    store_id: StoreId; item_date: string; created_on: string; order_id: number;
+    customer_id: number | null; is_walkin: boolean; name: string; sku: string | null;
+    quantity: number; line_revenue: number; cost: number; is_service: boolean;
+    is_passthrough: boolean; sales_person: string | null;
+  };
+  const rows = (data ?? []) as unknown as Row[];
+  // PostgREST caps RPC responses at 1,000 rows; a result AT the cap means the
+  // window was too wide and lines were silently dropped — flag it honestly.
+  const truncated = rows.length >= 1000;
+
+  // Resolve owner names in one read (customers has a temp public-read policy, so
+  // the session client can see it). Walk-ins / unknowns fall back to a label.
+  const custIds = [...new Set(rows.filter((r) => r.customer_id != null && !r.is_walkin).map((r) => String(r.customer_id)))];
+  const idents = new Map<string, { name: string; pet: string | null; segment: string | null }>();
+  if (custIds.length) {
+    const { data: custRows } = await supabase.from("customers").select("id, name, pet, segment").in("id", custIds);
+    for (const c of (custRows ?? []) as { id: string; name: string | null; pet: string | null; segment: string | null }[]) {
+      idents.set(c.id, { name: c.name && c.name !== "—" ? c.name : "", pet: c.pet, segment: c.segment });
+    }
+  }
+
+  const byTicket = new Map<number, DayTicket>();
+  for (const r of rows) {
+    let tk = byTicket.get(r.order_id);
+    if (!tk) {
+      const resolved = r.customer_id != null && !r.is_walkin ? idents.get(String(r.customer_id)) : undefined;
+      const customer = r.is_walkin ? "Walk-in" : resolved?.name || "Unknown";
+      tk = {
+        orderId: r.order_id, store: r.store_id,
+        time: r.created_on ? r.created_on.slice(11, 16) : null,
+        customer, pet: resolved?.pet ?? null, segment: resolved?.segment ?? null,
+        isWalkin: r.is_walkin, total: 0, grooming: 0, retail: 0,
+        hasService: false, hasRetail: false, lines: [],
+      };
+      byTicket.set(r.order_id, tk);
+    }
+    const rev = Number(r.line_revenue);
+    tk.total += rev;
+    if (r.is_service) { tk.grooming += rev; tk.hasService = true; }
+    else { tk.retail += rev; tk.hasRetail = true; }
+    tk.lines.push({
+      name: r.name, sku: r.sku, qty: Number(r.quantity), revenue: rev,
+      line: r.is_service ? "Grooming" : "Retail", groomer: r.sales_person,
+    });
+  }
+  // Map preserves insertion (DB) order; if the response hit the row cap, the
+  // last ticket may be cut mid-basket, so drop it — better to under-show than
+  // render a partial ticket. The truncated flag still signals incomplete coverage.
+  const ordered = [...byTicket.values()];
+  if (truncated && ordered.length > 1) ordered.pop();
+  const tickets = ordered.sort((a, b) => b.total - a.total);
+  return { tickets, lineCount: rows.length, truncated };
 }
 // Real split from metrics_daily. "New" = the customer's first visit day in our
 // recorded history (starts 2024-01-01). walkIn = revenue on the stores' house
