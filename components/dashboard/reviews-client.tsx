@@ -5,9 +5,10 @@
 // the proposed-fix modal state. The 1–5★ distribution is derived here from the
 // passed rating + volume (the same model the all-time bars use).
 
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import { actionPlans, type Review, type ActionPlan } from "@/components/dashboard/data";
-import { Card, PageHeader, Display, Micro, Tag, Meter, RatingBars, Segmented, pct } from "@/components/dashboard/ui";
+import { Card, PageHeader, Display, Micro, Tag, Meter, RatingBars, Segmented, EmptyState, pct } from "@/components/dashboard/ui";
+import { CountUp } from "@/components/dashboard/count-up";
 import { AskAi } from "@/components/dashboard/ask-ai";
 import { ChartInfo } from "@/components/dashboard/chart-info";
 import { Modal } from "@/components/dashboard/modal";
@@ -70,22 +71,26 @@ export function ReviewsClient({
   const shown = expanded ? reviews : reviews.slice(0, 5);
   const storeOpts = reputation.map((r) => ({ value: r.store, label: r.store.replace("Village", "").trim() }));
   const sortOpts = sortOptions.map((o) => ({ ...o, label: t(o.label) }));
+  // Single win beat: the one store with the highest rating gets acknowledged.
+  const topRated = reputation.reduce((a, b) => (b.rating > a.rating ? b : a), reputation[0]).store;
 
   return (
-    <div className="animate-stage-in space-y-10">
-      <PageHeader
-        eyebrow={`${t("Reputation & visibility")} · Google`}
-        title={t("Reputation & visibility")}
-        right={
-          <div className="flex gap-2">
-            <Tag tone="orange">{suspectedFakes} {t("suspected fakes")}</Tag>
-            <Tag tone="orange">{unanswered} {t("unanswered")}</Tag>
-          </div>
-        }
-      />
+    <div className="space-y-10">
+      <div className="dash-rise" style={{ "--i": 0 } as CSSProperties}>
+        <PageHeader
+          eyebrow={`${t("Reputation & visibility")} · Google`}
+          title={t("Reputation & visibility")}
+          right={
+            <div className="flex gap-2">
+              <Tag tone="orange">{suspectedFakes} {t("suspected fakes")}</Tag>
+              <Tag tone="orange">{unanswered} {t("unanswered")}</Tag>
+            </div>
+          }
+        />
+      </div>
 
       {/* Reputation per store */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="dash-rise grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4" style={{ "--i": 1 } as CSSProperties}>
         {reputation.map((r, i) => {
           const find = findability[i];
           const sel = r.store === store;
@@ -93,20 +98,27 @@ export function ReviewsClient({
             <button
               key={r.store}
               onClick={() => setStore(r.store)}
-              className={`flex flex-col gap-4 rounded-none border bg-panel p-5 text-left transition-colors hover:border-edge-strong ${sel ? "border-edge-strong bg-raise-strong" : "border-edge"}`}
+              className={`dash-press flex cursor-pointer flex-col gap-4 rounded-none border bg-panel p-5 text-left transition-colors ${sel ? "border-edge-strong bg-raise-strong" : "dash-hover border-edge"}`}
             >
-              <div className="flex items-start justify-between">
+              <div className="flex items-start justify-between gap-2">
                 <div className="text-[14.5px] text-ink">{r.store}</div>
-                {!find.bookButton && <Tag tone="orange">{t("No book button")}</Tag>}
+                <div className="flex flex-wrap justify-end gap-1.5">
+                  {r.store === topRated && (
+                    <span className="chip-in inline-flex">
+                      <Tag tone="good">{t("Top rated")}</Tag>
+                    </span>
+                  )}
+                  {!find.bookButton && <Tag tone="orange">{t("No book button")}</Tag>}
+                </div>
               </div>
               <div className="flex items-end justify-between">
                 <div>
-                  <Display className="text-[30px] leading-none text-ink">{r.rating.toFixed(1)}<span className="text-star">★</span></Display>
-                  <Micro className="mt-1.5">{r.volume} {t("reviews")}</Micro>
+                  <Display className="text-[30px] leading-none tabular-nums text-ink">{r.rating.toFixed(1)}<span className="text-star">★</span></Display>
+                  <Micro className="mt-1.5"><CountUp value={r.volume} format="int" /> {t("reviews")}</Micro>
                 </div>
                 <div className="text-right">
-                  <Display className="text-[30px] leading-none">
-                    <span style={{ color: find.rank > 4 ? "#fe5100" : "var(--color-ink)" }}>#{find.rank}</span>
+                  <Display className="text-[30px] leading-none tabular-nums">
+                    <span style={{ color: find.rank > 4 ? "#fe5100" : "var(--color-ink)" }}>#<CountUp value={find.rank} format="int" /></span>
                   </Display>
                   <Micro className="mt-1.5">{t("local rank")}</Micro>
                 </div>
@@ -116,7 +128,7 @@ export function ReviewsClient({
                   <Micro>{t("Reply rate")}</Micro>
                   <span className="font-mono text-[11px] text-ink-dim">{pct(r.responseRate)} · {r.responseHrs}h {t("avg")}</span>
                 </div>
-                <Meter value={r.responseRate} color={r.responseRate < 0.6 ? "#fe5100" : "var(--color-good)"} />
+                <Meter value={r.responseRate} color={r.responseRate < 0.6 ? "#fe5100" : "var(--color-good)"} delay={120 + i * 70} />
               </div>
             </button>
           );
@@ -124,7 +136,7 @@ export function ReviewsClient({
       </div>
 
       {/* Review browser */}
-      <section className="grid grid-cols-1 items-start gap-3 lg:grid-cols-[1fr_1.6fr]">
+      <section className="dash-rise grid grid-cols-1 items-start gap-3 lg:grid-cols-[1fr_1.6fr]" style={{ "--i": 2 } as CSSProperties}>
         <Card className="flex h-fit flex-col gap-5 lg:sticky lg:top-[84px]">
           <div>
             <div className="flex items-center gap-1.5">
@@ -138,11 +150,12 @@ export function ReviewsClient({
               <ChartInfo id="ratingDistribution" />
             </div>
             <div className="mt-2 flex items-baseline gap-2.5">
-              <span className="text-[30px] font-bold leading-none tracking-[-0.02em]">{dist.rating.toFixed(1)}<span className="text-star">★</span></span>
-              <span className="text-[12.5px] text-ink-dim">{dist.total} {t("reviews")}</span>
+              <Display className="text-[30px] leading-none tabular-nums">{dist.rating.toFixed(1)}<span className="text-star">★</span></Display>
+              <span className="text-[12.5px] tabular-nums text-ink-dim"><CountUp value={dist.total} format="int" /> {t("reviews")}</span>
             </div>
           </div>
-          <RatingBars stars={dist.stars} counts={dist.counts} />
+          {/* Keyed by store so the distribution re-enters (and any fill animation re-runs) on switch. */}
+          <RatingBars key={store} stars={dist.stars} counts={dist.counts} />
           <div className="border-t border-edge pt-4">
             <Micro>{t("Store")}</Micro>
             <div className="mt-2.5">
@@ -155,16 +168,30 @@ export function ReviewsClient({
           <div className="flex flex-wrap items-center justify-between gap-3 px-5 pb-3 pt-5">
             <div>
               <Micro>{t("Reviews")}</Micro>
-              <h2 className="mt-1.5 text-[18px] font-medium tracking-[-0.01em]">{store.replace("Village", "").trim()}</h2>
+              <h2 className="mt-1.5 text-[19px] font-medium tracking-[-0.01em]">{store.replace("Village", "").trim()}</h2>
             </div>
             <Segmented options={sortOpts} value={sort} onChange={setSort} />
           </div>
           {reviews.length === 0 ? (
-            <div className="border-t border-edge px-5 py-10 text-center text-[13px] text-ink-dim">{t("No reviews match this filter.")}</div>
+            <div className="border-t border-edge p-5">
+              <EmptyState
+                label={t("Review filter")}
+                title={sort === "flagged" ? t("No suspected fakes at this store") : t("No reviews match this filter.")}
+                body={sort === "flagged" ? t("Good news — every reviewer here matches a customer on file. New suspects surface the moment one doesn't.") : undefined}
+                action={
+                  <button
+                    onClick={() => setSort("recent")}
+                    className="dash-press cursor-pointer rounded-sm border border-edge px-3 py-1.5 text-[12.5px] text-ink-dim transition-colors hover:border-edge-strong hover:text-ink"
+                  >
+                    {t("Show recent")}
+                  </button>
+                }
+              />
+            </div>
           ) : (
             <>
-              {shown.map((rev, i) => (
-                <div key={i} className="border-t border-edge px-5 py-4">
+              {shown.map((rev) => (
+                <div key={`${rev.author}-${rev.days}`} className="border-t border-edge px-5 py-4">
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2.5">
                       <span className="font-mono text-[13px]" style={{ color: rev.rating <= 2 ? "#fe5100" : "var(--color-star)" }}>
@@ -179,7 +206,7 @@ export function ReviewsClient({
                   {rev.flagged && (
                     <button
                       onClick={() => setPlan({ title: t("Suspected fake review"), plan: actionPlans["fake-reviews"] })}
-                      className="mt-2.5 cursor-pointer rounded-lg border border-edge-strong px-3 py-1.5 text-[12px] text-ink transition-colors hover:bg-raise"
+                      className="dash-press mt-2.5 cursor-pointer rounded-lg border border-edge-strong px-3 py-1.5 text-[12px] text-ink transition-colors hover:bg-raise"
                     >
                       {t("Review the case")} →
                     </button>
@@ -189,7 +216,7 @@ export function ReviewsClient({
               {reviews.length > 5 && (
                 <button
                   onClick={() => setExpanded((v) => !v)}
-                  className="w-full cursor-pointer border-t border-edge px-5 py-3 text-center font-mono text-[11px] uppercase tracking-[0.12em] text-ink-dim transition-colors hover:text-orange"
+                  className="dash-press w-full cursor-pointer border-t border-edge px-5 py-3 text-center font-mono text-[11px] uppercase tracking-[0.12em] text-ink-dim transition-colors hover:text-orange"
                 >
                   {expanded ? t("Show less") : `${t("Show all")} ${reviews.length} ${t("reviews")}`}
                 </button>
@@ -200,7 +227,7 @@ export function ReviewsClient({
       </section>
 
       {/* Explainers */}
-      <section className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+      <section className="dash-rise grid grid-cols-1 gap-3 lg:grid-cols-2" style={{ "--i": 3 } as CSSProperties}>
         <Card className="flex flex-col gap-3">
           <div className="flex items-center gap-2">
             <span className="size-2 rounded-full bg-orange" />
@@ -212,7 +239,7 @@ export function ReviewsClient({
           </p>
           <button
             onClick={() => setPlan({ title: `${suspectedFakes} ${t("suspected fake reviews")}`, plan: actionPlans["fake-reviews"] })}
-            className="mt-1 w-fit cursor-pointer rounded-lg border border-edge-strong px-4 py-2 text-[13px] text-ink transition-colors hover:bg-raise"
+            className="dash-press mt-1 w-fit cursor-pointer rounded-lg border border-edge-strong px-4 py-2 text-[13px] text-ink transition-colors hover:bg-raise"
           >
             {t("Review the")} {suspectedFakes} {t("flagged")}
           </button>
@@ -229,7 +256,7 @@ export function ReviewsClient({
           </p>
           <button
             onClick={() => setPlan({ title: t("Add the missing booking link"), plan: actionPlans["booking-link"] })}
-            className="mt-1 w-fit cursor-pointer rounded-lg bg-orange px-4 py-2 text-[13px] font-medium text-white transition hover:brightness-110"
+            className="dash-press mt-1 w-fit cursor-pointer rounded-lg bg-orange px-4 py-2 text-[13px] font-medium text-white transition hover:brightness-110"
           >
             {t("Fix Winter Park listing")}
           </button>
@@ -242,7 +269,7 @@ export function ReviewsClient({
         eyebrow={t("Proposed fix")}
         title={plan?.title ?? ""}
         footer={
-          <a href="mailto:han@urso.tech?subject=Urso%20%E2%80%94%20reviews" className="flex w-full items-center justify-center rounded-lg bg-orange px-4 py-2.5 text-[13px] font-medium text-white transition hover:brightness-110">
+          <a href="mailto:han@urso.tech?subject=Urso%20%E2%80%94%20reviews" className="dash-press flex w-full items-center justify-center rounded-lg bg-orange px-4 py-2.5 text-[13px] font-medium text-white transition hover:brightness-110">
             {t("Have Urso fix this")} →
           </a>
         }

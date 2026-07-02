@@ -63,7 +63,7 @@ export function ThemeToggle() {
             key={o.value}
             onClick={() => applyTheme(o.value)}
             aria-pressed={active}
-            className={`flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-none px-2.5 py-1.5 font-mono text-[10.5px] uppercase tracking-[0.1em] transition-colors ${
+            className={`flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-none px-2.5 py-1.5 font-mono text-[10.5px] uppercase tracking-[0.1em] transition-colors active:bg-raise-strong ${
               active ? "bg-raise-strong text-ink" : "text-ink-dim hover:text-ink"
             }`}
           >

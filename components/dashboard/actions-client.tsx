@@ -4,9 +4,10 @@
 // (data.server) and passed in as the initial list; this component owns the
 // approve / dismiss / filter / agent-toggle state.
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useState, useTransition, type CSSProperties } from "react";
 import { ACTION_FLOW, actionStatusLabel, actionPlans, type ActionStatus, type AgentAction } from "@/components/dashboard/data";
-import { Card, PageHeader, Micro, Tag, Segmented } from "@/components/dashboard/ui";
+import { Card, PageHeader, Micro, Tag, Segmented, EmptyState } from "@/components/dashboard/ui";
+import { CountUp } from "@/components/dashboard/count-up";
 import { Modal } from "@/components/dashboard/modal";
 import { ActionPlanBody } from "@/components/dashboard/action-plan";
 import { InfoTip } from "@/components/dashboard/info-tip";
@@ -53,6 +54,8 @@ const autonomyOptions: { value: "ask" | "auto"; label: string }[] = [
 
 const order: Record<ActionStatus, number> = { suggested: 0, running: 1, approved: 2, completed: 3 };
 
+const rise = (i: number) => ({ "--i": i } as CSSProperties);
+
 export function ActionsClient({ initialActions, showHeader = true }: { initialActions: ActionWithPlan[]; showHeader?: boolean }) {
   const t = useT();
   const [actions, setActions] = useState<ActionWithPlan[]>(initialActions);
@@ -91,30 +94,36 @@ export function ActionsClient({ initialActions, showHeader = true }: { initialAc
     });
   };
 
+  // On the actions page this renders below the header/console/intro (indices
+  // 0–2), so its own sections continue the page's dash-rise sequence.
+  const base = showHeader ? 1 : 3;
+
   return (
-    <div className="animate-stage-in space-y-3">
+    <div className="space-y-3">
       {showHeader && (
-        <PageHeader
-          eyebrow={t("AI action center")}
-          title={t("The dashboard does the work")}
-        />
+        <div className="dash-rise" style={rise(0)}>
+          <PageHeader
+            eyebrow={t("AI action center")}
+            title={t("The dashboard does the work")}
+          />
+        </div>
       )}
 
       {error && (
-        <div className="rounded-none border border-[rgba(226,75,74,0.4)] bg-[rgba(226,75,74,0.08)] px-4 py-3 text-[13px] text-ink">
+        <div className="chip-in rounded-none border border-[rgba(254,81,0,0.35)] bg-orange-soft px-4 py-3 text-[13px] text-ink" style={{ "--reveal-delay": "0ms" } as CSSProperties}>
           {t("Couldn’t save that change —")} {error}. {t("Please try again.")}
         </div>
       )}
 
       {/* Status filter */}
-      <div className="no-scrollbar flex gap-1.5 overflow-x-auto">
+      <div className="dash-rise no-scrollbar flex gap-1.5 overflow-x-auto" style={rise(base)}>
         {filters.map((f) => {
           const active = f.value === filter;
           return (
             <button
               key={f.value}
               onClick={() => setFilter(f.value)}
-              className={`shrink-0 cursor-pointer rounded-full border px-3.5 py-1.5 text-[12.5px] transition-colors ${
+              className={`dash-press shrink-0 cursor-pointer rounded-full border px-3.5 py-1.5 text-[12.5px] transition-colors ${
                 active ? "border-edge-strong bg-raise-strong text-ink" : "border-edge text-ink-dim hover:text-ink"
               }`}
             >
@@ -125,18 +134,35 @@ export function ActionsClient({ initialActions, showHeader = true }: { initialAc
       </div>
 
       {/* Action list */}
-      <div className="space-y-4">
+      <div className="dash-rise space-y-4" style={rise(base + 1)}>
         {list.length === 0 ? (
-          <Card>
-            <p className="text-center text-[13px] text-ink-dim">{t("No actions in this stage.")}</p>
-          </Card>
+          filter === "all" ? (
+            <EmptyState
+              label={t("All clear")}
+              title={t("Every suggested action is handled")}
+              body={t("New findings from your agents will land here.")}
+            />
+          ) : (
+            <EmptyState
+              label={t("Pipeline")}
+              title={t("Nothing in this stage")}
+              action={
+                <button
+                  onClick={() => setFilter("all")}
+                  className="dash-press cursor-pointer rounded-full border border-edge-strong px-3.5 py-1.5 text-[12.5px] text-ink transition-colors hover:bg-raise"
+                >
+                  {t("Show all actions")}
+                </button>
+              }
+            />
+          )
         ) : (
           list.map((a) => <ActionCard key={a.id} action={a} onApprove={() => approve(a.id)} onDismiss={() => dismiss(a.id)} />)
         )}
       </div>
 
       {/* Pipeline summary */}
-      <section>
+      <section className="dash-rise pt-5" style={rise(base + 2)}>
         <div className="mb-3 flex items-center gap-1.5">
           <Micro>{t("Pipeline · most urgent first")}</Micro>
           <InfoTip text={t("Every action moves left to right: the AI suggests it, you approve, the agent runs it, then it completes with a result. The list above is ordered by what needs you most.")} />
@@ -148,8 +174,8 @@ export function ActionsClient({ initialActions, showHeader = true }: { initialAc
                 <Micro>{t(actionStatusLabel[s])}</Micro>
                 <span className="font-mono text-[10px] text-ink-dimmer">{i + 1}/4</span>
               </div>
-              <div className="mt-2.5 text-[24px] font-bold leading-none tracking-[-0.02em]" style={{ color: s === "suggested" && count(s) > 0 ? "#fe5100" : undefined }}>
-                {count(s)}
+              <div className={`mt-2.5 text-[24px] font-bold leading-none tracking-[-0.02em] tabular-nums ${s === "suggested" && count(s) > 0 ? "text-orange" : ""}`}>
+                <CountUp value={count(s)} format="int" />
               </div>
               <p className="mt-2 text-[11px] leading-[1.4] text-ink-dimmer">{t(stageHelp[s])}</p>
             </div>
@@ -158,7 +184,7 @@ export function ActionsClient({ initialActions, showHeader = true }: { initialAc
       </section>
 
       {/* Agent management */}
-      <section>
+      <section className="dash-rise pt-5" style={rise(base + 3)}>
         <div className="mb-3 flex items-center gap-1.5">
           <Micro>{t("Your agents")}</Micro>
           <InfoTip text={t("Turn each agent on or off, and choose whether it asks before acting or runs automatically. Paused agents stop suggesting new actions.")} />
@@ -183,8 +209,10 @@ export function ActionsClient({ initialActions, showHeader = true }: { initialAc
                   />
                   <button
                     onClick={() => setAgents((p) => ({ ...p, [a.key]: { ...p[a.key], active: !p[a.key].active } }))}
-                    className={`w-[78px] cursor-pointer rounded-full border px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] transition-colors ${
-                      st.active ? "border-[rgba(70,209,138,0.3)] text-[var(--color-good)]" : "border-edge text-ink-dim hover:text-ink"
+                    className={`dash-press w-[78px] cursor-pointer rounded-full border px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] transition-colors ${
+                      st.active
+                        ? "border-[color-mix(in_srgb,var(--color-good)_35%,transparent)] text-[var(--color-good)] hover:bg-raise"
+                        : "border-edge text-ink-dim hover:text-ink"
                     }`}
                   >
                     {st.active ? t("Active") : t("Paused")}
@@ -219,15 +247,23 @@ function ActionCard({ action: a, onApprove, onDismiss }: { action: ActionWithPla
           </div>
           <h2 className="mt-2 text-[16px] font-medium tracking-[-0.01em] text-ink">{a.title}</h2>
         </div>
-        <Tag tone={statusTone[a.status]}>{t(actionStatusLabel[a.status])}</Tag>
+        {/* Keyed by status so the chip settles in once whenever the state advances. */}
+        <span key={a.status} className="chip-in inline-flex" style={{ "--reveal-delay": "0ms" } as CSSProperties}>
+          <Tag tone={statusTone[a.status]}>{t(actionStatusLabel[a.status])}</Tag>
+        </span>
       </div>
 
       <p className="text-[13.5px] leading-[1.55] text-ink-dim">{a.detail}</p>
 
-      {/* Lifecycle progress */}
+      {/* Lifecycle progress — filled segments draw in; a newly earned segment
+          remounts (key includes its filled state) and fills on approve. */}
       <div className="flex items-center gap-1.5">
         {ACTION_FLOW.map((s, i) => (
-          <span key={s} className={`h-1 flex-1 rounded-full ${i <= idx ? "bg-orange" : "bg-raise-strong"}`} />
+          <span
+            key={`${s}-${i <= idx}`}
+            className={`h-1 flex-1 rounded-full ${i <= idx ? "meter-fill bg-orange" : "bg-raise-strong"}`}
+            style={{ "--reveal-delay": `${i * 80}ms` } as CSSProperties}
+          />
         ))}
       </div>
       <div className="flex items-center justify-between gap-3">
@@ -239,7 +275,14 @@ function ActionCard({ action: a, onApprove, onDismiss }: { action: ActionWithPla
       </div>
 
       {a.result && (
-        <div className="flex items-center gap-2 rounded-none border border-[rgba(70,209,138,0.3)] bg-raise px-3.5 py-2.5">
+        // The payoff strip — a quiet good-tint settle, theme-aware via color-mix.
+        <div
+          className="chip-in flex items-center gap-2 rounded-none border px-3.5 py-2.5"
+          style={{
+            borderColor: "color-mix(in srgb, var(--color-good) 35%, transparent)",
+            background: "color-mix(in srgb, var(--color-good) 6%, transparent)",
+          }}
+        >
           <span className="size-1.5 rounded-full bg-[var(--color-good)]" />
           <span className="text-[12.5px] text-ink">{a.result}</span>
         </div>
@@ -248,15 +291,15 @@ function ActionCard({ action: a, onApprove, onDismiss }: { action: ActionWithPla
       <div className="flex flex-wrap items-center gap-2">
         {isSuggested ? (
           <>
-            <button onClick={() => setOpen(true)} className="cursor-pointer rounded-lg bg-orange px-4 py-2 text-[13px] font-medium text-white transition hover:brightness-110">
+            <button onClick={() => setOpen(true)} className="dash-press cursor-pointer rounded-lg bg-orange px-4 py-2 text-[13px] font-medium text-white transition hover:brightness-110">
               {t("Review & approve")}
             </button>
-            <button onClick={onDismiss} className="cursor-pointer rounded-lg border border-edge-strong px-4 py-2 text-[13px] text-ink transition-colors hover:bg-raise">
+            <button onClick={onDismiss} className="dash-press cursor-pointer rounded-lg border border-edge-strong px-4 py-2 text-[13px] text-ink transition-colors hover:bg-raise">
               {t("Dismiss")}
             </button>
           </>
         ) : (
-          <button onClick={() => setOpen(true)} className="cursor-pointer rounded-lg border border-edge-strong px-4 py-2 text-[13px] text-ink transition-colors hover:bg-raise">
+          <button onClick={() => setOpen(true)} className="dash-press cursor-pointer rounded-lg border border-edge-strong px-4 py-2 text-[13px] text-ink transition-colors hover:bg-raise">
             {t("View plan")}
           </button>
         )}
@@ -275,7 +318,7 @@ function ActionCard({ action: a, onApprove, onDismiss }: { action: ActionWithPla
                   onApprove();
                   setOpen(false);
                 }}
-                className="flex-1 cursor-pointer rounded-lg bg-orange px-4 py-2.5 text-[13px] font-medium text-white transition hover:brightness-110"
+                className="dash-press flex-1 cursor-pointer rounded-lg bg-orange px-4 py-2.5 text-[13px] font-medium text-white transition hover:brightness-110"
               >
                 {t("Approve & start")}
               </button>
@@ -284,7 +327,7 @@ function ActionCard({ action: a, onApprove, onDismiss }: { action: ActionWithPla
                   onDismiss();
                   setOpen(false);
                 }}
-                className="cursor-pointer rounded-lg border border-edge-strong px-4 py-2.5 text-[13px] text-ink transition-colors hover:bg-raise"
+                className="dash-press cursor-pointer rounded-lg border border-edge-strong px-4 py-2.5 text-[13px] text-ink transition-colors hover:bg-raise"
               >
                 {t("Dismiss")}
               </button>

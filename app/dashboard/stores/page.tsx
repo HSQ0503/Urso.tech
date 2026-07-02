@@ -19,6 +19,10 @@ import { StoreScoreboard } from "@/components/dashboard/store-scoreboard";
 import { AskAi } from "@/components/dashboard/ask-ai";
 import { ChartInfo } from "@/components/dashboard/chart-info";
 import { getI18n } from "@/lib/i18n.server";
+import Link from "next/link";
+import type { CSSProperties } from "react";
+
+const rise = (i: number) => ({ "--i": i } as CSSProperties);
 
 // Live FranPOS columns only — No-show, Calls missed, and Rating rejoin the
 // table when the booking feed, Twilio, and GBP go live (their values today
@@ -44,61 +48,76 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
       .sort((a, b) => sel(b) - sel(a))
       .map((r) => ({ name: r.s.name.replace("Village", "").trim(), value: sel(r), highlight: scope === r.s.id }));
 
+  const monthQ = sp.month ? `&month=${sp.month}` : "";
+
   return (
-    <div className="animate-stage-in space-y-12">
-      <PageHeader
-        eyebrow={`${t("All locations")} · ${period}`}
-        title={t("Store comparison")}
-      />
+    <div className="space-y-12">
+      <div className="dash-rise" style={rise(0)}>
+        <PageHeader
+          eyebrow={`${t("All locations")} · ${period}`}
+          title={t("Store comparison")}
+        />
+      </div>
 
       {/* Scoreboard */}
-      <StoreScoreboard rows={scores} highlightId={scope === "all" ? null : scope} variant="owner" />
+      <div className="dash-rise" style={rise(1)}>
+        <StoreScoreboard rows={scores} highlightId={scope === "all" ? null : scope} variant="owner" />
+      </div>
 
       {/* Comparison table */}
-      <Card pad={false}>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[860px] border-collapse text-[13.5px]">
-            <thead>
-              <tr className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-dimmer">
-                {COLS.map((h) => (
-                  <th key={h} className={`px-5 py-3 font-normal ${h === "Location" ? "text-left" : "text-right"}`}>{t(h)}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map(({ s, m }) => {
-                const sel = scope === s.id;
-                return (
-                  <tr
-                    key={s.id}
-                    className={`border-t border-edge transition-colors hover:bg-raise ${sel ? "bg-raise-strong" : ""}`}
-                  >
-                    <td className="relative px-5 py-3.5">
-                      {sel && <span className="absolute left-0 top-1/2 h-5 w-[2.5px] -translate-y-1/2 rounded-full bg-orange" />}
-                      <span className="text-ink">{s.name}</span>
-                      <Micro className="mt-0.5">{s.tier}</Micro>
-                    </td>
-                    <td className="px-5 py-3.5 text-right font-mono text-ink">{fmtMoney(m.revenue)}</td>
-                    <td className="px-5 py-3.5 text-right font-mono text-ink-dim">{m.bookings.toLocaleString()}</td>
-                    <td className="px-5 py-3.5 text-right font-mono text-ink-dim">{fmtMoney(m.avgTicket)}</td>
-                    <td className="px-5 py-3.5 text-right font-mono text-ink-dim">{pct(m.groomingShare)}</td>
-                    <td className="px-5 py-3.5 text-right">
-                      <div className="ml-auto flex w-[104px] items-center gap-2">
-                        <Meter value={m.rebook} />
-                        <span className="font-mono text-ink-dim">{pct(m.rebook)}</span>
-                      </div>
-                    </td>
-                    <td className="px-5 py-3.5 text-right font-mono" style={{ color: m.attach < 0.15 ? "#fe5100" : "var(--color-ink-dim)" }}>{pct(m.attach)}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </Card>
+      <section className="dash-rise" style={rise(2)}>
+        <Card pad={false}>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[860px] border-collapse text-[13.5px]">
+              <thead>
+                <tr className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-dimmer">
+                  {COLS.map((h) => (
+                    <th key={h} className={`px-5 py-3 font-normal ${h === "Location" ? "text-left" : "text-right"}`}>{t(h)}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map(({ s, m }, i) => {
+                  const sel = scope === s.id;
+                  return (
+                    <tr
+                      key={s.id}
+                      className={`relative border-t border-edge transition-colors hover:bg-raise ${sel ? "bg-raise-strong" : ""}`}
+                    >
+                      <td className="px-5 py-3.5">
+                        {sel && <span className="absolute left-0 top-1/2 h-5 w-[2.5px] -translate-y-1/2 rounded-full bg-orange" />}
+                        {/* Stretched link — the row's hover promises a click, so the click scopes the page. */}
+                        <Link
+                          href={`/dashboard/stores?store=${sel ? "all" : s.id}${monthQ}`}
+                          scroll={false}
+                          aria-label={s.name}
+                          className="absolute inset-0"
+                        />
+                        <span className="text-ink">{s.name}</span>
+                        <Micro className="mt-0.5">{s.tier}</Micro>
+                      </td>
+                      <td className="px-5 py-3.5 text-right font-mono text-ink">{fmtMoney(m.revenue)}</td>
+                      <td className="px-5 py-3.5 text-right font-mono text-ink-dim">{m.bookings.toLocaleString()}</td>
+                      <td className="px-5 py-3.5 text-right font-mono text-ink-dim">{fmtMoney(m.avgTicket)}</td>
+                      <td className="px-5 py-3.5 text-right font-mono text-ink-dim">{pct(m.groomingShare)}</td>
+                      <td className="px-5 py-3.5 text-right">
+                        <div className="ml-auto flex w-[104px] items-center gap-2">
+                          <Meter value={m.rebook} delay={120 + i * 50} />
+                          <span className="font-mono text-ink-dim">{pct(m.rebook)}</span>
+                        </div>
+                      </td>
+                      <td className="px-5 py-3.5 text-right font-mono" style={{ color: m.attach < 0.15 ? "#fe5100" : "var(--color-ink-dim)" }}>{pct(m.attach)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      </section>
 
       {/* Ranked comparisons */}
-      <section className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+      <section className="dash-rise grid grid-cols-1 gap-3 lg:grid-cols-3" style={rise(3)}>
         <Card>
           <div className="flex items-center gap-1.5">
             <Micro>{t("Revenue")}</Micro>
@@ -140,7 +159,7 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
         </Card>
       </section>
 
-      <p className="mt-3 text-[13px] text-ink-dim">
+      <p className="dash-rise mt-3 text-[13px] text-ink-dim" style={rise(4)}>
         {scope === "all"
           ? t("Return rate and retail attach are the two levers every store controls today — the ranked bars show where coaching pays off first. Call capture joins the comparison once tracking is live.")
           : `${t("Showing")} ${scopeLabel(scope)} ${t("highlighted against the other locations.")}`}

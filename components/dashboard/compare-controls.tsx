@@ -192,7 +192,7 @@ export function CompareControls({ mode, preset, metric, a, bs, minDate, maxDate 
                       <button
                         onClick={() => setDraftBs(draftBs.filter((_, j) => j !== i))}
                         aria-label={t("Remove this period")}
-                        className="rounded-sm border border-edge px-2 py-1.5 text-[12px] text-ink-dim transition-colors hover:border-edge-strong hover:text-ink"
+                        className="dash-press cursor-pointer rounded-sm border border-edge px-2 py-1.5 text-[12px] text-ink-dim transition-colors hover:border-edge-strong hover:text-ink"
                       >
                         ×
                       </button>
@@ -213,7 +213,7 @@ export function CompareControls({ mode, preset, metric, a, bs, minDate, maxDate 
                 <button
                   onClick={() => applyRanges(draftA, draftBs)}
                   disabled={!dirty}
-                  className={`rounded-sm px-4 py-2 text-[13px] font-medium transition ${
+                  className={`dash-press rounded-sm px-4 py-2 text-[13px] font-medium transition ${
                     dirty ? "cursor-pointer bg-orange text-[#070707] hover:brightness-110" : "cursor-default border border-edge text-ink-dimmer"
                   }`}
                 >
@@ -222,7 +222,7 @@ export function CompareControls({ mode, preset, metric, a, bs, minDate, maxDate 
                 {draftBs.length < MAX_BASELINES && (
                   <button
                     onClick={() => setDraftBs([...draftBs, draftBs[draftBs.length - 1]])}
-                    className="cursor-pointer rounded-sm border border-edge px-3 py-2 text-[12.5px] text-ink-dim transition-colors hover:border-edge-strong hover:text-ink"
+                    className="dash-press cursor-pointer rounded-sm border border-edge px-3 py-2 text-[12.5px] text-ink-dim transition-colors hover:border-edge-strong hover:text-ink"
                   >
                     + {t("Add another period")}
                   </button>
@@ -275,7 +275,7 @@ function Chip({ active, onClick, children }: { active: boolean; onClick: () => v
   return (
     <button
       onClick={onClick}
-      className={`cursor-pointer rounded-sm border px-3 py-1.5 text-[12.5px] transition-colors ${
+      className={`dash-press cursor-pointer rounded-sm border px-3 py-1.5 text-[12.5px] transition-colors ${
         active
           ? "border-[rgba(254,81,0,0.45)] bg-orange-soft text-orange"
           : "border-edge text-ink-dim hover:border-edge-strong hover:text-ink"
@@ -310,7 +310,7 @@ function DateInput({ value, min, max, onChange }: { value: string; min: string; 
       min={min}
       max={max}
       onChange={(e) => e.target.value && onChange(e.target.value)}
-      className="rounded-sm border border-edge bg-transparent px-2.5 py-1.5 font-mono text-[12.5px] text-ink focus:border-orange/60 focus:outline-none"
+      className="rounded-sm border border-edge bg-transparent px-2.5 py-1.5 font-mono text-[12.5px] text-ink focus:border-orange/60"
     />
   );
 }

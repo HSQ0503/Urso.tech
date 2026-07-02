@@ -16,6 +16,7 @@ import type { Role } from "@/lib/auth";
 import type { Locale } from "@/lib/i18n";
 import { signOut } from "@/app/login/actions";
 import { Modal } from "./modal";
+import { CountUp } from "./count-up";
 import { ThemeToggle } from "./theme-toggle";
 import { LangToggle } from "./lang-toggle";
 import { LocaleProvider, useT } from "./locale-provider";
@@ -159,9 +160,12 @@ function ShellChrome({ qs, role, storeId, clientName, userName, email, streak, m
       >
         <Link
           href={withQs("/dashboard")}
-          className="group flex items-center gap-3 rounded-none px-1 outline-none focus-visible:ring-2 focus-visible:ring-orange/50"
+          className="group flex items-center gap-3 rounded-none px-1 outline-none transition-colors hover:bg-raise focus-visible:ring-2 focus-visible:ring-orange/50"
         >
-          <span className="grid size-9 shrink-0 place-items-center rounded-none border border-[rgba(254,81,0,0.25)] bg-orange-soft font-mono text-[12px] font-medium text-orange shadow-[inset_0_1px_0_0_rgba(255,255,255,0.14)]">
+          <span
+            className="grid size-9 shrink-0 place-items-center rounded-none border border-[rgba(254,81,0,0.25)] bg-orange-soft font-mono text-[12px] font-medium text-orange transition-colors group-hover:border-[rgba(254,81,0,0.45)]"
+            style={{ boxShadow: "var(--card-highlight)" }}
+          >
             {orgInitials}
           </span>
           <span className="text-[15px] font-semibold leading-[1.15] tracking-[-0.01em] text-ink">{clientName}</span>
@@ -254,14 +258,14 @@ function ShellChrome({ qs, role, storeId, clientName, userName, email, streak, m
               <Link
                 key={n.href}
                 href={withQs(n.href)}
-                className={`shrink-0 rounded-none px-3 py-1.5 text-[13px] transition-colors ${active ? "bg-orange-soft text-ink" : "text-ink-dim hover:text-ink"}`}
+                className={`shrink-0 rounded-none px-3 py-1.5 text-[13px] transition-colors active:bg-raise ${active ? "bg-orange-soft text-ink" : "text-ink-dim hover:text-ink"}`}
               >
                 {t(n.label)}
               </Link>
             );
           })}
           <form action={signOut} className="ml-auto shrink-0">
-            <button type="submit" className="cursor-pointer rounded-none px-3 py-1.5 font-mono text-[10.5px] uppercase tracking-[0.1em] text-ink-dimmer">
+            <button type="submit" className="cursor-pointer rounded-none px-3 py-1.5 font-mono text-[10.5px] uppercase tracking-[0.1em] text-ink-dimmer transition-colors hover:text-ink active:bg-raise">
               {t("Sign out")}
             </button>
           </form>
@@ -284,7 +288,7 @@ function ShellChrome({ qs, role, storeId, clientName, userName, email, streak, m
             <AccountRow k={t("Client")} v={clientName} />
             {lockedStore && <AccountRow k={t("Store")} v={scopeLabel(lockedStore)} />}
             <AccountRow k={t("Member since")} v={memberSince} />
-            {streak > 0 && <AccountRow k={t("Login streak")} v={t("{n} days", { n: streak })} />}
+            {streak > 0 && <AccountRow k={t("Login streak")} v={<StreakDays streak={streak} />} />}
           </dl>
           <p className="text-[11.5px] leading-[1.5] text-ink-dimmer">
             {t("Pilot environment — profile editing and password changes are handled by Urso for now.")}
@@ -292,7 +296,7 @@ function ShellChrome({ qs, role, storeId, clientName, userName, email, streak, m
           <form action={signOut}>
             <button
               type="submit"
-              className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-none border border-edge-strong py-2.5 text-[13px] text-ink transition-colors hover:bg-raise"
+              className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-none border border-edge-strong py-2.5 text-[13px] text-ink transition-colors hover:bg-raise active:bg-raise-strong"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M15 4h3a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-3" /><path d="M10 17l-5-5 5-5" /><path d="M5 12h11" /></svg>
               {t("Sign out")}
@@ -304,12 +308,27 @@ function ShellChrome({ qs, role, storeId, clientName, userName, email, streak, m
   );
 }
 
-function AccountRow({ k, v }: { k: string; v: string }) {
+function AccountRow({ k, v }: { k: string; v: ReactNode }) {
   return (
     <div className="flex items-center justify-between bg-cell px-4 py-3 text-[13px]">
       <span className="text-ink-dim">{k}</span>
       <span className="font-mono text-ink">{v}</span>
     </div>
+  );
+}
+
+// The one earned stat in the shell — it ticks up on modal open and earns the
+// win hairline. Splitting the template on {n} keeps both locales' "days" text.
+function StreakDays({ streak }: { streak: number }) {
+  const t = useT();
+  const [pre, post] = t("{n} days").split("{n}");
+  return (
+    <span className="relative inline-block">
+      {pre}
+      <CountUp value={streak} format="int" className="tabular-nums" />
+      {post}
+      <span className="dash-draw absolute -bottom-0.5 left-0 h-px w-full bg-orange" aria-hidden />
+    </span>
   );
 }
 
@@ -385,7 +404,7 @@ function FilterSelect<T extends string>({
   const current = options.find((o) => o.value === value) ?? options[0];
 
   return (
-    <div className="relative">
+    <div className="relative" onKeyDown={(e) => { if (e.key === "Escape") setOpen(false); }}>
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
@@ -422,7 +441,8 @@ function FilterSelect<T extends string>({
           <button type="button" aria-label="Close" className="fixed inset-0 z-30 cursor-default" onClick={() => setOpen(false)} />
           <div
             role="listbox"
-            className="absolute right-0 z-40 mt-2 max-h-[320px] w-[200px] overflow-y-auto rounded-none border border-edge bg-surface p-1 shadow-[0_18px_40px_-16px_rgba(0,0,0,0.8)]"
+            className="tip-in absolute right-0 z-40 mt-2 max-h-[320px] w-[200px] overflow-y-auto rounded-none border border-edge bg-surface p-1"
+            style={{ boxShadow: "var(--pop-shadow)" }}
           >
             {options.map((o) => {
               const sel = o.value === value;
@@ -435,7 +455,7 @@ function FilterSelect<T extends string>({
                     onChange(o.value);
                     setOpen(false);
                   }}
-                  className={`flex w-full items-center justify-between rounded-none px-3 py-2 text-left text-[12.5px] transition-colors ${
+                  className={`flex w-full cursor-pointer items-center justify-between rounded-none px-3 py-2 text-left text-[12.5px] transition-colors ${
                     sel ? "bg-raise-strong text-ink" : "text-ink-dim hover:bg-raise hover:text-ink"
                   }`}
                 >

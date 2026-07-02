@@ -22,6 +22,7 @@ import {
   Micro,
   Tag,
   Delta,
+  EmptyState,
   ProfitWaterfall,
   MoneyTrend,
   CostBars,
@@ -29,10 +30,13 @@ import {
   fmtMoney,
   pct,
 } from "@/components/dashboard/ui";
+import { CountUp, type CountFormat } from "@/components/dashboard/count-up";
 import { AskAi } from "@/components/dashboard/ask-ai";
 import { getI18n } from "@/lib/i18n.server";
+import Link from "next/link";
+import type { CSSProperties } from "react";
 
-const ORANGE = "#fe5100";
+const rise = (i: number) => ({ "--i": i } as CSSProperties);
 
 export default async function MoneyPage({ searchParams }: { searchParams: Promise<{ store?: string; month?: string }> }) {
   const sp = await searchParams;
@@ -58,15 +62,17 @@ export default async function MoneyPage({ searchParams }: { searchParams: Promis
   const openSelected = overview.openMonth && /^\d{4}-\d{2}$/.test(month) && month === overview.openMonth;
 
   return (
-    <div className="animate-stage-in space-y-3">
-      <PageHeader
-        eyebrow={`${t("Money")} · ${scopeLabel(scope)} · ${period}`}
-        title={t("Profit & margins")}
-        period
-      />
+    <div className="space-y-3">
+      <div className="dash-rise" style={rise(0)}>
+        <PageHeader
+          eyebrow={`${t("Money")} · ${scopeLabel(scope)} · ${period}`}
+          title={t("Profit & margins")}
+          period
+        />
+      </div>
 
       {/* Honesty notices */}
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="dash-rise flex flex-wrap items-center gap-2" style={rise(1)}>
         <Tag tone="muted">{t("QuickBooks · accrual")}</Tag>
         {openSelected && <Tag tone="warn">{t("Books not closed — provisional")}</Tag>}
         {!openSelected && overview.openMonth && <Tag tone="muted">{t("Current month excluded (books open)")}</Tag>}
@@ -74,32 +80,48 @@ export default async function MoneyPage({ searchParams }: { searchParams: Promis
       </div>
 
       {!hasData ? (
-        <Card>
-          <p className="py-8 text-center text-[13.5px] text-ink-dim">{t("No QuickBooks data for this period.")}</p>
-        </Card>
+        <div className="dash-rise" style={rise(2)}>
+          <EmptyState
+            label={`${t("Money")} · ${period}`}
+            title={t("No QuickBooks data for this period.")}
+            body={month !== "all" ? t("Books for this month may not be closed yet — the 12-month view covers every closed month.") : undefined}
+            action={
+              month !== "all" ? (
+                <Link
+                  href={`/dashboard/money?month=all${sp.store ? `&store=${sp.store}` : ""}`}
+                  className="dash-pill inline-flex items-center rounded-full px-3.5 py-1.5 font-mono text-[11px] uppercase tracking-[0.12em] text-ink-dim transition-colors hover:text-ink"
+                >
+                  {t("View last 12 months")}
+                </Link>
+              ) : undefined
+            }
+          />
+        </div>
       ) : (
         <>
           {/* KPI strip */}
-          <section className="grid grid-cols-2 gap-px overflow-hidden rounded-none border border-edge bg-edge md:grid-cols-3 xl:grid-cols-6">
-            <Kpi label={t("Revenue")} value={fmtMoney(overview.revenue)} delta={deltas.revenue} />
-            <Kpi label={t("Gross margin")} value={pct(overview.grossMargin)} />
+          <section className="dash-rise grid grid-cols-2 gap-px overflow-hidden rounded-none border border-edge bg-edge md:grid-cols-3 xl:grid-cols-6" style={rise(2)}>
+            <Kpi label={t("Revenue")} value={overview.revenue} format="money" delta={deltas.revenue} />
+            <Kpi label={t("Gross margin")} value={overview.grossMargin} format="pct" />
             <Kpi
               label={t("Net profit")}
-              value={fmtMoney(overview.netIncome)}
+              value={overview.netIncome}
+              format="money"
               delta={deltas.netIncome}
               tone={overview.netIncome >= 0 ? "good" : "bad"}
             />
             <Kpi
               label={t("Net margin")}
-              value={pct(overview.netMargin)}
+              value={overview.netMargin}
+              format="pct"
               sub={deltas.netMargin != null ? `${deltas.netMargin >= 0 ? "+" : "−"}${Math.abs(deltas.netMargin * 100).toFixed(1)} ${t("pts")}` : undefined}
             />
-            <Kpi label={t("Labor ratio")} value={pct(overview.laborRatio)} sub={t("payroll ÷ revenue")} />
-            <Kpi label={t("Profit / groom")} value={fmtMoney(ppb.netPerBooking)} sub={t("net ÷ bookings")} />
+            <Kpi label={t("Labor ratio")} value={overview.laborRatio} format="pct" sub={t("payroll ÷ revenue")} />
+            <Kpi label={t("Profit / groom")} value={ppb.netPerBooking} format="money" sub={t("net ÷ bookings")} />
           </section>
 
           {/* Money trend with Revenue / Profit / Margin toggle */}
-          <section>
+          <section className="dash-rise" style={rise(3)}>
             <Card>
               <div className="mb-1 flex items-center gap-1.5">
                 <Micro>{t("Trend · all closed months")}</Micro>
@@ -115,7 +137,7 @@ export default async function MoneyPage({ searchParams }: { searchParams: Promis
           </section>
 
           {/* Waterfall + cost-as-%-of-revenue */}
-          <section className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+          <section className="dash-rise grid grid-cols-1 gap-3 lg:grid-cols-2" style={rise(4)}>
             <Card>
               <div className="mb-1 flex items-center gap-1.5">
                 <Micro>{t("Where the money goes")}</Micro>
@@ -136,7 +158,7 @@ export default async function MoneyPage({ searchParams }: { searchParams: Promis
           </section>
 
           {/* Cross-store cost benchmark ⭐ */}
-          <section>
+          <section className="dash-rise" style={rise(5)}>
             <Card>
               <div className="mb-1 flex items-center gap-1.5">
                 <Micro>{t("Cross-store benchmark · cost as % of revenue")}</Micro>
@@ -160,7 +182,7 @@ export default async function MoneyPage({ searchParams }: { searchParams: Promis
           </section>
 
           {/* Owner P&L + per-store contribution */}
-          <section className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+          <section className="dash-rise grid grid-cols-1 gap-3 lg:grid-cols-2" style={rise(6)}>
             <Card>
               <Micro>{scope === "all" ? t("Consolidated P&L") : t("Profit & loss")}</Micro>
               <h2 className="mb-3 text-[17px] font-medium tracking-[-0.01em]">{scope === "all" ? t("All stores, this period") : scopeLabel(scope)}</h2>
@@ -176,23 +198,30 @@ export default async function MoneyPage({ searchParams }: { searchParams: Promis
               <Micro>{t("Net margin by store")}</Micro>
               <h2 className="mb-3 text-[17px] font-medium tracking-[-0.01em]">{t("Who's carrying the profit")}</h2>
               <div className="divide-y divide-edge">
-                {[...consolidated.perStore].sort((a, b) => b.netMargin - a.netMargin).map((s) => (
-                  <div key={s.id} className="flex items-center justify-between py-2.5">
-                    <span className="text-[13.5px] text-ink">{s.name}</span>
+                {[...consolidated.perStore].sort((a, b) => b.netMargin - a.netMargin).map((s, i) => (
+                  <Link
+                    key={s.id}
+                    href={`/dashboard/money?store=${s.id}&month=${month}`}
+                    className="-mx-2 flex items-center justify-between px-2 py-2.5 transition-colors duration-150 hover:bg-raise"
+                  >
+                    <span className="flex items-center gap-2 text-[13.5px] text-ink">
+                      {s.name}
+                      {i === 0 && s.netMargin > 0 && <Tag tone="good">{t("Top")}</Tag>}
+                    </span>
                     <div className="flex items-baseline gap-3">
                       <span className="font-mono text-[12px] text-ink-dim">{fmtMoney(s.netIncome)}</span>
-                      <span className="w-14 text-right font-mono text-[13px] tabular-nums" style={{ color: s.netMargin >= 0 ? "var(--color-good)" : ORANGE }}>
+                      <span className="w-14 text-right font-mono text-[13px] tabular-nums" style={{ color: s.netMargin >= 0 ? "var(--color-good)" : "var(--color-orange)" }}>
                         {pct(s.netMargin)}
                       </span>
                     </div>
-                  </div>
+                  </Link>
                 ))}
               </div>
             </Card>
           </section>
 
           {/* Service-line margin + break-even */}
-          <section className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+          <section className="dash-rise grid grid-cols-1 gap-3 lg:grid-cols-2" style={rise(7)}>
             <Card>
               <div className="mb-1 flex items-center gap-1.5">
                 <Micro>{t("True margin by service line")}</Micro>
@@ -238,12 +267,26 @@ export default async function MoneyPage({ searchParams }: { searchParams: Promis
                 <Stat label={t("Contribution margin")} value={pct(breakeven.contributionMargin)} />
                 <Stat label={t("Fixed costs / mo")} value={fmtMoney(breakeven.fixedMonthly)} />
               </div>
-              <div className="mt-4 border-t border-edge pt-4">
+              <div className="relative mt-4 border-t border-edge pt-4">
+                {/* The page's one win moment — a green hairline draws itself over the divider. */}
+                {breakeven.bookingsToBreakeven != null && breakeven.bookingsToBreakeven <= 0 && (
+                  <div
+                    aria-hidden
+                    className="dash-draw absolute inset-x-0 -top-px h-px"
+                    style={{ background: "color-mix(in srgb, var(--color-good) 55%, transparent)" }}
+                  />
+                )}
                 {breakeven.bookingsToBreakeven == null ? (
                   <p className="text-[13px] text-ink-dim">{t("Costs exceed revenue at every volume this period — fix the cost base before chasing volume.")}</p>
                 ) : breakeven.bookingsToBreakeven <= 0 ? (
                   <p className="text-[13px] text-ink-dim">
-                    {t("Above break-even by")} <span className="font-mono text-[var(--color-good)]">{Math.round(-breakeven.bookingsToBreakeven)}</span> {t("grooms/month of cushion.")}
+                    {t("Above break-even by")}{" "}
+                    <CountUp
+                      value={Math.round(-breakeven.bookingsToBreakeven)}
+                      format="int"
+                      className="font-mono font-semibold tabular-nums text-[var(--color-good)]"
+                    />{" "}
+                    {t("grooms/month of cushion.")}
                   </p>
                 ) : (
                   <p className="text-[13px] text-ink-dim">
@@ -262,13 +305,13 @@ export default async function MoneyPage({ searchParams }: { searchParams: Promis
   );
 }
 
-function Kpi({ label, value, delta, sub, tone }: { label: string; value: string; delta?: number | null; sub?: string; tone?: "good" | "bad" }) {
+function Kpi({ label, value, format, delta, sub, tone }: { label: string; value: number; format: CountFormat; delta?: number | null; sub?: string; tone?: "good" | "bad" }) {
   return (
     <div className="bg-cell p-4">
       <Micro>{label}</Micro>
       <div className="mt-2.5 flex items-baseline gap-2">
-        <div className="text-[22px] font-bold leading-none tracking-[-0.02em]" style={tone ? { color: tone === "good" ? "var(--color-good)" : ORANGE } : undefined}>
-          {value}
+        <div className="text-[22px] font-bold leading-none tracking-[-0.02em] tabular-nums" style={tone ? { color: tone === "good" ? "var(--color-good)" : "var(--color-orange)" } : undefined}>
+          <CountUp value={value} format={format} />
         </div>
         {delta != null && <Delta value={delta} />}
       </div>
@@ -285,7 +328,7 @@ function PnlRow({ label, value, bold, dim, accent, sub }: { label: string; value
         {sub && <span className="text-[11px] text-ink-dimmer">{sub}</span>}
         <span
           className={`tabular-nums ${bold ? "font-semibold" : ""}`}
-          style={accent ? { color: accent === "good" ? "var(--color-good)" : ORANGE } : undefined}
+          style={accent ? { color: accent === "good" ? "var(--color-good)" : "var(--color-orange)" } : undefined}
         >
           {value}
         </span>

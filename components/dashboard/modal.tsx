@@ -4,7 +4,7 @@
 // action-item overview, the AI action workflow, the store scoreboard and the
 // account panel. Matches the dark tooltip/popover surface (#0c0c0c, hairline).
 
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useT } from "@/components/dashboard/locale-provider";
 
@@ -26,6 +26,7 @@ export function Modal({
   maxWidth?: number;
 }) {
   const t = useT();
+  const panelRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -34,6 +35,8 @@ export function Modal({
     document.addEventListener("keydown", onKey);
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    // Move focus into the dialog so keyboard users land inside it, not behind it.
+    panelRef.current?.focus();
     return () => {
       document.removeEventListener("keydown", onKey);
       document.body.style.overflow = prev;
@@ -44,10 +47,12 @@ export function Modal({
 
   return createPortal(
     <div className="theme-scope fixed inset-0 z-[70] flex items-end justify-center sm:items-center" role="dialog" aria-modal="true">
-      <button aria-label={t("Close")} className="absolute inset-0 cursor-default bg-black/70 backdrop-blur-sm" onClick={onClose} />
+      <button aria-label={t("Close")} className="tip-in absolute inset-0 cursor-default bg-black/70 backdrop-blur-sm" onClick={onClose} />
       <div
-        className="no-scrollbar animate-stage-in relative z-10 max-h-[88vh] w-full overflow-y-auto rounded-t-2xl border border-edge bg-surface shadow-[0_24px_64px_-24px_rgba(0,0,0,0.85)] sm:rounded-2xl"
-        style={{ maxWidth }}
+        ref={panelRef}
+        tabIndex={-1}
+        className="no-scrollbar animate-stage-in relative z-10 max-h-[88vh] w-full overflow-y-auto rounded-none border border-edge bg-surface"
+        style={{ maxWidth, boxShadow: "var(--modal-shadow)" }}
       >
         <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-edge bg-surface/95 px-5 py-4 backdrop-blur-md">
           <div className="min-w-0">
@@ -62,7 +67,7 @@ export function Modal({
           <button
             onClick={onClose}
             aria-label={t("Close")}
-            className="grid size-7 shrink-0 place-items-center rounded-lg border border-edge text-ink-dim transition-colors hover:border-edge-strong hover:text-ink"
+            className="dash-press grid size-7 shrink-0 cursor-pointer place-items-center rounded-none border border-edge text-ink-dim transition-colors hover:border-edge-strong hover:text-ink active:bg-raise"
           >
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
           </button>

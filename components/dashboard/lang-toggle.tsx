@@ -37,7 +37,7 @@ export function LangToggle() {
             onClick={() => set(l)}
             aria-pressed={active}
             title={l === "en" ? "English" : "Português"}
-            className={`cursor-pointer rounded-none px-2 py-1 font-mono text-[10.5px] uppercase tracking-[0.1em] transition-colors ${
+            className={`cursor-pointer rounded-none px-2 py-1 font-mono text-[10.5px] uppercase tracking-[0.1em] transition-colors active:bg-raise-strong ${
               active ? "bg-raise-strong text-ink" : "text-ink-dim hover:text-ink"
             }`}
           >

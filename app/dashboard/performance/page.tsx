@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import {
   parseScope,
   parseMonth,
@@ -19,6 +20,7 @@ import {
   Micro,
   Tag,
   Legend,
+  EmptyState,
   AreaChart,
   CallsBars,
   CallsChart,
@@ -30,6 +32,7 @@ import {
   pct,
 } from "@/components/dashboard/ui";
 import { AskAi } from "@/components/dashboard/ask-ai";
+import { CountUp } from "@/components/dashboard/count-up";
 import { ChartInfo } from "@/components/dashboard/chart-info";
 import { getI18n } from "@/lib/i18n.server";
 
@@ -61,14 +64,16 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
   const period = month === "all" ? t("Last 12 months") : monthLabel(month);
 
   return (
-    <div className="animate-stage-in space-y-12">
-      <PageHeader
-        eyebrow={`${t("Diagnostics")} · ${scopeLabel(scope)} · ${period}`}
-        title={t("Performance")}
-      />
+    <div className="space-y-12">
+      <div className="dash-rise">
+        <PageHeader
+          eyebrow={`${t("Diagnostics")} · ${scopeLabel(scope)} · ${period}`}
+          title={t("Performance")}
+        />
+      </div>
 
       {/* Capture */}
-      <section>
+      <section className="dash-rise" style={{ "--i": 1 } as CSSProperties}>
         <SubHead
           eyebrow={`${t("Capture")} · Twilio`}
           title={t("Inbound call handling")}
@@ -88,17 +93,28 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
                   />
                   <ChartInfo id="callsAnsweredMissed" />
                 </div>
-                <div className="mt-1.5 text-[22px] font-bold tracking-[-0.01em]">{cs.total.toLocaleString()} <span className="text-[13px] text-ink-dim">{t("calls")}</span></div>
+                <div className="mt-1.5 text-[22px] font-bold tracking-[-0.01em] tabular-nums"><CountUp value={cs.total} format="int" /> <span className="text-[13px] text-ink-dim">{t("calls")}</span></div>
               </div>
               <div className="text-right">
-                <div className="text-[20px] font-bold text-orange">{pct(cs.missedPct)}</div>
+                {/* A low miss rate is a win, not an alarm — tone follows the threshold. */}
+                <div className={`text-[20px] font-bold tabular-nums ${cs.total > 0 && cs.missedPct <= 0.05 ? "text-[var(--color-good)]" : "text-orange"}`}><CountUp value={cs.missedPct} format="pct" /></div>
                 <Micro>{t("missed")}</Micro>
               </div>
             </div>
-            <CallsBars labels={labels} total={series.callsTotal} missed={series.callsMissed} height={224} />
-            <div className="mt-3">
-              <Legend items={[{ label: t("Answered"), color: "var(--color-series)" }, { label: t("Missed"), color: "#fe5100" }]} />
-            </div>
+            {cs.total === 0 ? (
+              <EmptyState
+                label={t("No call data this period")}
+                title={t("Answered and missed calls will chart here")}
+                body={t("Connect Twilio call tracking to start measuring call capture for this scope.")}
+              />
+            ) : (
+              <>
+                <CallsBars labels={labels} total={series.callsTotal} missed={series.callsMissed} height={224} />
+                <div className="mt-3">
+                  <Legend items={[{ label: t("Answered"), color: "var(--color-series)" }, { label: t("Missed"), color: "var(--color-orange)" }]} />
+                </div>
+              </>
+            )}
           </Card>
 
           <Card className="flex flex-col">
@@ -147,15 +163,24 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
               </div>
             }
           />
-          <CallsChart hourly={hourly.hourly} missedHourly={hourly.missedHourly} startHour={hourly.startHour} closeHour={hourly.closeHour} height={180} />
-          <p className="mt-3 text-[13px] text-ink-dim">
-            {t("Misses cluster in the busy midday desk hours and after closing (shaded). After-hours calls are the clearest case for instant text-back.")}
-          </p>
+          {cs.total === 0 ? (
+            <EmptyState
+              label={t("No call data this period")}
+              title={t("Hour-by-hour call patterns will map here")}
+            />
+          ) : (
+            <>
+              <CallsChart hourly={hourly.hourly} missedHourly={hourly.missedHourly} startHour={hourly.startHour} closeHour={hourly.closeHour} height={180} />
+              <p className="mt-3 text-[13px] text-ink-dim">
+                {t("Misses cluster in the busy midday desk hours and after closing (shaded). After-hours calls are the clearest case for instant text-back.")}
+              </p>
+            </>
+          )}
         </Card>
       </section>
 
       {/* Convert */}
-      <section>
+      <section className="dash-rise" style={{ "--i": 2 } as CSSProperties}>
         <SubHead
           eyebrow={`${t("Convert")} · ${t("Web analytics")} + FranPOS`}
           title={t("Booking conversion")}
@@ -178,11 +203,19 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
                 <div className="mt-1.5 text-[15px] text-ink-dim">{t("From first visit to a booked appointment")}</div>
               </div>
               <div className="text-right">
-                <div className="text-[20px] font-bold">{pct(ws.convRate, 1)}</div>
+                <div className="text-[20px] font-bold tabular-nums"><CountUp value={ws.convRate} format="pct" /></div>
                 <Micro>{t("visit → book")}</Micro>
               </div>
             </div>
-            <ConversionFunnel steps={funnel} />
+            {ws.visits === 0 ? (
+              <EmptyState
+                label={t("No web data this period")}
+                title={t("The booking funnel will build here")}
+                body={t("Connect web analytics to trace visits through to booked appointments.")}
+              />
+            ) : (
+              <ConversionFunnel steps={funnel} />
+            )}
           </Card>
 
           <Card>
@@ -198,23 +231,32 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
                   />
                   <ChartInfo id="webTraffic" />
                 </div>
-                <div className="mt-1.5 text-[22px] font-bold tracking-[-0.01em]">{ws.visits.toLocaleString()} <span className="text-[13px] text-ink-dim">{t("visits")}</span></div>
+                <div className="mt-1.5 text-[22px] font-bold tracking-[-0.01em] tabular-nums"><CountUp value={ws.visits} format="int" /> <span className="text-[13px] text-ink-dim">{t("visits")}</span></div>
               </div>
               <div className="text-right">
-                <div className="text-[20px] font-bold">{ws.bookings.toLocaleString()}</div>
+                <div className="text-[20px] font-bold tabular-nums"><CountUp value={ws.bookings} format="int" /></div>
                 <Micro>{t("bookings")}</Micro>
               </div>
             </div>
-            <TrafficChart labels={labels} visits={series.webVisits} bookings={series.webBookings} height={228} />
-            <div className="mt-3">
-              <Legend items={[{ label: t("Visits"), color: "var(--color-series)" }, { label: t("Became bookings"), color: "#fe5100" }]} />
-            </div>
+            {ws.visits === 0 ? (
+              <EmptyState
+                label={t("No web data this period")}
+                title={t("Traffic and bookings will chart here")}
+              />
+            ) : (
+              <>
+                <TrafficChart labels={labels} visits={series.webVisits} bookings={series.webBookings} height={228} />
+                <div className="mt-3">
+                  <Legend items={[{ label: t("Visits"), color: "var(--color-series)" }, { label: t("Became bookings"), color: "var(--color-orange)" }]} />
+                </div>
+              </>
+            )}
           </Card>
         </div>
       </section>
 
       {/* Money */}
-      <section>
+      <section className="dash-rise" style={{ "--i": 3 } as CSSProperties}>
         <SubHead
           eyebrow={`${t("Money")} · FranPOS`}
           title={t("Revenue and mix")}
@@ -237,7 +279,7 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
                   />
                   <ChartInfo id="revenueTrend" />
                 </div>
-                <div className="mt-1.5 text-[22px] font-bold tracking-[-0.01em]">{fmtMoney(m.revenue)}</div>
+                <div className="mt-1.5 text-[22px] font-bold tracking-[-0.01em] tabular-nums"><CountUp value={m.revenue} format="money" /></div>
               </div>
               <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-dimmer">{period}</span>
             </div>
@@ -261,7 +303,7 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
               <div className="mt-4">
                 <Donut
                   segments={[
-                    { label: t("Both"), value: xs.both, color: "#fe5100" },
+                    { label: t("Both"), value: xs.both, color: "var(--color-orange)" },
                     { label: t("Grooming only"), value: xs.groomingOnly, color: "var(--color-series)" },
                     { label: t("Retail only"), value: xs.retailOnly, color: "var(--color-series-soft)" },
                   ]}
@@ -283,7 +325,8 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
               </div>
               <div>
                 <Micro>{t("Retail attach")}</Micro>
-                <div className="mt-1.5 font-mono text-[16px]" style={{ color: m.attach < 0.25 ? "#fe5100" : undefined }}>{pct(m.attach)}</div>
+                {/* Healthy attach earns the quiet good tone; weak attach keeps the orange flag. */}
+                <div className="mt-1.5 font-mono text-[16px]" style={{ color: m.attach < 0.25 ? "var(--color-orange)" : "var(--color-good)" }}>{pct(m.attach)}</div>
               </div>
             </div>
           </Card>

@@ -8,7 +8,7 @@
 // carries a rolling, distilled memory across them — see lib/ai/memory.ts and
 // /api/ai/threads. The chat itself hits /api/ai/agent with the active threadId.
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { useSearchParams } from "next/navigation";
 import { useChat } from "@ai-sdk/react";
@@ -73,7 +73,7 @@ function ThinkingLabel({ label }: { label: string }) {
 function Thinking() {
   const t = useT();
   return (
-    <div className="flex gap-3">
+    <div className="tip-in flex gap-3">
       <span className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-full border border-edge bg-raise text-orange"><Spark /></span>
       <ThinkingLabel label={t("analyzing")} />
     </div>
@@ -85,7 +85,7 @@ function Message({ role, parts, live = false }: { role: string; parts: { type: s
   if (role === "user") {
     const text = parts.filter((p) => p.type === "text").map((p) => p.text ?? "").join("");
     return (
-      <div className="flex justify-end">
+      <div className="tip-in flex justify-end">
         <div className="max-w-[85%] rounded-none border border-[rgba(254,81,0,0.28)] bg-orange-wash px-3.5 py-2.5 text-[14px] leading-[1.55] text-ink">{text}</div>
       </div>
     );
@@ -93,14 +93,16 @@ function Message({ role, parts, live = false }: { role: string; parts: { type: s
   const tools = Array.from(new Set(parts.filter((p) => p.type.startsWith("tool-")).map((p) => toolLabel(p.type))));
   const text = parts.filter((p) => p.type === "text").map((p) => p.text ?? "").join("");
   return (
-    <div className="flex gap-3">
+    <div className="tip-in flex gap-3">
       <span className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-full border border-edge bg-raise text-orange"><Spark /></span>
       <div className="min-w-0 flex-1 space-y-2">
         {tools.length > 0 && (
           <div className="flex flex-wrap items-center gap-1.5 font-mono text-[9.5px] uppercase tracking-[0.12em] text-ink-dimmer">
             <span className="text-orange">{t("analyzed")}</span>
-            {tools.map((n) => (
-              <span key={n} className="rounded-full border border-edge px-1.5 py-[2px]">{t(n)}</span>
+            {tools.map((n, i) => (
+              // Chips land one beat apart as analyses complete — keyed by name,
+              // so a chip only animates when it first appears.
+              <span key={n} className="chip-in rounded-full border border-edge px-1.5 py-[2px]" style={{ "--reveal-delay": `${i * 60}ms` } as CSSProperties}>{t(n)}</span>
             ))}
           </div>
         )}
@@ -145,7 +147,7 @@ function EmptyState({ firstName, briefHeadline, onPick, busy }: { firstName: str
               key={s}
               onClick={() => onPick(s)}
               disabled={busy}
-              className="group flex items-center justify-between gap-3 rounded-none border border-edge bg-raise px-4 py-3 text-[13.5px] text-ink-dim transition-colors hover:border-[rgba(254,81,0,0.4)] hover:text-ink disabled:opacity-50"
+              className="group flex cursor-pointer items-center justify-between gap-3 rounded-none border border-edge bg-raise px-4 py-3 text-[13.5px] text-ink-dim transition-colors hover:border-[rgba(254,81,0,0.4)] hover:text-ink disabled:opacity-50"
             >
               <span>{t(s)}</span>
               <span className="text-ink-dimmer transition-colors group-hover:text-orange"><Spark /></span>
@@ -194,14 +196,14 @@ function ThreadRow({ thread, active, onOpen, onDelete, onRename }: { thread: Thr
 
   return (
     <div className={`group flex items-center gap-1 rounded-lg pl-2.5 pr-1.5 text-[13px] transition-colors ${active ? "bg-raise text-ink" : "text-ink-dim hover:bg-raise/60 hover:text-ink"}`}>
-      <button onClick={onOpen} onDoubleClick={startEdit} className="min-w-0 flex-1 truncate py-2 text-left" title={`${thread.title}  (${t("double-click to rename")})`}>
+      <button onClick={onOpen} onDoubleClick={startEdit} className="min-w-0 flex-1 cursor-pointer truncate py-2 text-left" title={`${thread.title}  (${t("double-click to rename")})`}>
         {thread.title}
       </button>
       <button
         onClick={onDelete}
         aria-label={t("Delete conversation")}
         title={t("Delete conversation")}
-        className="grid size-6 shrink-0 place-items-center rounded text-ink-dimmer opacity-0 transition-opacity hover:text-orange focus:opacity-100 group-hover:opacity-100"
+        className="grid size-6 shrink-0 cursor-pointer place-items-center rounded text-ink-dimmer opacity-0 transition-opacity hover:text-orange focus:opacity-100 group-hover:opacity-100"
       >
         <TrashIcon />
       </button>
@@ -222,7 +224,7 @@ function ThreadRail({
         <button
           onClick={onNew}
           disabled={busy}
-          className="flex w-full items-center justify-center gap-2 rounded-none border border-[rgba(254,81,0,0.4)] bg-orange-soft px-3 py-2 text-[13px] font-medium text-orange transition-colors hover:bg-[rgba(254,81,0,0.18)] disabled:opacity-50"
+          className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-none border border-[rgba(254,81,0,0.4)] bg-orange-soft px-3 py-2 text-[13px] font-medium text-orange transition-colors hover:bg-[rgba(254,81,0,0.18)] disabled:opacity-50"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" aria-hidden><path d="M12 5v14M5 12h14" /></svg>
           {t("New conversation")}
@@ -230,7 +232,10 @@ function ThreadRail({
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
         {threads.length === 0 ? (
-          <p className="px-2 py-3 text-[12px] leading-[1.5] text-ink-dimmer">{t("No conversations yet. Ask something to start one.")}</p>
+          <div className="px-2 py-3">
+            <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-dimmer">{t("Conversations")}</div>
+            <p className="mt-1.5 text-[12px] leading-[1.5] text-ink-dimmer">{t("No conversations yet. Ask something to start one.")}</p>
+          </div>
         ) : (
           <ul className="space-y-0.5">
             {threads.map((t) => (
@@ -248,10 +253,10 @@ function ThreadRail({
 type ChatApi = ReturnType<typeof useChat>;
 
 function ChatPanel({
-  chat, input, setInput, scopeText, userName, briefHeadline, expanded, onToggleExpand, onToggleRail, onSend,
+  chat, input, setInput, scopeText, userName, briefHeadline, expanded, hydrating, onToggleExpand, onToggleRail, onSend,
 }: {
   chat: ChatApi; input: string; setInput: (v: string) => void; scopeText: string; userName: string;
-  briefHeadline?: string | null; expanded: boolean; onToggleExpand: () => void; onToggleRail: () => void; onSend: (text: string) => void;
+  briefHeadline?: string | null; expanded: boolean; hydrating: boolean; onToggleExpand: () => void; onToggleRail: () => void; onSend: (text: string) => void;
 }) {
   const t = useT();
   const { messages, status, error, stop } = chat;
@@ -281,7 +286,7 @@ function ChatPanel({
             onClick={onToggleRail}
             aria-label={t("Conversations")}
             title={t("Conversations")}
-            className="grid size-8 shrink-0 place-items-center rounded-lg border border-edge text-ink-dim transition-colors hover:border-edge-strong hover:text-ink md:hidden"
+            className="grid size-8 shrink-0 cursor-pointer place-items-center rounded-lg border border-edge text-ink-dim transition-colors hover:border-edge-strong hover:text-ink md:hidden"
           >
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" aria-hidden><path d="M4 6h16M4 12h16M4 18h16" /></svg>
           </button>
@@ -302,7 +307,7 @@ function ChatPanel({
           onClick={onToggleExpand}
           aria-label={expanded ? t("Exit full screen") : t("Full screen")}
           title={expanded ? t("Exit full screen (Esc)") : t("Full screen")}
-          className="grid size-8 shrink-0 place-items-center rounded-lg border border-edge text-ink-dim transition-colors hover:border-edge-strong hover:text-ink"
+          className="grid size-8 shrink-0 cursor-pointer place-items-center rounded-lg border border-edge text-ink-dim transition-colors hover:border-edge-strong hover:text-ink"
         >
           {expanded ? (
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M9 9 4 4M9 4H4v5M15 9l5-5M15 4h5v5M9 15l-5 5M4 15v5h5M15 15l5 5M20 15v5h-5" /></svg>
@@ -315,7 +320,22 @@ function ChatPanel({
       {/* Messages */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-5 md:px-6">
         <div className="mx-auto w-full max-w-[760px]">
-          {messages.length === 0 ? (
+          {hydrating ? (
+            // Loading a persisted thread — ghost message rows, so the greeting
+            // never flashes for returning users before their conversation lands.
+            <div aria-hidden className="space-y-6 py-1">
+              <div className="flex justify-end">
+                <div className="skeleton-shimmer h-10 w-1/2 max-w-[320px] rounded-sm bg-raise" />
+              </div>
+              <div className="flex gap-3">
+                <div className="skeleton-shimmer size-7 shrink-0 rounded-full bg-raise" />
+                <div className="min-w-0 flex-1 space-y-2 pt-1">
+                  <div className="skeleton-shimmer h-3.5 w-4/5 rounded-sm bg-raise" />
+                  <div className="skeleton-shimmer h-3.5 w-3/5 rounded-sm bg-raise" />
+                </div>
+              </div>
+            </div>
+          ) : messages.length === 0 ? (
             <EmptyState firstName={firstName} briefHeadline={briefHeadline} onPick={submit} busy={busy} />
           ) : (
             <div className="space-y-6">
@@ -374,7 +394,7 @@ function ChatPanel({
                 type="button"
                 onClick={() => stop()}
                 aria-label={t("Stop")}
-                className="grid size-9 shrink-0 place-items-center rounded-none border border-edge text-ink-dim transition-colors hover:border-edge-strong hover:text-ink"
+                className="dash-press grid size-9 shrink-0 cursor-pointer place-items-center rounded-none border border-edge text-ink-dim transition-colors hover:border-edge-strong hover:text-ink"
               >
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
               </button>
@@ -383,7 +403,7 @@ function ChatPanel({
                 type="submit"
                 disabled={!input.trim()}
                 aria-label={t("Send")}
-                className="grid size-9 shrink-0 place-items-center rounded-none border border-[rgba(254,81,0,0.4)] bg-orange-soft text-orange transition-colors hover:bg-[rgba(254,81,0,0.18)] disabled:cursor-default disabled:opacity-40"
+                className="dash-press grid size-9 shrink-0 cursor-pointer place-items-center rounded-none border border-[rgba(254,81,0,0.4)] bg-orange-soft text-orange transition-colors hover:bg-[rgba(254,81,0,0.18)] disabled:cursor-default disabled:opacity-40"
               >
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M12 19V5M6 11l6-6 6 6" /></svg>
               </button>
@@ -405,6 +425,9 @@ export function AnalystConsole({ userName, briefHeadline }: { userName: string; 
   const [input, setInput] = useState("");
   const [threads, setThreads] = useState<ThreadSummary[]>([]);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
+  // True while a persisted thread is being fetched (initial load + thread
+  // switches) so the panel shows ghost rows instead of flashing the greeting.
+  const [hydrating, setHydrating] = useState(true);
   const params = useSearchParams();
   const scope = parseScope(params.get("store"));
   const month = parseMonth(params.get("month"));
@@ -443,12 +466,13 @@ export function AnalystConsole({ userName, briefHeadline }: { userName: string; 
       } catch { /* offline / not configured — start fresh */ }
       if (cancelled) return;
       setThreads(list);
-      if (!list.length) return;
+      if (!list.length) { setHydrating(false); return; }
       setActiveThreadId(list[0].id);
       try {
         const r = await fetch(`/api/ai/threads/${list[0].id}`);
         if (r.ok && !cancelled) setMessages((await r.json()).messages ?? []);
       } catch { /* leave empty */ }
+      if (!cancelled) setHydrating(false);
     })();
     return () => { cancelled = true; };
   }, [setMessages]);
@@ -457,11 +481,14 @@ export function AnalystConsole({ userName, briefHeadline }: { userName: string; 
     if (busy) return;
     setActiveThreadId(id);
     setRailOpen(false);
+    setHydrating(true);
     try {
       const r = await fetch(`/api/ai/threads/${id}`);
       setMessages(r.ok ? (await r.json()).messages ?? [] : []);
     } catch {
       setMessages([]);
+    } finally {
+      setHydrating(false);
     }
   }, [busy, setMessages]);
 
@@ -471,6 +498,7 @@ export function AnalystConsole({ userName, briefHeadline }: { userName: string; 
     setMessages([]);
     setInput("");
     setRailOpen(false);
+    setHydrating(false);
   }, [busy, setMessages]);
 
   const deleteThread = useCallback(async (id: string) => {
@@ -564,7 +592,7 @@ export function AnalystConsole({ userName, briefHeadline }: { userName: string; 
             onRename={renameThread}
             busy={busy}
           />
-          <button aria-label={t("Close conversations")} className="flex-1 bg-black/40" onClick={() => setRailOpen(false)} />
+          <button aria-label={t("Close conversations")} className="flex-1 cursor-pointer bg-black/40" onClick={() => setRailOpen(false)} />
         </div>
       )}
       <div className="min-w-0 flex-1">
@@ -576,6 +604,7 @@ export function AnalystConsole({ userName, briefHeadline }: { userName: string; 
           userName={userName}
           briefHeadline={briefHeadline}
           expanded={expanded}
+          hydrating={hydrating}
           onToggleExpand={() => setExpanded((e) => !e)}
           onToggleRail={() => setRailOpen(true)}
           onSend={send}
@@ -588,7 +617,7 @@ export function AnalystConsole({ userName, briefHeadline }: { userName: string; 
     return createPortal(
       <div className="theme-scope fixed inset-0 z-[60] bg-bg">
         <div className="mx-auto flex h-full max-w-[1180px] flex-col p-3 md:p-6">
-          <div className="flex h-full flex-col overflow-hidden rounded-none border border-edge bg-panel shadow-[0_24px_64px_-24px_rgba(0,0,0,0.85)]">{body}</div>
+          <div className="animate-stage-in flex h-full flex-col overflow-hidden rounded-none border border-edge bg-panel shadow-[var(--modal-shadow)]">{body}</div>
         </div>
       </div>,
       document.body,
@@ -596,7 +625,7 @@ export function AnalystConsole({ userName, briefHeadline }: { userName: string; 
   }
 
   return (
-    <div className="h-[72vh] min-h-[560px] overflow-hidden rounded-none border border-edge bg-panel shadow-[0_30px_80px_-40px_rgba(0,0,0,0.7)]">
+    <div className="h-[72vh] min-h-[560px] overflow-hidden rounded-none border border-edge bg-panel shadow-[var(--pop-shadow)]">
       {body}
     </div>
   );

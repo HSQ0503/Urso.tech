@@ -45,6 +45,7 @@ export function AskAi({
   const t = useT();
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
+  const [lastQ, setLastQ] = useState("");
   const params = useSearchParams();
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -57,6 +58,7 @@ export function AskAi({
   const ask = (text: string) => {
     const q = text.trim();
     if (!q || busy) return;
+    setLastQ(q);
     sendMessage(
       { text: q },
       {
@@ -74,7 +76,8 @@ export function AskAi({
   };
 
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
+    const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: reduced ? "auto" : "smooth" });
   }, [messages, status]);
 
   return (
@@ -83,7 +86,7 @@ export function AskAi({
         onClick={() => setOpen(true)}
         title={t(label)}
         aria-label={t(label)}
-        className="inline-grid size-6 shrink-0 cursor-pointer place-items-center rounded-full border border-[rgba(254,81,0,0.35)] bg-orange-soft text-orange transition-colors hover:border-[rgba(254,81,0,0.55)] hover:bg-[rgba(254,81,0,0.18)]"
+        className="dash-press inline-grid size-6 shrink-0 cursor-pointer place-items-center rounded-full border border-[rgba(254,81,0,0.35)] bg-orange-soft text-orange transition-colors hover:border-[rgba(254,81,0,0.55)] hover:bg-[rgba(254,81,0,0.18)] active:bg-[rgba(254,81,0,0.22)]"
       >
         <Spark />
       </button>
@@ -101,7 +104,7 @@ export function AskAi({
                     <button
                       key={s}
                       onClick={() => ask(s)}
-                      className="cursor-pointer rounded-full border border-edge px-3 py-1.5 text-[12.5px] text-ink-dim transition-colors hover:border-[rgba(254,81,0,0.45)] hover:text-ink"
+                      className="dash-pill cursor-pointer rounded-full px-3 py-1.5 text-[12.5px] text-ink-dim hover:text-ink"
                     >
                       {t(s)}
                     </button>
@@ -111,7 +114,7 @@ export function AskAi({
             )}
 
             {messages.map((m) => (
-              <div key={m.id} className={m.role === "user" ? "flex justify-end" : ""}>
+              <div key={m.id} className={m.role === "user" ? "panel-fade-in flex justify-end" : "panel-fade-in"}>
                 {m.role === "user" ? (
                   <div className="max-w-[85%] rounded-none border border-[rgba(254,81,0,0.28)] bg-orange-wash px-3.5 py-2 text-[13.5px] leading-[1.55] text-ink">
                     {m.parts.map((p, i) => (p.type === "text" ? <span key={i}>{p.text}</span> : null))}
@@ -119,7 +122,7 @@ export function AskAi({
                 ) : (
                   <div className="space-y-2">
                     {m.parts.some((p) => p.type.startsWith("tool-")) && (
-                      <div className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-ink-dimmer">
+                      <div className="tip-in flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-ink-dimmer">
                         <Spark /> {t("checked the numbers")}
                       </div>
                     )}
@@ -133,17 +136,28 @@ export function AskAi({
             ))}
 
             {status === "submitted" && (
-              <div className="flex items-center gap-2 text-[12.5px] text-ink-dimmer">
-                <span className="inline-block size-1.5 animate-pulse rounded-full bg-orange" />
+              <div className="tip-in flex items-center gap-2 text-[12.5px] text-ink-dimmer">
+                <span className="inline-block size-1.5 rounded-full bg-orange motion-safe:animate-pulse" />
                 {t("thinking")}…
               </div>
             )}
             {error && (
-              <p className="text-[12.5px] leading-[1.5] text-ink-dim">
-                {error.message.includes("API_KEY")
-                  ? t("The AI key isn't configured yet.")
-                  : error.message.trim() || t("Something went wrong — try asking again.")}
-              </p>
+              <div className="tip-in border-l-2 border-orange pl-3">
+                <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-orange">{t("Connection")}</div>
+                <p className="mt-1 text-[13.5px] leading-[1.5] text-ink">
+                  {error.message.includes("API_KEY")
+                    ? t("The AI key isn't configured yet.")
+                    : error.message.trim() || t("Something went wrong — try asking again.")}
+                </p>
+                {lastQ && (
+                  <button
+                    onClick={() => ask(lastQ)}
+                    className="dash-pill mt-2 cursor-pointer rounded-full px-3 py-1.5 text-[12.5px] text-ink-dim hover:text-ink"
+                  >
+                    {t("Try again")}
+                  </button>
+                )}
+              </div>
             )}
           </div>
 
@@ -163,7 +177,7 @@ export function AskAi({
             <button
               type="submit"
               disabled={busy || !input.trim()}
-              className="inline-grid size-9 shrink-0 cursor-pointer place-items-center rounded-none border border-[rgba(254,81,0,0.35)] bg-orange-soft text-orange transition-colors hover:bg-[rgba(254,81,0,0.18)] disabled:cursor-default disabled:opacity-40"
+              className="dash-press inline-grid size-9 shrink-0 cursor-pointer place-items-center rounded-none border border-[rgba(254,81,0,0.35)] bg-orange-soft text-orange transition-colors hover:bg-[rgba(254,81,0,0.18)] active:bg-[rgba(254,81,0,0.22)] disabled:cursor-default disabled:opacity-40"
               aria-label={t("Send")}
             >
               <Spark />

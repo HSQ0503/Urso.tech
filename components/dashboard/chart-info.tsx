@@ -24,13 +24,13 @@ export function ChartInfo({ id, align = "left", t = identity }: { id: GuideId; a
         tabIndex={0}
         role="button"
         aria-label={t("How to read this graph")}
-        className="grid size-6 cursor-help select-none place-items-center rounded-full border border-edge-strong font-mono text-[13px] font-medium normal-case leading-none tracking-normal text-ink-dimmer transition-colors hover:border-orange hover:text-orange focus:outline-none focus-visible:border-orange focus-visible:text-orange"
+        className="dash-press grid size-6 cursor-help select-none place-items-center rounded-full border border-edge-strong font-mono text-[13px] font-medium normal-case leading-none tracking-normal text-ink-dimmer transition-colors hover:border-orange hover:text-orange focus:outline-none focus-visible:border-orange focus-visible:text-orange"
       >
         i
       </span>
       <span
         role="tooltip"
-        className={`pointer-events-none absolute bottom-[calc(100%+8px)] z-50 w-[266px] rounded-none border border-edge bg-surface p-3.5 text-left opacity-0 shadow-[0_18px_44px_-16px_rgba(0,0,0,0.85)] transition-opacity duration-150 group-hover/ci:opacity-100 group-focus-within/ci:opacity-100 motion-reduce:transition-none ${ALIGN[align]}`}
+        className={`pointer-events-none absolute bottom-[calc(100%+8px)] z-50 w-[266px] translate-y-1 rounded-none border border-edge bg-surface p-3.5 text-left opacity-0 shadow-[var(--pop-shadow)] transition-[opacity,translate] duration-150 group-hover/ci:translate-y-0 group-hover/ci:opacity-100 group-focus-within/ci:translate-y-0 group-focus-within/ci:opacity-100 motion-reduce:transition-none ${ALIGN[align]}`}
       >
         <span className="block font-mono text-[9px] uppercase tracking-[0.16em] text-ink-dimmer">{t("How to read this")}</span>
         <span className="mt-2 block font-sans text-[12px] font-medium normal-case leading-[1.45] tracking-normal text-ink">{t(g.summary)}</span>

@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import {
   parseScope,
   parseMonth,
@@ -26,13 +27,17 @@ import {
   StackedShareBar,
   HistogramBars,
   RateTrend,
+  EmptyState,
   fmtMoney,
   pct,
 } from "@/components/dashboard/ui";
+import { CountUp, type CountFormat } from "@/components/dashboard/count-up";
 import { WinbackCard } from "@/components/dashboard/winback-card";
 import { AskAi } from "@/components/dashboard/ask-ai";
 import { ChartInfo } from "@/components/dashboard/chart-info";
 import { getI18n } from "@/lib/i18n.server";
+
+const rise = (i: number) => ({ "--i": i } as CSSProperties);
 
 export default async function CustomersPage({ searchParams }: { searchParams: Promise<{ store?: string; month?: string }> }) {
   const sp = await searchParams;
@@ -56,18 +61,20 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
   const segCells = segments.filter((s) => s.segment !== "Dormant" || s.count > 0);
 
   return (
-    <div className="animate-stage-in">
-      <PageHeader
-        eyebrow={`${t("Customers")} · ${scopeLabel(scope)} · ${period}`}
-        title={t("Customer retention")}
-      />
+    <div>
+      <div className="dash-rise" style={rise(0)}>
+        <PageHeader
+          eyebrow={`${t("Customers")} · ${scopeLabel(scope)} · ${period}`}
+          title={t("Customer retention")}
+        />
+      </div>
 
-      <section className="border-y border-edge py-7">
+      <section className="dash-rise border-y border-edge py-7" style={rise(1)}>
         <div className="grid grid-cols-2 gap-x-8 gap-y-6 md:grid-cols-4">
-          <Stat label={t("Returning")} value={pct(retention.returningPct)} sub={t("of customers come back after their first visit")} />
-          <Stat label={t("Return rate")} value={pct(m.rebook)} sub={t("of profiled visits are 90-day returns")} delta={deltas.rebook} />
-          <Stat label={t("Grooming cycle")} value={retention.cycle.medianDays ? `${retention.cycle.medianDays} ${t("days")}` : "—"} sub={t("median time between grooms")} />
-          <Stat label={t("Single-visit")} value={retention.oneAndDone.toLocaleString()} sub={t("came once, no return in 90+ days")} accent />
+          <Stat label={t("Returning")} countTo={retention.returningPct} countFormat="pct" sub={t("of customers come back after their first visit")} />
+          <Stat label={t("Return rate")} countTo={m.rebook} countFormat="pct" sub={t("of profiled visits are 90-day returns")} delta={deltas.rebook} />
+          <Stat label={t("Grooming cycle")} value="—" countTo={retention.cycle.medianDays || undefined} suffix={t("days")} sub={t("median time between grooms")} />
+          <Stat label={t("Single-visit")} countTo={retention.oneAndDone} sub={t("came once, no return in 90+ days")} accent />
         </div>
         <p className="mt-5 font-mono text-[10px] uppercase tracking-[0.12em] text-ink-dimmer">
           {t("Returning, cycle & single-visit cover all recorded history (Jan 2024 →) · Return rate follows the month filter")}
@@ -75,23 +82,25 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
       </section>
 
       {trend && (
-        <Card className="mt-3">
-          <div className="flex items-center gap-1.5">
-            <Micro>{t("Return rate · by month, trailing year")}</Micro>
-            <AskAi
-              topic="Return rate trend"
-              topicId="returnRateTrend"
-              suggestions={["Is the return rate sliding?", "When did the trend change?"]}
-            />
-            <ChartInfo id="returnRateTrend" />
-          </div>
-          <div className="mt-3">
-            <RateTrend data={trend} />
-          </div>
-        </Card>
+        <div className="dash-rise" style={rise(2)}>
+          <Card className="mt-3">
+            <div className="flex items-center gap-1.5">
+              <Micro>{t("Return rate · by month, trailing year")}</Micro>
+              <AskAi
+                topic="Return rate trend"
+                topicId="returnRateTrend"
+                suggestions={["Is the return rate sliding?", "When did the trend change?"]}
+              />
+              <ChartInfo id="returnRateTrend" />
+            </div>
+            <div className="mt-3">
+              <RateTrend data={trend} />
+            </div>
+          </Card>
+        </div>
       )}
 
-      <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
+      <div className="dash-rise mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2" style={rise(3)}>
         <Card className="flex flex-col gap-6">
           <div>
             <div className="flex items-center gap-1.5">
@@ -153,34 +162,36 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
       </div>
 
       {/* Grooming cycle */}
-      <Card className="mt-3">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-1.5">
-              <Micro>{t("Grooming cycle · time between grooms")}</Micro>
-              <AskAi
-                topic="Grooming cycle"
-                topicId="groomingCycle"
-                suggestions={["When should rebooking nudges go out?", "How many customers are drifting off cadence?"]}
-              />
-              <ChartInfo id="groomingCycle" />
+      <div className="dash-rise" style={rise(4)}>
+        <Card className="mt-3">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-1.5">
+                <Micro>{t("Grooming cycle · time between grooms")}</Micro>
+                <AskAi
+                  topic="Grooming cycle"
+                  topicId="groomingCycle"
+                  suggestions={["When should rebooking nudges go out?", "How many customers are drifting off cadence?"]}
+                />
+                <ChartInfo id="groomingCycle" />
+              </div>
+              <h2 className="mt-1.5 text-[18px] font-medium tracking-[-0.01em]">{t("How often customers come back")}</h2>
             </div>
-            <h2 className="mt-1.5 text-[18px] font-medium tracking-[-0.01em]">{t("How often customers come back")}</h2>
+            <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-dimmer">
+              {retention.cycle.gapCount.toLocaleString()} {t("return visits measured")}
+            </span>
           </div>
-          <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-dimmer">
-            {retention.cycle.gapCount.toLocaleString()} {t("return visits measured")}
-          </span>
-        </div>
-        <div className="mt-4">
-          <HistogramBars data={retention.cycle.histogram} seriesLabel={t("Share of return gaps")} />
-        </div>
-        <p className="mt-3 max-w-[720px] text-[13px] leading-[1.55] text-ink-dim">
-          {t("The median customer returns every")} {retention.cycle.medianDays} {t("days, and")} {pct(retention.cycle.recurringPct)} {t("of returning customers hold a recurring cycle of 60 days or less")} ({retention.cycle.recurringCount.toLocaleString()} {t("of")} {retention.cycle.cycleCustomers.toLocaleString()}). {t("Everything right of the 8-week bars is a customer drifting off cadence — the moment a rebooking nudge earns its keep. True checkout rebooking (booked the next visit before leaving) arrives with the FranPOS booking feed.")}
-        </p>
-      </Card>
+          <div className="mt-4">
+            <HistogramBars data={retention.cycle.histogram} seriesLabel={t("Share of return gaps")} />
+          </div>
+          <p className="mt-3 max-w-[720px] text-[13px] leading-[1.55] text-ink-dim">
+            {t("The median customer returns every")} {retention.cycle.medianDays} {t("days, and")} {pct(retention.cycle.recurringPct)} {t("of returning customers hold a recurring cycle of 60 days or less")} ({retention.cycle.recurringCount.toLocaleString()} {t("of")} {retention.cycle.cycleCustomers.toLocaleString()}). {t("Everything right of the 8-week bars is a customer drifting off cadence — the moment a rebooking nudge earns its keep. True checkout rebooking (booked the next visit before leaving) arrives with the FranPOS booking feed.")}
+          </p>
+        </Card>
+      </div>
 
       {/* Customer intelligence */}
-      <section className="mt-3">
+      <section className="dash-rise mt-3" style={rise(5)}>
         <div className="mb-4 flex items-end justify-between gap-3">
           <div>
             <Micro>{t("Customer intelligence")}</Micro>
@@ -195,62 +206,99 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
             return (
               <div key={s.segment} className="bg-cell p-4">
                 <Micro>{t(s.segment)}</Micro>
-                <div className="mt-2.5 text-[24px] font-bold leading-none tracking-[-0.02em]" style={{ color: risk ? "#fe5100" : undefined }}>{s.count}</div>
+                <div className="mt-2.5 text-[24px] font-bold leading-none tracking-[-0.02em] tabular-nums" style={{ color: risk ? "#fe5100" : undefined }}>{s.count}</div>
               </div>
             );
           })}
         </div>
 
-        <Card pad={false} className="mt-3">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[680px] border-collapse text-[13.5px]">
-              <thead>
-                <tr className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-dimmer">
-                  {["Customer", "Store", "Visits", "Lifetime value", "Last visit", "Next action"].map((h, i) => (
-                    <th key={h} className={`px-5 py-3 font-normal ${i === 2 || i === 3 ? "text-right" : "text-left"}`}>{t(h)}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {topCustomers.map((c) => {
-                  const risk = c.segment === "At risk" || c.segment === "Lapsed";
-                  return (
-                    <tr key={c.name} className="border-t border-edge transition-colors hover:bg-raise">
-                      <td className="px-5 py-3.5">
-                        <div className="flex items-center gap-2">
-                          <span className="text-ink">{c.name}</span>
-                          <Tag tone={c.segment === "VIP" ? "good" : risk ? "orange" : "muted"}>{t(c.segment)}</Tag>
-                        </div>
-                        <Micro className="mt-0.5">{c.pet}</Micro>
-                      </td>
-                      <td className="px-5 py-3.5 text-ink-dim">{c.store}</td>
-                      <td className="px-5 py-3.5 text-right font-mono text-ink-dim">{c.visits}</td>
-                      <td className="px-5 py-3.5 text-right font-mono text-ink">{fmtMoney(c.ltv)}</td>
-                      <td className="px-5 py-3.5 font-mono" style={{ color: c.lastVisit > 60 ? "#fe5100" : "var(--color-ink-dim)" }}>{c.lastVisit}d {t("ago")}</td>
-                      <td className="px-5 py-3.5 text-ink-dim">{t(c.next)}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </Card>
+        {topCustomers.length === 0 ? (
+          <EmptyState
+            className="mt-3"
+            label={t("Customer intelligence")}
+            title={t("No named profiles yet")}
+            body={t("Named FranPOS customer profiles appear here as they sync — value, risk and next action per customer.")}
+          />
+        ) : (
+          <Card pad={false} className="mt-3">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[680px] border-collapse text-[13.5px]">
+                <thead>
+                  <tr className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-dimmer">
+                    {["Customer", "Store", "Visits", "Lifetime value", "Last visit", "Next action"].map((h, i) => (
+                      <th key={h} className={`px-5 py-3 font-normal ${i === 2 || i === 3 ? "text-right" : "text-left"}`}>{t(h)}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {topCustomers.map((c) => {
+                    const risk = c.segment === "At risk" || c.segment === "Lapsed";
+                    return (
+                      <tr key={c.name} className="border-t border-edge transition-colors hover:bg-raise">
+                        <td className="px-5 py-3.5">
+                          <div className="flex items-center gap-2">
+                            <span className="text-ink">{c.name}</span>
+                            <Tag tone={c.segment === "VIP" ? "good" : risk ? "orange" : "muted"}>{t(c.segment)}</Tag>
+                          </div>
+                          <Micro className="mt-0.5">{c.pet}</Micro>
+                        </td>
+                        <td className="px-5 py-3.5 text-ink-dim">{c.store}</td>
+                        <td className="px-5 py-3.5 text-right font-mono text-ink-dim">{c.visits}</td>
+                        <td className="px-5 py-3.5 text-right font-mono text-ink">{fmtMoney(c.ltv)}</td>
+                        <td className="px-5 py-3.5 font-mono" style={{ color: c.lastVisit > 60 ? "#fe5100" : "var(--color-ink-dim)" }}>{c.lastVisit}d {t("ago")}</td>
+                        <td className="px-5 py-3.5 text-ink-dim">{t(c.next)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        )}
         <p className="mt-2.5 text-[11.5px] leading-[1.5] text-ink-dimmer">
           {t("Customers without a name on file (incomplete FranPOS profiles, house accounts) are excluded from this list and the win-back queue — their revenue still counts everywhere else.")}
         </p>
       </section>
 
-      <WinbackCard list={winback.list} winbackCount={winback.count} />
+      <div className="dash-rise" style={rise(6)}>
+        <WinbackCard list={winback.list} winbackCount={winback.count} />
+      </div>
     </div>
   );
 }
 
-function Stat({ label, value, sub, accent, delta }: { label: string; value: string; sub: string; accent?: boolean; delta?: number | null }) {
+function Stat({
+  label,
+  value,
+  sub,
+  accent,
+  delta,
+  countTo,
+  countFormat = "int",
+  suffix,
+}: {
+  label: string;
+  value?: string;
+  sub: string;
+  accent?: boolean;
+  delta?: number | null;
+  // When the raw number is passed, the stat ticks up to it on arrival (mirrors BigStat).
+  countTo?: number;
+  countFormat?: CountFormat;
+  suffix?: string;
+}) {
   return (
     <div>
       <Micro>{label}</Micro>
-      <div className={`mt-2 flex items-baseline gap-2 text-[34px] font-bold leading-none tracking-[-0.02em] ${accent ? "text-orange" : "text-ink"}`}>
-        {value}
+      <div className={`mt-2 flex items-baseline gap-2 text-[34px] font-bold leading-none tracking-[-0.02em] tabular-nums ${accent ? "text-orange" : "text-ink"}`}>
+        {countTo !== undefined ? (
+          <span>
+            <CountUp value={countTo} format={countFormat} />
+            {suffix && ` ${suffix}`}
+          </span>
+        ) : (
+          value
+        )}
         {delta != null && <Delta value={delta} />}
       </div>
       <div className="mt-1.5 text-[12.5px] text-ink-dim">{sub}</div>

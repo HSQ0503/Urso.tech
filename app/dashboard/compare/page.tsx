@@ -20,12 +20,14 @@ import {
   Tag,
   Delta,
   Legend,
+  EmptyState,
   CompareBars,
   CompareDiverging,
   ComparePace,
   fmtMoney,
   pct,
 } from "@/components/dashboard/ui";
+import { CountUp } from "@/components/dashboard/count-up";
 import Link from "next/link";
 import { CompareControls } from "@/components/dashboard/compare-controls";
 import { AskAi } from "@/components/dashboard/ask-ai";
@@ -91,33 +93,45 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
   const headlineCols = ["md:grid-cols-3", "md:grid-cols-4", "md:grid-cols-5"][extras.length] ?? "md:grid-cols-3";
 
   return (
-    <div className="animate-stage-in space-y-3">
-      <PageHeader
-        eyebrow={`${t("Compare")} · ${rangeLabel(a)} ${t("vs")} ${rangeLabel(b)}${scopeNote}`}
-        title={t("Compare anything")}
-      />
+    <div className="space-y-3">
+      <div className="dash-rise" style={{ "--i": 0 } as React.CSSProperties}>
+        <PageHeader
+          eyebrow={`${t("Compare")} · ${rangeLabel(a)} ${t("vs")} ${rangeLabel(b)}${scopeNote}`}
+          title={t("Compare anything")}
+        />
+      </div>
 
-      <CompareControls key={[a, ...bs].map((r) => `${r.start}${r.end}`).join("")} mode={mode} preset={preset} metric={metricKey} a={a} bs={bs} minDate={bounds.min} maxDate={bounds.max} />
+      <div className="dash-rise" style={{ "--i": 1 } as React.CSSProperties}>
+        <CompareControls key={[a, ...bs].map((r) => `${r.start}${r.end}`).join("")} mode={mode} preset={preset} metric={metricKey} a={a} bs={bs} minDate={bounds.min} maxDate={bounds.max} />
+      </div>
 
       {warnings.map((w, i) => (
-        <p key={i} className="flex items-start gap-2 text-[13px] leading-[1.5] text-ink-dim">
+        <p key={i} className="dash-rise flex items-start gap-2 text-[13px] leading-[1.5] text-ink-dim" style={{ "--i": 2 } as React.CSSProperties}>
           <span className="mt-[5px] size-1.5 shrink-0 rounded-full bg-orange" />
           {w}
         </p>
       ))}
 
       {/* Headline: revenue across every period, oldest first */}
-      <section className={`grid grid-cols-2 gap-px overflow-hidden rounded-none border border-edge bg-edge ${headlineCols}`}>
+      <section className={`dash-rise grid grid-cols-2 gap-px overflow-hidden rounded-none border border-edge bg-edge ${headlineCols}`} style={{ "--i": 2 } as React.CSSProperties}>
         {[...extras].reverse().map((r, i) => (
           <Period key={`x${i}`} label={r.start.slice(0, 4)} range={r} value={revenue.bs[extras.length - i]} days={dayInfo.bs[extras.length - i]} t={t} />
         ))}
         <Period label={t("Compared against")} range={b} value={revB} days={dayInfo.bs[0]} t={t} />
-        <Period label={t("This period")} range={a} value={revenue.a} days={dayInfo.a} accent t={t} />
+        <Period label={t("This period")} range={a} value={revenue.a} days={dayInfo.a} accent win={revDelta != null && revDelta >= 0} t={t} />
         <div className="col-span-2 bg-cell p-4 md:col-span-1">
           <Micro>{t("Revenue change")}{extras.length > 0 ? ` · ${t("vs previous")}` : ""}</Micro>
           <div className="mt-2.5 flex items-baseline gap-2.5">
-            <span className="text-[26px] font-bold leading-none tracking-[-0.02em]">
-              {revDelta == null ? "—" : `${revDelta >= 0 ? "+" : "−"}${Math.abs(revDelta * 100).toFixed(1)}%`}
+            <span
+              className="text-[26px] font-bold leading-none tracking-[-0.02em] tabular-nums"
+              style={revDelta == null ? undefined : { color: revDelta >= 0 ? "var(--color-good)" : "#fe5100" }}
+            >
+              {revDelta == null ? "—" : (
+                <>
+                  {revDelta >= 0 ? "+" : "−"}
+                  <CountUp value={Math.abs(revDelta)} format="pct" />
+                </>
+              )}
             </span>
             {dayInfo.a !== dayInfo.bs[0] && <span className="text-[11.5px] text-ink-dim">{t("totals · lengths differ")}</span>}
           </div>
@@ -131,7 +145,7 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
 
       {/* All metrics: one small-multiple panel per metric, totals per period */}
       {overview && (
-        <section>
+        <section className="dash-rise" style={{ "--i": 3 } as React.CSSProperties}>
           <div className="mb-4 flex items-end justify-between gap-3">
             <div>
               <Micro>{t("All metrics")} · {t("totals for")} {scopeLabel(scope)}</Micro>
@@ -151,6 +165,7 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
 
       {/* What stands out */}
       {data && data.insights.length > 0 && (
+        <div className="dash-rise" style={{ "--i": 3 } as React.CSSProperties}>
         <Card className="flex flex-col gap-3">
           <Micro className="!text-orange">{t("What stands out")}</Micro>
           <ul className="space-y-2">
@@ -159,11 +174,12 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
             ))}
           </ul>
         </Card>
+        </div>
       )}
 
       {/* Mode-specific visuals */}
       {data && mode === "stores" && (
-        <section className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+        <section className="dash-rise grid grid-cols-1 gap-3 xl:grid-cols-2" style={{ "--i": 4 } as React.CSSProperties}>
           <Card>
             <div className="mb-1 flex items-center gap-1.5">
               <Micro>{t(data.metricLabel)} · {t("by store")}</Micro>
@@ -202,6 +218,7 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
       )}
 
       {data && mode === "groomers" && (
+        <div className="dash-rise" style={{ "--i": 4 } as React.CSSProperties}>
         <Card>
           <div className="mb-1 flex items-center gap-1.5">
             <Micro>{t(data.metricLabel)} · {t("per groomer")}</Micro>
@@ -217,9 +234,12 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
           <CompareBars layout="rows" data={scaled} labelA={`${t("Now")} · ${rangeLabel(a, true)}`} labelB={`${t("Before")} · ${rangeLabel(b, true)}`} moreLabels={extraLabels} format={chartFormat} />
           <div className="mt-3"><Legend items={legend} /></div>
         </Card>
+        </div>
       )}
 
-      {data && mode === "products" && movers.length > 0 && (
+      {/* Absence is narrated, not hidden — an empty movers list is a data fact. */}
+      {data && mode === "products" && (
+        <div className="dash-rise" style={{ "--i": 4 } as React.CSSProperties}>
         <Card>
           <div className="mb-1 flex items-center gap-1.5">
             <Micro>{t(data.metricLabel)} · {t("biggest moves between periods")}</Micro>
@@ -232,17 +252,27 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
             <ChartInfo id="compareDiverging" />
           </div>
           <h2 className="mb-4 text-[17px] font-medium tracking-[-0.01em]">{t("Winners and losers")}</h2>
-          <CompareDiverging data={movers} format={deltaFormat} />
-          <p className="mt-3 text-[12.5px] leading-[1.5] text-ink-dim">
-            {data.pointDelta
-              ? t("The biggest margin moves across every item, in percentage points — right improved, left slipped. Changes under 1 point are left out.")
-              : t("The biggest moves across every item — right of the line sold more than in the comparison period, left sold less. Small changes are left out; the table below has the exact figures for your top sellers.")}
-          </p>
+          {movers.length > 0 ? (
+            <>
+              <CompareDiverging data={movers} format={deltaFormat} />
+              <p className="mt-3 text-[12.5px] leading-[1.5] text-ink-dim">
+                {data.pointDelta
+                  ? t("The biggest margin moves across every item, in percentage points — right improved, left slipped. Changes under 1 point are left out.")
+                  : t("The biggest moves across every item — right of the line sold more than in the comparison period, left sold less. Small changes are left out; the table below has the exact figures for your top sellers.")}
+              </p>
+            </>
+          ) : (
+            <p className="text-[12.5px] leading-[1.5] text-ink-dim">
+              {t("Nothing moved more than the threshold between these periods — the table below has the exact figures.")}
+            </p>
+          )}
         </Card>
+        </div>
       )}
 
       {/* Exact figures */}
       {data && (
+      <div className="dash-rise" style={{ "--i": 5 } as React.CSSProperties}>
       <Card pad={false}>
         <div className="px-5 pb-1 pt-5">
           <Micro>{t("Exact figures")} · {t(data.metricLabel).toLowerCase()}</Micro>
@@ -284,8 +314,20 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
               ))}
               {data.rows.length === 0 && (
                 <tr className="border-t border-edge">
-                  <td colSpan={4 + extras.length} className="px-5 py-8 text-center text-[13.5px] text-ink-dim">
-                    {t("No data in these periods — try widening the dates (history starts {date}).").replace("{date}", new Date(`${bounds.min}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" }))}
+                  <td colSpan={4 + extras.length} className="p-5">
+                    <EmptyState
+                      label={t("No overlapping data")}
+                      title={t("Nothing to compare in these periods")}
+                      body={t("No data in these periods — try widening the dates (history starts {date}).").replace("{date}", new Date(`${bounds.min}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" }))}
+                      action={
+                        <Link
+                          href="/dashboard/compare?preset=mom"
+                          className="dash-press rounded-sm border border-edge px-3 py-1.5 text-[12.5px] text-ink-dim transition-colors hover:border-edge-strong hover:text-ink"
+                        >
+                          {t("Reset to this month vs last month")}
+                        </Link>
+                      }
+                    />
                   </td>
                 </tr>
               )}
@@ -293,10 +335,11 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
           </table>
         </div>
       </Card>
+      </div>
       )}
 
       {data && mode === "products" && (
-        <p className="-mt-2 text-[13px]">
+        <p className="dash-rise -mt-2 text-[13px]" style={{ "--i": 5 } as React.CSSProperties}>
           <Link href="/dashboard/products" className="text-orange transition-opacity hover:opacity-80">
             {t("Browse the full product list")} →
           </Link>
@@ -304,7 +347,7 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
       )}
 
       {(data?.notes ?? []).map((n, i) => (
-        <p key={i} className="-mt-2 text-[12.5px] leading-[1.5] text-ink-dimmer">{n}</p>
+        <p key={i} className="dash-rise -mt-2 text-[12.5px] leading-[1.5] text-ink-dimmer" style={{ "--i": 5 } as React.CSSProperties}>{n}</p>
       ))}
     </div>
   );
@@ -348,7 +391,7 @@ function MetricPanel({ label, format, values, periods, t }: { label: string; for
         <Change a={values[0]} b={values[1] ?? null} points={format === "pct"} t={t} />
       </div>
       <div className="mt-3.5 space-y-2.5">
-        {orderedIdx.map((idx) => {
+        {orderedIdx.map((idx, pos) => {
           const v = values[idx];
           const focus = idx === 0;
           return (
@@ -358,12 +401,13 @@ function MetricPanel({ label, format, values, periods, t }: { label: string; for
               </span>
               <div className="h-[14px] flex-1 overflow-hidden rounded bg-raise">
                 <div
-                  className="h-full rounded"
+                  className="meter-fill h-full rounded"
                   style={{
                     width: `${v == null || max <= 0 ? 0 : Math.max(2, (v / max) * 100)}%`,
                     background: focus ? "#fe5100" : "var(--color-series)",
                     opacity: focus ? 1 : 0.55,
-                  }}
+                    "--reveal-delay": `${120 + pos * 70}ms`,
+                  } as React.CSSProperties}
                 />
               </div>
               <span className={`w-[72px] shrink-0 text-right font-mono text-[11.5px] tabular-nums ${focus ? "text-ink" : "text-ink-dim"}`}>
@@ -377,11 +421,17 @@ function MetricPanel({ label, format, values, periods, t }: { label: string; for
   );
 }
 
-function Period({ label, range, value, days, accent, t }: { label: string; range: CompareRange; value: number; days: number; accent?: boolean; t: (s: string) => string }) {
+// `win` draws the single orange hairline — one per page, only under "This
+// period" when the delta is positive.
+function Period({ label, range, value, days, accent, win, t }: { label: string; range: CompareRange; value: number; days: number; accent?: boolean; win?: boolean; t: (s: string) => string }) {
   return (
     <div className="bg-cell p-4">
       <Micro className={accent ? "!text-orange" : undefined}>{label}</Micro>
-      <div className="mt-2.5 text-[26px] font-bold leading-none tracking-[-0.02em]">{fmtMoney(value)}</div>
+      <div className="relative mt-2.5 text-[26px] font-bold leading-none tracking-[-0.02em] tabular-nums">
+        <CountUp value={value} format="money" />
+        {/* absolute so the win underline never shifts the cell's baseline grid */}
+        {win && <div aria-hidden className="dash-draw absolute -bottom-[5px] left-0 h-px w-full bg-orange" />}
+      </div>
       <div className="mt-2 text-[12px] text-ink-dim">
         {rangeLabel(range)} · {days} {days === 1 ? t("day") : t("days")}
       </div>

@@ -1,8 +1,9 @@
 // Card scaffolding + small primitives for the dashboard.
 // Charts now live in ./charts (Recharts) and are re-exported below.
 
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import type { T } from "@/lib/i18n";
+import { CountUp, type CountFormat } from "./count-up";
 
 const ORANGE = "#fe5100";
 
@@ -62,26 +63,31 @@ export function Card({
   children,
   className = "",
   pad = true,
+  interactive = false,
 }: {
   children: ReactNode;
   className?: string;
   pad?: boolean;
+  // Cards that lead somewhere respond to the pointer; data cards stay calm.
+  interactive?: boolean;
 }) {
   return (
-    <div className={`rounded-none border border-edge bg-panel ${pad ? "p-5" : ""} ${className}`}>
+    <div
+      className={`rounded-none border border-edge bg-panel ${pad ? "p-5" : ""} ${interactive ? "dash-hover cursor-pointer" : ""} ${className}`}
+    >
       {children}
     </div>
   );
 }
 
-// Large display numbers — Geist, tight tracking. Just a sizing/weight wrapper.
+// Large display numbers — sans, tight tracking. Just a sizing/weight wrapper.
 export function Display({ children, className = "" }: { children: ReactNode; className?: string }) {
   return <span className={`font-bold tracking-[-0.02em] ${className}`}>{children}</span>;
 }
 
-// Loading skeleton block — pulses in the brand's surface color.
+// Loading skeleton block — a light pass over the surface, quieter than a pulse.
 export function Skeleton({ className = "" }: { className?: string }) {
-  return <div className={`animate-pulse rounded-md bg-raise ${className}`} />;
+  return <div className={`skeleton-shimmer rounded-sm bg-raise ${className}`} />;
 }
 
 export function SkeletonCard({ className = "", children }: { className?: string; children?: ReactNode }) {
@@ -115,12 +121,33 @@ export function PageHeader({
   );
 }
 
-export function BigStat({ label, value, delta, deltaInvert, sub, accent }: { label: string; value: string; delta?: number; deltaInvert?: boolean; sub?: string; accent?: boolean }) {
+export function BigStat({
+  label,
+  value,
+  delta,
+  deltaInvert,
+  sub,
+  accent,
+  countTo,
+  countFormat = "int",
+}: {
+  label: string;
+  value: string;
+  delta?: number;
+  deltaInvert?: boolean;
+  sub?: string;
+  accent?: boolean;
+  // When the raw number is passed, the stat ticks up to it on arrival.
+  countTo?: number;
+  countFormat?: CountFormat;
+}) {
   return (
     <div className="flex flex-col gap-2">
       <Micro>{label}</Micro>
       <div className="flex items-baseline gap-2.5">
-        <Display className={`text-[40px] leading-none tracking-[-0.02em] ${accent ? "text-orange" : "text-ink"}`}>{value}</Display>
+        <Display className={`text-[40px] leading-none tracking-[-0.02em] tabular-nums ${accent ? "text-orange" : "text-ink"}`}>
+          {countTo !== undefined ? <CountUp value={countTo} format={countFormat} /> : value}
+        </Display>
         {delta !== undefined && <Delta value={delta} invert={deltaInvert} />}
       </div>
       {sub && <div className="text-[12.5px] text-ink-dim">{sub}</div>}
@@ -143,14 +170,16 @@ export function SectionHeader({ index, title, desc, right }: { index: string; ti
   );
 }
 
-export function Delta({ value, invert = false }: { value: number; invert?: boolean }) {
+export function Delta({ value, invert = false, animate = true }: { value: number; invert?: boolean; animate?: boolean }) {
   const up = value >= 0;
   const good = invert ? !up : up;
+  // Derive the wash from the token — light mode retunes --color-good, and a
+  // hardcoded green would leave text and wash on two different greens.
   const color = good ? "var(--color-good)" : ORANGE;
-  const bg = good ? "rgba(70,209,138,0.12)" : "rgba(254,81,0,0.12)";
+  const bg = good ? "color-mix(in srgb, var(--color-good) 12%, transparent)" : "rgba(254,81,0,0.12)";
   return (
     <span
-      className="inline-flex items-center gap-1 rounded-full px-1.5 py-[2.5px] font-mono text-[10.5px] leading-none tabular-nums"
+      className={`inline-flex items-center gap-1 rounded-full px-1.5 py-[2.5px] font-mono text-[10.5px] leading-none tabular-nums ${animate ? "chip-in" : ""}`}
       style={{ color, background: bg }}
     >
       <svg width="7.5" height="7.5" viewBox="0 0 10 10" fill="currentColor" aria-hidden className={up ? "" : "rotate-180"}>
@@ -165,7 +194,7 @@ export function Tag({ children, tone = "muted" }: { children: ReactNode; tone?: 
   const map = {
     muted: "border-edge text-ink-dim",
     orange: "border-[rgba(254,81,0,0.35)] bg-orange-soft text-orange",
-    good: "border-[rgba(70,209,138,0.3)] text-[var(--color-good)]",
+    good: "border-[color-mix(in_srgb,var(--color-good)_30%,transparent)] text-[var(--color-good)]",
     warn: "border-[rgba(254,81,0,0.35)] text-orange",
   } as const;
   return (
@@ -176,10 +205,28 @@ export function Tag({ children, tone = "muted" }: { children: ReactNode; tone?: 
 }
 
 // ---- Horizontal meter ------------------------------------------------------
-export function Meter({ value, color = ORANGE, track = "var(--color-track)" }: { value: number; color?: string; track?: string }) {
+// Fills from zero on arrival; stagger sibling meters with `delay`.
+export function Meter({
+  value,
+  color = ORANGE,
+  track = "var(--color-track)",
+  delay,
+}: {
+  value: number;
+  color?: string;
+  track?: string;
+  delay?: number;
+}) {
   return (
     <div className="h-1.5 w-full overflow-hidden rounded-none" style={{ background: track }}>
-      <div className="h-full rounded-none" style={{ width: `${Math.min(100, value * 100)}%`, background: color }} />
+      <div
+        className="meter-fill h-full rounded-none"
+        style={{
+          width: `${Math.min(100, value * 100)}%`,
+          background: color,
+          ...(delay !== undefined ? ({ "--reveal-delay": `${delay}ms` } as CSSProperties) : {}),
+        }}
+      />
     </div>
   );
 }
@@ -204,11 +251,43 @@ export function Segmented<T extends string>({ options, value, onChange }: { opti
         <button
           key={o.value}
           onClick={() => onChange(o.value)}
-          className={`cursor-pointer rounded-full px-2.5 py-1 text-[11.5px] transition-colors ${value === o.value ? "bg-raise-strong text-ink" : "text-ink-dim hover:text-ink"}`}
+          className={`dash-press cursor-pointer rounded-full px-2.5 py-1 text-[11.5px] transition-colors ${value === o.value ? "bg-raise-strong text-ink" : "text-ink-dim hover:text-ink"}`}
         >
           {o.label}
         </button>
       ))}
+    </div>
+  );
+}
+
+// Empty states are a premium moment, not an apology: what will appear here,
+// and the one action that makes it appear. Faint orange bloom, both themes.
+export function EmptyState({
+  label,
+  title,
+  body,
+  action,
+  className = "",
+}: {
+  label: string;
+  title: string;
+  body?: string;
+  action?: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={`relative overflow-hidden rounded-none border border-edge bg-panel px-6 py-10 text-center ${className}`}>
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0"
+        style={{ background: "radial-gradient(80% 60% at 50% 0%, var(--color-orange-wash) 0%, transparent 70%)" }}
+      />
+      <div className="relative">
+        <Micro>{label}</Micro>
+        <div className="mt-2 text-[15px] font-semibold tracking-[-0.01em] text-ink">{title}</div>
+        {body && <p className="mx-auto mt-1.5 max-w-[400px] text-[12.5px] leading-[1.5] text-ink-dim">{body}</p>}
+        {action && <div className="mt-4 flex justify-center">{action}</div>}
+      </div>
     </div>
   );
 }

@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import {
   parseScope,
   parseMonth,
@@ -19,12 +20,14 @@ import {
   Tag,
   BarRanking,
   StackedShareBar,
+  EmptyState,
   fmtMoney,
-  pct,
 } from "@/components/dashboard/ui";
+import { CountUp, type CountFormat } from "@/components/dashboard/count-up";
 import { AskAi } from "@/components/dashboard/ask-ai";
 import { ChartInfo } from "@/components/dashboard/chart-info";
 import { getI18n } from "@/lib/i18n.server";
+import type { T } from "@/lib/i18n";
 
 export default async function RevenueMapPage({ searchParams }: { searchParams: Promise<{ store?: string; month?: string }> }) {
   const sp = await searchParams;
@@ -34,30 +37,34 @@ export default async function RevenueMapPage({ searchParams }: { searchParams: P
   const period = month === "all" ? "Last 12 months" : monthLabel(month);
 
   const m = await getMetrics(scope, month);
-  const byLocation = (await getRevenueByLocation(month)).map((r) => ({ name: r.name.replace("Village", "").trim(), value: r.value, highlight: scope === r.id }));
+  // Rankings arrive sorted desc — crown the leader when no store is scoped so
+  // each ranking carries exactly one orange win.
+  const byLocation = (await getRevenueByLocation(month)).map((r, i) => ({ name: r.name.replace("Village", "").trim(), value: r.value, highlight: scope === "all" ? i === 0 : scope === r.id }));
   const byService = await getRevenueByService(scope, month);
-  const byGroomer = (await getRevenueByGroomer(scope, month)).slice(0, 6).map((g) => ({ name: g.name, value: g.value }));
+  const byGroomer = (await getRevenueByGroomer(scope, month)).slice(0, 6).map((g, i) => ({ name: g.name, value: g.value, highlight: i === 0 }));
   const nvr = await getRevenueNewVsRepeat(scope, month);
   const xs = await getCrossSell(scope, month);
   const repeatShare = nvr.repeat / (nvr.repeat + nvr.fresh);
 
   return (
-    <div className="animate-stage-in space-y-3">
-      <PageHeader
-        eyebrow={`${t("Revenue map")} · ${scopeLabel(scope)} · ${period}`}
-        title={t("Where the money comes from")}
-      />
+    <div className="space-y-3">
+      <div className="dash-rise" style={{ "--i": 0 } as CSSProperties}>
+        <PageHeader
+          eyebrow={`${t("Revenue map")} · ${scopeLabel(scope)} · ${period}`}
+          title={t("Where the money comes from")}
+        />
+      </div>
 
       {/* Headline strip */}
-      <section className="grid grid-cols-2 gap-px overflow-hidden rounded-none border border-edge bg-edge md:grid-cols-4">
-        <Kpi label={t("Total revenue")} value={fmtMoney(m.revenue)} />
-        <Kpi label={t("Avg ticket")} value={fmtMoney(m.avgTicket)} />
-        <Kpi label={t("Buy both")} value={pct(xs.both)} />
-        <Kpi label={t("Repeat revenue")} value={pct(repeatShare)} />
+      <section className="dash-rise grid grid-cols-2 gap-px overflow-hidden rounded-none border border-edge bg-edge md:grid-cols-4" style={{ "--i": 1 } as CSSProperties}>
+        <Kpi label={t("Total revenue")} raw={m.revenue} format="money" />
+        <Kpi label={t("Avg ticket")} raw={m.avgTicket} format="money" />
+        <Kpi label={t("Buy both")} raw={xs.both} format="pct" />
+        <Kpi label={t("Repeat revenue")} raw={repeatShare} format="pct" />
       </section>
 
       {/* Location + line */}
-      <section className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+      <section className="dash-rise grid grid-cols-1 gap-3 lg:grid-cols-2" style={{ "--i": 2 } as CSSProperties}>
         <Card>
           <div className="flex items-center gap-1.5">
             <Micro>{t("By location")}</Micro>
@@ -69,7 +76,11 @@ export default async function RevenueMapPage({ searchParams }: { searchParams: P
             <ChartInfo id="revenueByLocation" />
           </div>
           <h2 className="mb-4 mt-1.5 text-[17px] font-medium tracking-[-0.01em]">{t("Revenue by store")}</h2>
-          <BarRanking data={byLocation} format="moneyK" labelWidth={104} valueLabel={t("Revenue")} />
+          {byLocation.length === 0 ? (
+            <NoRevenue t={t} />
+          ) : (
+            <BarRanking data={byLocation} format="moneyK" labelWidth={104} valueLabel={t("Revenue")} />
+          )}
         </Card>
         <Card className="flex flex-col gap-6">
           <div>
@@ -82,16 +93,14 @@ export default async function RevenueMapPage({ searchParams }: { searchParams: P
               />
               <ChartInfo id="crossSellMix" />
             </div>
-            <h2 className="mt-1.5 text-[17px] font-medium tracking-[-0.01em]">{t("Grooming vs retail")}</h2>
-            <div className="mt-4">
-              <StackedShareBar
-                segments={[
-                  { label: t("Both"), value: xs.both, color: "#fe5100" },
-                  { label: t("Grooming only"), value: xs.groomingOnly, color: "var(--color-series)" },
-                  { label: t("Retail only"), value: xs.retailOnly, color: "var(--color-series-soft)" },
-                ]}
-              />
-            </div>
+            <h2 className="mb-4 mt-1.5 text-[17px] font-medium tracking-[-0.01em]">{t("Grooming vs retail")}</h2>
+            <StackedShareBar
+              segments={[
+                { label: t("Both"), value: xs.both, color: "#fe5100" },
+                { label: t("Grooming only"), value: xs.groomingOnly, color: "var(--color-series)" },
+                { label: t("Retail only"), value: xs.retailOnly, color: "var(--color-series-soft)" },
+              ]}
+            />
           </div>
           <div className="border-t border-edge pt-5">
             <div className="mb-3 flex items-center gap-1.5">
@@ -115,21 +124,25 @@ export default async function RevenueMapPage({ searchParams }: { searchParams: P
       </section>
 
       {/* Service + groomer */}
-      <section className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+      <section className="dash-rise grid grid-cols-1 gap-3 lg:grid-cols-2" style={{ "--i": 3 } as CSSProperties}>
         <Card>
           <Micro>{t("By service")}</Micro>
-          <h2 className="mb-3 mt-1.5 text-[17px] font-medium tracking-[-0.01em]">{t("Top revenue lines")}</h2>
-          <div className="divide-y divide-edge">
-            {byService.map((s) => (
-              <div key={s.name} className="flex items-center justify-between py-2.5">
-                <div className="flex items-center gap-2.5">
-                  <span className="text-[13.5px] text-ink">{s.name}</span>
-                  <Tag tone={s.line === "Grooming" ? "orange" : "muted"}>{t(s.line)}</Tag>
+          <h2 className="mb-4 mt-1.5 text-[17px] font-medium tracking-[-0.01em]">{t("Top revenue lines")}</h2>
+          {byService.length === 0 ? (
+            <NoRevenue t={t} />
+          ) : (
+            <div className="divide-y divide-edge">
+              {byService.map((s) => (
+                <div key={s.name} className="flex items-center justify-between py-2.5">
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-[13.5px] text-ink">{s.name}</span>
+                    <Tag tone={s.line === "Grooming" ? "orange" : "muted"}>{t(s.line)}</Tag>
+                  </div>
+                  <span className="font-mono text-[13px] text-ink-dim">{fmtMoney(s.value)}</span>
                 </div>
-                <span className="font-mono text-[13px] text-ink-dim">{fmtMoney(s.value)}</span>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </Card>
         <Card>
           <div className="flex items-center gap-1.5">
@@ -142,22 +155,48 @@ export default async function RevenueMapPage({ searchParams }: { searchParams: P
             <ChartInfo id="revenueByGroomer" />
           </div>
           <h2 className="mb-4 mt-1.5 text-[17px] font-medium tracking-[-0.01em]">{t("Service revenue performed")}</h2>
-          <BarRanking data={byGroomer} format="moneyK" labelWidth={130} valueLabel={t("Service revenue")} />
+          {byGroomer.length === 0 ? (
+            <NoRevenue t={t} />
+          ) : (
+            <BarRanking data={byGroomer} format="moneyK" labelWidth={130} valueLabel={t("Service revenue")} />
+          )}
         </Card>
       </section>
 
-      <p className="mt-3 text-[13px] leading-[1.6] text-ink-dim">
+      <p className="dash-rise mt-3 text-[13px] leading-[1.6] text-ink-dim" style={{ "--i": 4 } as CSSProperties}>
         {t("Retail attaches to grooming visits, so grooming share and retail attach move together. The clearest revenue lever is converting grooming-only customers into retail buyers at checkout.")}
       </p>
     </div>
   );
 }
 
-function Kpi({ label, value }: { label: string; value: string }) {
+function Kpi({ label, raw, format }: { label: string; raw: number; format: CountFormat }) {
   return (
     <div className="bg-cell p-4">
       <Micro>{label}</Micro>
-      <div className="mt-2.5 text-[22px] font-bold leading-none tracking-[-0.02em]">{value}</div>
+      <div className="mt-2.5 text-[22px] font-bold leading-none tracking-[-0.02em] tabular-nums">
+        <CountUp value={raw} format={format} />
+      </div>
     </div>
+  );
+}
+
+// Live RPCs can return zero rows for a scoped store + month — say so instead of
+// leaving a blank chart box.
+function NoRevenue({ t }: { t: T }) {
+  return (
+    <EmptyState
+      label={t("No revenue recorded")}
+      title={t("Nothing booked for this selection")}
+      body={t("No sales or appointments landed in this store and period. Widen the view to see where the money comes from.")}
+      action={
+        <a
+          href="/dashboard/revenue"
+          className="dash-pill inline-flex items-center rounded-none px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.12em] text-ink-dim transition-colors hover:text-ink"
+        >
+          {t("View all stores · full period")}
+        </a>
+      }
+    />
   );
 }

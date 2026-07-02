@@ -11,5 +11,5 @@ export default async function TeamPage({ searchParams }: { searchParams: Promise
   const period = month === "all" ? t("Last 12 months") : monthLabel(month);
   const roster = await getTeamRoster(scope, month);
 
-  return <TeamClient roster={roster} scopeName={scopeLabel(scope)} period={period} />;
+  return <TeamClient roster={roster} scopeName={scopeLabel(scope)} period={period} canWiden={scope !== "all" || month !== "all"} />;
 }

@@ -1,3 +1,4 @@
+import { type CSSProperties } from "react";
 import {
   parseScope,
   scopeLabel,
@@ -17,8 +18,8 @@ export default async function BriefPage({ searchParams }: { searchParams: Promis
   const printHref = sp.store ? `/brief-print?store=${encodeURIComponent(sp.store)}` : "/brief-print";
 
   return (
-    <div className="animate-stage-in space-y-3">
-      <div className="flex items-center justify-end">
+    <div className="space-y-3">
+      <div className="dash-rise flex items-center justify-end" style={{ "--i": 0 } as CSSProperties}>
         <a
           href={printHref}
           target="_blank"
@@ -31,7 +32,7 @@ export default async function BriefPage({ searchParams }: { searchParams: Promis
           {t("Download PDF")}
         </a>
       </div>
-      <BriefReport b={b} scopeText={scopeLabel(scope)} period={period} generatedAt={generatedAt} t={t} />
+      <BriefReport b={b} scopeText={scopeLabel(scope)} period={period} generatedAt={generatedAt} t={t} animate />
     </div>
   );
 }

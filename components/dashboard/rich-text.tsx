@@ -28,6 +28,13 @@ function renderInline(text: string, keyPrefix: string): ReactNode[] {
   return out;
 }
 
+// Inline-only variant for AI prose that lives inside an existing text element
+// (report headlines, list items): renders the marks without imposing block
+// structure, and strips a stray leading bullet marker so "- " never prints.
+export function RichInline({ text }: { text: string }) {
+  return <>{renderInline(text.replace(/^\s*[-•*]\s+/, ""), "in")}</>;
+}
+
 type Block = { type: "p" | "ul" | "h"; items: string[] };
 
 function parseBlocks(text: string): Block[] {

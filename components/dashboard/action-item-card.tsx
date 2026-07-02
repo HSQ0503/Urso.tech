@@ -55,7 +55,7 @@ export function ActionItemCard({
             setOpen(true);
           }
         }}
-        className="dash-raise group relative flex cursor-pointer flex-col justify-center overflow-hidden rounded-none border border-[rgba(254,81,0,0.28)] p-6 transition-all duration-200 hover:-translate-y-px hover:border-[rgba(254,81,0,0.45)] focus:outline-none focus-visible:ring-2 focus-visible:ring-orange/50"
+        className="dash-raise group relative flex cursor-pointer flex-col justify-center overflow-hidden rounded-none border border-[rgba(254,81,0,0.28)] p-6 transition-all duration-200 hover:-translate-y-px hover:border-[rgba(254,81,0,0.45)]"
         style={{ background: "linear-gradient(158deg, rgba(254,81,0,0.12) 0%, rgba(254,81,0,0.035) 48%, rgba(254,81,0,0) 100%)" }}
       >
         <div aria-hidden className="pointer-events-none absolute -right-20 -top-20 h-48 w-48 rounded-full opacity-60 blur-3xl" style={{ background: "radial-gradient(circle, rgba(254,81,0,0.22), transparent 70%)" }} />
@@ -83,11 +83,13 @@ export function ActionItemCard({
           <a
             href={MAILTO}
             onClick={(e) => e.stopPropagation()}
-            className="rounded-lg bg-orange px-4 py-2 text-[13px] font-medium text-[#070707] transition hover:bg-[#FF6A1F]"
+            className="dash-press rounded-sm bg-orange px-4 py-2 text-[13px] font-medium text-[#070707] transition hover:brightness-110"
           >
             {cta}
           </a>
-          <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-dimmer transition-colors group-hover:text-ink-dim">{t("See breakdown")} →</span>
+          <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-dimmer transition-colors group-hover:text-ink-dim">
+            {t("See breakdown")} <span className="inline-block transition-transform duration-200 group-hover:translate-x-0.5">→</span>
+          </span>
         </div>
       </div>
 
@@ -97,7 +99,7 @@ export function ActionItemCard({
         eyebrow={t("Proposed fix")}
         title={title}
         footer={
-          <a href={MAILTO} className="flex w-full items-center justify-center rounded-lg bg-orange px-4 py-2.5 text-[13px] font-medium text-[#070707] transition hover:bg-[#FF6A1F]">
+          <a href={MAILTO} className="dash-press flex w-full items-center justify-center rounded-sm bg-orange px-4 py-2.5 text-[13px] font-medium text-[#070707] transition hover:brightness-110">
             {cta} →
           </a>
         }

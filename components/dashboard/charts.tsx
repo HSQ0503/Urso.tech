@@ -4,7 +4,7 @@
 // Same export signatures as the previous hand-drawn SVG versions, so pages
 // don't need to change. Theming flows through ChartConfig color vars.
 
-import { useId, useState } from "react";
+import { useId, useState, type CSSProperties } from "react";
 import {
   Area,
   AreaChart as RAreaChart,
@@ -27,11 +27,30 @@ import {
   YAxis,
 } from "recharts";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "./chart";
+import { CountUp } from "./count-up";
 import type { FunnelStep, WaterfallStep, CostLine, MarginTrend, StoreCostBenchmark } from "./data";
 import { useT } from "@/components/dashboard/locale-provider";
 
 const ORANGE = "#fe5100";
 const MUTED = "var(--color-series)";
+
+// One entrance vocabulary for every Recharts series: a 550ms ease-out sweep,
+// multi-series charts staggered ~80ms apart via `begin`. Recharts animates in
+// JS, so the CSS reduced-motion rules can't reach it — gate per render (the
+// check is client-only; this whole file is a client module).
+const reducedMotion = () => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+const sweep = (begin = 0) => ({
+  isAnimationActive: !reducedMotion(),
+  animationDuration: 550,
+  animationEasing: "ease-out" as const,
+  animationBegin: begin,
+});
+
+// One hover-dot spec across every trend chart: the focal (orange) series
+// answers with a restrained orange halo; baseline series stay a smaller plain
+// dot so they read subordinate.
+const ACTIVE_DOT = { r: 3.5, strokeWidth: 6, stroke: "rgba(254,81,0,0.18)" };
+const ACTIVE_DOT_SOFT = { r: 2.5, strokeWidth: 0 };
 // No-rounding rule: values, labels and tooltips show exact figures (cents on
 // money, first decimal on rates). Axis TICK labels may stay compact — Recharts
 // picks round tick values, so nothing real is lost there.
@@ -134,7 +153,7 @@ export function AreaChart({
         <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} interval={tickEvery(labels.length)} />
         <YAxis tickLine={false} axisLine={false} width={42} tickFormatter={axis} />
         <ChartTooltip cursor={{ strokeDasharray: "3 3" }} content={<ChartTooltipContent valueFormatter={(v) => fmt(v)} />} />
-        <Area dataKey="value" type="linear" stroke="var(--color-value)" strokeWidth={2} fill={`url(#${gid})`} dot={false} activeDot={{ r: 3 }} />
+        <Area dataKey="value" type="linear" stroke="var(--color-value)" strokeWidth={2} fill={`url(#${gid})`} dot={false} activeDot={ACTIVE_DOT} {...sweep()} />
       </RAreaChart>
     </ChartContainer>
   );
@@ -167,8 +186,8 @@ export function CallsBars({
         <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} interval={tickEvery(labels.length)} />
         <YAxis tickLine={false} axisLine={false} width={30} />
         <ChartTooltip content={<ChartTooltipContent />} />
-        <Bar dataKey="answered" stackId="a" fill="var(--color-answered)" radius={0} />
-        <Bar dataKey="missed" stackId="a" fill="var(--color-missed)" radius={0} />
+        <Bar dataKey="answered" stackId="a" fill="var(--color-answered)" radius={0} {...sweep()} />
+        <Bar dataKey="missed" stackId="a" fill="var(--color-missed)" radius={0} {...sweep(80)} />
       </BarChart>
     </ChartContainer>
   );
@@ -202,8 +221,8 @@ export function TrafficChart({
         <YAxis yAxisId="left" tickLine={false} axisLine={false} width={34} />
         <YAxis yAxisId="right" orientation="right" tickLine={false} axisLine={false} width={26} />
         <ChartTooltip content={<ChartTooltipContent />} />
-        <Bar yAxisId="left" dataKey="visits" fill="var(--color-visits)" radius={0} barSize={13} />
-        <Line yAxisId="right" dataKey="bookings" type="linear" stroke="var(--color-bookings)" strokeWidth={2} dot={false} activeDot={{ r: 3.5 }} />
+        <Bar yAxisId="left" dataKey="visits" fill="var(--color-visits)" radius={0} barSize={13} {...sweep()} />
+        <Line yAxisId="right" dataKey="bookings" type="linear" stroke="var(--color-bookings)" strokeWidth={2} dot={false} activeDot={ACTIVE_DOT} {...sweep(80)} />
       </ComposedChart>
     </ChartContainer>
   );
@@ -237,8 +256,8 @@ export function CallsChart({
         <YAxis tickLine={false} axisLine={false} width={24} />
         <ReferenceArea x1={closeHour} x2={startHour + hourly.length - 1} fill={ORANGE} fillOpacity={0.07} ifOverflow="extendDomain" />
         <ChartTooltip content={<ChartTooltipContent labelFormatter={(h) => fmtHour(Number(h))} />} />
-        <Bar dataKey="answered" stackId="a" fill="var(--color-answered)" radius={0} />
-        <Bar dataKey="missed" stackId="a" fill="var(--color-missed)" radius={0} />
+        <Bar dataKey="answered" stackId="a" fill="var(--color-answered)" radius={0} {...sweep()} />
+        <Bar dataKey="missed" stackId="a" fill="var(--color-missed)" radius={0} {...sweep(80)} />
       </BarChart>
     </ChartContainer>
   );
@@ -269,8 +288,8 @@ export function StackedArea({ data }: { data: { m: string; grooming: number; ret
         <XAxis dataKey="m" tickLine={false} axisLine={false} tickMargin={8} />
         <YAxis tickLine={false} axisLine={false} width={28} />
         <ChartTooltip content={<ChartTooltipContent />} />
-        <Area dataKey="grooming" type="linear" stackId="1" stroke="var(--color-grooming)" strokeWidth={1.5} fill={`url(#${gid}-g)`} />
-        <Area dataKey="retail" type="linear" stackId="1" stroke="var(--color-retail)" strokeWidth={1.5} fill={`url(#${gid}-r)`} />
+        <Area dataKey="grooming" type="linear" stackId="1" stroke="var(--color-grooming)" strokeWidth={1.5} fill={`url(#${gid}-g)`} activeDot={ACTIVE_DOT} {...sweep()} />
+        <Area dataKey="retail" type="linear" stackId="1" stroke="var(--color-retail)" strokeWidth={1.5} fill={`url(#${gid}-r)`} activeDot={ACTIVE_DOT_SOFT} {...sweep(80)} />
       </RAreaChart>
     </ChartContainer>
   );
@@ -292,7 +311,7 @@ export function DonutSplit({ a, b, labelA, labelB }: { a: number; b: number; lab
       <ChartContainer config={config} className="shrink-0" style={{ height: 96, width: 96 }}>
         <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
           <ChartTooltip content={<ChartTooltipContent hideLabel valueFormatter={(v) => fmtPct(v / total)} />} />
-          <Pie data={chartData} dataKey="value" nameKey="name" innerRadius={28} outerRadius={46} strokeWidth={0} paddingAngle={2}>
+          <Pie data={chartData} dataKey="value" nameKey="name" innerRadius={28} outerRadius={46} strokeWidth={0} paddingAngle={2} {...sweep()}>
             <Cell fill="var(--color-a)" />
             <Cell fill="var(--color-b)" />
           </Pie>
@@ -328,7 +347,7 @@ export function Donut({ segments }: { segments: { label: string; value: number; 
       <ChartContainer config={config} className="shrink-0" style={{ height: 96, width: 96 }}>
         <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
           <ChartTooltip content={<ChartTooltipContent hideLabel valueFormatter={(v) => fmtPct(v / total)} />} />
-          <Pie data={data} dataKey="value" nameKey="name" innerRadius={28} outerRadius={46} strokeWidth={0} paddingAngle={2}>
+          <Pie data={data} dataKey="value" nameKey="name" innerRadius={28} outerRadius={46} strokeWidth={0} paddingAngle={2} {...sweep()}>
             {segments.map((s, i) => (
               <Cell key={i} fill={s.color} />
             ))}
@@ -364,7 +383,7 @@ export function CohortCurve({ data, label = "months since first visit" }: { data
           <XAxis dataKey="x" tickLine={false} axisLine={false} tickMargin={6} />
           <YAxis tickLine={false} axisLine={false} width={28} domain={[0, 100]} tickFormatter={(v) => `${v}%`} />
           <ChartTooltip content={<ChartTooltipContent labelFormatter={(x) => t("Month {x}", { x: String(x) })} valueFormatter={(v) => `${v}%`} />} />
-          <Area dataKey="value" type="linear" stroke="var(--color-value)" strokeWidth={1.75} fill={`url(#${gid})`} dot={false} />
+          <Area dataKey="value" type="linear" stroke="var(--color-value)" strokeWidth={1.75} fill={`url(#${gid})`} dot={false} activeDot={ACTIVE_DOT} {...sweep()} />
         </RAreaChart>
       </ChartContainer>
       <div className="mt-1.5 font-mono text-[10px] uppercase tracking-[0.1em] text-ink-dimmer">{t(label)}</div>
@@ -390,7 +409,7 @@ export function RateTrend({ data, seriesLabel = "Return rate" }: { data: { label
         <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={6} interval="preserveStartEnd" />
         <YAxis tickLine={false} axisLine={false} width={34} domain={[0, 100]} tickFormatter={(v) => `${v}%`} />
         <ChartTooltip content={<ChartTooltipContent valueFormatter={(v) => `${v}%`} />} />
-        <Area dataKey="value" type="linear" stroke="var(--color-value)" strokeWidth={1.75} fill={`url(#${gid})`} dot={false} />
+        <Area dataKey="value" type="linear" stroke="var(--color-value)" strokeWidth={1.75} fill={`url(#${gid})`} dot={false} activeDot={ACTIVE_DOT} {...sweep()} />
       </RAreaChart>
     </ChartContainer>
   );
@@ -412,9 +431,10 @@ export function ConversionFunnel({ steps }: { steps: FunnelStep[] }) {
             </span>
           </div>
           <div className="h-8 w-full overflow-hidden rounded-none bg-raise">
+            {/* Stages fill top-to-bottom in sequence — the cascade shows the leak. */}
             <div
-              className="h-full rounded-none"
-              style={{ width: `${Math.max(5, (s.value / max) * 100)}%`, background: s.leak ? "rgba(254,81,0,0.42)" : "var(--color-series-soft)" }}
+              className="meter-fill h-full rounded-none"
+              style={{ width: `${Math.max(5, (s.value / max) * 100)}%`, background: s.leak ? "rgba(254,81,0,0.42)" : "var(--color-series-soft)", "--reveal-delay": `${i * 70}ms` } as CSSProperties}
             />
           </div>
           {i > 0 && (
@@ -433,19 +453,21 @@ export function ConversionFunnel({ steps }: { steps: FunnelStep[] }) {
 
 // ---- Radial gauge (a single rate, e.g. % answered) -------------------------
 export function RadialGauge({ value, caption, color = ORANGE, height = 168 }: { value: number; caption?: string; color?: string; height?: number }) {
-  const pctVal = (value * 100).toLocaleString("en-US", { maximumFractionDigits: 1 });
-  const data = [{ name: "v", value: pctVal }];
+  const data = [{ name: "v", value: value * 100 }];
   const config = { value: { label: caption ?? "", color } } satisfies ChartConfig;
   return (
     <div className="relative mx-auto" style={{ height, width: height }}>
       <ChartContainer config={config} style={{ height }}>
         <RadialBarChart data={data} startAngle={220} endAngle={-40} innerRadius="74%" outerRadius="100%">
           <PolarAngleAxis type="number" domain={[0, 100]} angleAxisId={0} tick={false} />
-          <RadialBar background={{ fill: "var(--color-track)" }} dataKey="value" cornerRadius={0} fill="var(--color-value)" angleAxisId={0} />
+          <RadialBar background={{ fill: "var(--color-track)" }} dataKey="value" cornerRadius={0} fill="var(--color-value)" angleAxisId={0} {...sweep()} />
         </RadialBarChart>
       </ChartContainer>
       <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-[30px] font-bold leading-none tracking-[-0.02em] text-ink">{pctVal}%</span>
+        {/* The stat ticks up while the arc sweeps — number and gauge move as one. */}
+        <span className="text-[30px] font-bold leading-none tracking-[-0.02em] tabular-nums text-ink">
+          <CountUp value={value} format="pct" />
+        </span>
         {caption && <span className="mt-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-ink-dimmer">{caption}</span>}
       </div>
     </div>
@@ -491,7 +513,8 @@ export function BarRanking({
           tick={<RankTick max={Math.max(6, Math.floor(labelWidth / 7))} />}
         />
         <ChartTooltip cursor={{ fill: "var(--color-raise)" }} content={<ChartTooltipContent hideLabel valueFormatter={(v) => fmt(v)} />} />
-        <Bar dataKey="value" radius={0} isAnimationActive={false}>
+        {/* Value labels render once the sweep settles — Recharts holds them back. */}
+        <Bar dataKey="value" radius={0} {...sweep()}>
           {data.map((d, i) => (
             <Cell key={i} fill={d.highlight ? color : track} />
           ))}
@@ -518,7 +541,7 @@ export function StackedShareBar({ segments }: { segments: { label: string; value
               className={`group/seg relative min-w-[2px] cursor-default transition-[width,filter] hover:brightness-110 ${i === 0 ? "rounded-none" : ""} ${i === last ? "rounded-none" : ""}`}
               style={{ width: `${(s.value / total) * 100}%`, background: s.color }}
             >
-              <span className="pointer-events-none absolute bottom-[calc(100%+8px)] left-1/2 z-20 -translate-x-1/2 whitespace-nowrap rounded-none border border-edge bg-surface px-3 py-2 opacity-0 shadow-[0_12px_32px_-12px_rgba(0,0,0,0.6)] transition-opacity duration-150 group-hover/seg:opacity-100">
+              <span className="pointer-events-none absolute bottom-[calc(100%+8px)] left-1/2 z-20 -translate-x-1/2 translate-y-1 whitespace-nowrap rounded-none border border-edge bg-surface px-3 py-2 opacity-0 shadow-[var(--pop-shadow)] transition-[opacity,translate] duration-150 group-hover/seg:translate-y-0 group-hover/seg:opacity-100 motion-reduce:transition-none">
                 <span className="flex items-center gap-2 text-[11.5px]">
                   <span className="size-2 rounded-[2px]" style={{ background: s.color }} />
                   <span className="text-ink-dim">{s.label}</span>
@@ -547,14 +570,17 @@ export function RatingBars({ stars, counts }: { stars: number[]; counts: number[
   const max = Math.max(...counts, 1);
   return (
     <div className="space-y-2">
-      {[...stars].reverse().map((star) => {
+      {[...stars].reverse().map((star, row) => {
         const idx = stars.indexOf(star);
         const c = counts[idx];
         return (
-          <div key={star} className="flex items-center gap-2.5">
+          <div key={star} className="group/rb flex items-center gap-2.5">
             <span className="w-7 shrink-0 font-mono text-[11px] text-ink-dim">{star}★</span>
-            <div className="h-3 flex-1 overflow-hidden rounded-none bg-raise">
-              <div className="h-full rounded-none" style={{ width: `${(c / max) * 100}%`, background: star >= 4 ? "var(--color-series)" : ORANGE }} />
+            <div className="h-3 flex-1 overflow-hidden rounded-none bg-raise transition-colors group-hover/rb:bg-raise-strong">
+              <div
+                className="meter-fill h-full rounded-none"
+                style={{ width: `${(c / max) * 100}%`, background: star >= 4 ? "var(--color-series)" : ORANGE, "--reveal-delay": `${row * 70}ms` } as CSSProperties}
+              />
             </div>
             <span className="w-9 shrink-0 text-right font-mono text-[11px] text-ink-dim">{c}</span>
           </div>
@@ -615,10 +641,10 @@ export function CompareBars({
           <XAxis type="number" hide />
           <YAxis type="category" dataKey="name" width={118} tickLine={false} axisLine={false} interval={0} tick={{ fontSize: 11 }} tickFormatter={(v) => truncName(String(v), 16)} />
           <ChartTooltip cursor={{ fill: "var(--color-raise)" }} content={<ChartTooltipContent valueFormatter={(v) => fmt(v)} />} />
-          {orderedKeys.map((k) => (
-            <Bar key={k} dataKey={k} fill={`var(--color-${k})`} radius={0} barSize={8} isAnimationActive={false} />
+          {orderedKeys.map((k, i) => (
+            <Bar key={k} dataKey={k} fill={`var(--color-${k})`} radius={0} barSize={8} {...sweep(i * 80)} />
           ))}
-          <Bar dataKey="a" fill="var(--color-a)" radius={0} barSize={8} isAnimationActive={false}>
+          <Bar dataKey="a" fill="var(--color-a)" radius={0} barSize={8} {...sweep(orderedKeys.length * 80)}>
             <LabelList dataKey="a" position="right" fill="var(--color-ink-dim)" fontSize={10.5} formatter={fmtLabel} />
           </Bar>
         </BarChart>
@@ -633,10 +659,10 @@ export function CompareBars({
         <XAxis dataKey="name" tickLine={false} axisLine={false} interval={0} height={40} tick={<WrapTick />} />
         <YAxis tickLine={false} axisLine={false} width={46} tickFormatter={axis} />
         <ChartTooltip cursor={{ fill: "var(--color-raise)" }} content={<ChartTooltipContent valueFormatter={(v) => fmt(v)} />} />
-        {orderedKeys.map((k) => (
-          <Bar key={k} dataKey={k} fill={`var(--color-${k})`} radius={0} isAnimationActive={false} />
+        {orderedKeys.map((k, i) => (
+          <Bar key={k} dataKey={k} fill={`var(--color-${k})`} radius={0} {...sweep(i * 80)} />
         ))}
-        <Bar dataKey="a" fill="var(--color-a)" radius={0} isAnimationActive={false}>
+        <Bar dataKey="a" fill="var(--color-a)" radius={0} {...sweep(orderedKeys.length * 80)}>
           <LabelList dataKey="a" position="top" fill="var(--color-ink-dim)" fontSize={10.5} formatter={fmtLabel} />
         </Bar>
       </BarChart>
@@ -669,7 +695,7 @@ export function CompareDiverging({
         <YAxis type="category" dataKey="name" width={126} tickLine={false} axisLine={false} interval={0} tick={{ fontSize: 11 }} tickFormatter={(v) => truncName(String(v), 17)} />
         <ReferenceLine x={0} stroke="var(--color-edge-strong)" />
         <ChartTooltip cursor={{ fill: "var(--color-raise)" }} content={<ChartTooltipContent hideLabel valueFormatter={(v) => signed(v)} />} />
-        <Bar dataKey="delta" radius={0} isAnimationActive={false}>
+        <Bar dataKey="delta" radius={0} {...sweep()}>
           {data.map((d, i) => (
             <Cell key={i} fill={d.delta >= 0 ? "var(--color-good)" : ORANGE} />
           ))}
@@ -734,10 +760,11 @@ export function ComparePace({
           content={<ChartTooltipContent labelFormatter={(l) => t("Day {l}", { l: String(l) })} valueFormatter={(v) => fmt(v)} />}
         />
         {more.map((_, i) => (
-          <Line key={i} dataKey={`m${i}`} type="linear" stroke={`var(--color-m${i})`} strokeWidth={1.5} strokeDasharray="3 4" dot={false} />
+          <Line key={i} dataKey={`m${i}`} type="linear" stroke={`var(--color-m${i})`} strokeWidth={1.5} strokeDasharray="3 4" dot={false} activeDot={ACTIVE_DOT_SOFT} {...sweep(i * 80)} />
         ))}
-        <Line dataKey="b" type="linear" stroke="var(--color-b)" strokeWidth={1.75} strokeDasharray="5 4" dot={false} />
-        <Line dataKey="a" type="linear" stroke="var(--color-a)" strokeWidth={2.25} dot={false} activeDot={{ r: 3 }} />
+        <Line dataKey="b" type="linear" stroke="var(--color-b)" strokeWidth={1.75} strokeDasharray="5 4" dot={false} activeDot={ACTIVE_DOT_SOFT} {...sweep(more.length * 80)} />
+        {/* Focus period lands last — the answer arrives after the baselines. */}
+        <Line dataKey="a" type="linear" stroke="var(--color-a)" strokeWidth={2.25} dot={false} activeDot={ACTIVE_DOT} {...sweep((more.length + 1) * 80)} />
       </LineChart>
     </ChartContainer>
   );
@@ -764,7 +791,7 @@ export function HistogramBars({
         <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} interval={0} tick={{ fontSize: 11 }} />
         <YAxis hide />
         <ChartTooltip cursor={{ fill: "var(--color-raise)" }} content={<ChartTooltipContent valueFormatter={(v) => `${(v * 100).toLocaleString("en-US", { maximumFractionDigits: 1 })}%`} />} />
-        <Bar dataKey="value" fill="var(--color-value)" radius={0} isAnimationActive={false}>
+        <Bar dataKey="value" fill="var(--color-value)" radius={0} {...sweep()}>
           <LabelList dataKey="value" position="top" fill="var(--color-ink-dim)" fontSize={10.5} formatter={(v) => `${(Number(v) * 100).toLocaleString("en-US", { maximumFractionDigits: 1 })}%`} />
         </Bar>
       </BarChart>
@@ -788,7 +815,7 @@ function Segmented<T extends string>({ options, value, onChange }: { options: re
           key={o.k}
           type="button"
           onClick={() => onChange(o.k)}
-          className={`rounded-full px-3 py-1 font-mono text-[10px] uppercase tracking-[0.1em] transition-colors ${value === o.k ? "bg-orange text-white" : "text-ink-dim hover:text-ink"}`}
+          className={`dash-press cursor-pointer rounded-full px-3 py-1 font-mono text-[10px] uppercase tracking-[0.1em] transition-colors ${value === o.k ? "bg-orange text-white" : "text-ink-dim hover:text-ink"}`}
         >
           {o.label}
         </button>
@@ -836,6 +863,7 @@ function niceTicks(lo: number, hi: number): number[] {
 
 export function ProfitWaterfall({ steps }: { steps: WaterfallStep[]; height?: number }) {
   const bars = waterfallGeometry(steps);
+  const [hover, setHover] = useState<number | null>(null);
   const W = 600, H = 320, padL = 48, padR = 14, padT = 24, padB = 48;
   const plotW = W - padL - padR, plotH = H - padT - padB;
   const slot = plotW / bars.length;
@@ -847,9 +875,10 @@ export function ProfitWaterfall({ steps }: { steps: WaterfallStep[]; height?: nu
   const domMax = Math.max(hiMax, ticks[ticks.length - 1]);
   const yOf = (v: number) => padT + plotH * (1 - (v - domMin) / (domMax - domMin || 1));
   const cx = (i: number) => padL + slot * i + slot / 2;
+  const hovered = hover == null ? null : bars[hover];
 
   return (
-    <div className="w-full font-mono">
+    <div className="relative w-full font-mono">
       <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ height: "auto", display: "block" }} preserveAspectRatio="xMidYMid meet">
         {ticks.map((v, i) => (
           <g key={`t${i}`}>
@@ -857,18 +886,40 @@ export function ProfitWaterfall({ steps }: { steps: WaterfallStep[]; height?: nu
             <text x={padL - 8} y={yOf(v)} dy="0.32em" textAnchor="end" fontSize={10.5} fill="var(--color-axis)">{moneyK(v)}</text>
           </g>
         ))}
-        {bars.slice(0, -1).map((b, i) => (
-          <line key={`c${i}`} x1={cx(i) + barW / 2} y1={yOf(b.after)} x2={cx(i + 1) - barW / 2} y2={yOf(b.after)} stroke="var(--color-edge-strong)" strokeWidth={1} />
-        ))}
+        {/* Column cursor — same raise material as the Recharts bar cursor. */}
+        {hover != null && <rect x={padL + slot * hover} y={padT} width={slot} height={plotH} fill="var(--color-raise)" />}
+        {/* Connectors settle in after the bars have risen. */}
+        <g className="panel-fade-in" style={{ animationDelay: "260ms" }}>
+          {bars.slice(0, -1).map((b, i) => (
+            <line key={`c${i}`} x1={cx(i) + barW / 2} y1={yOf(b.after)} x2={cx(i + 1) - barW / 2} y2={yOf(b.after)} stroke="var(--color-edge-strong)" strokeWidth={1} />
+          ))}
+        </g>
         {bars.map((b, i) => {
           const yTop = yOf(b.hi), yBot = yOf(b.lo);
           const isTotal = b.kind !== "subtract";
-          const fill = isTotal ? (b.value >= 0 ? ORANGE : "#e0492e") : MUTED;
+          const fill = isTotal ? ORANGE : MUTED;
           return (
             <g key={`b${i}`}>
-              <title>{`${b.label}: ${money0(b.value)}`}</title>
-              <rect x={cx(i) - barW / 2} y={yTop} width={barW} height={Math.max(1.5, yBot - yTop)} fill={fill} />
-              <text x={cx(i)} y={yTop - 6} textAnchor="middle" fontSize={11} fontWeight={isTotal ? 600 : 400} fill={isTotal ? "var(--color-ink)" : "var(--color-ink-dim)"}>
+              <rect
+                className="bar-rise"
+                style={{ transformBox: "fill-box", transformOrigin: "50% 100%", animationDelay: `${i * 60}ms` }}
+                x={cx(i) - barW / 2}
+                y={yTop}
+                width={barW}
+                height={Math.max(1.5, yBot - yTop)}
+                fill={fill}
+                stroke={hover === i ? "var(--color-edge-strong)" : "none"}
+              />
+              <text
+                className="panel-fade-in"
+                style={{ animationDelay: `${i * 60 + 200}ms` }}
+                x={cx(i)}
+                y={yTop - 6}
+                textAnchor="middle"
+                fontSize={11}
+                fontWeight={isTotal ? 600 : 400}
+                fill={isTotal ? "var(--color-ink)" : "var(--color-ink-dim)"}
+              >
                 {moneyK(b.value)}
               </text>
             </g>
@@ -885,7 +936,32 @@ export function ProfitWaterfall({ steps }: { steps: WaterfallStep[]; height?: nu
             </text>
           );
         })}
+        {/* Full-column hit areas so thin bars are easy to hover. */}
+        {bars.map((_, i) => (
+          <rect
+            key={`h${i}`}
+            x={padL + slot * i}
+            y={padT}
+            width={slot}
+            height={plotH}
+            fill="transparent"
+            onMouseEnter={() => setHover(i)}
+            onMouseLeave={() => setHover(null)}
+          />
+        ))}
       </svg>
+      {hovered && hover != null && (
+        <div
+          className="tip-in pointer-events-none absolute z-20 -translate-x-1/2 whitespace-nowrap rounded-none border border-edge bg-surface px-3 py-2"
+          style={{ left: `${(cx(hover) / W) * 100}%`, bottom: `calc(${((H - yOf(hovered.hi)) / H) * 100}% + 8px)`, boxShadow: "var(--pop-shadow)" }}
+        >
+          <span className="flex items-center gap-2 text-[11.5px]">
+            <span className="size-2 rounded-[2px]" style={{ background: hovered.kind !== "subtract" ? ORANGE : MUTED }} />
+            <span className="font-sans text-ink-dim">{hovered.label}</span>
+            <span className="tabular-nums text-ink">{money0(hovered.value)}</span>
+          </span>
+        </div>
+      )}
     </div>
   );
 }
@@ -935,7 +1011,7 @@ function MoneyArea({ labels, data, label, height }: { labels: string[]; data: nu
         <YAxis tickLine={false} axisLine={false} width={46} tickFormatter={(n) => moneyK(Number(n))} />
         <ReferenceLine y={0} stroke="var(--color-edge-strong)" />
         <ChartTooltip cursor={{ strokeDasharray: "3 3" }} content={<ChartTooltipContent valueFormatter={(v) => money0(Number(v))} />} />
-        <Area dataKey="value" type="monotone" stroke="var(--color-value)" strokeWidth={2} fill={`url(#${gid})`} dot={false} activeDot={{ r: 3 }} />
+        <Area dataKey="value" type="monotone" stroke="var(--color-value)" strokeWidth={2} fill={`url(#${gid})`} dot={false} activeDot={ACTIVE_DOT} {...sweep()} />
       </RAreaChart>
     </ChartContainer>
   );
@@ -956,8 +1032,8 @@ function MarginLines({ labels, gross, net, height }: { labels: string[]; gross: 
         <YAxis tickLine={false} axisLine={false} width={40} tickFormatter={(n) => `${Math.round(Number(n))}%`} />
         <ReferenceLine y={0} stroke="var(--color-edge-strong)" />
         <ChartTooltip cursor={{ strokeDasharray: "3 3" }} content={<ChartTooltipContent valueFormatter={(v) => `${Number(v).toLocaleString("en-US", { maximumFractionDigits: 1 })}%`} />} />
-        <Line dataKey="gross" type="monotone" stroke="var(--color-gross)" strokeWidth={2} dot={false} />
-        <Line dataKey="net" type="monotone" stroke="var(--color-net)" strokeWidth={2} dot={false} />
+        <Line dataKey="gross" type="monotone" stroke="var(--color-gross)" strokeWidth={2} dot={false} activeDot={ACTIVE_DOT_SOFT} {...sweep()} />
+        <Line dataKey="net" type="monotone" stroke="var(--color-net)" strokeWidth={2} dot={false} activeDot={ACTIVE_DOT} {...sweep(80)} />
       </LineChart>
     </ChartContainer>
   );
@@ -968,11 +1044,12 @@ export function CostBars({ lines }: { lines: CostLine[] }) {
   const max = Math.max(...lines.map((l) => l.pctOfRevenue), 0.01);
   return (
     <div className="flex flex-col gap-2">
-      {lines.map((l) => (
+      {lines.map((l, i) => (
         <div key={l.category} className="flex items-center gap-3">
           <div className="w-[104px] shrink-0 truncate font-mono text-[11px] text-ink-dim">{l.category}</div>
           <div className="relative h-[18px] flex-1 overflow-hidden rounded-[2px] bg-[var(--color-track)]">
-            <div className="h-full bg-orange" style={{ width: `${(l.pctOfRevenue / max) * 100}%` }} />
+            {/* Ranked order fills top-down — the sequence restates the ranking. */}
+            <div className="meter-fill h-full bg-orange" style={{ width: `${(l.pctOfRevenue / max) * 100}%`, "--reveal-delay": `${i * 70}ms` } as CSSProperties} />
           </div>
           <div className="w-[124px] shrink-0 text-right font-mono text-[11px] tabular-nums text-ink">
             {money0(l.amount)} <span className="text-ink-dimmer">· {pct1(l.pctOfRevenue)}</span>
@@ -1008,7 +1085,7 @@ export function CostBenchmark({ rows }: { rows: StoreCostBenchmark[] }) {
         </thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={r.id} className="border-t border-edge">
+            <tr key={r.id} className="border-t border-edge transition-colors hover:bg-raise">
               <td className="py-2 pr-3 text-ink">{r.name}</td>
               {cols.map((c) => (
                 <td key={c.k} className="px-2 py-2 text-right font-mono tabular-nums text-ink-dim" style={{ background: `rgba(254,81,0,${(r[c.k] / colMax[c.k]) * 0.2})` }}>

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { CSSProperties } from "react";
 import {
   stores,
   parseScope,
@@ -80,7 +81,7 @@ export async function OwnerHome({ searchParams, userName, streak }: { searchPara
 
   return (
     <div>
-      <div className="animate-stage-in">
+      <div className="dash-rise">
         <WelcomeBanner name={userName} streak={streak} />
         <PageHeader
           eyebrow={`${t("Overview")} · ${t(scopeLabel(scope))} · ${t(periodLabel)}`}
@@ -89,18 +90,20 @@ export async function OwnerHome({ searchParams, userName, streak }: { searchPara
       </div>
 
       {winner && (
-        <div className="mt-3 inline-flex animate-stage-in items-center gap-2.5 border-l-2 border-orange bg-orange-wash py-2 pl-3 pr-4">
+        <div className="dash-rise relative mt-3 inline-flex items-center gap-2.5 border-l-2 border-orange bg-orange-wash py-2 pl-3 pr-4" style={{ "--i": 1 } as CSSProperties}>
           <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-orange">urso.ai</span>
           <span className="text-[13px] text-ink-dim">
-            <span className="font-semibold text-orange">{t(WIN_LABELS[winner.key])} {t("up")} {pct(winner.d)}</span> — {t("your strongest move this period.")}
+            <span className="font-semibold text-orange">{t(WIN_LABELS[winner.key])} {t("up")} <CountUp value={winner.d} format="pct" className="tabular-nums" /></span> — {t("your strongest move this period.")}
           </span>
+          {/* Win rule: the page's single dash-draw, arriving once the banner has settled. */}
+          <span aria-hidden className="dash-draw absolute inset-x-0 bottom-0 h-px bg-orange" style={{ "--reveal-delay": "500ms" } as CSSProperties} />
         </div>
       )}
 
       {/* KPI row — all six are live FranPOS metrics with real period-over-period
           deltas (chips hide when no honest prior period exists). Calls answered
           and no-show join the row when Twilio / the booking feed go live. */}
-      <section className="dash-raise mt-2 grid animate-stage-in grid-cols-2 gap-px overflow-hidden rounded-none border border-edge bg-edge md:grid-cols-3 xl:grid-cols-6" style={{ animationDelay: "50ms" }}>
+      <section className="dash-raise dash-rise mt-3 grid grid-cols-2 gap-px overflow-hidden rounded-none border border-edge bg-edge md:grid-cols-3 xl:grid-cols-6" style={{ "--i": 2 } as CSSProperties}>
         <Kpi label={t("Revenue")} raw={m.revenue} format="money" delta={deltas.revenue} accent={winner?.key === "revenue"} />
         <Kpi label={t("Bookings")} raw={m.bookings} format="int" delta={deltas.bookings} accent={winner?.key === "bookings"} />
         <Kpi label={t("Avg visit")} raw={m.avgTicket} format="money" delta={deltas.avgTicket} accent={winner?.key === "avgTicket"} />
@@ -110,7 +113,7 @@ export async function OwnerHome({ searchParams, userName, streak }: { searchPara
       </section>
 
       {/* One action item + revenue */}
-      <section className="mt-3 grid animate-stage-in grid-cols-1 gap-3 lg:grid-cols-[1fr_1.25fr]" style={{ animationDelay: "110ms" }}>
+      <section className="dash-rise mt-3 grid grid-cols-1 gap-3 lg:grid-cols-[1fr_1.25fr]" style={{ "--i": 3 } as CSSProperties}>
         <ActionItemCard
           eyebrow={t("Action item · what to fix first")}
           title={action.title}
@@ -148,7 +151,7 @@ export async function OwnerHome({ searchParams, userName, streak }: { searchPara
       </section>
 
       {/* Calls + Traffic */}
-      <section className="mt-3 grid animate-stage-in grid-cols-1 gap-3 xl:grid-cols-2" style={{ animationDelay: "170ms" }}>
+      <section className="dash-rise mt-3 grid grid-cols-1 gap-3 xl:grid-cols-2" style={{ "--i": 4 } as CSSProperties}>
         <Card className="dash-raise">
           <div className="mb-4 flex items-center gap-2">
             <Micro>{t("Inbound calls")}</Micro>
@@ -162,16 +165,19 @@ export async function OwnerHome({ searchParams, userName, streak }: { searchPara
           </div>
           {cs.total === 0 ? (
             <EmptyFeed
+              label={t("Coming online")}
               title={t("Call tracking goes live with Twilio")}
               detail={t("Once connected, you'll see answered vs missed calls each month — and the revenue behind every missed one.")}
               tag={t("Call tracking pending")}
+              actionHref="/dashboard/actions"
+              actionLabel={t("Set up call tracking")}
             />
           ) : (
             <>
               <div className="mb-4 flex items-start justify-between gap-3">
-                <div className="text-[22px] font-bold tracking-[-0.01em]">{cs.total.toLocaleString()} <span className="text-[13px] text-ink-dim">{t("calls")}</span></div>
+                <div className="text-[22px] font-bold tracking-[-0.01em] tabular-nums"><CountUp value={cs.total} format="int" /> <span className="text-[13px] text-ink-dim">{t("calls")}</span></div>
                 <div className="text-right">
-                  <div className="text-[20px] font-bold text-orange">{pct(cs.missedPct)}</div>
+                  <div className="text-[20px] font-bold tabular-nums text-orange"><CountUp value={cs.missedPct} format="pct" /></div>
                   <Micro>{t("missed")}</Micro>
                 </div>
               </div>
@@ -196,16 +202,19 @@ export async function OwnerHome({ searchParams, userName, streak }: { searchPara
           </div>
           {ws.visits === 0 ? (
             <EmptyFeed
+              label={t("Coming online")}
               title={t("Website analytics connect next")}
               detail={t("With analytics linked, you'll track visits, online bookings, and exactly where the booking funnel leaks.")}
               tag={t("Analytics pending")}
+              actionHref="/dashboard/actions"
+              actionLabel={t("Connect analytics")}
             />
           ) : (
             <>
               <div className="mb-4 flex items-start justify-between gap-3">
-                <div className="text-[22px] font-bold tracking-[-0.01em]">{ws.visits.toLocaleString()} <span className="text-[13px] text-ink-dim">{t("visits")}</span></div>
+                <div className="text-[22px] font-bold tracking-[-0.01em] tabular-nums"><CountUp value={ws.visits} format="int" /> <span className="text-[13px] text-ink-dim">{t("visits")}</span></div>
                 <div className="text-right">
-                  <div className="text-[20px] font-bold text-orange">{pct(ws.convRate, 1)}</div>
+                  <div className="text-[20px] font-bold tabular-nums text-orange"><CountUp value={ws.convRate} format="pct" /></div>
                   <Micro>{t("book online")}</Micro>
                 </div>
               </div>
@@ -219,41 +228,44 @@ export async function OwnerHome({ searchParams, userName, streak }: { searchPara
       </section>
 
       {/* Store performance */}
-      <section className="mt-3 animate-stage-in" style={{ animationDelay: "230ms" }}>
+      <section className="dash-rise mt-3" style={{ "--i": 5 } as CSSProperties}>
         <div className="mb-4 flex items-end justify-between">
           <div>
             <Micro>{t("By location")}</Micro>
             <h2 className="mt-1.5 text-[16px] font-semibold tracking-[-0.01em] text-ink">{t("Store performance")}</h2>
           </div>
-          <Link href="/dashboard/stores" className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-dim transition-colors hover:text-orange">
+          <Link href="/dashboard/stores" className="dash-press font-mono text-[11px] uppercase tracking-[0.12em] text-ink-dim transition-colors hover:text-orange">
             {t("Compare")} →
           </Link>
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {stores.map((s) => {
+          {stores.map((s, i) => {
             const sm = cards[s.id];
             return (
-              <Card key={s.id} className="dash-raise flex flex-col gap-4 transition-all duration-200 hover:-translate-y-px">
-                <div className="flex items-start justify-between">
+              <Link key={s.id} href={`/dashboard/stores?store=${s.id}`} className="block">
+                <Card interactive className="dash-raise flex h-full flex-col gap-4">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <div className="text-[14.5px] text-ink">{s.name}</div>
+                      <Micro className="mt-0.5">{t(s.tier)}</Micro>
+                    </div>
+                    <span className="font-mono text-[12px] text-ink-dim">{fmtMoney(sm.avgTicket)} {t("avg")}</span>
+                  </div>
+                  <div className="text-[27px] font-bold leading-none tracking-[-0.02em] tabular-nums"><CountUp value={sm.revenue} format="money" /></div>
                   <div>
-                    <div className="text-[14.5px] text-ink">{s.name}</div>
-                    <Micro className="mt-0.5">{t(s.tier)}</Micro>
+                    <div className="mb-1.5 flex items-center justify-between">
+                      <Micro>{t("Return")}</Micro>
+                      <span className="font-mono text-[11px] text-ink-dim">{pct(sm.rebook)}</span>
+                    </div>
+                    {/* Fills sweep left-to-right across the row as the section lands (~250ms in). */}
+                    <Meter value={sm.rebook} color="var(--color-ink-dim)" delay={300 + i * 80} />
                   </div>
-                  <span className="font-mono text-[12px] text-ink-dim">{fmtMoney(sm.avgTicket)} {t("avg")}</span>
-                </div>
-                <div className="text-[27px] font-bold leading-none tracking-[-0.02em] tabular-nums"><CountUp value={sm.revenue} format="money" /></div>
-                <div>
-                  <div className="mb-1.5 flex items-center justify-between">
-                    <Micro>{t("Return")}</Micro>
-                    <span className="font-mono text-[11px] text-ink-dim">{pct(sm.rebook)}</span>
+                  <div className="flex items-center justify-between border-t border-edge pt-3">
+                    <Micro>{t("Retail attach")}</Micro>
+                    <span className="font-mono text-[12px]" style={{ color: sm.attach < 0.15 ? "#fe5100" : "var(--color-ink-dim)" }}>{pct(sm.attach)}</span>
                   </div>
-                  <Meter value={sm.rebook} color="var(--color-ink-dim)" />
-                </div>
-                <div className="flex items-center justify-between border-t border-edge pt-3">
-                  <Micro>{t("Retail attach")}</Micro>
-                  <span className="font-mono text-[12px]" style={{ color: sm.attach < 0.15 ? "#fe5100" : "var(--color-ink-dim)" }}>{pct(sm.attach)}</span>
-                </div>
-              </Card>
+                </Card>
+              </Link>
             );
           })}
         </div>
@@ -262,10 +274,10 @@ export async function OwnerHome({ searchParams, userName, streak }: { searchPara
   );
 }
 
-// Pending-feed empty state — a premium "coming online" moment (serif line + a
-// faint warm bloom) rather than a dead chart at zero. Used until Twilio / web
-// analytics go live.
-function EmptyFeed({ title, detail, tag }: { title: string; detail: string; tag: string }) {
+// Pending-feed empty state — a premium "coming online" moment (a faint warm
+// bloom, what will appear here, and the one step that turns the feed on) rather
+// than a dead chart at zero. Used until Twilio / web analytics go live.
+function EmptyFeed({ label, title, detail, tag, actionHref, actionLabel }: { label: string; title: string; detail: string; tag: string; actionHref: string; actionLabel: string }) {
   return (
     <div className="relative flex min-h-[176px] flex-col items-center justify-center overflow-hidden rounded-none px-6 py-8 text-center">
       <div
@@ -274,10 +286,14 @@ function EmptyFeed({ title, detail, tag }: { title: string; detail: string; tag:
         style={{ background: "radial-gradient(60% 70% at 50% 32%, var(--color-orange-wash), transparent 72%)" }}
       />
       <div aria-hidden className="dash-grain pointer-events-none absolute inset-0" />
-      <p className="relative text-[15px] font-semibold leading-[1.25] tracking-[-0.01em] text-ink">{title}</p>
+      <Micro className="relative">{label}</Micro>
+      <p className="relative mt-2 text-[15px] font-semibold leading-[1.25] tracking-[-0.01em] text-ink">{title}</p>
       <p className="relative mt-2 max-w-[300px] text-[12.5px] leading-[1.5] text-ink-dim">{detail}</p>
-      <div className="relative mt-4">
+      <div className="relative mt-4 flex items-center gap-3">
         <Tag tone="muted">{tag}</Tag>
+        <Link href={actionHref} className="dash-press font-mono text-[10px] uppercase tracking-[0.12em] text-ink-dim transition-colors hover:text-orange">
+          {actionLabel} →
+        </Link>
       </div>
     </div>
   );

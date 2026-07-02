@@ -159,6 +159,9 @@
   background: var(--pill-bg-hover);
   border-color: var(--pill-edge-hover);
 }
+.dash-pill:active {
+  transform: translateY(0.5px);
+}
 
 /* Film grain overlay for premium / feature surfaces — flips intensity per theme. */
 .dash-grain {
@@ -172,6 +175,114 @@
    soft lift (a whisper on dark, a real shadow on light). */
 .dash-raise {
   box-shadow: var(--card-highlight), var(--card-shadow);
+}
+
+/* ===== Emotional layer — one motion grammar for the dashboard =====
+   Tactility and reward, never decoration: 140ms tooltips, 160ms hovers,
+   240ms chips, 500–700ms entrances/fills, all on --ease-out, all
+   token-driven so both themes get the same feel. */
+
+/* Floating surfaces (tooltips, popovers) get real depth per theme. The
+   fallback matches the dark value for surfaces outside .theme-scope. */
+.theme-scope {
+  --pop-shadow: 0 12px 32px -12px rgba(0, 0, 0, 0.75), inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
+  --modal-shadow: 0 24px 64px -24px rgba(0, 0, 0, 0.85);
+}
+:root[data-theme="light"] .theme-scope,
+.report-light {
+  --pop-shadow: 0 12px 32px -16px rgba(15, 18, 22, 0.25), 0 2px 8px -4px rgba(15, 18, 22, 0.12), inset 0 1px 0 0 #ffffff;
+  --modal-shadow: 0 24px 64px -32px rgba(15, 18, 22, 0.28), 0 4px 16px -8px rgba(15, 18, 22, 0.12);
+}
+
+/* Orchestrated entrance — sections rise once, in order. Set --i per sibling
+   (0, 1, 2 …) for a 50ms stagger: header, KPIs, then cards. */
+.dash-rise {
+  animation: panel-fade-in 0.5s var(--ease-out) backwards;
+  animation-delay: calc(var(--i, 0) * 50ms);
+}
+
+/* Interactive surfaces — hover sharpens the border and lifts the material;
+   color/bg only, so nothing shifts layout. Pair with cursor-pointer. */
+.dash-hover {
+  transition:
+    background-color 160ms var(--ease-out),
+    border-color 160ms var(--ease-out);
+}
+.dash-hover:hover {
+  background-color: var(--color-raise);
+  border-color: var(--color-edge-strong);
+}
+
+/* Press feedback — controls settle half a pixel under the pointer. */
+.dash-press:active {
+  transform: translateY(0.5px);
+}
+
+/* Keyboard focus — one visible ring, dashboard-wide. */
+.theme-scope :focus-visible {
+  outline: 2px solid rgba(254, 81, 0, 0.55);
+  outline-offset: 2px;
+}
+
+/* Meters fill from zero on arrival — momentum you can see. */
+@keyframes meter-fill {
+  from { transform: scaleX(0); }
+}
+.meter-fill {
+  transform-origin: left center;
+  animation: meter-fill 650ms var(--ease-out) var(--reveal-delay, 120ms) backwards;
+}
+
+/* Delta chips land just after their value settles — one coordinated beat. */
+@keyframes chip-in {
+  from { opacity: 0; transform: scale(0.94); }
+}
+.chip-in {
+  animation: chip-in 240ms var(--ease-out) var(--reveal-delay, 350ms) backwards;
+}
+
+/* Win rule — a single orange hairline that draws itself under a highlight.
+   The executive version of celebration. */
+@keyframes dash-draw {
+  from { transform: scaleX(0); }
+}
+.dash-draw {
+  transform-origin: left center;
+  animation: dash-draw 700ms var(--ease-out) var(--reveal-delay, 350ms) backwards;
+}
+
+/* Tooltip entrance — content arrives, never blinks in. */
+@keyframes tip-in {
+  from { opacity: 0; transform: translateY(3px); }
+}
+.tip-in {
+  animation: tip-in 140ms var(--ease-out);
+}
+
+/* Loading shimmer — a light pass over the skeleton, quieter than a pulse.
+   Reads correctly in both themes via the raise tokens. */
+@keyframes skeleton-shimmer {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+.skeleton-shimmer {
+  background: linear-gradient(90deg, var(--color-raise) 25%, var(--color-raise-strong) 37%, var(--color-raise) 63%);
+  background-size: 400% 100%;
+  /* linear: a constant-velocity light pass loops seamlessly; eased sweeps hitch. */
+  animation: skeleton-shimmer 1.6s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dash-rise, .meter-fill, .chip-in, .dash-draw, .tip-in {
+    animation: none;
+  }
+  .skeleton-shimmer {
+    animation: none;
+    background: var(--color-raise);
+  }
+  .dash-press:active {
+    transform: none;
+  }
 }
 
 .slide-sheen {

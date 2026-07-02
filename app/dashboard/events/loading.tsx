@@ -1,1 +1,1 @@
-export { ActionsSkeleton as default } from "@/components/dashboard/skeletons";
+export { EventsSkeleton as default } from "@/components/dashboard/skeletons";

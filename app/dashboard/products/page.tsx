@@ -10,9 +10,12 @@ import {
   type ProductSort,
 } from "@/components/dashboard/data";
 import { getProductCatalog } from "@/components/dashboard/data.server";
-import { Card, PageHeader, Micro, Tag, fmtMoney, pct } from "@/components/dashboard/ui";
+import { Card, PageHeader, Micro, Tag, EmptyState, fmtMoney, pct } from "@/components/dashboard/ui";
 import { InfoTip } from "@/components/dashboard/info-tip";
 import { getI18n } from "@/lib/i18n.server";
+import type { CSSProperties } from "react";
+
+const rise = (i: number) => ({ "--i": i } as CSSProperties);
 
 // Every canonical product sold in the selected period. The same item rung
 // under different register spellings is ONE row here: barcodes collapse to a
@@ -47,8 +50,24 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
   const catalog = await getProductCatalog(scope, month, { q, sort, dir, page });
   if (!catalog) {
     return (
-      <div className="animate-stage-in">
-        <PageHeader eyebrow={`${t("Products")} · ${scopeLabel(scope)} · ${period}`} title={t("Products")} />
+      <div className="space-y-3">
+        <div className="dash-rise" style={rise(0)}>
+          <PageHeader eyebrow={`${t("Products")} · ${scopeLabel(scope)} · ${period}`} title={t("Products")} />
+        </div>
+        <div className="dash-rise" style={rise(1)}>
+          <EmptyState
+            label={t("Catalog unavailable")}
+            title={t("Product data didn’t load for this period.")}
+            action={
+              <Link
+                href="/dashboard/products"
+                className="dash-pill inline-flex items-center rounded-full px-3.5 py-1.5 font-mono text-[11px] uppercase tracking-[0.12em] text-ink-dim transition-colors hover:text-ink"
+              >
+                {t("Reset view")}
+              </Link>
+            }
+          />
+        </div>
       </div>
     );
   }
@@ -70,13 +89,15 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
   const arrow = (col: ProductSort) => (sort === col ? (dir === "asc" ? " ↑" : " ↓") : "");
 
   return (
-    <div className="animate-stage-in space-y-3">
-      <PageHeader
-        eyebrow={`${t("Products")} · ${scopeLabel(scope)} · ${period}`}
-        title={t("Products")}
-      />
+    <div className="space-y-3">
+      <div className="dash-rise" style={rise(0)}>
+        <PageHeader
+          eyebrow={`${t("Products")} · ${scopeLabel(scope)} · ${period}`}
+          title={t("Products")}
+        />
+      </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="dash-rise flex flex-wrap items-center justify-between gap-3" style={rise(1)}>
         <form action="/dashboard/products" className="flex items-center gap-2">
           {sp.store && <input type="hidden" name="store" value={sp.store} />}
           {sp.month && <input type="hidden" name="month" value={sp.month} />}
@@ -86,9 +107,9 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
             name="q"
             defaultValue={q}
             placeholder={t("Search products…")}
-            className="w-64 rounded-lg border border-edge bg-transparent px-3 py-1.5 text-[13px] text-ink placeholder:text-ink-dimmer focus:border-orange/60 focus:outline-none"
+            className="dash-pill w-64 rounded-none px-3 py-1.5 text-[13px] text-ink placeholder:text-ink-dimmer focus:border-orange/60"
           />
-          <button type="submit" className="rounded-lg border border-edge px-3 py-1.5 text-[12.5px] text-ink-dim transition-colors hover:border-orange/60 hover:text-ink">
+          <button type="submit" className="dash-pill cursor-pointer rounded-none px-3 py-1.5 text-[12.5px] text-ink-dim transition-colors hover:border-orange/60 hover:text-ink">
             {t("Search")}
           </button>
           {q && (
@@ -97,83 +118,99 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
             </Link>
           )}
         </form>
-        <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-dimmer">
+        <Micro>
           {total.toLocaleString("en-US")} {t("products")}{q ? ` ${t("matching")} “${q}”` : ""}
-        </span>
+        </Micro>
       </div>
 
-      <Card pad={false}>
-        <div className="flex items-center gap-1.5 px-5 pb-1 pt-5">
-          <Micro>{t("Catalog · sold in period")}</Micro>
-          <InfoTip text={colHelp(t)} />
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[640px] border-collapse text-[13.5px]">
-            <thead>
-              <tr className="font-mono text-[10px] uppercase tracking-[0.1em] text-ink-dimmer">
-                <th className="px-5 py-2.5 text-left font-normal">
-                  <Link href={sortHref("name")} className="transition-colors hover:text-ink">{t("Product")}{arrow("name")}</Link>
-                </th>
-                <th className="px-5 py-2.5 text-right font-normal">
-                  <Link href={sortHref("revenue")} className="transition-colors hover:text-ink">{t("Revenue")}{arrow("revenue")}</Link>
-                </th>
-                <th className="px-5 py-2.5 text-right font-normal">
-                  <Link href={sortHref("units")} className="transition-colors hover:text-ink">{t("Units")}{arrow("units")}</Link>
-                </th>
-                <th className="px-5 py-2.5 text-right font-normal">{t("Avg price")}</th>
-                <th className="px-5 py-2.5 text-right font-normal">
-                  <Link href={sortHref("margin")} className="transition-colors hover:text-ink">{t("Margin")}{arrow("margin")}</Link>
-                </th>
-                <th className="px-5 py-2.5 text-right font-normal">{t("Stores")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.key} className="border-t border-edge transition-colors hover:bg-raise">
-                  <td className="px-5 py-3">
-                    <div className="flex items-center gap-2">
-                      <span className="text-ink">{r.name}</span>
-                      <Tag tone={r.line === "Grooming" ? "orange" : "muted"}>{r.line}</Tag>
-                    </div>
-                  </td>
-                  <td className="px-5 py-3 text-right font-mono text-ink">{fmtMoney(r.revenue)}</td>
-                  <td className="px-5 py-3 text-right font-mono text-ink-dim">{r.units.toLocaleString("en-US")}</td>
-                  <td className="px-5 py-3 text-right font-mono text-ink-dim">{r.avgPrice == null ? "—" : fmtMoney(Math.round(r.avgPrice))}</td>
-                  <td className="px-5 py-3 text-right font-mono text-ink-dim">{r.margin == null ? "—" : pct(r.margin)}</td>
-                  <td className="px-5 py-3 text-right font-mono text-ink-dimmer">{r.stores}</td>
-                </tr>
-              ))}
-              {rows.length === 0 && (
-                <tr className="border-t border-edge">
-                  <td colSpan={6} className="px-5 py-8 text-center text-[13.5px] text-ink-dim">
-                    {t("Nothing sold matches")}{q ? ` “${q}”` : ` ${t("this period")}`} — {t("try a different search or widen the period.")}
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-        <div className="flex items-center justify-between border-t border-edge px-5 py-3">
-          <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-dimmer">
-            {first.toLocaleString("en-US")}–{last.toLocaleString("en-US")} {t("of")} {total.toLocaleString("en-US")}
-          </span>
-          <div className="flex items-center gap-3 text-[12.5px]">
-            {page > 1 ? (
-              <Link href={href({ page: String(page - 1) })} className="text-ink-dim transition-colors hover:text-ink">← {t("Prev")}</Link>
-            ) : (
-              <span className="text-ink-dimmer/50">← {t("Prev")}</span>
-            )}
-            <span className="font-mono text-[11px] text-ink-dimmer">{page} / {pages}</span>
-            {page < pages ? (
-              <Link href={href({ page: String(page + 1) })} className="text-ink-dim transition-colors hover:text-ink">{t("Next")} →</Link>
-            ) : (
-              <span className="text-ink-dimmer/50">{t("Next")} →</span>
-            )}
+      <section className="dash-rise" style={rise(2)}>
+        <Card pad={false}>
+          <div className="flex items-center gap-1.5 px-5 pb-1 pt-5">
+            <Micro>{t("Catalog · sold in period")}</Micro>
+            <InfoTip text={colHelp(t)} />
           </div>
-        </div>
-      </Card>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px] border-collapse text-[13.5px]">
+              <thead>
+                <tr className="font-mono text-[10px] uppercase tracking-[0.1em] text-ink-dimmer">
+                  <th className="p-0 text-left font-normal">
+                    <Link href={sortHref("name")} className="block px-5 py-2.5 transition-colors hover:bg-raise hover:text-ink">{t("Product")}{arrow("name")}</Link>
+                  </th>
+                  <th className="p-0 text-right font-normal">
+                    <Link href={sortHref("revenue")} className="block px-5 py-2.5 transition-colors hover:bg-raise hover:text-ink">{t("Revenue")}{arrow("revenue")}</Link>
+                  </th>
+                  <th className="p-0 text-right font-normal">
+                    <Link href={sortHref("units")} className="block px-5 py-2.5 transition-colors hover:bg-raise hover:text-ink">{t("Units")}{arrow("units")}</Link>
+                  </th>
+                  <th className="px-5 py-2.5 text-right font-normal">{t("Avg price")}</th>
+                  <th className="p-0 text-right font-normal">
+                    <Link href={sortHref("margin")} className="block px-5 py-2.5 transition-colors hover:bg-raise hover:text-ink">{t("Margin")}{arrow("margin")}</Link>
+                  </th>
+                  <th className="px-5 py-2.5 text-right font-normal">{t("Stores")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.key} className="border-t border-edge transition-colors hover:bg-raise">
+                    <td className="px-5 py-3">
+                      <div className="flex items-center gap-2">
+                        <span className="text-ink">{r.name}</span>
+                        <Tag tone={r.line === "Grooming" ? "orange" : "muted"}>{r.line}</Tag>
+                      </div>
+                    </td>
+                    <td className="px-5 py-3 text-right font-mono text-ink">{fmtMoney(r.revenue)}</td>
+                    <td className="px-5 py-3 text-right font-mono text-ink-dim">{r.units.toLocaleString("en-US")}</td>
+                    <td className="px-5 py-3 text-right font-mono text-ink-dim">{r.avgPrice == null ? "—" : fmtMoney(Math.round(r.avgPrice))}</td>
+                    <td className="px-5 py-3 text-right font-mono text-ink-dim">{r.margin == null ? "—" : pct(r.margin)}</td>
+                    <td className="px-5 py-3 text-right font-mono text-ink-dimmer">{r.stores}</td>
+                  </tr>
+                ))}
+                {rows.length === 0 && (
+                  <tr className="border-t border-edge">
+                    <td colSpan={6} className="p-5">
+                      <EmptyState
+                        label={t("No matches")}
+                        title={`${t("Nothing sold matches")}${q ? ` “${q}”` : ` ${t("this period")}`}`}
+                        body={t("Try a different search or widen the period.")}
+                        action={
+                          q || month !== "all" ? (
+                            <Link
+                              href={q ? href({ q: undefined }) : href({ month: "all" })}
+                              className="dash-pill inline-flex items-center rounded-full px-3.5 py-1.5 font-mono text-[11px] uppercase tracking-[0.12em] text-ink-dim transition-colors hover:text-ink"
+                            >
+                              {q ? t("Clear search") : t("View last 12 months")}
+                            </Link>
+                          ) : undefined
+                        }
+                      />
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          <div className="flex items-center justify-between border-t border-edge px-5 py-3">
+            <Micro>
+              {first.toLocaleString("en-US")}–{last.toLocaleString("en-US")} {t("of")} {total.toLocaleString("en-US")}
+            </Micro>
+            <div className="flex items-center gap-3 text-[12.5px]">
+              {page > 1 ? (
+                <Link href={href({ page: String(page - 1) })} className="dash-press inline-block text-ink-dim transition-colors hover:text-ink">← {t("Prev")}</Link>
+              ) : (
+                <span className="text-ink-dimmer/50">← {t("Prev")}</span>
+              )}
+              <span className="font-mono text-[11px] text-ink-dimmer">{page} / {pages}</span>
+              {page < pages ? (
+                <Link href={href({ page: String(page + 1) })} className="dash-press inline-block text-ink-dim transition-colors hover:text-ink">{t("Next")} →</Link>
+              ) : (
+                <span className="text-ink-dimmer/50">{t("Next")} →</span>
+              )}
+            </div>
+          </div>
+        </Card>
+      </section>
 
-      <p className="text-[12.5px] leading-[1.5] text-ink-dimmer">
+      <p className="dash-rise text-[12.5px] leading-[1.5] text-ink-dimmer" style={rise(3)}>
         {t("Products that never sold in the period don’t appear — FranPOS doesn’t expose the full catalog yet (vendor request open). Margin uses the item cost FranPOS records at sale time.")}
       </p>
     </div>
