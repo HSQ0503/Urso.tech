@@ -1,25 +1,10 @@
 import { NextResponse } from "next/server";
+import { sendContactSubmission } from "@/lib/email";
 
-// Stub. The form UX is complete; backend delivery is deferred until the
-// destination is confirmed (Resend domain, CRM webhook, etc).
-//
-// To wire Resend: set RESEND_API_KEY in env and uncomment the fetch block.
-// Once a verified sender is set up, change `from` to your domain.
-//
-// const res = await fetch("https://api.resend.com/emails", {
-//   method: "POST",
-//   headers: {
-//     Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
-//     "Content-Type": "application/json",
-//   },
-//   body: JSON.stringify({
-//     from: "Urso <onboarding@resend.dev>",
-//     to: ["hsq0503@gmail.com"],
-//     subject: `New conversation — ${name} (${company || "—"})`,
-//     html: `<p><b>Name:</b> ${name}</p><p><b>Email:</b> ${email}</p>...`,
-//   }),
-// });
-// if (!res.ok) throw new Error("Resend rejected the message");
+// Contact form (app/contact). There's no database row for these — the founder
+// notification email IS the delivery — so a send failure is surfaced to the
+// visitor (the form re-arms and shows the error) rather than silently dropping
+// a lead. Routing + Resend live in lib/email.ts (sendContactSubmission).
 
 type Payload = {
   name?: string;
@@ -51,17 +36,32 @@ export async function POST(req: Request) {
   }
   if (!company) return NextResponse.json({ error: "Company is required." }, { status: 400 });
 
-  console.log("[contact]", {
+  // Breadcrumb so a lead is recoverable from logs even if the transport blips.
+  console.log("[contact]", { name, email, company, at: new Date().toISOString() });
+
+  const { sent, error } = await sendContactSubmission({
+    kind: "Contact form",
     name,
     email,
-    company,
-    website: body.website,
-    businessType: body.businessType,
-    locations: body.locations,
-    challenge: body.challenge,
-    stack: body.stack,
-    at: new Date().toISOString(),
+    org: company,
+    facts: [
+      { label: "Website", value: body.website?.trim() ?? "" },
+      { label: "Business type", value: body.businessType?.trim() ?? "" },
+      { label: "Locations", value: body.locations?.trim() ?? "" },
+    ],
+    answers: [
+      { label: "What's getting harder as they grow", value: body.challenge?.trim() ?? "" },
+      { label: "What runs the business today", value: body.stack?.trim() ?? "" },
+    ],
   });
+
+  if (!sent) {
+    console.error("[contact] notification failed:", error);
+    return NextResponse.json(
+      { error: "We couldn't send that. Please try again, or email us at hello@urso.ws." },
+      { status: 500 },
+    );
+  }
 
   return NextResponse.json({ ok: true });
 }

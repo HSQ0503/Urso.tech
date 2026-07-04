@@ -1,33 +1,12 @@
 import { NextResponse } from "next/server";
-
-// Stub. The form UX is complete; backend delivery is deferred until Han
-// confirms destination (Resend domain, CRM webhook, etc).
-//
-// To wire Resend (the recommended path): set RESEND_API_KEY in env and
-// uncomment the fetch block below. Once a verified sender is set up,
-// change the `from` value from the Resend test sender to your domain.
-//
-// const res = await fetch("https://api.resend.com/emails", {
-//   method: "POST",
-//   headers: {
-//     Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
-//     "Content-Type": "application/json",
-//   },
-//   body: JSON.stringify({
-//     from: "Urso Diagnostic <onboarding@resend.dev>",
-//     to: ["hsq0503@gmail.com"],
-//     subject: `Diagnostic request — ${name} (${brand || "—"})`,
-//     html: `<p><b>Name:</b> ${escapeHtml(name)}</p>
-//            <p><b>Email:</b> ${escapeHtml(email)}</p>
-//            <p><b>Business:</b> ${escapeHtml(brand || "(not provided)")}</p>
-//            <p><b>Knows where they're leaking:</b> ${escapeHtml(clarity || "(not provided)")}</p>`,
-//   }),
-// });
-// if (!res.ok) throw new Error("Resend rejected the message");
+import { sendContactSubmission } from "@/lib/email";
 
 // Accepts both the homepage CTA (name/email/phone/about) and the
-// book-a-diagnostic form (name/email/brand/clarity). Only name + email
-// are required; the rest is captured opportunistically.
+// book-a-diagnostic form (name/email/brand/clarity). Only name + email are
+// required; the rest is captured opportunistically. No database row — the
+// founder email is the delivery — so a send failure is surfaced to the visitor
+// rather than dropped. Routing + Resend live in lib/email.ts.
+
 type Payload = {
   name?: string;
   email?: string;
@@ -54,15 +33,28 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Email looks invalid" }, { status: 400 });
   }
 
-  console.log("[diagnostic request]", {
+  // Breadcrumb so a lead is recoverable from logs even if the transport blips.
+  console.log("[diagnostic request]", { name, email, at: new Date().toISOString() });
+
+  const { sent, error } = await sendContactSubmission({
+    kind: "Diagnostic request",
     name,
     email,
-    brand: body.brand,
-    clarity: body.clarity,
-    phone: body.phone,
-    about: body.about,
-    at: new Date().toISOString(),
+    org: body.brand?.trim() || undefined,
+    facts: [{ label: "Phone", value: body.phone?.trim() ?? "" }],
+    answers: [
+      { label: "Where they think they're leaking", value: body.clarity?.trim() ?? "" },
+      { label: "About the business", value: body.about?.trim() ?? "" },
+    ],
   });
+
+  if (!sent) {
+    console.error("[diagnostic request] notification failed:", error);
+    return NextResponse.json(
+      { error: "We couldn't send that. Please try again, or email us at hello@urso.ws." },
+      { status: 500 },
+    );
+  }
 
   return NextResponse.json({ ok: true });
 }
