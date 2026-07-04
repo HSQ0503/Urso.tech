@@ -86,14 +86,20 @@ export function Conversation({
   lead,
   messages,
   calls,
+  isVendor = false,
 }: {
   peerPhone: string;
   lead: Lead | null;
   messages: Message[];
   calls: Call[];
+  isVendor?: boolean;
 }) {
   const streamRef = useRef<HTMLDivElement>(null);
   const lastKey = messages[messages.length - 1]?.id ?? calls[calls.length - 1]?.id;
+
+  // A lead parsed from a vendor blob starts its thread with an outbound hold
+  // text; surface the originating vendor text so the conversation has context.
+  const originNote = !isVendor && lead?.source === "lead_vendor" && Boolean(lead.raw_message);
 
   useEffect(() => {
     const el = streamRef.current;
@@ -144,27 +150,30 @@ export function Conversation({
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-2">
             <h2 className="truncate text-[15px] font-semibold">
-              {lead?.name ?? fmtPhone(peerPhone)}
+              {isVendor ? "Lead vendor" : (lead?.name ?? fmtPhone(peerPhone))}
             </h2>
-            {lead && (
+            {isVendor && (
+              <span className="cp-chip shrink-0 bg-[var(--cp-bg)] text-[var(--cp-muted)]">Vendor</span>
+            )}
+            {!isVendor && lead && (
               <span
                 className={`cp-chip shrink-0 ${lead.type === "hot" ? "cp-badge-hot" : "cp-badge-cold"}`}
               >
                 {lead.type === "hot" ? "Hot" : "Cold"}
               </span>
             )}
-            {lead && (
+            {!isVendor && lead && (
               <span className={`cp-chip shrink-0 ${STATUS_CLASS[lead.status]} xl:hidden`}>
                 {STATUS_LABEL[lead.status]}
               </span>
             )}
           </div>
-          {lead?.name && (
+          {(isVendor || lead?.name) && (
             <p className="text-[12px] tabular-nums text-[var(--cp-muted)]">{fmtPhone(peerPhone)}</p>
           )}
         </div>
         <div className="flex shrink-0 items-center gap-2 xl:hidden">
-          {lead && (
+          {!isVendor && lead && (
             <Link href={`/CanesPressure/leads/${lead.id}`} className="cp-btn cp-btn-sm">
               Open lead
             </Link>
@@ -180,7 +189,28 @@ export function Conversation({
         ref={streamRef}
         className="cp-scroll flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-3 py-4 md:px-4"
       >
-        {stream.length === 0 && (
+        {isVendor && (
+          <p className="mx-auto mb-1 max-w-[420px] rounded-lg bg-[var(--cp-bg)] px-3 py-2 text-center text-[12px] leading-snug text-[var(--cp-muted)]">
+            Texts from your lead vendor land here and become lead cards automatically. Each
+            customer gets their own conversation.
+          </p>
+        )}
+        {originNote && lead && (
+          <div className="flex max-w-[78%] flex-col items-start self-start">
+            <div className="rounded-2xl border border-dashed border-[var(--cp-line-strong)] bg-[var(--cp-bg)] px-3.5 py-2">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.04em] text-[var(--cp-faint)]">
+                From the lead vendor
+              </p>
+              <p className="mt-0.5 whitespace-pre-wrap break-words text-[13px] leading-relaxed text-[var(--cp-muted)]">
+                {lead.raw_message}
+              </p>
+            </div>
+            <span className="mt-1 text-[11px] tabular-nums text-[var(--cp-faint)]">
+              {stamp(lead.created_at)}
+            </span>
+          </div>
+        )}
+        {stream.length === 0 && !isVendor && !originNote && (
           <p className="m-auto text-[13px] text-[var(--cp-muted)]">No messages in this thread yet.</p>
         )}
         {stream.map((item) => (

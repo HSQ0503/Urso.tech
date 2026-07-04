@@ -5,6 +5,7 @@ import { useState, useTransition } from "react";
 import { Plus } from "lucide-react";
 import { createLead } from "@/app/CanesPressure/actions";
 import { etLocalToIso, SOURCE_LABEL, type LeadSource, type LeadType } from "@/lib/canes/types";
+import { isCompleteWhen, SchedulePicker } from "./schedule-picker";
 
 // Loose on purpose: 10 digits with an optional +1 and common separators.
 // toE164 on the server is the real gate.
@@ -18,6 +19,7 @@ export function NewLead() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [type, setType] = useState<LeadType>("cold");
+  const [when, setWhen] = useState("");
   const [notice, setNotice] = useState("");
   const [isPending, startTransition] = useTransition();
 
@@ -37,7 +39,6 @@ export function NewLead() {
     const service = String(fd.get("service") ?? "").trim();
     const address = String(fd.get("address") ?? "").trim();
     const source = String(fd.get("source")) as LeadSource;
-    const appointment = String(fd.get("appointment") ?? "");
     setNotice("");
     startTransition(async () => {
       const res = await createLead({
@@ -47,11 +48,12 @@ export function NewLead() {
         source,
         service: service || undefined,
         address: address || undefined,
-        appointmentIso: type === "hot" && appointment ? etLocalToIso(appointment) : undefined,
+        appointmentIso: type === "hot" && isCompleteWhen(when) ? etLocalToIso(when) : undefined,
       });
       if (res.ok) {
         setOpen(false);
         setType("cold");
+        setWhen("");
         router.refresh();
       } else {
         setNotice(res.notice ?? "Could not add the lead.");
@@ -63,8 +65,8 @@ export function NewLead() {
     <button
       type="button"
       onClick={() => setType(value)}
-      className={`min-h-[32px] rounded text-[13px] font-semibold transition-colors ${
-        type === value ? activeClass : "text-[var(--cp-muted)]"
+      className={`min-h-[32px] cursor-pointer rounded text-[13px] font-semibold transition-colors ${
+        type === value ? activeClass : "text-[var(--cp-muted)] hover:text-[var(--cp-ink)]"
       }`}
     >
       {label}
@@ -123,10 +125,9 @@ export function NewLead() {
               <input id="new-address" name="address" className="cp-input" placeholder="Street, city" />
             </div>
             {type === "hot" && (
-              <div>
-                <label className="cp-label" htmlFor="new-appointment">Estimate visit (optional)</label>
-                <input id="new-appointment" name="appointment" type="datetime-local" className="cp-input" />
-                <p className="mt-1.5 text-[12px] text-[var(--cp-faint)]">Times are Eastern (ET).</p>
+              <div className="sm:col-span-2">
+                <span className="cp-label">Estimate visit (optional)</span>
+                <SchedulePicker value={when} onChange={setWhen} />
               </div>
             )}
           </div>

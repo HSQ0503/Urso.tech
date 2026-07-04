@@ -18,7 +18,7 @@ import type { CanesSettings, Lead } from "@/lib/canes/types";
 // simulator funnel through processInboundSms so the routing rules (opt-out →
 // vendor → known lead → organic) live in exactly one place.
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://urso.tech";
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://urso.ws";
 
 export type InboundOutcome = {
   handled:

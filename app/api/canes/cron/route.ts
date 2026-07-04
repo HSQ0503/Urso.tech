@@ -17,7 +17,7 @@ import type { AutomationTask, Lead } from "@/lib/canes/types";
 // ${CRON_SECRET}` automatically; manual runs can pass ?secret= instead.
 export const maxDuration = 60;
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://urso.tech";
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://urso.ws";
 
 export async function GET(req: NextRequest) {
   const secret = process.env.CRON_SECRET;

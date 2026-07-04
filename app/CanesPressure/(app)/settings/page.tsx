@@ -19,7 +19,7 @@ export default async function SettingsPage() {
   const settings = await getSettings();
   const demo = isDemo();
   const twilio = twilioConfigured();
-  const base = process.env.NEXT_PUBLIC_APP_URL ?? "https://urso.tech";
+  const base = process.env.NEXT_PUBLIC_APP_URL ?? "https://urso.ws";
 
   const webhooks = [
     { label: "SMS", url: `${base}/api/canes/twilio/sms` },

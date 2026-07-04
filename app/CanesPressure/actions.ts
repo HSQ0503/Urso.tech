@@ -189,7 +189,7 @@ export async function initiateCall(leadId: string): Promise<ActionResult> {
   const owner = process.env.CANES_OWNER_PHONE;
   const { accountSid, authToken, from } = canesTwilioCreds();
   if (!owner || !accountSid) return { ok: false, notice: "Twilio isn't configured yet — use the Call link instead." };
-  const base = process.env.NEXT_PUBLIC_APP_URL ?? "https://urso.tech";
+  const base = process.env.NEXT_PUBLIC_APP_URL ?? "https://urso.ws";
   const twimlUrl = `${base}/api/canes/twilio/bridge?to=${encodeURIComponent(lead.phone)}`;
   const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Calls.json`, {
     method: "POST",

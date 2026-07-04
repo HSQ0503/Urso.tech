@@ -12,6 +12,7 @@ import {
   type ActionResult,
 } from "@/app/CanesPressure/actions";
 import { etLocalToIso, fmtEt, STATUS_LABEL, type LeadStatus } from "@/lib/canes/types";
+import { isCompleteWhen, SchedulePicker } from "./schedule-picker";
 
 // Every interactive widget for the lead-profile rail lives here: the profile
 // page is a Server Component, so the dispositions, call bridge, status,
@@ -91,32 +92,24 @@ export function Disposition({ leadId }: { leadId: string }) {
       </div>
 
       {mode === "closed" && (
-        <div className="space-y-1.5">
-          <div className="flex gap-2">
-            <input
-              type="datetime-local"
-              className="cp-input flex-1"
-              value={when}
-              onChange={(e) => setWhen(e.target.value)}
-            />
-            <button
-              type="button"
-              className="cp-btn cp-btn-primary"
-              disabled={!when || isPending}
-              onClick={() =>
-                run(
-                  () => setAppointment(leadId, etLocalToIso(when)),
-                  () => {
-                    setMode(null);
-                    setWhen("");
-                  },
-                )
-              }
-            >
-              Book
-            </button>
-          </div>
-          <p className="text-[12px] leading-snug text-[var(--cp-faint)]">Times are Eastern (ET).</p>
+        <div className="space-y-2.5">
+          <SchedulePicker value={when} onChange={setWhen} />
+          <button
+            type="button"
+            className="cp-btn cp-btn-primary w-full"
+            disabled={!isCompleteWhen(when) || isPending}
+            onClick={() =>
+              run(
+                () => setAppointment(leadId, etLocalToIso(when)),
+                () => {
+                  setMode(null);
+                  setWhen("");
+                },
+              )
+            }
+          >
+            {isPending ? "Booking..." : "Book estimate visit"}
+          </button>
         </div>
       )}
 
@@ -282,23 +275,18 @@ export function AppointmentCard({
           <span className="text-[var(--cp-muted)]">No visit scheduled.</span>
         )}
       </p>
-      <input
-        type="datetime-local"
-        className="cp-input"
-        value={when}
-        onChange={(e) => setWhen(e.target.value)}
-      />
+      <SchedulePicker value={when} onChange={setWhen} />
       <button
         type="button"
         className="cp-btn cp-btn-sm w-full"
-        disabled={!when || isPending}
+        disabled={!isCompleteWhen(when) || isPending}
         onClick={() => run(() => setAppointment(leadId, etLocalToIso(when)), () => setWhen(""))}
       >
         <CalendarClock size={15} strokeWidth={2} />
-        {isPending ? "Saving..." : "Save"}
+        {isPending ? "Saving..." : appointmentAt ? "Reschedule" : "Save"}
       </button>
       <p className="text-[12px] leading-snug text-[var(--cp-faint)]">
-        Times are Eastern (ET). Confirmation text goes out automatically {offsetHours}h before.
+        Confirmation text goes out automatically {offsetHours}h before the visit.
       </p>
       <Notice value={feedback} />
     </div>

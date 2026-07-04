@@ -12,7 +12,7 @@ export default async function CanesAppLayout({ children }: { children: React.Rea
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-[1440px]">
       {/* Sidebar (desktop) */}
-      <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col gap-1 border-r border-[var(--cp-line)] bg-[var(--cp-surface)] px-3 py-5 md:flex">
+      <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col gap-1 border-r border-[var(--cp-line)] bg-[var(--cp-sidebar)] px-3 py-5 md:flex">
         {/* Wordmark, not an icon-in-a-box — real trade software leads with the name */}
         <Link href="/CanesPressure" className="mb-6 block px-2.5 pt-1">
           <span className="cp-display block text-[17px] leading-tight">Canes</span>

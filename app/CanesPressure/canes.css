@@ -1,31 +1,35 @@
 /* Canes Pressure Washing — operations design system.
-   Grounded in working field-service software (Jobber-class web apps,
-   OpenPhone's inbox): cool light-gray canvas, white cards with hairline
-   borders, deep navy ink, one teal action color, disciplined status tints.
-   No gradients, no decorative washes, nothing blinks.
+   Layout grounded in working field-service software (Jobber-class web apps,
+   OpenPhone's inbox); colors are Urso's light mode (globals.css light tokens):
+   cool gray canvas, white cards with hairline borders, near-black ink, Urso
+   orange #fe5100 as the one accent. Raw orange is for accents (toplines,
+   dots, focus, timers); solid fills use the deepened steps so white button
+   text keeps contrast. No gradients, no washes, nothing blinks.
    Everything scopes under .canes so the rest of urso.tech is untouched. */
 
 .canes {
   /* palette */
-  --cp-bg: #f6f7f9;
+  --cp-bg: #eceef1;
+  --cp-sidebar: #f6f7f9;
   --cp-surface: #ffffff;
-  --cp-ink: #0c2b3f;
-  --cp-muted: #53616e;
-  --cp-faint: #7d8a96;
-  --cp-line: #e2e6ea;
-  --cp-line-strong: #c7cfd6;
-  --cp-hover: #f2f4f6;
-  --cp-brand: #0e7490;
-  --cp-brand-deep: #0b5c73;
-  --cp-brand-soft: #e6f3f7;
-  --cp-hot: #b54708;
-  --cp-hot-bg: #fdf1df;
+  --cp-ink: #14171c;
+  --cp-muted: #5a5f66;
+  --cp-faint: #84888f;
+  --cp-line: #e4e6e8;
+  --cp-line-strong: #cfd2d6;
+  --cp-hover: #f1f2f4;
+  --cp-brand: #fe5100;
+  --cp-brand-fill: #e84900;
+  --cp-brand-deep: #c23e00;
+  --cp-brand-soft: #ffefe7;
+  --cp-hot: #c23e00;
+  --cp-hot-bg: #ffefe7;
   --cp-cold: #0b6aa2;
   --cp-cold-bg: #e7f2fa;
   --cp-good: #0f7b48;
   --cp-good-bg: #e5f5ec;
-  --cp-warn: #b54708;
-  --cp-warn-bg: #fdf1df;
+  --cp-warn: #c23e00;
+  --cp-warn-bg: #ffefe7;
   --cp-danger: #b42318;
   --cp-danger-bg: #fdecea;
 
@@ -58,10 +62,10 @@
   box-shadow: 0 1px 3px rgba(12, 43, 63, 0.06);
 }
 
-/* per-section accent: a solid 3px top border on stat cards (never a gradient) */
-.cp-topline { display: block; height: 3px; border-radius: 6px 6px 0 0; }
+/* per-section accent: a solid 3px top border on workflow columns (Jobber) */
+.cp-topline { display: block; height: 3px; }
+.cp-topline-slate { background: #3e4a56; }
 .cp-topline-brand { background: var(--cp-brand); }
-.cp-topline-hot { background: var(--cp-hot); }
 .cp-topline-cold { background: var(--cp-cold); }
 .cp-topline-good { background: var(--cp-good); }
 
@@ -88,13 +92,14 @@
 }
 .cp-btn:hover { background: var(--cp-hover); }
 .cp-btn-primary {
-  background: var(--cp-brand);
-  border-color: var(--cp-brand);
+  background: var(--cp-brand-fill);
+  border-color: var(--cp-brand-fill);
   color: #fff;
 }
 .cp-btn-primary:hover { background: var(--cp-brand-deep); border-color: var(--cp-brand-deep); }
 .cp-btn-danger { color: var(--cp-danger); }
 .cp-btn-sm { min-height: 30px; padding: 0 10px; font-size: 12.5px; border-radius: 4px; }
+.cp-btn:disabled { opacity: 0.45; pointer-events: none; }
 
 /* inputs */
 .cp-input, .cp-select, .cp-textarea {
@@ -143,16 +148,45 @@
 .cp-status-contacted { background: #e7f0fb; color: #1758b8; }
 .cp-status-appt { background: var(--cp-warn-bg); color: var(--cp-warn); }
 .cp-status-confirmed { background: var(--cp-good-bg); color: var(--cp-good); }
-.cp-status-estimated { background: var(--cp-brand-soft); color: var(--cp-brand-deep); }
+.cp-status-estimated { background: #e3f2f6; color: #0b6478; }
 .cp-status-won { background: var(--cp-good); color: #fff; }
 .cp-status-lost { background: #eceff2; color: var(--cp-faint); text-decoration: line-through; }
+
+/* schedule picker — selectable day/time chips, same square Jobber geometry */
+.cp-slot {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  min-height: 38px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.25;
+  border: 1px solid var(--cp-line-strong);
+  background: var(--cp-surface);
+  color: var(--cp-ink);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+.cp-slot:hover:not(:disabled) { background: var(--cp-hover); }
+.cp-slot[data-selected="true"] {
+  background: var(--cp-brand-fill);
+  border-color: var(--cp-brand-fill);
+  color: #fff;
+}
+.cp-slot:disabled { opacity: 0.35; cursor: not-allowed; }
+.cp-slot-sub { font-size: 10.5px; font-weight: 500; opacity: 0.75; }
 
 /* speed-to-lead timers — color escalates, nothing blinks */
 .cp-timer-ok { background: var(--cp-good-bg); color: var(--cp-good); }
 .cp-timer-warn { background: var(--cp-warn-bg); color: var(--cp-warn); }
 .cp-timer-late { background: var(--cp-danger-bg); color: var(--cp-danger); }
 
-/* nav — white sidebar; active is a flat gray row with dark text (Jobber) */
+/* nav — light sidebar; active is a white card with a hairline ring (Jobber) */
 .cp-nav-link {
   display: flex;
   align-items: center;
@@ -166,9 +200,10 @@
 }
 .cp-nav-link:hover { background: var(--cp-hover); color: var(--cp-ink); }
 .cp-nav-link[data-active="true"] {
-  background: var(--cp-hover);
+  background: var(--cp-surface);
   color: var(--cp-ink);
   font-weight: 600;
+  box-shadow: inset 0 0 0 1px var(--cp-line), 0 1px 2px rgba(20, 23, 28, 0.05);
 }
 
 /* call + voicemail events in the conversation stream (OpenPhone-style) */
@@ -185,14 +220,14 @@
 .cp-call-card-out { background: var(--cp-brand-soft); border-color: transparent; }
 .cp-call-card audio { width: 100%; max-width: 260px; height: 36px; }
 
-/* message bubbles — inbound flat gray, outbound teal, automated darker */
+/* message bubbles — inbound flat gray, outbound brand, automated darker */
 .cp-bubble-in {
   background: #f1f3f6;
   color: var(--cp-ink);
   border-radius: 14px 14px 14px 4px;
 }
 .cp-bubble-out {
-  background: var(--cp-brand);
+  background: var(--cp-brand-fill);
   color: #fff;
   border-radius: 14px 14px 4px 14px;
 }

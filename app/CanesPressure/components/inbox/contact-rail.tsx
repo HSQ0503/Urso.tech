@@ -28,7 +28,42 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   );
 }
 
-export function ContactRail({ peerPhone, lead }: { peerPhone: string; lead: Lead | null }) {
+export function ContactRail({
+  peerPhone,
+  lead,
+  isVendor = false,
+}: {
+  peerPhone: string;
+  lead: Lead | null;
+  isVendor?: boolean;
+}) {
+  if (isVendor) {
+    return (
+      <div className="cp-scroll flex h-full min-h-0 flex-col overflow-y-auto px-4 py-5">
+        <div className="flex flex-col items-center text-center">
+          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-[#e8ebee] text-[15px] font-semibold text-[var(--cp-muted)]">
+            LV
+          </span>
+          <p className="mt-2.5 text-[15px] font-semibold leading-tight">Lead vendor</p>
+          <p className="mt-0.5 text-[12.5px] tabular-nums text-[var(--cp-muted)]">
+            {fmtPhone(peerPhone)}
+          </p>
+          <span className="cp-chip mt-2 bg-[var(--cp-bg)] text-[var(--cp-muted)]">Vendor</span>
+        </div>
+        <div className="mt-4 grid grid-cols-1 gap-2">
+          <a href={`tel:${peerPhone}`} className="cp-btn cp-btn-sm">
+            <Phone size={14} strokeWidth={2} /> Call
+          </a>
+        </div>
+        <div className="cp-divider mt-4 pt-3">
+          <p className="text-[12.5px] leading-relaxed text-[var(--cp-muted)]">
+            New lead texts from this number are parsed into lead cards automatically. The
+            customers each get their own conversation and lead page.
+          </p>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="cp-scroll flex h-full min-h-0 flex-col overflow-y-auto px-4 py-5">
       {/* Identity */}

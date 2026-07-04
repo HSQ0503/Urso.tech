@@ -112,6 +112,16 @@ export type Thread = {
   message_count: number;
 };
 
+// A vendor thread is the lead guy's raw feed, never a customer conversation:
+// either a configured vendor number, or (fallback, before the number is
+// configured) unattributed inbound with no lead record on the phone.
+export function isVendorThread(t: Thread, vendorPhones: string[]): boolean {
+  return (
+    vendorPhones.includes(t.peer_phone) ||
+    (!t.lead && t.last_message?.direction === "in" && t.last_message.lead_id === null)
+  );
+}
+
 // A call that rang out without an answer — missed from the caller's side,
 // voicemail from ours when a recording or transcript exists.
 export function isMissedCall(c: Call): boolean {

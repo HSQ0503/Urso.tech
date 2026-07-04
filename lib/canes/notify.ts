@@ -14,7 +14,7 @@ const TO = (process.env.CANES_NOTIFY_EMAIL ?? "han@urso.ws")
   .map((s) => s.trim())
   .filter(Boolean);
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://urso.tech";
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://urso.ws";
 
 // Lead fields come straight from SMS bodies (vendor texts, unknown numbers) —
 // escape everything before it lands in email HTML.

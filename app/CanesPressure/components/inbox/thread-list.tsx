@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { PhoneIncoming, PhoneMissed, PhoneOutgoing } from "lucide-react";
-import { fmtEt, fmtPhone, isMissedCall, minutesSince, type Thread } from "@/lib/canes/types";
+import { fmtEt, fmtPhone, isMissedCall, isVendorThread, minutesSince, type Thread } from "@/lib/canes/types";
 
 // Left pane of the inbox: one row per conversation (SMS or calls), newest
 // activity first. Call-only threads get OpenPhone-style call previews.
@@ -88,11 +88,7 @@ export function ThreadList({
         )}
         {threads.map((t) => {
           const active = t.peer_phone === activePhone;
-          // Vendor threads carry raw lead drops: no lead record, inbound, unattributed.
-          const isVendor =
-            !t.lead &&
-            (vendorPhones.includes(t.peer_phone) ||
-              (t.last_message?.direction === "in" && t.last_message.lead_id === null));
+          const isVendor = isVendorThread(t, vendorPhones);
           return (
             <li key={t.peer_phone}>
               <Link
@@ -103,9 +99,9 @@ export function ThreadList({
               >
                 <div className="flex items-center gap-2">
                   <span className="truncate text-[14px] font-semibold">
-                    {t.lead?.name ?? fmtPhone(t.peer_phone)}
+                    {isVendor ? "Lead vendor" : (t.lead?.name ?? fmtPhone(t.peer_phone))}
                   </span>
-                  {t.lead && (
+                  {!isVendor && t.lead && (
                     <span
                       className={`cp-chip shrink-0 ${t.lead.type === "hot" ? "cp-badge-hot" : "cp-badge-cold"}`}
                     >

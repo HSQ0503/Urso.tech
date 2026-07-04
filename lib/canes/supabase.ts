@@ -5,6 +5,9 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 // publishable key exists for future client-side needs, not data access).
 
 export function canesConfigured(): boolean {
+  // CANES_DEMO=1 forces the demo fixtures (and blocks every live read/write)
+  // even when the real keys are present — for local styling/UX review.
+  if (process.env.CANES_DEMO === "1") return false;
   return Boolean(process.env.NEXT_PUBLIC_CANES_SUPABASE_URL && process.env.CANES_SUPABASE_SECRET_KEY);
 }
 

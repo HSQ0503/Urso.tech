@@ -1,6 +1,6 @@
 import { MessageSquare } from "lucide-react";
 import { getSettings, getThreadCalls, getThreadMessages, listThreads } from "@/lib/canes/data";
-import { toE164 } from "@/lib/canes/types";
+import { isVendorThread, toE164 } from "@/lib/canes/types";
 import { Conversation } from "@/app/CanesPressure/components/inbox/conversation";
 import { ContactRail } from "@/app/CanesPressure/components/inbox/contact-rail";
 import { InboxPoll, ThreadList } from "@/app/CanesPressure/components/inbox/thread-list";
@@ -30,6 +30,13 @@ export default async function InboxPage({
   const activeThread = activePhone
     ? (threads.find((t) => t.peer_phone === activePhone) ?? null)
     : null;
+  // Settings may hold vendor numbers in loose formats; compare in E.164.
+  const vendorPhones = settings.lead_vendor_phones.map((p) => toE164(p) ?? p);
+  const activeIsVendor = activeThread
+    ? isVendorThread(activeThread, vendorPhones)
+    : activePhone
+      ? vendorPhones.includes(activePhone)
+      : false;
 
   if (threads.length === 0 && !activePhone) {
     return (
@@ -55,11 +62,7 @@ export default async function InboxPage({
         <div
           className={`${activePhone ? "hidden md:flex" : "flex"} w-full flex-col md:w-[320px] md:shrink-0 md:border-r md:border-[var(--cp-line)]`}
         >
-          <ThreadList
-            threads={threads}
-            activePhone={activePhone}
-            vendorPhones={settings.lead_vendor_phones}
-          />
+          <ThreadList threads={threads} activePhone={activePhone} vendorPhones={vendorPhones} />
         </div>
         <div className={`${activePhone ? "flex" : "hidden md:flex"} min-w-0 flex-1 flex-col`}>
           {activePhone ? (
@@ -68,6 +71,7 @@ export default async function InboxPage({
               lead={activeThread?.lead ?? null}
               messages={messages}
               calls={calls}
+              isVendor={activeIsVendor}
             />
           ) : (
             <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center">
@@ -80,7 +84,11 @@ export default async function InboxPage({
         </div>
         {activePhone && (
           <div className="hidden w-[280px] shrink-0 border-l border-[var(--cp-line)] xl:block">
-            <ContactRail peerPhone={activePhone} lead={activeThread?.lead ?? null} />
+            <ContactRail
+              peerPhone={activePhone}
+              lead={activeThread?.lead ?? null}
+              isVendor={activeIsVendor}
+            />
           </div>
         )}
       </div>

@@ -86,8 +86,8 @@ export default async function TodayPage() {
   const nextDay = agenda.find((g) => g.day !== todayKey);
 
   const stats = [
-    { label: "Open leads", value: counts.open, topline: "cp-topline-brand", href: "/CanesPressure/leads?f=open" },
-    { label: "Hot", value: counts.hot, topline: "cp-topline-hot", href: "/CanesPressure/leads?f=hot" },
+    { label: "Open leads", value: counts.open, topline: "cp-topline-slate", href: "/CanesPressure/leads?f=open" },
+    { label: "Hot", value: counts.hot, topline: "cp-topline-brand", href: "/CanesPressure/leads?f=hot" },
     { label: "Cold to call", value: counts.cold, topline: "cp-topline-cold", href: "/CanesPressure/leads?f=cold" },
     { label: "Won this week", value: counts.wonThisWeek, topline: "cp-topline-good", href: "/CanesPressure/leads?f=won" },
   ];
@@ -99,21 +99,26 @@ export default async function TodayPage() {
     <div className="flex flex-col gap-7">
       {/* Header — date line + greeting, Jobber-style */}
       <header>
-        <p className="text-[13px] text-[var(--cp-muted)]">{dateLine}</p>
-        <h1 className="cp-display mt-0.5 text-[26px]">{greeting}, Sebastian</h1>
+        <p className="text-[13.5px] text-[var(--cp-muted)]">{dateLine}</p>
+        <h1 className="cp-display mt-0.5 text-[30px]">{greeting}, Sebastian</h1>
       </header>
 
-      {/* Pipeline at a glance — each card opens its leads view */}
-      <section>
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      {/* Workflow — one segmented card, a colored topline per stage (Jobber);
+          each column opens its leads view */}
+      <section className="cp-card overflow-hidden">
+        <div className="-mb-px -mr-px grid grid-cols-2 lg:grid-cols-4">
           {stats.map((s) => (
-            <Link key={s.label} href={s.href} className="cp-card cp-card-hover overflow-hidden">
+            <Link
+              key={s.label}
+              href={s.href}
+              className="border-b border-r border-[var(--cp-line)] transition-colors hover:bg-[var(--cp-hover)]"
+            >
               <span className={`cp-topline ${s.topline}`} />
               <div className="px-4 pb-3.5 pt-3">
-                <p className="text-[22px] font-bold leading-tight tabular-nums">{s.value}</p>
-                <p className="mt-0.5 whitespace-nowrap text-[12.5px] font-medium text-[var(--cp-muted)]">
+                <p className="whitespace-nowrap text-[13px] font-medium text-[var(--cp-muted)]">
                   {s.label}
                 </p>
+                <p className="mt-1 text-[24px] font-bold leading-tight tabular-nums">{s.value}</p>
               </div>
             </Link>
           ))}
@@ -203,27 +208,29 @@ export default async function TodayPage() {
         </div>
       )}
 
-      {/* Today's visits */}
+      {/* Today's visits — summary strip inside the card, Jobber-style */}
       <section>
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <SectionTitle label="Today's visits" count={todayAgenda.length} />
-          <div className="flex items-center gap-2">
-            {todayAgenda.length > 0 && (
-              <>
-                <span className="cp-chip cp-status-confirmed">{confirmedToday} confirmed</span>
-                {pendingToday > 0 && (
-                  <span className="cp-chip cp-status-appt">{pendingToday} pending</span>
-                )}
-              </>
-            )}
-            <Link href="/CanesPressure/schedule" className="cp-btn cp-btn-sm">
+        <SectionTitle label="Today's visits" />
+        <div className="cp-card mt-2.5">
+          <div className="flex flex-wrap items-center gap-x-8 gap-y-2 px-4 py-3">
+            {[
+              { label: "Total", value: todayAgenda.length },
+              { label: "Confirmed", value: confirmedToday },
+              { label: "Pending", value: pendingToday },
+            ].map((s) => (
+              <div key={s.label}>
+                <p className="text-[12px] font-medium text-[var(--cp-muted)]">{s.label}</p>
+                <p className="text-[18px] font-bold leading-tight tabular-nums">{s.value}</p>
+              </div>
+            ))}
+            <Link href="/CanesPressure/schedule" className="cp-btn cp-btn-sm ml-auto">
               View schedule
             </Link>
           </div>
-        </div>
-        {todayAgenda.length > 0 ? (
-          <div className="cp-card mt-2.5 divide-y divide-[var(--cp-line)]">
-            {todayAgenda.map((lead) => {
+          <div className="cp-divider" />
+          {todayAgenda.length > 0 ? (
+            <div className="divide-y divide-[var(--cp-line)]">
+              {todayAgenda.map((lead) => {
               const confirmed = lead.status === "confirmed";
               return (
                 <div key={lead.id} className="flex items-center gap-3 px-4 py-3">
@@ -258,12 +265,13 @@ export default async function TodayPage() {
                 </div>
               );
             })}
-          </div>
-        ) : (
-          <p className="mt-2.5 text-[13.5px] text-[var(--cp-muted)]">
-            No visits on the calendar today.
-          </p>
-        )}
+            </div>
+          ) : (
+            <p className="px-4 py-4 text-[13.5px] text-[var(--cp-muted)]">
+              No visits on the calendar today.
+            </p>
+          )}
+        </div>
         {nextDay && nextDay.leads.length > 0 && (
           <p className="mt-2 text-[12.5px] text-[var(--cp-muted)]">
             {nextDay.day}: {nextDay.leads.length} visit{nextDay.leads.length === 1 ? "" : "s"} booked.{" "}
