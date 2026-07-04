@@ -1,0 +1,204 @@
+// Canes Pressure Washing — shared types for the Phase 1 lead/phone funnel.
+// Mirrors supabase/canes/0001_init.sql exactly.
+
+export type LeadType = "hot" | "cold";
+
+export type LeadStatus =
+  | "new"
+  | "contacted"
+  | "appointment_set"
+  | "confirmed"
+  | "estimated"
+  | "won"
+  | "lost";
+
+export type LeadSource = "lead_vendor" | "website" | "referral" | "other";
+
+export type Lead = {
+  id: string;
+  created_at: string;
+  type: LeadType;
+  status: LeadStatus;
+  name: string | null;
+  phone: string | null;
+  address: string | null;
+  service: string | null;
+  source: LeadSource;
+  appointment_at: string | null;
+  confirmed_at: string | null;
+  lost_reason: string | null;
+  notes: string | null;
+  raw_message: string | null;
+  parse_confidence: number | null;
+  opted_out: boolean;
+  snoozed_until: string | null;
+  last_activity_at: string;
+};
+
+export type Message = {
+  id: string;
+  created_at: string;
+  lead_id: string | null;
+  peer_phone: string;
+  direction: "in" | "out";
+  body: string;
+  media_urls: string[];
+  automated: boolean;
+  twilio_sid: string | null;
+  delivery_status: string | null;
+};
+
+export type Call = {
+  id: string;
+  created_at: string;
+  lead_id: string | null;
+  peer_phone: string;
+  direction: "in" | "out";
+  status: string | null;
+  duration_seconds: number | null;
+  recording_url: string | null;
+  transcript: string | null;
+  twilio_sid: string | null;
+};
+
+export type TaskKind =
+  | "hold_text"
+  | "confirmation"
+  | "no_reply_escalation"
+  | "cold_escalation"
+  | "follow_up"
+  | "digest";
+
+export type AutomationTask = {
+  id: string;
+  created_at: string;
+  lead_id: string | null;
+  kind: TaskKind;
+  dedupe_key: string;
+  scheduled_for: string;
+  sent_at: string | null;
+  status: "pending" | "sending" | "sent" | "canceled" | "failed";
+  payload: Record<string, unknown>;
+};
+
+export type LeadEvent = {
+  id: string;
+  created_at: string;
+  lead_id: string;
+  kind: string;
+  detail: string | null;
+  data: Record<string, unknown>;
+};
+
+export type CanesSettings = {
+  quiet_hours: { start: number; end: number; timezone: string };
+  confirmation_offset_hours: number;
+  templates: {
+    hold_text: string;
+    confirmation: string;
+    confirmation_ack: string;
+    missed_call: string;
+  };
+  lead_vendor_phones: string[];
+};
+
+export type Thread = {
+  peer_phone: string;
+  lead: Lead | null;
+  last_message: Message;
+  unread: boolean; // last message is inbound and newer than the lead's last activity touch
+  message_count: number;
+};
+
+// ── Display maps (single source of truth for labels + the .cp-* class names
+//    defined in app/CanesPressure/canes.css) ──────────────────────────────────
+
+export const STATUS_LABEL: Record<LeadStatus, string> = {
+  new: "New",
+  contacted: "Contacted",
+  appointment_set: "Appointment set",
+  confirmed: "Confirmed",
+  estimated: "Estimated",
+  won: "Won",
+  lost: "Lost",
+};
+
+export const STATUS_CLASS: Record<LeadStatus, string> = {
+  new: "cp-status-new",
+  contacted: "cp-status-contacted",
+  appointment_set: "cp-status-appt",
+  confirmed: "cp-status-confirmed",
+  estimated: "cp-status-estimated",
+  won: "cp-status-won",
+  lost: "cp-status-lost",
+};
+
+export const SOURCE_LABEL: Record<LeadSource, string> = {
+  lead_vendor: "Lead vendor",
+  website: "Website",
+  referral: "Referral",
+  other: "Other",
+};
+
+export const ET = "America/New_York";
+
+export function fmtEt(
+  iso: string | null | undefined,
+  opts: Intl.DateTimeFormatOptions = { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" },
+): string {
+  if (!iso) return "—";
+  return new Intl.DateTimeFormat("en-US", { ...opts, timeZone: ET }).format(new Date(iso));
+}
+
+export function minutesSince(iso: string): number {
+  return Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 60_000));
+}
+
+// What ET wall-clock time does this instant show, expressed as a fake-UTC
+// epoch so it can be compared against the intended wall time.
+function etWallClockAsUtcMs(d: Date): number {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: ET,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).formatToParts(d);
+  const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value ?? "00";
+  const hour = get("hour") === "24" ? "00" : get("hour"); // some engines render midnight as 24
+  return Date.parse(`${get("year")}-${get("month")}-${get("day")}T${hour}:${get("minute")}:${get("second")}Z`);
+}
+
+// Interpret a datetime-local value ("YYYY-MM-DDTHH:mm") as America/New_York
+// wall time no matter what timezone the device is in. Two-pass offset
+// technique: guess the instant as if the input were UTC, see what ET wall time
+// that instant shows, shift by the difference; the second pass settles DST
+// edges.
+export function etLocalToIso(naive: string): string {
+  const full = /T\d{2}:\d{2}$/.test(naive) ? `${naive}:00` : naive; // pickers may omit seconds
+  const intended = Date.parse(`${full}Z`);
+  if (Number.isNaN(intended)) return naive; // let the server reject it
+  let guess = intended;
+  for (let i = 0; i < 2; i++) {
+    guess += intended - etWallClockAsUtcMs(new Date(guess));
+  }
+  return new Date(guess).toISOString();
+}
+
+// Normalize a US phone into E.164 (+1XXXXXXXXXX); returns null if hopeless.
+export function toE164(raw: string): string | null {
+  const digits = raw.replace(/\D/g, "");
+  if (digits.length === 10) return `+1${digits}`;
+  if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
+  if (raw.startsWith("+") && digits.length > 10) return `+${digits}`;
+  return null;
+}
+
+export function fmtPhone(e164: string | null): string {
+  if (!e164) return "—";
+  const m = e164.match(/^\+1(\d{3})(\d{3})(\d{4})$/);
+  return m ? `(${m[1]}) ${m[2]}-${m[3]}` : e164;
+}
