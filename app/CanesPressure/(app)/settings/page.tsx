@@ -30,9 +30,8 @@ export default async function SettingsPage() {
   return (
     <div className="flex flex-col gap-6">
       <header>
-        <div className="cp-waterline mb-3 w-14" />
-        <h1 className="cp-display text-[22px]">Settings</h1>
-        <p className="text-[13.5px] text-[var(--cp-muted)]">
+        <h1 className="cp-display text-[24px]">Settings</h1>
+        <p className="mt-1 text-[13.5px] text-[var(--cp-muted)]">
           Templates, timing and lead sources for the automation
         </p>
       </header>
@@ -89,7 +88,7 @@ export default async function SettingsPage() {
               <p className="text-[12px] font-semibold uppercase tracking-[0.04em] text-[var(--cp-muted)]">
                 {label}
               </p>
-              <code className="mt-0.5 block break-all rounded-lg bg-[var(--cp-bg)] px-2.5 py-1.5 font-mono text-[12.5px] text-[var(--cp-ink)]">
+              <code className="mt-0.5 block break-all rounded bg-[var(--cp-bg)] px-2.5 py-1.5 font-mono text-[12.5px] text-[var(--cp-ink)]">
                 {url}
               </code>
             </div>

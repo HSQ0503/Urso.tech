@@ -118,39 +118,77 @@ export async function getThreadMessages(peerPhone: string): Promise<Message[]> {
 
 export async function listThreads(): Promise<Thread[]> {
   let messages: Message[];
+  let calls: Call[];
   let leads: Lead[];
   if (isDemo()) {
     messages = DEMO_MESSAGES;
+    calls = DEMO_CALLS;
     leads = DEMO_LEADS;
   } else {
     const db = canesDb();
-    const [m, l] = await Promise.all([
+    const [m, c, l] = await Promise.all([
       db.from("messages").select("*").order("created_at", { ascending: false }).limit(1000),
+      db.from("calls").select("*").order("created_at", { ascending: false }).limit(500),
       db.from("leads").select("*"),
     ]);
     messages = (m.data ?? []) as Message[];
+    calls = (c.data ?? []) as Call[];
     leads = (l.data ?? []) as Lead[];
   }
-  const byPeer = new Map<string, Message[]>();
+  const msgsByPeer = new Map<string, Message[]>();
   for (const msg of messages) {
-    const arr = byPeer.get(msg.peer_phone) ?? [];
+    const arr = msgsByPeer.get(msg.peer_phone) ?? [];
     arr.push(msg);
-    byPeer.set(msg.peer_phone, arr);
+    msgsByPeer.set(msg.peer_phone, arr);
+  }
+  const callsByPeer = new Map<string, Call[]>();
+  for (const call of calls) {
+    const arr = callsByPeer.get(call.peer_phone) ?? [];
+    arr.push(call);
+    callsByPeer.set(call.peer_phone, arr);
   }
   const leadByPhone = new Map(leads.filter((l) => l.phone).map((l) => [l.phone as string, l]));
+  const peers = new Set([...msgsByPeer.keys(), ...callsByPeer.keys()]);
   const threads: Thread[] = [];
-  for (const [peer, msgs] of byPeer) {
-    const sorted = msgs.sort((a, b) => b.created_at.localeCompare(a.created_at));
-    const last = sorted[0];
+  for (const peer of peers) {
+    const msgs = (msgsByPeer.get(peer) ?? []).sort((a, b) => b.created_at.localeCompare(a.created_at));
+    const peerCalls = (callsByPeer.get(peer) ?? []).sort((a, b) => b.created_at.localeCompare(a.created_at));
+    const lastMessage = msgs[0] ?? null;
+    const lastCall = peerCalls[0] ?? null;
+    const lastAt = [lastMessage?.created_at, lastCall?.created_at]
+      .filter((t): t is string => Boolean(t))
+      .sort()
+      .at(-1) as string;
+    const callIsNewest = Boolean(lastCall && (!lastMessage || lastCall.created_at > lastMessage.created_at));
+    const unread = callIsNewest
+      ? lastCall!.direction === "in" && lastCall!.status !== "completed"
+      : lastMessage?.direction === "in";
     threads.push({
       peer_phone: peer,
       lead: leadByPhone.get(peer) ?? null,
-      last_message: last,
-      unread: last.direction === "in",
+      last_message: lastMessage,
+      last_call: lastCall,
+      last_activity_at: lastAt,
+      unread: Boolean(unread),
       message_count: msgs.length,
     });
   }
-  return threads.sort((a, b) => b.last_message.created_at.localeCompare(a.last_message.created_at));
+  return threads.sort((a, b) => b.last_activity_at.localeCompare(a.last_activity_at));
+}
+
+export async function getThreadCalls(peerPhone: string): Promise<Call[]> {
+  if (isDemo()) {
+    return DEMO_CALLS.filter((c) => c.peer_phone === peerPhone).sort((a, b) =>
+      a.created_at.localeCompare(b.created_at),
+    );
+  }
+  const { data } = await canesDb()
+    .from("calls")
+    .select("*")
+    .eq("peer_phone", peerPhone)
+    .order("created_at", { ascending: true })
+    .limit(200);
+  return (data ?? []) as Call[];
 }
 
 export type Agenda = { day: string; leads: Lead[] }[];

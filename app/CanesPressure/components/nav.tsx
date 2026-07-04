@@ -24,10 +24,10 @@ export function CanesNav({ mobile = false }: { mobile?: boolean }) {
           <Link
             key={href}
             href={href}
-            className="flex min-w-16 flex-col items-center gap-0.5 rounded-lg px-2 py-1.5 text-[10px] font-semibold"
+            className="flex min-w-16 flex-col items-center gap-0.5 rounded-md px-2 py-1.5 text-[10px] font-semibold"
             style={{ color: isActive(href, exact) ? "var(--cp-brand-deep)" : "var(--cp-muted)" }}
           >
-            <Icon size={20} strokeWidth={isActive(href, exact) ? 2.4 : 2} />
+            <Icon size={20} strokeWidth={2} />
             {label}
           </Link>
         ))}
@@ -39,7 +39,7 @@ export function CanesNav({ mobile = false }: { mobile?: boolean }) {
     <nav className="flex flex-col gap-1">
       {LINKS.map(({ href, label, icon: Icon, exact }) => (
         <Link key={href} href={href} className="cp-nav-link" data-active={isActive(href, exact)}>
-          <Icon size={17} strokeWidth={2.1} />
+          <Icon size={16} strokeWidth={2} />
           {label}
         </Link>
       ))}

@@ -240,7 +240,7 @@ export function SettingsForm({ settings }: { settings: CanesSettings }) {
             {phones.map((p) => (
               <li
                 key={p}
-                className="flex items-center justify-between gap-3 rounded-xl border border-[var(--cp-line)] px-3.5 py-2"
+                className="flex items-center justify-between gap-3 rounded-md border border-[var(--cp-line)] px-3.5 py-2"
               >
                 <span className="text-[14px] font-medium">{fmtPhone(p)}</span>
                 <button
@@ -249,7 +249,7 @@ export function SettingsForm({ settings }: { settings: CanesSettings }) {
                   aria-label={`Remove ${fmtPhone(p)}`}
                   onClick={() => setPhones(phones.filter((x) => x !== p))}
                 >
-                  <X size={14} strokeWidth={2.4} />
+                  <X size={14} strokeWidth={2} />
                 </button>
               </li>
             ))}
@@ -272,7 +272,7 @@ export function SettingsForm({ settings }: { settings: CanesSettings }) {
             }}
           />
           <button type="button" className="cp-btn shrink-0" onClick={addPhone}>
-            <Plus size={16} strokeWidth={2.2} />
+            <Plus size={16} strokeWidth={2} />
             Add
           </button>
         </div>

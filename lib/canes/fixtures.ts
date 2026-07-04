@@ -212,6 +212,15 @@ export const DEMO_CALLS: Call[] = [
     id: "c2", created_at: min(1510), lead_id: "d5", peer_phone: "+15615550190", direction: "out",
     status: "completed", duration_seconds: 340, recording_url: null, transcript: null, twilio_sid: null,
   },
+  // Maria left a voicemail before the hold text went out — shows the
+  // voicemail card (transcript, no recording) in the conversation stream.
+  {
+    id: "c3", created_at: min(8), lead_id: "d1", peer_phone: "+15615550142", direction: "in",
+    status: "no-answer", duration_seconds: 24, recording_url: null,
+    transcript:
+      "Hi, this is Maria — I sent the request about the driveway and pool deck. Give me a call back when you get a chance. Thanks!",
+    twilio_sid: null,
+  },
 ];
 
 export const DEMO_EVENTS: LeadEvent[] = [

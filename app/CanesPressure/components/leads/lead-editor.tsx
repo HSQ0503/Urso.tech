@@ -88,7 +88,7 @@ export function LeadEditor({ lead }: { lead: Lead }) {
         </button>
         {saved && (
           <span className="inline-flex items-center gap-1 text-[13px] font-medium text-[var(--cp-good)]">
-            <Check size={14} strokeWidth={2.4} /> Saved
+            <Check size={14} strokeWidth={2} /> Saved
           </span>
         )}
         {notice && <span className="text-[12.5px] text-[var(--cp-warn)]">{notice}</span>}

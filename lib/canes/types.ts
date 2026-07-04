@@ -105,10 +105,25 @@ export type CanesSettings = {
 export type Thread = {
   peer_phone: string;
   lead: Lead | null;
-  last_message: Message;
-  unread: boolean; // last message is inbound and newer than the lead's last activity touch
+  last_message: Message | null; // null for call-only threads
+  last_call: Call | null;
+  last_activity_at: string;
+  unread: boolean; // newest event is an inbound message or a missed inbound call
   message_count: number;
 };
+
+// A call that rang out without an answer — missed from the caller's side,
+// voicemail from ours when a recording or transcript exists.
+export function isMissedCall(c: Call): boolean {
+  return c.direction === "in" && c.status !== "completed";
+}
+
+export function fmtCallDuration(seconds: number | null): string {
+  if (!seconds || seconds <= 0) return "";
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
 
 // ── Display maps (single source of truth for labels + the .cp-* class names
 //    defined in app/CanesPressure/canes.css) ──────────────────────────────────

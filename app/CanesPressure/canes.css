@@ -1,32 +1,33 @@
-/* Canes Pressure Washing — Phase 1 design system.
-   Deliberately NOT the Woof Gang dashboard language: light, warm, big touch
-   targets, one deep-water teal action color, flame/sky lead-type accents.
+/* Canes Pressure Washing — operations design system.
+   Grounded in working field-service software (Jobber-class web apps,
+   OpenPhone's inbox): cool light-gray canvas, white cards with hairline
+   borders, deep navy ink, one teal action color, disciplined status tints.
+   No gradients, no decorative washes, nothing blinks.
    Everything scopes under .canes so the rest of urso.tech is untouched. */
 
 .canes {
   /* palette */
-  --cp-bg: #f5f6f2;
+  --cp-bg: #f6f7f9;
   --cp-surface: #ffffff;
-  --cp-ink: #131b23;
-  --cp-muted: #5b6673;
-  --cp-faint: #8b95a1;
-  --cp-line: #e5e8eb;
-  --cp-line-strong: #cfd6dc;
+  --cp-ink: #0c2b3f;
+  --cp-muted: #53616e;
+  --cp-faint: #7d8a96;
+  --cp-line: #e2e6ea;
+  --cp-line-strong: #c7cfd6;
+  --cp-hover: #f2f4f6;
   --cp-brand: #0e7490;
-  --cp-brand-deep: #0a5c73;
-  --cp-brand-soft: #e3f4f8;
+  --cp-brand-deep: #0b5c73;
+  --cp-brand-soft: #e6f3f7;
   --cp-hot: #b54708;
-  --cp-hot-bg: #fef0c7;
-  --cp-cold: #026aa2;
-  --cp-cold-bg: #e0f2fe;
-  --cp-good: #027a48;
-  --cp-good-bg: #d1fadf;
+  --cp-hot-bg: #fdf1df;
+  --cp-cold: #0b6aa2;
+  --cp-cold-bg: #e7f2fa;
+  --cp-good: #0f7b48;
+  --cp-good-bg: #e5f5ec;
   --cp-warn: #b54708;
-  --cp-warn-bg: #fef0c7;
+  --cp-warn-bg: #fdf1df;
   --cp-danger: #b42318;
-  --cp-danger-bg: #fee4e2;
-  --cp-violet: #6941c6;
-  --cp-violet-bg: #f4ebff;
+  --cp-danger-bg: #fdecea;
 
   background: var(--cp-bg);
   color: var(--cp-ink);
@@ -36,52 +37,56 @@
 }
 
 .canes ::selection { background: var(--cp-brand-soft); }
+.canes :focus-visible { outline: 2px solid var(--cp-brand); outline-offset: 2px; }
 
 .cp-display {
-  font-family: var(--font-canes-display), var(--font-canes-body), sans-serif;
   font-weight: 700;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.015em;
 }
 
-/* surfaces */
+/* surfaces — flat white, hairline border, no resting shadow.
+   Jobber geometry: 6px cards, 5px controls, 4px chips. Nothing pill-shaped
+   except avatars and the unread dot. */
 .cp-card {
   background: var(--cp-surface);
   border: 1px solid var(--cp-line);
-  border-radius: 16px;
-  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.05);
+  border-radius: 6px;
 }
-.cp-card-hover { transition: border-color 120ms ease, box-shadow 120ms ease; }
+.cp-card-hover { transition: border-color 150ms ease, box-shadow 150ms ease; }
 .cp-card-hover:hover {
   border-color: var(--cp-line-strong);
-  box-shadow: 0 4px 12px rgba(16, 24, 40, 0.08);
+  box-shadow: 0 1px 3px rgba(12, 43, 63, 0.06);
 }
 
-/* the water line — urgent cards + page headers carry the current */
-.cp-waterline {
-  background-image: linear-gradient(90deg, #0e7490, #38bdf8);
-  height: 3px;
-  border-radius: 999px 999px 0 0;
-}
+/* per-section accent: a solid 3px top border on stat cards (never a gradient) */
+.cp-topline { display: block; height: 3px; border-radius: 6px 6px 0 0; }
+.cp-topline-brand { background: var(--cp-brand); }
+.cp-topline-hot { background: var(--cp-hot); }
+.cp-topline-cold { background: var(--cp-cold); }
+.cp-topline-good { background: var(--cp-good); }
 
-/* buttons */
+/* needs-action cards carry a red left rail instead of a tinted wash */
+.cp-urgent { border-left: 3px solid var(--cp-danger); }
+.cp-done { border-left: 3px solid var(--cp-good); }
+
+/* buttons — compact, near-square, text-first */
 .cp-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  min-height: 42px;
-  padding: 0 18px;
-  border-radius: 12px;
-  font-size: 14px;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 5px;
+  font-size: 13px;
   font-weight: 600;
-  border: 1px solid var(--cp-line);
+  border: 1px solid var(--cp-line-strong);
   background: var(--cp-surface);
   color: var(--cp-ink);
   cursor: pointer;
-  transition: background 120ms ease, border-color 120ms ease, transform 60ms ease;
+  transition: background 150ms ease, border-color 150ms ease;
 }
-.cp-btn:hover { border-color: var(--cp-line-strong); background: #fafbf9; }
-.cp-btn:active { transform: scale(0.98); }
+.cp-btn:hover { background: var(--cp-hover); }
 .cp-btn-primary {
   background: var(--cp-brand);
   border-color: var(--cp-brand);
@@ -89,20 +94,20 @@
 }
 .cp-btn-primary:hover { background: var(--cp-brand-deep); border-color: var(--cp-brand-deep); }
 .cp-btn-danger { color: var(--cp-danger); }
-.cp-btn-sm { min-height: 34px; padding: 0 12px; font-size: 13px; border-radius: 10px; }
+.cp-btn-sm { min-height: 30px; padding: 0 10px; font-size: 12.5px; border-radius: 4px; }
 
 /* inputs */
 .cp-input, .cp-select, .cp-textarea {
   width: 100%;
-  min-height: 42px;
-  padding: 8px 12px;
-  border-radius: 12px;
-  border: 1px solid var(--cp-line);
+  min-height: 38px;
+  padding: 8px 11px;
+  border-radius: 5px;
+  border: 1px solid var(--cp-line-strong);
   background: var(--cp-surface);
   color: var(--cp-ink);
   font-size: 14px;
   outline: none;
-  transition: border-color 120ms ease, box-shadow 120ms ease;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
 }
 .cp-textarea { padding-top: 10px; resize: vertical; }
 .cp-input:focus, .cp-select:focus, .cp-textarea:focus {
@@ -111,77 +116,85 @@
 }
 .cp-label {
   display: block;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--cp-muted);
   margin-bottom: 6px;
 }
 
-/* chips + badges */
+/* chips + badges — small square-ish labels (Jobber), never pills */
 .cp-chip {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 3px 10px;
-  border-radius: 999px;
-  font-size: 12px;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 11.5px;
   font-weight: 600;
-  line-height: 1.4;
+  line-height: 1.5;
   white-space: nowrap;
 }
 .cp-badge-hot { background: var(--cp-hot-bg); color: var(--cp-hot); }
 .cp-badge-cold { background: var(--cp-cold-bg); color: var(--cp-cold); }
 
-.cp-status-new { background: #eef1f4; color: var(--cp-muted); }
-.cp-status-contacted { background: #e0eefc; color: #175cd3; }
-.cp-status-appt { background: var(--cp-violet-bg); color: var(--cp-violet); }
+.cp-status-new { background: #eceff2; color: var(--cp-muted); }
+.cp-status-contacted { background: #e7f0fb; color: #1758b8; }
+.cp-status-appt { background: var(--cp-warn-bg); color: var(--cp-warn); }
 .cp-status-confirmed { background: var(--cp-good-bg); color: var(--cp-good); }
 .cp-status-estimated { background: var(--cp-brand-soft); color: var(--cp-brand-deep); }
 .cp-status-won { background: var(--cp-good); color: #fff; }
-.cp-status-lost { background: #eef1f4; color: var(--cp-faint); text-decoration: line-through; }
+.cp-status-lost { background: #eceff2; color: var(--cp-faint); text-decoration: line-through; }
 
-/* speed-to-lead timers */
+/* speed-to-lead timers — color escalates, nothing blinks */
 .cp-timer-ok { background: var(--cp-good-bg); color: var(--cp-good); }
 .cp-timer-warn { background: var(--cp-warn-bg); color: var(--cp-warn); }
-.cp-timer-late { background: var(--cp-danger-bg); color: var(--cp-danger); animation: cp-pulse 1.6s ease-in-out infinite; }
-@keyframes cp-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.55; }
-}
+.cp-timer-late { background: var(--cp-danger-bg); color: var(--cp-danger); }
 
-/* nav */
+/* nav — white sidebar; active is a flat gray row with dark text (Jobber) */
 .cp-nav-link {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 14px;
-  border-radius: 12px;
-  font-size: 14px;
+  padding: 8px 10px;
+  border-radius: 5px;
+  font-size: 13.5px;
   font-weight: 500;
   color: var(--cp-muted);
-  transition: background 120ms ease, color 120ms ease;
+  transition: background 150ms ease, color 150ms ease;
 }
-.cp-nav-link:hover { background: #edefe9; color: var(--cp-ink); }
+.cp-nav-link:hover { background: var(--cp-hover); color: var(--cp-ink); }
 .cp-nav-link[data-active="true"] {
-  background: var(--cp-surface);
-  color: var(--cp-brand-deep);
-  border: 1px solid var(--cp-line);
-  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.05);
+  background: var(--cp-hover);
+  color: var(--cp-ink);
   font-weight: 600;
 }
 
-/* message bubbles */
-.cp-bubble-in {
-  background: var(--cp-surface);
+/* call + voicemail events in the conversation stream (OpenPhone-style) */
+.cp-call-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 200px;
   border: 1px solid var(--cp-line);
-  border-radius: 16px 16px 16px 4px;
+  border-radius: 6px;
+  padding: 9px 11px;
+  background: var(--cp-surface);
+}
+.cp-call-card-out { background: var(--cp-brand-soft); border-color: transparent; }
+.cp-call-card audio { width: 100%; max-width: 260px; height: 36px; }
+
+/* message bubbles — inbound flat gray, outbound teal, automated darker */
+.cp-bubble-in {
+  background: #f1f3f6;
+  color: var(--cp-ink);
+  border-radius: 14px 14px 14px 4px;
 }
 .cp-bubble-out {
   background: var(--cp-brand);
   color: #fff;
-  border-radius: 16px 16px 4px 16px;
+  border-radius: 14px 14px 4px 14px;
 }
 .cp-bubble-out.cp-bubble-auto { background: var(--cp-brand-deep); }
 

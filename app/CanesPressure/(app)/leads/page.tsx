@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Calendar, Flame, Snowflake } from "lucide-react";
+import { Calendar } from "lucide-react";
 import { listLeads } from "@/lib/canes/data";
 import {
   fmtEt,
@@ -38,13 +38,9 @@ const EMPTY_COPY: Record<Filter, string> = {
 
 function TypeBadge({ type }: { type: LeadType }) {
   return type === "hot" ? (
-    <span className="cp-chip cp-badge-hot">
-      <Flame size={12} strokeWidth={2.4} /> Hot
-    </span>
+    <span className="cp-chip cp-badge-hot">Hot</span>
   ) : (
-    <span className="cp-chip cp-badge-cold">
-      <Snowflake size={12} strokeWidth={2.4} /> Cold
-    </span>
+    <span className="cp-chip cp-badge-cold">Cold</span>
   );
 }
 
@@ -64,7 +60,7 @@ function LeadRow({ lead }: { lead: Lead }) {
         <span className="tabular-nums">{fmtPhone(lead.phone)}</span>
         {lead.appointment_at && (
           <span className="inline-flex items-center gap-1 tabular-nums text-[var(--cp-muted)]">
-            <Calendar size={13} strokeWidth={2.2} />
+            <Calendar size={13} strokeWidth={2} />
             {fmtEt(lead.appointment_at)}
           </span>
         )}
@@ -104,8 +100,7 @@ export default async function LeadsPage({
     <div>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <div className="cp-waterline mb-3 w-12 rounded-full" />
-          <h1 className="cp-display text-[22px] leading-tight">Leads</h1>
+          <h1 className="cp-display text-[24px] leading-tight">Leads</h1>
           <p className="mt-1 text-[13.5px] text-[var(--cp-muted)]">
             Vendor texts, website requests, and referrals in one pipeline.
           </p>
@@ -113,21 +108,21 @@ export default async function LeadsPage({
         <NewLead />
       </div>
 
-      <div className="mt-5 flex flex-wrap gap-1.5">
+      <div className="mt-5 flex flex-wrap gap-1">
         {FILTERS.map((key) => {
           const active = key === filter;
           return (
             <Link
               key={key}
               href={`/CanesPressure/leads?f=${key}`}
-              className={`inline-flex min-h-11 items-center gap-1.5 rounded-full border px-4 text-[13px] font-semibold transition-colors ${
+              className={`inline-flex min-h-9 items-center gap-1.5 rounded-md border px-3 text-[13px] font-semibold transition-colors ${
                 active
-                  ? "border-[var(--cp-brand)] bg-[var(--cp-brand)] text-white"
-                  : "border-[var(--cp-line)] bg-[var(--cp-surface)] text-[var(--cp-muted)] hover:border-[var(--cp-line-strong)]"
+                  ? "border-[var(--cp-line-strong)] bg-[var(--cp-surface)] text-[var(--cp-ink)] shadow-[0_1px_2px_rgba(12,43,63,0.06)]"
+                  : "border-transparent text-[var(--cp-muted)] hover:bg-[var(--cp-hover)] hover:text-[var(--cp-ink)]"
               }`}
             >
               {TAB_LABEL[key]}
-              <span className={`tabular-nums ${active ? "text-white/75" : "text-[var(--cp-faint)]"}`}>
+              <span className={`tabular-nums ${active ? "text-[var(--cp-muted)]" : "text-[var(--cp-faint)]"}`}>
                 {subsets[key].length}
               </span>
             </Link>

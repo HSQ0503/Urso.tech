@@ -63,7 +63,7 @@ export function NewLead() {
     <button
       type="button"
       onClick={() => setType(value)}
-      className={`min-h-[38px] rounded-lg text-[13px] font-semibold transition-colors ${
+      className={`min-h-[32px] rounded text-[13px] font-semibold transition-colors ${
         type === value ? activeClass : "text-[var(--cp-muted)]"
       }`}
     >
@@ -82,7 +82,7 @@ export function NewLead() {
           setNotice("");
         }}
       >
-        <Plus size={16} strokeWidth={2.4} /> Add lead
+        <Plus size={16} strokeWidth={2} /> Add lead
       </button>
 
       {open && (
@@ -98,7 +98,7 @@ export function NewLead() {
             </div>
             <div>
               <span className="cp-label">Lead type</span>
-              <div className="grid grid-cols-2 gap-1 rounded-xl border border-[var(--cp-line)] bg-[var(--cp-surface)] p-1">
+              <div className="grid grid-cols-2 gap-1 rounded-md border border-[var(--cp-line)] bg-[var(--cp-surface)] p-1">
                 {segment("hot", "Hot", "bg-[var(--cp-hot-bg)] text-[var(--cp-hot)]")}
                 {segment("cold", "Cold", "bg-[var(--cp-cold-bg)] text-[var(--cp-cold)]")}
               </div>

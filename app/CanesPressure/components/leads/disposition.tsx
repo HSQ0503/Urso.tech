@@ -164,7 +164,7 @@ export function BridgeCallButton({ leadId }: { leadId: string }) {
         disabled={isPending}
         onClick={() => run(() => initiateCall(leadId))}
       >
-        <PhoneForwarded size={16} strokeWidth={2.2} />
+        <PhoneForwarded size={16} strokeWidth={2} />
         {isPending ? "Connecting..." : "Bridge via business line"}
       </button>
       <Notice value={feedback} />
@@ -182,7 +182,7 @@ export function ResendConfirmationButton({ leadId }: { leadId: string }) {
         disabled={isPending}
         onClick={() => run(() => sendConfirmationNow(leadId))}
       >
-        <MessageSquareText size={16} strokeWidth={2.2} />
+        <MessageSquareText size={16} strokeWidth={2} />
         {isPending ? "Sending..." : "Resend confirmation"}
       </button>
       <Notice value={feedback} />
@@ -294,7 +294,7 @@ export function AppointmentCard({
         disabled={!when || isPending}
         onClick={() => run(() => setAppointment(leadId, etLocalToIso(when)), () => setWhen(""))}
       >
-        <CalendarClock size={15} strokeWidth={2.2} />
+        <CalendarClock size={15} strokeWidth={2} />
         {isPending ? "Saving..." : "Save"}
       </button>
       <p className="text-[12px] leading-snug text-[var(--cp-faint)]">

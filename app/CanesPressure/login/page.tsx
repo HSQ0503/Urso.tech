@@ -1,5 +1,4 @@
 import { redirect } from "next/navigation";
-import { Droplets } from "lucide-react";
 import { grantAccess, hasAccess } from "@/lib/canes/gate";
 
 export const metadata = { title: "Sign in" };
@@ -21,15 +20,14 @@ export default async function CanesLogin({
   return (
     <div className="flex min-h-screen items-center justify-center px-4">
       <div className="w-full max-w-sm">
-        <div className="cp-card overflow-hidden">
-          <div className="cp-waterline" />
+        <div className="cp-card">
           <div className="p-7">
-            <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-[var(--cp-brand)] text-white">
-              <Droplets size={20} strokeWidth={2.2} />
-            </span>
-            <h1 className="cp-display mt-4 text-[20px]">Canes Pressure Washing</h1>
+            <p className="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-[var(--cp-muted)]">
+              Canes Pressure Washing
+            </p>
+            <h1 className="cp-display mt-1.5 text-[20px]">Sign in to operations</h1>
             <p className="mt-1 text-[13.5px] text-[var(--cp-muted)]">
-              Operations dashboard. Enter your access code to continue.
+              Enter your access code to continue.
             </p>
             <form action={unlock} className="mt-5 space-y-3">
               <input

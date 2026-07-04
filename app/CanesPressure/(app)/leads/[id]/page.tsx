@@ -4,12 +4,10 @@ import {
   ArrowLeft,
   CalendarClock,
   CheckCircle2,
-  Flame,
   MapPin,
   MessageSquare,
   Pencil,
   Phone,
-  Snowflake,
   Sparkles,
   Zap,
   type LucideIcon,
@@ -59,10 +57,8 @@ function CardTitle({ children }: { children: React.ReactNode }) {
 
 function ApptInfo({ lead }: { lead: Lead }) {
   return (
-    <div className="flex items-start gap-2.5">
-      <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--cp-brand-soft)] text-[var(--cp-brand-deep)]">
-        <CalendarClock size={16} strokeWidth={2.2} />
-      </span>
+    <div className="flex items-start gap-2">
+      <CalendarClock size={15} strokeWidth={2} className="mt-0.5 shrink-0 text-[var(--cp-muted)]" />
       <div className="min-w-0">
         <p className="text-[14px] font-semibold tabular-nums">{fmtEt(lead.appointment_at)}</p>
         {lead.address && <p className="truncate text-[13px] text-[var(--cp-muted)]">{lead.address}</p>}
@@ -79,7 +75,7 @@ function MapsLink({ address }: { address: string }) {
       rel="noreferrer"
       className="cp-btn w-full"
     >
-      <MapPin size={16} strokeWidth={2.2} /> Open in Maps
+      <MapPin size={16} strokeWidth={2} /> Open in Maps
     </a>
   );
 }
@@ -130,7 +126,7 @@ function NextStep({ lead }: { lead: Lead }) {
       {lead.phone ? (
         <>
           <a href={`tel:${lead.phone}`} className="cp-btn cp-btn-primary w-full">
-            <Phone size={17} strokeWidth={2.2} /> Call now
+            <Phone size={17} strokeWidth={2} /> Call now
           </a>
           <BridgeCallButton leadId={lead.id} />
         </>
@@ -176,19 +172,15 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
         href="/CanesPressure/leads"
         className="inline-flex min-h-11 items-center gap-1.5 text-[13px] font-medium text-[var(--cp-muted)]"
       >
-        <ArrowLeft size={15} strokeWidth={2.2} /> All leads
+        <ArrowLeft size={15} strokeWidth={2} /> All leads
       </Link>
 
       <div className="mt-1 flex flex-wrap items-center gap-2">
-        <h1 className="cp-display text-[22px] leading-tight">{lead.name ?? fmtPhone(lead.phone)}</h1>
+        <h1 className="cp-display text-[24px] leading-tight">{lead.name ?? fmtPhone(lead.phone)}</h1>
         {lead.type === "hot" ? (
-          <span className="cp-chip cp-badge-hot">
-            <Flame size={12} strokeWidth={2.4} /> Hot
-          </span>
+          <span className="cp-chip cp-badge-hot">Hot</span>
         ) : (
-          <span className="cp-chip cp-badge-cold">
-            <Snowflake size={12} strokeWidth={2.4} /> Cold
-          </span>
+          <span className="cp-chip cp-badge-cold">Cold</span>
         )}
         <span className={`cp-chip ${STATUS_CLASS[lead.status]}`}>{STATUS_LABEL[lead.status]}</span>
         {lead.opted_out && (
@@ -207,12 +199,38 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
         {SOURCE_LABEL[lead.source]}
       </p>
 
+      {/* Quick actions — the three things Sebastian does from the truck */}
+      <div className="mt-3 flex flex-wrap gap-2">
+        {lead.phone && (
+          <>
+            <a href={`tel:${lead.phone}`} className="cp-btn cp-btn-sm">
+              <Phone size={14} strokeWidth={2} /> Call
+            </a>
+            <Link
+              href={`/CanesPressure/inbox?t=${encodeURIComponent(lead.phone)}`}
+              className="cp-btn cp-btn-sm"
+            >
+              <MessageSquare size={14} strokeWidth={2} /> Text
+            </Link>
+          </>
+        )}
+        {lead.address && (
+          <a
+            href={`https://maps.google.com/?q=${encodeURIComponent(lead.address)}`}
+            target="_blank"
+            rel="noreferrer"
+            className="cp-btn cp-btn-sm"
+          >
+            <MapPin size={14} strokeWidth={2} /> Directions
+          </a>
+        )}
+      </div>
+
       <div className="mt-5 grid gap-4 md:grid-cols-[2fr_1fr]">
         {/* Rail first on mobile: Sebastian works this page from his phone and
             the next action has to sit above the fold. */}
         <div className="order-1 space-y-4 md:order-2">
-          <section className="cp-card overflow-hidden">
-            {urgent && <div className="cp-waterline" />}
+          <section className={`cp-card ${urgent ? "cp-urgent" : ""}`}>
             <div className="space-y-3 p-4">
               <CardTitle>Next step</CardTitle>
               <NextStep lead={lead} />
@@ -291,7 +309,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
                   href={`/CanesPressure/inbox?t=${encodeURIComponent(lead.phone)}`}
                   className="mt-2 inline-flex min-h-11 items-center gap-1.5 text-[13.5px] font-semibold text-[var(--cp-brand-deep)]"
                 >
-                  <MessageSquare size={15} strokeWidth={2.2} /> Open full thread
+                  <MessageSquare size={15} strokeWidth={2} /> Open full thread
                 </Link>
               )}
             </div>
@@ -306,10 +324,8 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
               {activity.map((item) => {
                 const Icon = item.icon;
                 return (
-                  <li key={item.id} className="flex gap-3">
-                    <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[var(--cp-line)] bg-[var(--cp-bg)] text-[var(--cp-muted)]">
-                      <Icon size={13} strokeWidth={2.2} />
-                    </span>
+                  <li key={item.id} className="flex gap-2.5">
+                    <Icon size={14} strokeWidth={2} className="mt-[3px] shrink-0 text-[var(--cp-faint)]" />
                     <div className="min-w-0">
                       <p className="text-[13.5px] leading-snug">{item.text}</p>
                       <p className="text-[11.5px] tabular-nums text-[var(--cp-faint)]">{fmtEt(item.at)}</p>
@@ -319,7 +335,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
               })}
             </ol>
             {lead.raw_message && (
-              <figure className="mt-4 rounded-xl border border-[var(--cp-line)] bg-[var(--cp-bg)] px-3.5 py-3">
+              <figure className="mt-4 rounded-md border border-[var(--cp-line)] bg-[var(--cp-bg)] px-3.5 py-3">
                 <figcaption className="text-[11px] font-semibold uppercase tracking-[0.04em] text-[var(--cp-faint)]">
                   Original vendor text
                   {lead.parse_confidence !== null &&

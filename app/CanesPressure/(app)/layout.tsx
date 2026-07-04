@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Droplets } from "lucide-react";
 import { hasAccess } from "@/lib/canes/gate";
 import { isDemo } from "@/lib/canes/data";
 import { CanesNav } from "../components/nav";
@@ -13,23 +12,19 @@ export default async function CanesAppLayout({ children }: { children: React.Rea
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-[1440px]">
       {/* Sidebar (desktop) */}
-      <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col gap-1 px-4 py-6 md:flex">
-        <Link href="/CanesPressure" className="mb-6 flex items-center gap-2.5 px-2">
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--cp-brand)] text-white">
-            <Droplets size={18} strokeWidth={2.2} />
-          </span>
-          <span>
-            <span className="cp-display block text-[15px] leading-tight">Canes</span>
-            <span className="block text-[11px] font-medium uppercase tracking-wider text-[var(--cp-muted)]">
-              Pressure Washing
-            </span>
+      <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col gap-1 border-r border-[var(--cp-line)] bg-[var(--cp-surface)] px-3 py-5 md:flex">
+        {/* Wordmark, not an icon-in-a-box — real trade software leads with the name */}
+        <Link href="/CanesPressure" className="mb-6 block px-2.5 pt-1">
+          <span className="cp-display block text-[17px] leading-tight">Canes</span>
+          <span className="block text-[10.5px] font-semibold uppercase tracking-[0.14em] text-[var(--cp-muted)]">
+            Pressure Washing
           </span>
         </Link>
         <CanesNav />
         <div className="mt-auto px-2">
           {isDemo() && (
-            <div className="cp-card px-3 py-2.5 text-[12px] leading-snug text-[var(--cp-muted)]">
-              <span className="font-semibold text-[var(--cp-hot)]">Demo data.</span> Connect the Canes
+            <div className="rounded-md border border-[var(--cp-line)] bg-[var(--cp-bg)] px-3 py-2.5 text-[12px] leading-snug text-[var(--cp-muted)]">
+              <span className="font-semibold text-[var(--cp-warn)]">Demo data.</span> Connect the Canes
               Supabase secret key to go live.
             </div>
           )}

@@ -1,20 +1,24 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { Fragment, useEffect, useRef } from "react";
 import Link from "next/link";
-import { ChevronLeft, Phone } from "lucide-react";
+import { ChevronLeft, Phone, PhoneIncoming, PhoneMissed, PhoneOutgoing, Voicemail } from "lucide-react";
 import {
   ET,
   STATUS_CLASS,
   STATUS_LABEL,
+  fmtCallDuration,
   fmtEt,
   fmtPhone,
+  isMissedCall,
+  type Call,
   type Lead,
   type Message,
 } from "@/lib/canes/types";
 import { Composer } from "./composer";
 
-// Right pane of the inbox: contact header, message stream, composer.
+// Right pane of the inbox: contact header, then one chronological stream of
+// SMS bubbles and call events (OpenPhone-style), then the composer.
 
 const etDay = new Intl.DateTimeFormat("en-US", { timeZone: ET, dateStyle: "short" });
 
@@ -25,22 +29,107 @@ function stamp(iso: string): string {
     : fmtEt(iso, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
+function CallEvent({ call }: { call: Call }) {
+  const out = call.direction === "out";
+  const missed = isMissedCall(call);
+  const voicemail = missed && Boolean(call.recording_url || call.transcript);
+  const duration = fmtCallDuration(call.duration_seconds);
+
+  const Icon = voicemail ? Voicemail : missed ? PhoneMissed : out ? PhoneOutgoing : PhoneIncoming;
+  const title = voicemail
+    ? "Voicemail"
+    : missed
+      ? "Missed call"
+      : out && call.status !== "completed"
+        ? "No answer"
+        : "Call ended";
+  const detail = out
+    ? `You called${duration ? ` · ${duration}` : ""}`
+    : missed
+      ? voicemail
+        ? "They left a message"
+        : "No one answered"
+      : `Answered${duration ? ` · ${duration}` : ""}`;
+
+  return (
+    <div className={`flex max-w-[78%] flex-col ${out ? "items-end self-end" : "items-start self-start"}`}>
+      <div className={`cp-call-card ${out ? "cp-call-card-out" : ""}`}>
+        <div className="flex items-center gap-2">
+          <Icon
+            size={15}
+            strokeWidth={2}
+            className={`shrink-0 ${
+              missed && !voicemail ? "text-[var(--cp-danger)]" : "text-[var(--cp-muted)]"
+            }`}
+          />
+          <div className="min-w-0">
+            <p className="text-[13.5px] font-semibold leading-tight">{title}</p>
+            <p className="text-[12px] leading-tight text-[var(--cp-muted)]">{detail}</p>
+          </div>
+        </div>
+        {call.recording_url && <audio controls preload="none" src={call.recording_url} />}
+        {call.transcript && (
+          <p className="border-l-2 border-[var(--cp-line-strong)] pl-2.5 text-[12.5px] italic leading-snug text-[var(--cp-muted)]">
+            {call.transcript}
+          </p>
+        )}
+      </div>
+      <span className="mt-1 text-[11px] tabular-nums text-[var(--cp-faint)]">{stamp(call.created_at)}</span>
+    </div>
+  );
+}
+
+type StreamItem = { at: string; key: string; node: React.ReactNode };
+
 export function Conversation({
   peerPhone,
   lead,
   messages,
+  calls,
 }: {
   peerPhone: string;
   lead: Lead | null;
   messages: Message[];
+  calls: Call[];
 }) {
   const streamRef = useRef<HTMLDivElement>(null);
-  const lastId = messages[messages.length - 1]?.id;
+  const lastKey = messages[messages.length - 1]?.id ?? calls[calls.length - 1]?.id;
 
   useEffect(() => {
     const el = streamRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [lastId]);
+  }, [lastKey]);
+
+  const stream: StreamItem[] = [
+    ...messages.map((m) => {
+      const out = m.direction === "out";
+      return {
+        at: m.created_at,
+        key: `m-${m.id}`,
+        node: (
+          <div className={`flex max-w-[78%] flex-col ${out ? "items-end self-end" : "items-start self-start"}`}>
+            {out && m.automated && (
+              <span className="mb-0.5 text-[11px] font-medium text-[var(--cp-faint)]">Auto</span>
+            )}
+            <div
+              className={`${
+                out ? (m.automated ? "cp-bubble-out cp-bubble-auto" : "cp-bubble-out") : "cp-bubble-in"
+              } whitespace-pre-wrap break-words px-3.5 py-2 text-[14px] leading-relaxed`}
+            >
+              {m.body}
+            </div>
+            <span className="mt-1 text-[11px] tabular-nums text-[var(--cp-faint)]">
+              {stamp(m.created_at)}
+            </span>
+            {m.delivery_status === "failed" && (
+              <span className="text-[11px] font-medium text-[var(--cp-danger)]">Not delivered</span>
+            )}
+          </div>
+        ),
+      };
+    }),
+    ...calls.map((c) => ({ at: c.created_at, key: `c-${c.id}`, node: <CallEvent call={c} /> })),
+  ].sort((a, b) => a.at.localeCompare(b.at));
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -48,7 +137,7 @@ export function Conversation({
         <Link
           href="/CanesPressure/inbox"
           aria-label="Back to inbox"
-          className="-ml-1 flex h-11 w-9 items-center justify-center rounded-lg text-[var(--cp-muted)] md:hidden"
+          className="-ml-1 flex h-11 w-9 items-center justify-center rounded-md text-[var(--cp-muted)] md:hidden"
         >
           <ChevronLeft size={22} />
         </Link>
@@ -65,7 +154,7 @@ export function Conversation({
               </span>
             )}
             {lead && (
-              <span className={`cp-chip shrink-0 ${STATUS_CLASS[lead.status]}`}>
+              <span className={`cp-chip shrink-0 ${STATUS_CLASS[lead.status]} xl:hidden`}>
                 {STATUS_LABEL[lead.status]}
               </span>
             )}
@@ -74,7 +163,7 @@ export function Conversation({
             <p className="text-[12px] tabular-nums text-[var(--cp-muted)]">{fmtPhone(peerPhone)}</p>
           )}
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2 xl:hidden">
           {lead && (
             <Link href={`/CanesPressure/leads/${lead.id}`} className="cp-btn cp-btn-sm">
               Open lead
@@ -91,37 +180,12 @@ export function Conversation({
         ref={streamRef}
         className="cp-scroll flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-3 py-4 md:px-4"
       >
-        {messages.length === 0 && (
+        {stream.length === 0 && (
           <p className="m-auto text-[13px] text-[var(--cp-muted)]">No messages in this thread yet.</p>
         )}
-        {messages.map((m) => {
-          const out = m.direction === "out";
-          return (
-            <div
-              key={m.id}
-              className={`flex max-w-[78%] flex-col ${out ? "items-end self-end" : "items-start self-start"}`}
-            >
-              {out && m.automated && (
-                <span className="mb-0.5 text-[11px] font-medium opacity-70">Auto</span>
-              )}
-              <div
-                className={`${
-                  out ? (m.automated ? "cp-bubble-out cp-bubble-auto" : "cp-bubble-out") : "cp-bubble-in"
-                } whitespace-pre-wrap break-words px-3.5 py-2 text-[14px] leading-relaxed`}
-              >
-                {m.body}
-              </div>
-              <span className="mt-1 text-[11px] tabular-nums text-[var(--cp-faint)]">
-                {stamp(m.created_at)}
-              </span>
-              {m.delivery_status === "failed" && (
-                <span className="text-[11px] font-medium text-[var(--cp-danger)]">
-                  Not delivered
-                </span>
-              )}
-            </div>
-          );
-        })}
+        {stream.map((item) => (
+          <Fragment key={item.key}>{item.node}</Fragment>
+        ))}
       </div>
 
       <div className="border-t border-[var(--cp-line)] px-3 py-3 md:px-4">
