@@ -43,15 +43,18 @@ export async function sendSms(opts: {
   from: string;
   to: string;
   body: string;
+  statusCallback?: string; // Twilio POSTs delivery-status updates here
 }): Promise<{ ok: boolean; sid?: string; error?: string }> {
   const basic = Buffer.from(`${opts.accountSid}:${opts.authToken}`).toString("base64");
+  const params = new URLSearchParams({ To: opts.to, From: opts.from, Body: opts.body });
+  if (opts.statusCallback) params.set("StatusCallback", opts.statusCallback);
   const res = await fetch(messagesUrl(opts.accountSid), {
     method: "POST",
     headers: {
       Authorization: `Basic ${basic}`,
       "Content-Type": "application/x-www-form-urlencoded",
     },
-    body: new URLSearchParams({ To: opts.to, From: opts.from, Body: opts.body }),
+    body: params,
   });
   if (!res.ok) return { ok: false, error: `Twilio responded ${res.status}` };
   const json = (await res.json()) as { sid?: string };

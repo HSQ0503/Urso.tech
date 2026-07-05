@@ -26,9 +26,10 @@ const DEFAULT_SETTINGS: CanesSettings = {
       "Hi{name}! This is Canes Pressure Washing. We got your request and Sebastian will call you in just a few minutes. Reply STOP to opt out.",
     confirmation:
       "Hi{name}, this is Canes Pressure Washing confirming your free estimate visit {when} at {address}. Reply YES to confirm. Reply STOP to opt out.",
-    confirmation_ack: "You are confirmed for {when}. See you then! - Canes Pressure Washing",
+    confirmation_ack:
+      "You are confirmed for {when}. See you then! - Canes Pressure Washing. Reply STOP to opt out.",
     missed_call:
-      "Hi, this is Canes Pressure Washing. Sorry we missed your call - we will get back to you shortly. Reply here and we will text you right back.",
+      "Hi, this is Canes Pressure Washing. Sorry we missed your call - we will get back to you shortly. Reply here and we will text you right back. Reply STOP to opt out.",
   },
   lead_vendor_phones: [],
 };

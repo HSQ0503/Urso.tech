@@ -18,6 +18,15 @@ export function canesTwilioCreds() {
   };
 }
 
+// Twilio POSTs queued→sent→delivered/undelivered transitions here, and the
+// status route stamps them onto the message row — so a carrier-filtered text
+// (e.g. pre-A2P error 30034) shows "Not delivered" in the inbox instead of
+// silently looking sent.
+function statusCallbackUrl(): string {
+  const base = (process.env.NEXT_PUBLIC_APP_URL ?? "https://urso.ws").replace(/\/$/, "");
+  return `${base}/api/canes/twilio/status`;
+}
+
 // Quiet hours run in ET: no automated customer texts late at night. Returns
 // null if sending is fine now, else the next allowed Date.
 export function nextAllowedSendTime(settings: CanesSettings, now = new Date()): Date | null {
@@ -80,6 +89,7 @@ export async function sendCanesSms(opts: {
     from: creds.from,
     to: opts.to,
     body: opts.body,
+    statusCallback: statusCallbackUrl(),
   });
   if (canesConfigured()) {
     await canesDb().from("messages").insert({
