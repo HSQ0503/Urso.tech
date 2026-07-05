@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   CalendarClock,
   CheckCircle2,
+  ChevronDown,
   MapPin,
   MessageSquare,
   Pencil,
@@ -23,10 +24,10 @@ import {
   type Lead,
 } from "@/lib/canes/types";
 import { LeadEditor } from "@/app/CanesPressure/components/leads/lead-editor";
+import { WaitTimer } from "@/app/CanesPressure/components/leads/wait-timer";
 import {
   AppointmentCard,
-  BridgeCallButton,
-  Disposition,
+  CallFlow,
   ResendConfirmationButton,
   SnoozeCard,
   StatusCard,
@@ -97,11 +98,26 @@ function NextStep({ lead }: { lead: Lead }) {
   }
 
   if (lead.status === "appointment_set") {
+    // eslint-disable-next-line react-hooks/purity -- per-request dynamic server render; "now" is stable for this render
+    const nowMs = Date.now();
+    const hoursUntil = lead.appointment_at
+      ? (new Date(lead.appointment_at).getTime() - nowMs) / 3_600_000
+      : null;
+    const soon = hoursUntil !== null && hoursUntil < 24;
     return (
       <div className="space-y-2.5">
         <ApptInfo lead={lead} />
-        <p className="text-[13px] text-[var(--cp-muted)]">Waiting on the customer to reply YES.</p>
+        <p className={`text-[13px] ${soon ? "font-medium text-[var(--cp-warn)]" : "text-[var(--cp-muted)]"}`}>
+          {soon
+            ? "No YES yet and the visit is soon — worth a call to confirm."
+            : "Waiting on the customer to reply YES to the confirmation text."}
+        </p>
         <ResendConfirmationButton leadId={lead.id} />
+        {lead.phone && (
+          <a href={`tel:${lead.phone}`} className="cp-btn w-full">
+            <Phone size={16} strokeWidth={2} /> Call to confirm
+          </a>
+        )}
       </div>
     );
   }
@@ -120,23 +136,24 @@ function NextStep({ lead }: { lead: Lead }) {
     );
   }
 
-  // new / contacted / estimated: the phone is the next step.
+  // new / contacted / estimated: the phone is the next step. One dominant
+  // button; the outcome questions appear only after a call starts.
   return (
-    <div className="space-y-2.5">
-      {lead.phone ? (
-        <>
-          <a href={`tel:${lead.phone}`} className="cp-btn cp-btn-primary w-full">
-            <Phone size={17} strokeWidth={2} /> Call now
-          </a>
-          <BridgeCallButton leadId={lead.id} />
-        </>
-      ) : (
-        <p className="text-[13px] text-[var(--cp-warn)]">No phone number on file. Add one in the details.</p>
+    <div className="space-y-3">
+      {lead.type === "cold" && lead.status === "new" && (
+        <div className="flex flex-wrap items-center gap-2">
+          <WaitTimer createdAt={lead.created_at} />
+          <p className="text-[13px] text-[var(--cp-muted)]">
+            They asked for a quote — call while it&rsquo;s warm.
+          </p>
+        </div>
       )}
-      <div className="cp-divider pt-2.5">
-        <p className="cp-label mb-2">After the call</p>
-        <Disposition leadId={lead.id} />
-      </div>
+      {lead.status === "contacted" && (
+        <p className="text-[13px] text-[var(--cp-muted)]">
+          You&rsquo;ve spoken before — close it, or log another call.
+        </p>
+      )}
+      <CallFlow leadId={lead.id} phone={lead.phone} />
     </div>
   );
 }
@@ -237,32 +254,40 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
             </div>
           </section>
 
-          <section className="cp-card p-4">
-            <div className="space-y-3">
-              <CardTitle>Status</CardTitle>
-              <StatusCard leadId={lead.id} status={lead.status} />
-            </div>
-          </section>
-
-          <section className="cp-card p-4">
-            <div className="space-y-3">
-              <CardTitle>Appointment</CardTitle>
-              <AppointmentCard
-                leadId={lead.id}
-                appointmentAt={lead.appointment_at}
-                offsetHours={settings.confirmation_offset_hours}
+          {/* Everything that isn't the next step lives behind one disclosure —
+              still a tap away, no longer competing for attention. */}
+          <details className="cp-card group">
+            <summary className="flex min-h-[52px] cursor-pointer list-none items-center justify-between px-4 text-[15px] font-semibold [&::-webkit-details-marker]:hidden">
+              More options
+              <ChevronDown
+                size={16}
+                strokeWidth={2}
+                className="text-[var(--cp-muted)] transition-transform duration-200 group-open:rotate-180"
               />
-            </div>
-          </section>
-
-          {lead.type === "cold" && lead.status === "contacted" && (
-            <section className="cp-card p-4">
-              <div className="space-y-3">
-                <CardTitle>Snooze follow-up</CardTitle>
-                <SnoozeCard leadId={lead.id} snoozedUntil={lead.snoozed_until} />
+            </summary>
+            <div className="space-y-4 border-t border-[var(--cp-line)] p-4">
+              <div className="space-y-2.5">
+                <p className="cp-label">Status</p>
+                <StatusCard leadId={lead.id} status={lead.status} />
               </div>
-            </section>
-          )}
+              <div className="cp-divider space-y-2.5 pt-4">
+                <p className="cp-label">
+                  {lead.appointment_at ? "Reschedule the visit" : "Set a visit manually"}
+                </p>
+                <AppointmentCard
+                  leadId={lead.id}
+                  appointmentAt={lead.appointment_at}
+                  offsetHours={settings.confirmation_offset_hours}
+                />
+              </div>
+              {lead.type === "cold" && lead.status === "contacted" && (
+                <div className="cp-divider space-y-2.5 pt-4">
+                  <p className="cp-label">Snooze follow-up</p>
+                  <SnoozeCard leadId={lead.id} snoozedUntil={lead.snoozed_until} />
+                </div>
+              )}
+            </div>
+          </details>
         </div>
 
         <div className="order-2 min-w-0 space-y-4 md:order-1">

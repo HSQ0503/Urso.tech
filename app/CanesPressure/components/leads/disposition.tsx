@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { CalendarClock, MessageSquareText, PhoneForwarded } from "lucide-react";
+import { CalendarClock, MessageSquareText, Phone, PhoneForwarded } from "lucide-react";
 import {
   initiateCall,
   logCallOutcome,
@@ -147,7 +147,13 @@ export function Disposition({ leadId }: { leadId: string }) {
 
 // ── One-shot buttons ─────────────────────────────────────────────────────────
 
-export function BridgeCallButton({ leadId }: { leadId: string }) {
+export function BridgeCallButton({
+  leadId,
+  onStarted,
+}: {
+  leadId: string;
+  onStarted?: () => void;
+}) {
   const { isPending, feedback, run } = useAction();
   return (
     <div className="space-y-1.5">
@@ -155,12 +161,66 @@ export function BridgeCallButton({ leadId }: { leadId: string }) {
         type="button"
         className="cp-btn w-full"
         disabled={isPending}
-        onClick={() => run(() => initiateCall(leadId))}
+        onClick={() => run(() => initiateCall(leadId), onStarted)}
       >
         <PhoneForwarded size={16} strokeWidth={2} />
         {isPending ? "Connecting..." : "Bridge via business line"}
       </button>
       <Notice value={feedback} />
+    </div>
+  );
+}
+
+// ── Guided call flow ─────────────────────────────────────────────────────────
+// One dominant action per state (Sebastian's ask: less noise, tell me what to
+// do next). Stage "call" shows a single big Call button; the moment a call
+// starts — native tap or bridge — the card flips to "How did the call go?"
+// and walks the outcome: booked / follow up / no answer / lost.
+
+export function CallFlow({ leadId, phone }: { leadId: string; phone: string | null }) {
+  const [stage, setStage] = useState<"call" | "outcome">("call");
+
+  if (!phone) {
+    return (
+      <p className="text-[13px] text-[var(--cp-warn)]">
+        No phone number on file. Add one in the details.
+      </p>
+    );
+  }
+
+  if (stage === "call") {
+    return (
+      <div className="space-y-2">
+        <a
+          href={`tel:${phone}`}
+          className="cp-btn cp-btn-primary min-h-[46px] w-full text-[14.5px]"
+          onClick={() => setStage("outcome")}
+        >
+          <Phone size={18} strokeWidth={2} /> Call now
+        </a>
+        <BridgeCallButton leadId={leadId} onStarted={() => setStage("outcome")} />
+        <button
+          type="button"
+          className="min-h-9 w-full cursor-pointer text-center text-[12.5px] font-semibold text-[var(--cp-brand-deep)] hover:underline"
+          onClick={() => setStage("outcome")}
+        >
+          Already called? Log the outcome
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2.5">
+      <p className="text-[14px] font-semibold">How did the call go?</p>
+      <Disposition leadId={leadId} />
+      <button
+        type="button"
+        className="min-h-9 cursor-pointer text-[12.5px] font-medium text-[var(--cp-muted)] hover:underline"
+        onClick={() => setStage("call")}
+      >
+        Back to call
+      </button>
     </div>
   );
 }
