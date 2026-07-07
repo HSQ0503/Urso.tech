@@ -1,10 +1,37 @@
 "use server";
 
+import { randomBytes } from "crypto";
 import { revalidatePath } from "next/cache";
 import { canesConfigured, canesDb } from "@/lib/canes/supabase";
 import { getSettings, getLead } from "@/lib/canes/data";
-import { sendCanesSms, fillTemplate, canesTwilioCreds } from "@/lib/canes/twilio";
-import { fmtEt, toE164, type LeadStatus, type LeadSource } from "@/lib/canes/types";
+import { sendCanesSms, fillTemplate, canesTwilioCreds, alertOwner } from "@/lib/canes/twilio";
+import {
+  getEstimate,
+  getEstimateByToken,
+  getEstimateItems,
+  getEstimateWithItems,
+  nextEstimateNumber,
+  enqueueEstimateSend,
+  enqueueEstimateReminders,
+} from "@/lib/canes/estimates";
+import {
+  notifyEstimateSent,
+  notifyEstimateApproved,
+  notifyEstimateDeclined,
+} from "@/lib/canes/notify";
+import { createDepositLink } from "@/lib/canes/square";
+import {
+  fmtEt,
+  fmtMoney,
+  toE164,
+  type CatalogKind,
+  type Estimate,
+  type EstimateItem,
+  type EstimateType,
+  type EstimateWithItems,
+  type LeadStatus,
+  type LeadSource,
+} from "@/lib/canes/types";
 
 // Server actions for the Canes UI. Every mutation returns { ok, notice? } and
 // revalidates the routes that render the touched data. In demo mode (no
@@ -212,6 +239,11 @@ export async function saveSettings(patch: {
   confirmation_offset_hours?: number;
   templates?: Record<string, string>;
   lead_vendor_phones?: string[];
+  estimate_terms?: string;
+  estimate_message?: string;
+  deposit_presets?: number[];
+  estimate_expiry_days?: number;
+  estimate_tax_rate_bps?: number;
 }): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
   const db = canesDb();
@@ -257,6 +289,562 @@ export async function createLead(fields: {
   if (error) return { ok: false, notice: error.message };
   await logEvent(data.id, "created", "Lead added manually");
   if (fields.appointmentIso) await setAppointment(data.id, fields.appointmentIso);
+  refresh();
+  return { ok: true };
+}
+
+// ── Estimates (Phase 2) ──────────────────────────────────────────────────────
+//
+// Money is always recomputed SERVER-SIDE from the line items — client-supplied
+// totals are never trusted. Line total = quantity*unit_price - discount. A line
+// counts toward the subtotal when it is mandatory, standard (not an option), or
+// a selected option. total = subtotal + adjustment + tax; deposit is a rounded
+// percentage of the total. Every mutation follows the ActionResult + DEMO guard
+// + logEvent/touch/refresh pattern from setAppointment.
+
+const genToken = () => randomBytes(16).toString("base64url");
+
+function lineTotalCents(item: { quantity: number; unit_price_cents: number; discount_cents: number }): number {
+  return Math.round(item.quantity * item.unit_price_cents) - item.discount_cents;
+}
+
+// Does this line contribute to the subtotal? Mandatory + standard lines always
+// count; an option only counts once the customer selects it.
+function itemCounts(item: { is_option: boolean; is_mandatory: boolean; is_selected: boolean }): boolean {
+  return item.is_mandatory || !item.is_option || item.is_selected;
+}
+
+type Totals = {
+  subtotal_cents: number;
+  discount_cents: number;
+  tax_cents: number;
+  total_cents: number;
+  deposit_cents: number;
+};
+
+function computeTotals(
+  items: EstimateItem[],
+  opts: { adjustmentCents: number; depositPercent: number; taxRateBps: number },
+): Totals {
+  let subtotal = 0;
+  let discount = 0;
+  let taxableBase = 0;
+  for (const item of items) {
+    if (!itemCounts(item)) continue;
+    subtotal += item.line_total_cents;
+    discount += item.discount_cents;
+    if (item.taxable) taxableBase += item.line_total_cents;
+  }
+  const tax = Math.round((taxableBase * opts.taxRateBps) / 10000);
+  const total = subtotal + opts.adjustmentCents + tax;
+  const deposit = Math.round((total * opts.depositPercent) / 100);
+  return { subtotal_cents: subtotal, discount_cents: discount, tax_cents: tax, total_cents: total, deposit_cents: deposit };
+}
+
+// Re-read the estimate + its items and persist recomputed totals. Called after
+// any change to items, adjustment, or deposit percent. Returns the fresh totals.
+async function recomputeEstimateTotals(estimateId: string): Promise<Totals | null> {
+  const estimate = await getEstimate(estimateId);
+  if (!estimate) return null;
+  const items = await getEstimateItems(estimateId);
+  const totals = computeTotals(items, {
+    adjustmentCents: estimate.adjustment_cents,
+    depositPercent: estimate.deposit_percent,
+    taxRateBps: estimate.tax_rate_bps,
+  });
+  const { error } = await canesDb()
+    .from("estimates")
+    .update({ ...totals, updated_at: new Date().toISOString() })
+    .eq("id", estimateId);
+  if (error) return null;
+  return totals;
+}
+
+export async function createEstimateFromLead(
+  leadId: string,
+): Promise<ActionResult & { estimateId?: string }> {
+  if (!canesConfigured()) return DEMO;
+  const lead = await getLead(leadId);
+  if (!lead) return { ok: false, notice: "Lead not found." };
+  return createEstimate({
+    leadId,
+    estimateType: "standard",
+    customerName: lead.name ?? undefined,
+    customerPhone: lead.phone ?? undefined,
+    jobAddress: lead.address ?? undefined,
+    jobName: lead.service ?? undefined,
+  });
+}
+
+export async function createEstimate(input: {
+  leadId?: string;
+  contactId?: string;
+  estimateType: EstimateType;
+  customerName?: string;
+  customerPhone?: string;
+  customerEmail?: string;
+  jobAddress?: string;
+  jobName?: string;
+}): Promise<ActionResult & { estimateId?: string }> {
+  if (!canesConfigured()) return DEMO;
+  const settings = await getSettings();
+  const number = await nextEstimateNumber();
+  const phone = input.customerPhone ? toE164(input.customerPhone) : null;
+  if (input.customerPhone && !phone) return { ok: false, notice: "That phone number doesn't look valid." };
+  // Snapshot terms + message + expiry from settings at creation so later
+  // settings edits never rewrite a sent estimate.
+  const expiresAt = new Date(
+    Date.now() + settings.estimate_expiry_days * 86_400_000,
+  ).toISOString();
+  const { data, error } = await canesDb()
+    .from("estimates")
+    .insert({
+      lead_id: input.leadId ?? null,
+      contact_id: input.contactId ?? null,
+      number,
+      estimate_type: input.estimateType,
+      status: "draft",
+      customer_name: input.customerName ?? null,
+      customer_phone: phone,
+      customer_email: input.customerEmail ?? null,
+      job_address: input.jobAddress ?? null,
+      job_name: input.jobName ?? null,
+      message_to_customer: settings.estimate_message,
+      terms: settings.estimate_terms,
+      tax_rate_bps: settings.estimate_tax_rate_bps,
+      expires_at: expiresAt,
+      public_token: genToken(),
+    })
+    .select("id")
+    .single();
+  if (error) return { ok: false, notice: error.message };
+  if (input.leadId) {
+    await logEvent(input.leadId, "estimate", `Estimate ${number} created`);
+    await touch(input.leadId);
+  }
+  refresh();
+  return { ok: true, estimateId: data.id as string };
+}
+
+export async function updateEstimate(
+  estimateId: string,
+  patch: {
+    customerName?: string;
+    customerPhone?: string;
+    customerEmail?: string;
+    jobAddress?: string;
+    jobName?: string;
+    estimateType?: EstimateType;
+    adjustmentCents?: number;
+    depositPercent?: number;
+    messageToCustomer?: string;
+    terms?: string;
+    internalNotes?: string;
+    expiresAtIso?: string | null;
+    employee?: string;
+  },
+): Promise<ActionResult> {
+  if (!canesConfigured()) return DEMO;
+  const estimate = await getEstimate(estimateId);
+  if (!estimate) return { ok: false, notice: "Estimate not found." };
+  if (estimate.status !== "draft") return { ok: false, notice: "Only draft estimates can be edited." };
+
+  const row: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (patch.customerName !== undefined) row.customer_name = patch.customerName || null;
+  if (patch.customerPhone !== undefined) {
+    const phone = patch.customerPhone ? toE164(patch.customerPhone) : null;
+    if (patch.customerPhone && !phone) return { ok: false, notice: "That phone number doesn't look valid." };
+    row.customer_phone = phone;
+  }
+  if (patch.customerEmail !== undefined) row.customer_email = patch.customerEmail || null;
+  if (patch.jobAddress !== undefined) row.job_address = patch.jobAddress || null;
+  if (patch.jobName !== undefined) row.job_name = patch.jobName || null;
+  if (patch.estimateType !== undefined) row.estimate_type = patch.estimateType;
+  if (patch.adjustmentCents !== undefined) row.adjustment_cents = Math.round(patch.adjustmentCents);
+  if (patch.depositPercent !== undefined) {
+    row.deposit_percent = Math.max(0, Math.min(100, Math.round(patch.depositPercent)));
+  }
+  if (patch.messageToCustomer !== undefined) row.message_to_customer = patch.messageToCustomer || null;
+  if (patch.terms !== undefined) row.terms = patch.terms || null;
+  if (patch.internalNotes !== undefined) row.internal_notes = patch.internalNotes || null;
+  if (patch.expiresAtIso !== undefined) row.expires_at = patch.expiresAtIso;
+  if (patch.employee !== undefined) row.employee = patch.employee || null;
+
+  const { error } = await canesDb().from("estimates").update(row).eq("id", estimateId);
+  if (error) return { ok: false, notice: error.message };
+  // Adjustment or deposit percent changed → totals must be recomputed.
+  await recomputeEstimateTotals(estimateId);
+  if (estimate.lead_id) await touch(estimate.lead_id);
+  refresh();
+  return { ok: true };
+}
+
+export async function saveEstimateItems(
+  estimateId: string,
+  items: Array<{
+    catalogId?: string | null;
+    name: string;
+    description?: string | null;
+    kind: CatalogKind;
+    quantity: number;
+    unitPriceCents: number;
+    discountCents?: number;
+    taxable?: boolean;
+    isOption?: boolean;
+    isMandatory?: boolean;
+    packageGroup?: string | null;
+  }>,
+): Promise<ActionResult> {
+  if (!canesConfigured()) return DEMO;
+  const estimate = await getEstimate(estimateId);
+  if (!estimate) return { ok: false, notice: "Estimate not found." };
+  if (estimate.status !== "draft") return { ok: false, notice: "Only draft estimates can be edited." };
+
+  const db = canesDb();
+  // Replace-all: wipe the old lines, insert the fresh set with recomputed line
+  // totals, then recompute the estimate totals from what was actually written.
+  const { error: delErr } = await db.from("estimate_items").delete().eq("estimate_id", estimateId);
+  if (delErr) return { ok: false, notice: delErr.message };
+
+  if (items.length > 0) {
+    const rows = items.map((it, i) => {
+      const quantity = Number(it.quantity) || 0;
+      const unit = Math.round(it.unitPriceCents);
+      const discount = Math.round(it.discountCents ?? 0);
+      const isOption = it.isOption ?? false;
+      const isMandatory = it.isMandatory ?? false;
+      return {
+        estimate_id: estimateId,
+        catalog_id: it.catalogId ?? null,
+        position: i,
+        name: it.name,
+        description: it.description ?? null,
+        kind: it.kind,
+        quantity,
+        unit_price_cents: unit,
+        discount_cents: discount,
+        taxable: it.taxable ?? false,
+        line_total_cents: lineTotalCents({ quantity, unit_price_cents: unit, discount_cents: discount }),
+        is_option: isOption,
+        is_mandatory: isMandatory,
+        // Options start selected only when mandatory; standard lines are selected.
+        is_selected: isOption ? isMandatory : true,
+        package_group: it.packageGroup ?? null,
+      };
+    });
+    const { error: insErr } = await db.from("estimate_items").insert(rows);
+    if (insErr) return { ok: false, notice: insErr.message };
+  }
+
+  await recomputeEstimateTotals(estimateId);
+  if (estimate.lead_id) await touch(estimate.lead_id);
+  refresh();
+  return { ok: true };
+}
+
+export async function sendEstimate(
+  estimateId: string,
+  opts?: { alsoText?: boolean },
+): Promise<ActionResult> {
+  if (!canesConfigured()) return DEMO;
+  const estimate = await getEstimate(estimateId);
+  if (!estimate) return { ok: false, notice: "Estimate not found." };
+  if (estimate.status !== "draft") return { ok: false, notice: "This estimate has already been sent." };
+
+  const db = canesDb();
+  // Lock in final totals (and deposit) before the customer ever sees them.
+  const totals = await recomputeEstimateTotals(estimateId);
+  const now = new Date().toISOString();
+  const { error } = await db
+    .from("estimates")
+    .update({ status: "sent", sent_at: now, updated_at: now })
+    .eq("id", estimateId);
+  if (error) return { ok: false, notice: error.message };
+  const sent: Estimate = {
+    ...estimate,
+    status: "sent",
+    sent_at: now,
+    ...(totals ?? {}),
+  };
+
+  // Email the customer inline (best-effort); queue the SMS + reminders through
+  // the tasks outbox so quiet hours and opt-outs are respected by the cron.
+  await notifyEstimateSent(sent);
+
+  const lead = estimate.lead_id ? await getLead(estimate.lead_id) : null;
+  const optedOut = Boolean(lead?.opted_out);
+  if ((opts?.alsoText ?? true) && sent.customer_phone && !optedOut) {
+    await enqueueEstimateSend(sent);
+  }
+  await enqueueEstimateReminders(sent);
+
+  if (estimate.lead_id) {
+    // Advance the lead to 'estimated' (never regress a won/lost lead).
+    if (lead && !["won", "lost"].includes(lead.status)) {
+      await db.from("leads").update({ status: "estimated" }).eq("id", estimate.lead_id);
+    }
+    await logEvent(estimate.lead_id, "estimate", `Estimate ${estimate.number} sent (${fmtMoney(sent.total_cents)})`);
+    await touch(estimate.lead_id);
+  }
+  refresh();
+  return { ok: true, notice: optedOut ? "Sent by email. Customer opted out of texts, so no SMS was queued." : undefined };
+}
+
+export async function voidEstimate(estimateId: string): Promise<ActionResult> {
+  if (!canesConfigured()) return DEMO;
+  const estimate = await getEstimate(estimateId);
+  if (!estimate) return { ok: false, notice: "Estimate not found." };
+  const db = canesDb();
+  const now = new Date().toISOString();
+  // Expired is the terminal "no longer live" status the schema allows for a
+  // voided estimate; cancel any pending reminder/send tasks so the customer is
+  // never texted about a dead estimate.
+  const { error } = await db
+    .from("estimates")
+    .update({ status: "expired", updated_at: now })
+    .eq("id", estimateId);
+  if (error) return { ok: false, notice: error.message };
+  await db
+    .from("tasks")
+    .update({ status: "canceled" })
+    .in("kind", ["estimate_send", "estimate_reminder"])
+    .eq("status", "pending")
+    .in("dedupe_key", [
+      `estimate_send:${estimateId}`,
+      `estimate_reminder:${estimateId}:d2`,
+      `estimate_reminder:${estimateId}:d5`,
+    ]);
+  if (estimate.lead_id) {
+    await logEvent(estimate.lead_id, "estimate", `Estimate ${estimate.number} voided`);
+    await touch(estimate.lead_id);
+  }
+  refresh();
+  return { ok: true };
+}
+
+// ── Public, token-scoped (called from the ungated /CanesPressure/e/[token]) ──
+
+export async function markViewed(token: string): Promise<ActionResult> {
+  if (!canesConfigured()) return DEMO;
+  const estimate = await getEstimateByToken(token);
+  if (!estimate) return { ok: false, notice: "Estimate not found." };
+  // Only the first open of a sent estimate flips to viewed; idempotent after.
+  if (estimate.status !== "sent") return { ok: true };
+  const now = new Date().toISOString();
+  const { error } = await canesDb()
+    .from("estimates")
+    .update({ status: "viewed", viewed_at: now, updated_at: now })
+    .eq("id", estimate.id)
+    .eq("status", "sent");
+  if (error) return { ok: false, notice: error.message };
+  if (estimate.lead_id) await logEvent(estimate.lead_id, "estimate", `Estimate ${estimate.number} viewed by customer`);
+  refresh();
+  return { ok: true };
+}
+
+export async function approveEstimate(
+  token: string,
+  signatureName: string,
+  selectedItemIds?: string[],
+): Promise<ActionResult & { depositUrl?: string | null }> {
+  if (!canesConfigured()) return DEMO;
+  const signature = signatureName.trim();
+  if (!signature) return { ok: false, notice: "Please type your name to sign." };
+  const estimate = await getEstimateByToken(token);
+  if (!estimate) return { ok: false, notice: "Estimate not found." };
+  if (estimate.status === "approved") return { ok: false, notice: "This estimate is already approved." };
+  if (!["sent", "viewed"].includes(estimate.status)) {
+    return { ok: false, notice: "This estimate can no longer be approved." };
+  }
+  if (estimate.expires_at && new Date(estimate.expires_at).getTime() < Date.now()) {
+    return { ok: false, notice: "This estimate has expired. Please contact us for a new one." };
+  }
+
+  const db = canesDb();
+  // Options estimates: persist the customer's selection before recomputing so
+  // the approved totals reflect exactly what they chose.
+  if (estimate.estimate_type === "options" && selectedItemIds) {
+    const items = await getEstimateItems(estimate.id);
+    const chosen = new Set(selectedItemIds);
+    for (const item of items) {
+      if (item.is_mandatory) continue; // mandatory lines are never toggled off
+      const selected = chosen.has(item.id);
+      if (selected !== item.is_selected) {
+        await db.from("estimate_items").update({ is_selected: selected }).eq("id", item.id);
+      }
+    }
+  }
+  const totals = await recomputeEstimateTotals(estimate.id);
+  const now = new Date().toISOString();
+  // Conditional claim on the exact status we read: if a concurrent approve (a
+  // second tab, a replayed POST) already flipped it, we match zero rows and bail
+  // before firing the owner alert or creating a second job.
+  const { data: claimed, error } = await db
+    .from("estimates")
+    .update({ status: "approved", approved_at: now, signature_name: signature, updated_at: now })
+    .eq("id", estimate.id)
+    .eq("status", estimate.status)
+    .select("id");
+  if (error) return { ok: false, notice: error.message };
+  if (!claimed || claimed.length === 0) {
+    return { ok: true, notice: "This estimate is already approved." };
+  }
+
+  const approved: Estimate = {
+    ...estimate,
+    status: "approved",
+    approved_at: now,
+    signature_name: signature,
+    ...(totals ?? {}),
+  };
+
+  if (estimate.lead_id) {
+    const lead = await getLead(estimate.lead_id);
+    if (lead && lead.status !== "lost") {
+      await db.from("leads").update({ status: "won" }).eq("id", estimate.lead_id);
+    }
+    await logEvent(estimate.lead_id, "estimate", `Estimate ${estimate.number} approved by ${signature}`);
+    await touch(estimate.lead_id);
+  }
+
+  await alertOwner(
+    `Estimate ${approved.number} approved by ${approved.customer_name ?? signature} — ` +
+      `${fmtMoney(approved.total_cents)}. A job was created; time to schedule.`,
+  );
+  await notifyEstimateApproved(approved);
+
+  const withItems = await getEstimateWithItems(estimate.id);
+  if (withItems) await createJobFromEstimate(withItems);
+
+  const deposit = await createDepositLink(approved);
+  refresh();
+  return { ok: true, depositUrl: deposit.url };
+}
+
+export async function declineEstimate(token: string, reason: string): Promise<ActionResult> {
+  if (!canesConfigured()) return DEMO;
+  const estimate = await getEstimateByToken(token);
+  if (!estimate) return { ok: false, notice: "Estimate not found." };
+  if (!["sent", "viewed"].includes(estimate.status)) {
+    return { ok: false, notice: "This estimate can no longer be declined." };
+  }
+  const db = canesDb();
+  const now = new Date().toISOString();
+  const trimmed = reason.trim() || null;
+  const { error } = await db
+    .from("estimates")
+    .update({ status: "declined", declined_at: now, decline_reason: trimmed, updated_at: now })
+    .eq("id", estimate.id);
+  if (error) return { ok: false, notice: error.message };
+
+  const declined: Estimate = {
+    ...estimate,
+    status: "declined",
+    declined_at: now,
+    decline_reason: trimmed,
+  };
+
+  // Cancel any pending reminder/send tasks — no more nagging a declined estimate.
+  await db
+    .from("tasks")
+    .update({ status: "canceled" })
+    .eq("status", "pending")
+    .in("dedupe_key", [
+      `estimate_send:${estimate.id}`,
+      `estimate_reminder:${estimate.id}:d2`,
+      `estimate_reminder:${estimate.id}:d5`,
+    ]);
+
+  if (estimate.lead_id) {
+    await logEvent(estimate.lead_id, "estimate", `Estimate ${estimate.number} declined${trimmed ? ` — ${trimmed}` : ""}`);
+    await touch(estimate.lead_id);
+  }
+  await alertOwner(
+    `Estimate ${declined.number} declined by ${declined.customer_name ?? "customer"}${trimmed ? `: ${trimmed}` : "."}`,
+  );
+  await notifyEstimateDeclined(declined);
+  refresh();
+  return { ok: true };
+}
+
+// Internal: create the job that backs an approved estimate. Insert-only dedupe
+// on estimate_id so a double-approve (or a retried approve) never spawns a
+// second job. Not exported as an action surface; called by approveEstimate.
+export async function createJobFromEstimate(estimate: EstimateWithItems): Promise<string | null> {
+  if (!canesConfigured()) return null;
+  const db = canesDb();
+  // Guard: a job already tied to this estimate means we're done.
+  const { data: existing } = await db
+    .from("jobs")
+    .select("id")
+    .eq("estimate_id", estimate.id)
+    .maybeSingle();
+  if (existing?.id) return existing.id as string;
+
+  const { data, error } = await db
+    .from("jobs")
+    .insert({
+      estimate_id: estimate.id,
+      lead_id: estimate.lead_id,
+      contact_id: estimate.contact_id,
+      status: "unscheduled",
+      customer_name: estimate.customer_name,
+      job_address: estimate.job_address,
+      total_cents: estimate.total_cents,
+      deposit_cents: estimate.deposit_cents,
+    })
+    .select("id")
+    .single();
+  if (error) {
+    console.error(`[canes] createJobFromEstimate failed for ${estimate.id}: ${error.message}`);
+    return null;
+  }
+  return data.id as string;
+}
+
+// ── Service catalog ──────────────────────────────────────────────────────────
+
+export async function upsertCatalogItem(item: {
+  id?: string;
+  name: string;
+  kind: CatalogKind;
+  defaultPriceCents: number;
+  description?: string | null;
+  unit?: string;
+  taxable?: boolean;
+  active?: boolean;
+  position?: number;
+}): Promise<ActionResult> {
+  if (!canesConfigured()) return DEMO;
+  if (!item.name.trim()) return { ok: false, notice: "Name is required." };
+  const db = canesDb();
+  const row: Record<string, unknown> = {
+    name: item.name.trim(),
+    kind: item.kind,
+    default_price_cents: Math.round(item.defaultPriceCents),
+    description: item.description ?? null,
+    unit: item.unit ?? "each",
+    taxable: item.taxable ?? false,
+    active: item.active ?? true,
+    position: item.position ?? 0,
+  };
+  if (item.id) {
+    const { error } = await db.from("service_catalog").update(row).eq("id", item.id);
+    if (error) return { ok: false, notice: error.message };
+  } else {
+    const { error } = await db.from("service_catalog").insert(row);
+    if (error) return { ok: false, notice: error.message };
+  }
+  refresh();
+  return { ok: true };
+}
+
+export async function deleteCatalogItem(id: string): Promise<ActionResult> {
+  if (!canesConfigured()) return DEMO;
+  // Soft-delete: catalog items may be referenced by historical estimate lines,
+  // so deactivate rather than remove.
+  const { error } = await canesDb().from("service_catalog").update({ active: false }).eq("id", id);
+  if (error) return { ok: false, notice: error.message };
   refresh();
   return { ok: true };
 }

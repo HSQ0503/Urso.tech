@@ -32,6 +32,13 @@ const DEFAULT_SETTINGS: CanesSettings = {
       "Hi, this is Canes Pressure Washing. Sorry we missed your call - we will get back to you shortly. Reply here and we will text you right back. Reply STOP to opt out.",
   },
   lead_vendor_phones: [],
+  estimate_terms:
+    "Payment due on completion unless a deposit is agreed. Estimates are valid for 28 days. Canes Pressure Washing is not responsible for pre-existing damage, loose or failing surfaces, or oxidation revealed by cleaning. Access to water and power required. Reschedules due to weather are expected.",
+  estimate_message:
+    "Thanks for having us out. Here is your estimate. Tap to review the details and approve, and we will get you on the schedule. Any questions, just reply to this text.",
+  deposit_presets: [0, 25, 50],
+  estimate_expiry_days: 28,
+  estimate_tax_rate_bps: 0,
 };
 
 export async function getSettings(): Promise<CanesSettings> {
@@ -46,6 +53,11 @@ export async function getSettings(): Promise<CanesSettings> {
     lead_vendor_phones: (map.lead_vendor_phones ?? []).concat(
       process.env.CANES_LEAD_VENDOR_PHONE ? [process.env.CANES_LEAD_VENDOR_PHONE] : [],
     ),
+    estimate_terms: map.estimate_terms ?? DEFAULT_SETTINGS.estimate_terms,
+    estimate_message: map.estimate_message ?? DEFAULT_SETTINGS.estimate_message,
+    deposit_presets: map.deposit_presets ?? DEFAULT_SETTINGS.deposit_presets,
+    estimate_expiry_days: Number(map.estimate_expiry_days ?? DEFAULT_SETTINGS.estimate_expiry_days),
+    estimate_tax_rate_bps: Number(map.estimate_tax_rate_bps ?? DEFAULT_SETTINGS.estimate_tax_rate_bps),
   };
 }
 

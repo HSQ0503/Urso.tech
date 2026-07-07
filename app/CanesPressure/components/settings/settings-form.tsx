@@ -98,6 +98,15 @@ export function SettingsForm({ settings }: { settings: CanesSettings }) {
   const [phonesNotice, setPhonesNotice] = useState<Notice>(null);
   const [phonesPending, startPhones] = useTransition();
 
+  // Estimates
+  const [estimateTerms, setEstimateTerms] = useState(settings.estimate_terms);
+  const [estimateMessage, setEstimateMessage] = useState(settings.estimate_message);
+  const [depositPresets, setDepositPresets] = useState(settings.deposit_presets.join(", "));
+  const [expiryDays, setExpiryDays] = useState(String(settings.estimate_expiry_days));
+  const [taxRatePct, setTaxRatePct] = useState(String(settings.estimate_tax_rate_bps / 100));
+  const [estimateNotice, setEstimateNotice] = useState<Notice>(null);
+  const [estimatePending, startEstimate] = useTransition();
+
   const saveTemplates = () =>
     startTemplates(async () => {
       setTemplatesNotice(noticeFrom(await saveSettings({ templates })));
@@ -137,6 +146,40 @@ export function SettingsForm({ settings }: { settings: CanesSettings }) {
     startPhones(async () => {
       setPhonesNotice(noticeFrom(await saveSettings({ lead_vendor_phones: phones })));
     });
+
+  const saveEstimate = () => {
+    const presets = depositPresets
+      .split(",")
+      .map((s) => Number(s.trim()))
+      .filter((n) => Number.isFinite(n));
+    if (presets.length === 0 || presets.some((n) => n < 0 || n > 100)) {
+      setEstimateNotice({ ok: false, text: "Deposit presets must be percentages between 0 and 100." });
+      return;
+    }
+    const days = Number(expiryDays);
+    if (!Number.isInteger(days) || days < 1 || days > 365) {
+      setEstimateNotice({ ok: false, text: "Expiry must be between 1 and 365 days." });
+      return;
+    }
+    const taxPct = Number(taxRatePct);
+    if (!Number.isFinite(taxPct) || taxPct < 0 || taxPct > 100) {
+      setEstimateNotice({ ok: false, text: "Tax rate must be between 0 and 100 percent." });
+      return;
+    }
+    startEstimate(async () => {
+      setEstimateNotice(
+        noticeFrom(
+          await saveSettings({
+            estimate_terms: estimateTerms,
+            estimate_message: estimateMessage,
+            deposit_presets: presets,
+            estimate_expiry_days: days,
+            estimate_tax_rate_bps: Math.round(taxPct * 100),
+          }),
+        ),
+      );
+    });
+  };
 
   return (
     <div className="flex flex-col gap-5">
@@ -275,6 +318,87 @@ export function SettingsForm({ settings }: { settings: CanesSettings }) {
             <Plus size={16} strokeWidth={2} />
             Add
           </button>
+        </div>
+      </SectionCard>
+
+      <SectionCard
+        title="Estimates"
+        description="Defaults for new quotes: the terms and cover message, deposit options, how long an estimate stays valid, and sales tax."
+        onSave={saveEstimate}
+        pending={estimatePending}
+        notice={estimateNotice}
+      >
+        <div>
+          <label className="cp-label" htmlFor="estimate-message">
+            Cover message
+          </label>
+          <textarea
+            id="estimate-message"
+            className="cp-textarea min-h-[84px]"
+            value={estimateMessage}
+            onChange={(e) => setEstimateMessage(e.target.value)}
+          />
+          <p className="mt-1 text-[12px] text-[var(--cp-faint)]">
+            Shown at the top of every estimate and used in the send text.
+          </p>
+        </div>
+        <div>
+          <label className="cp-label" htmlFor="estimate-terms">
+            Terms
+          </label>
+          <textarea
+            id="estimate-terms"
+            className="cp-textarea min-h-[120px]"
+            value={estimateTerms}
+            onChange={(e) => setEstimateTerms(e.target.value)}
+          />
+          <p className="mt-1 text-[12px] text-[var(--cp-faint)]">
+            The fine print the customer agrees to when they approve.
+          </p>
+        </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div>
+            <label className="cp-label" htmlFor="deposit-presets">
+              Deposit presets (%)
+            </label>
+            <input
+              id="deposit-presets"
+              className="cp-input"
+              inputMode="numeric"
+              value={depositPresets}
+              onChange={(e) => setDepositPresets(e.target.value)}
+            />
+            <p className="mt-1 text-[12px] text-[var(--cp-faint)]">Comma-separated, e.g. 0, 25, 50.</p>
+          </div>
+          <div>
+            <label className="cp-label" htmlFor="estimate-expiry">
+              Valid for (days)
+            </label>
+            <input
+              id="estimate-expiry"
+              type="number"
+              min={1}
+              max={365}
+              className="cp-input"
+              value={expiryDays}
+              onChange={(e) => setExpiryDays(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="cp-label" htmlFor="estimate-tax">
+              Sales tax (%)
+            </label>
+            <input
+              id="estimate-tax"
+              type="number"
+              min={0}
+              max={100}
+              step="0.001"
+              className="cp-input"
+              value={taxRatePct}
+              onChange={(e) => setTaxRatePct(e.target.value)}
+            />
+          </div>
         </div>
       </SectionCard>
     </div>

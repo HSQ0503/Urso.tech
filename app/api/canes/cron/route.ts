@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { canesConfigured, canesDb } from "@/lib/canes/supabase";
 import { getAgenda, getLead, getOverview, getSettings } from "@/lib/canes/data";
 import type { Overview } from "@/lib/canes/data";
+import { getEstimate } from "@/lib/canes/estimates";
 import { alertOwner, fillTemplate, nextAllowedSendTime, sendCanesSms } from "@/lib/canes/twilio";
 import { notifyColdEscalation, notifyUnconfirmed, sendDigestEmail } from "@/lib/canes/notify";
 import { logLeadEvent, upsertConfirmationTask } from "@/lib/canes/inbound";
@@ -68,7 +69,7 @@ async function drainDueTasks() {
   const { data } = await db
     .from("tasks")
     .select("*")
-    .in("kind", ["hold_text", "confirmation"])
+    .in("kind", ["hold_text", "confirmation", "estimate_send", "estimate_reminder"])
     .eq("status", "pending")
     .lte("scheduled_for", new Date().toISOString())
     .order("scheduled_for", { ascending: true })
@@ -92,6 +93,74 @@ async function drainDueTasks() {
       .select("id");
     if (!claimed || claimed.length === 0) {
       contested++;
+      continue;
+    }
+
+    // Estimate texts key off the estimate, not the lead: cancel the moment the
+    // quote leaves the sent/viewed window (approved, declined, expired), the
+    // estimate is gone, the customer opted out, or there's no number to text.
+    const isEstimateTask = task.kind === "estimate_send" || task.kind === "estimate_reminder";
+    if (isEstimateTask) {
+      const estimateId =
+        typeof task.payload?.estimate_id === "string" ? task.payload.estimate_id : null;
+      const estimate = estimateId ? await getEstimate(estimateId) : null;
+      const optedOut = estimate?.lead_id ? (await getLead(estimate.lead_id))?.opted_out : false;
+      const expired =
+        !!estimate?.expires_at && new Date(estimate.expires_at).getTime() < Date.now();
+      if (
+        !estimate ||
+        !estimate.customer_phone ||
+        optedOut ||
+        expired ||
+        (estimate.status !== "sent" && estimate.status !== "viewed")
+      ) {
+        await db.from("tasks").update({ status: "canceled" }).eq("id", task.id);
+        canceled++;
+        continue;
+      }
+
+      const link = `${APP_URL}/CanesPressure/e/${estimate.public_token}`;
+      const body =
+        task.kind === "estimate_send"
+          ? `Here is your estimate: ${link}`
+          : `Just following up on your estimate: ${link}`;
+      const res = await sendCanesSms({
+        to: estimate.customer_phone,
+        body,
+        leadId: estimate.lead_id,
+        automated: true,
+      });
+
+      if (res.ok) {
+        await db
+          .from("tasks")
+          .update({ status: "sent", sent_at: new Date().toISOString() })
+          .eq("id", task.id);
+        if (estimate.lead_id) {
+          await logLeadEvent(
+            estimate.lead_id,
+            "automation",
+            task.kind === "estimate_send" ? "Estimate text sent" : "Estimate reminder sent",
+          );
+        }
+        sent++;
+      } else if (res.skipped === "quiet_hours") {
+        const at = nextAllowedSendTime(settings) ?? new Date(Date.now() + 3_600_000);
+        await db
+          .from("tasks")
+          .update({ status: "pending", scheduled_for: at.toISOString() })
+          .eq("id", task.id);
+        deferred++;
+      } else if (res.skipped) {
+        await db.from("tasks").update({ status: "pending" }).eq("id", task.id);
+        deferred++;
+      } else {
+        await db
+          .from("tasks")
+          .update({ status: "failed", payload: { ...task.payload, error: res.error ?? "send failed" } })
+          .eq("id", task.id);
+        failed++;
+      }
       continue;
     }
 

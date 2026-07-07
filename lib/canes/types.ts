@@ -67,7 +67,9 @@ export type TaskKind =
   | "no_reply_escalation"
   | "cold_escalation"
   | "follow_up"
-  | "digest";
+  | "digest"
+  | "estimate_send"
+  | "estimate_reminder";
 
 export type AutomationTask = {
   id: string;
@@ -100,6 +102,11 @@ export type CanesSettings = {
     missed_call: string;
   };
   lead_vendor_phones: string[];
+  estimate_terms: string;
+  estimate_message: string;
+  deposit_presets: number[];
+  estimate_expiry_days: number;
+  estimate_tax_rate_bps: number;
 };
 
 export type Thread = {
@@ -226,4 +233,76 @@ export function fmtPhone(e164: string | null): string {
   if (!e164) return "—";
   const m = e164.match(/^\+1(\d{3})(\d{3})(\d{4})$/);
   return m ? `(${m[1]}) ${m[2]}-${m[3]}` : e164;
+}
+
+// ── Phase 2: estimates + jobs (mirrors supabase/canes/0002_estimates.sql) ─────
+
+export type EstimateType = "standard" | "options" | "packages";
+export type EstimateStatus = "draft" | "sent" | "viewed" | "approved" | "declined" | "expired";
+export type CatalogKind = "service" | "product";
+
+export type Contact = {
+  id: string; created_at: string; name: string | null; phone: string | null;
+  email: string | null; source: LeadSource; notes: string | null; last_activity_at: string;
+};
+
+export type Address = {
+  id: string; created_at: string; contact_id: string | null; line: string;
+  site_notes: string | null; is_primary: boolean;
+};
+
+export type CatalogItem = {
+  id: string; created_at: string; name: string; description: string | null; kind: CatalogKind;
+  default_price_cents: number; unit: string; taxable: boolean; active: boolean; position: number;
+};
+
+export type Estimate = {
+  id: string; created_at: string; updated_at: string;
+  lead_id: string | null; contact_id: string | null; address_id: string | null;
+  number: string; estimate_type: EstimateType; status: EstimateStatus;
+  customer_name: string | null; customer_phone: string | null; customer_email: string | null;
+  job_address: string | null; job_name: string | null;
+  subtotal_cents: number; discount_cents: number; adjustment_cents: number;
+  tax_cents: number; tax_rate_bps: number; total_cents: number; deposit_percent: number; deposit_cents: number;
+  message_to_customer: string | null; terms: string | null; internal_notes: string | null;
+  expires_at: string | null; public_token: string;
+  sent_at: string | null; viewed_at: string | null; approved_at: string | null;
+  declined_at: string | null; decline_reason: string | null; signature_name: string | null;
+  employee: string | null;
+};
+
+export type EstimateItem = {
+  id: string; estimate_id: string; catalog_id: string | null; position: number;
+  name: string; description: string | null; kind: CatalogKind; quantity: number;
+  unit_price_cents: number; discount_cents: number; taxable: boolean; line_total_cents: number;
+  is_option: boolean; is_mandatory: boolean; is_selected: boolean; package_group: string | null;
+};
+
+export type JobStatus =
+  | "unscheduled" | "scheduled" | "confirmed" | "in_progress"
+  | "completed" | "invoiced" | "paid" | "canceled";
+
+export type Job = {
+  id: string; created_at: string; estimate_id: string | null; lead_id: string | null;
+  contact_id: string | null; status: JobStatus; customer_name: string | null;
+  job_address: string | null; total_cents: number; deposit_cents: number;
+  scheduled_at: string | null; assigned_to: string | null; notes: string | null;
+};
+
+export type EstimateWithItems = Estimate & { items: EstimateItem[] };
+
+export const ESTIMATE_STATUS_LABEL: Record<EstimateStatus, string> = {
+  draft: "Draft", sent: "Sent", viewed: "Viewed",
+  approved: "Approved", declined: "Declined", expired: "Expired",
+};
+export const ESTIMATE_STATUS_CLASS: Record<EstimateStatus, string> = {
+  draft: "cp-status-new", sent: "cp-status-contacted", viewed: "cp-status-estimated",
+  approved: "cp-status-won", declined: "cp-status-lost", expired: "cp-status-lost",
+};
+export const ESTIMATE_TYPE_LABEL: Record<EstimateType, string> = {
+  standard: "Standard", options: "Options", packages: "Packages",
+};
+
+export function fmtMoney(cents: number | null | undefined): string {
+  return ((cents ?? 0) / 100).toLocaleString("en-US", { style: "currency", currency: "USD" });
 }

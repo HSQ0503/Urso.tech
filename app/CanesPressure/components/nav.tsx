@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, MessageSquare, Filter, CalendarDays, Settings } from "lucide-react";
+import { LayoutDashboard, MessageSquare, Filter, FileText, CalendarDays, Settings } from "lucide-react";
 
 const LINKS = [
   { href: "/CanesPressure", label: "Today", icon: LayoutDashboard, exact: true },
   { href: "/CanesPressure/inbox", label: "Inbox", icon: MessageSquare, exact: false },
   { href: "/CanesPressure/leads", label: "Leads", icon: Filter, exact: false },
+  { href: "/CanesPressure/estimates", label: "Estimates", icon: FileText, exact: false },
   { href: "/CanesPressure/schedule", label: "Schedule", icon: CalendarDays, exact: false },
   { href: "/CanesPressure/settings", label: "Settings", icon: Settings, exact: false },
 ];

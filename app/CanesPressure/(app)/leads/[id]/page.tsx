@@ -5,17 +5,23 @@ import {
   CalendarClock,
   CheckCircle2,
   ChevronDown,
+  FileText,
   MapPin,
   MessageSquare,
   Pencil,
   Phone,
+  Plus,
   Sparkles,
   Zap,
   type LucideIcon,
 } from "lucide-react";
 import { getLead, getLeadCalls, getLeadEvents, getSettings, getThreadMessages } from "@/lib/canes/data";
+import { listEstimates } from "@/lib/canes/estimates";
 import {
+  ESTIMATE_STATUS_CLASS,
+  ESTIMATE_STATUS_LABEL,
   fmtEt,
+  fmtMoney,
   fmtPhone,
   SOURCE_LABEL,
   STATUS_CLASS,
@@ -163,11 +169,12 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
   const lead = await getLead(id);
   if (!lead) notFound();
 
-  const [events, calls, messages, settings] = await Promise.all([
+  const [events, calls, messages, settings, estimates] = await Promise.all([
     getLeadEvents(lead.id),
     getLeadCalls(lead.id),
     lead.phone ? getThreadMessages(lead.phone) : Promise.resolve([]),
     getSettings(),
+    listEstimates({ leadId: lead.id }),
   ]);
   const lastMessages = messages.slice(-3); // thread comes back oldest-first
 
@@ -252,6 +259,53 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
               <CardTitle>Next step</CardTitle>
               <NextStep lead={lead} />
             </div>
+          </section>
+
+          <section className="cp-card p-4">
+            <div className="flex items-center justify-between gap-2">
+              <CardTitle>Estimates</CardTitle>
+              {estimates.length > 0 && (
+                <Link
+                  href={`/CanesPressure/estimates/new?lead=${lead.id}`}
+                  className="cp-btn cp-btn-sm"
+                  aria-label="Create estimate"
+                >
+                  <Plus size={14} strokeWidth={2} /> New
+                </Link>
+              )}
+            </div>
+            {estimates.length === 0 ? (
+              <div className="mt-3 space-y-3">
+                <p className="text-[13.5px] text-[var(--cp-muted)]">No estimates yet for this lead.</p>
+                <Link
+                  href={`/CanesPressure/estimates/new?lead=${lead.id}`}
+                  className="cp-btn cp-btn-primary w-full"
+                >
+                  <FileText size={16} strokeWidth={2} /> Create estimate
+                </Link>
+              </div>
+            ) : (
+              <ul className="mt-3 flex flex-col gap-2">
+                {estimates.map((est) => (
+                  <li key={est.id}>
+                    <Link
+                      href={`/CanesPressure/estimates/${est.id}`}
+                      className="flex items-center justify-between gap-3 rounded-md border border-[var(--cp-line)] px-3.5 py-2.5 transition-colors hover:bg-[var(--cp-hover)]"
+                    >
+                      <div className="flex min-w-0 items-center gap-2">
+                        <span className="tabular-nums text-[13.5px] font-semibold">{est.number}</span>
+                        <span className={`cp-chip ${ESTIMATE_STATUS_CLASS[est.status]}`}>
+                          {ESTIMATE_STATUS_LABEL[est.status]}
+                        </span>
+                      </div>
+                      <span className="shrink-0 tabular-nums text-[13.5px] font-semibold">
+                        {fmtMoney(est.total_cents)}
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
           </section>
 
           {/* Everything that isn't the next step lives behind one disclosure —

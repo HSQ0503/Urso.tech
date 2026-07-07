@@ -1,4 +1,13 @@
-import type { Call, Lead, LeadEvent, Message } from "@/lib/canes/types";
+import type {
+  Call,
+  CatalogItem,
+  Estimate,
+  EstimateItem,
+  Job,
+  Lead,
+  LeadEvent,
+  Message,
+} from "@/lib/canes/types";
 
 // Demo fixtures — shown whenever CANES_SUPABASE_SECRET_KEY is absent so the
 // dashboard is reviewable before the database and Twilio exist. Every phone
@@ -230,4 +239,132 @@ export const DEMO_EVENTS: LeadEvent[] = [
   { id: "e4", created_at: min(90), lead_id: "d3", kind: "automation", detail: "Confirmation text sent (T-12h)", data: {} },
   { id: "e5", created_at: min(55), lead_id: "d4", kind: "status", detail: "Customer replied YES — appointment confirmed", data: {} },
   { id: "e6", created_at: min(2800), lead_id: "d6", kind: "status", detail: "Closed won — $425", data: {} },
+];
+
+// ── Phase 2 fixtures: catalog, estimates, line items, jobs ───────────────────
+
+export const DEMO_CATALOG: CatalogItem[] = [
+  {
+    id: "cat1", created_at: min(9000), name: "Driveway wash", description: "Concrete driveway surface clean",
+    kind: "service", default_price_cents: 15000, unit: "each", taxable: false, active: true, position: 0,
+  },
+  {
+    id: "cat2", created_at: min(9000), name: "House wash", description: "Soft wash of exterior siding",
+    kind: "service", default_price_cents: 30000, unit: "each", taxable: false, active: true, position: 1,
+  },
+  {
+    id: "cat3", created_at: min(9000), name: "Roof wash (tile)", description: "Soft wash tile roof, algae + oxidation",
+    kind: "service", default_price_cents: 45000, unit: "each", taxable: false, active: true, position: 2,
+  },
+  {
+    id: "cat4", created_at: min(9000), name: "Pool deck / paver clean", description: "Deck or paver surface clean",
+    kind: "service", default_price_cents: 20000, unit: "each", taxable: false, active: true, position: 3,
+  },
+  {
+    id: "cat5", created_at: min(9000), name: "Paver sealing", description: "Clean and seal pavers",
+    kind: "service", default_price_cents: 60000, unit: "each", taxable: false, active: true, position: 4,
+  },
+  {
+    id: "cat6", created_at: min(9000), name: "Gutter brightening", description: "Remove tiger stripes from gutters",
+    kind: "service", default_price_cents: 12000, unit: "each", taxable: false, active: true, position: 5,
+  },
+];
+
+export const DEMO_ESTIMATES: Estimate[] = [
+  // est1 — draft for Maria (lead d1): driveway + pool deck, no deposit.
+  {
+    id: "est1", created_at: min(5), updated_at: min(5),
+    lead_id: "d1", contact_id: null, address_id: null,
+    number: "EST-000001", estimate_type: "standard", status: "draft",
+    customer_name: "Maria Delgado", customer_phone: "+15615550142", customer_email: null,
+    job_address: "214 Sandpiper Way, West Palm Beach", job_name: "Driveway + pool deck",
+    subtotal_cents: 35000, discount_cents: 0, adjustment_cents: 0,
+    tax_cents: 0, tax_rate_bps: 0, total_cents: 35000, deposit_percent: 0, deposit_cents: 0,
+    message_to_customer:
+      "Thanks for having us out. Here is your estimate. Tap to review the details and approve, and we will get you on the schedule. Any questions, just reply to this text.",
+    terms:
+      "Payment due on completion unless a deposit is agreed. Estimates are valid for 28 days. Canes Pressure Washing is not responsible for pre-existing damage, loose or failing surfaces, or oxidation revealed by cleaning. Access to water and power required. Reschedules due to weather are expected.",
+    internal_notes: null, expires_at: hrAhead(28 * 24), public_token: "demo-token-est1",
+    sent_at: null, viewed_at: null, approved_at: null,
+    declined_at: null, decline_reason: null, signature_name: null, employee: "Sebastian",
+  },
+  // est2 — sent with options for Janet (lead d3): mandatory house wash + optional gutter.
+  {
+    id: "est2", created_at: min(130), updated_at: min(120),
+    lead_id: "d3", contact_id: null, address_id: null,
+    number: "EST-000002", estimate_type: "options", status: "sent",
+    customer_name: "Janet Whitfield", customer_phone: "+15615550118", customer_email: null,
+    job_address: "902 Banyan Isle Dr, Palm Beach Gardens", job_name: "House wash + gutters",
+    subtotal_cents: 30000, discount_cents: 0, adjustment_cents: 0,
+    tax_cents: 0, tax_rate_bps: 0, total_cents: 30000, deposit_percent: 25, deposit_cents: 7500,
+    message_to_customer:
+      "Thanks for having us out. Here is your estimate. The gutter brightening is optional — add it if you'd like. Reply with any questions.",
+    terms:
+      "Payment due on completion unless a deposit is agreed. Estimates are valid for 28 days. Canes Pressure Washing is not responsible for pre-existing damage, loose or failing surfaces, or oxidation revealed by cleaning. Access to water and power required. Reschedules due to weather are expected.",
+    internal_notes: null, expires_at: hrAhead(28 * 24), public_token: "demo-token-est2",
+    sent_at: min(120), viewed_at: null, approved_at: null,
+    declined_at: null, decline_reason: null, signature_name: null, employee: "Sebastian",
+  },
+  // est3 — approved for Carl (lead d4): paver sealing, 50% deposit, signed.
+  {
+    id: "est3", created_at: min(60), updated_at: min(30),
+    lead_id: "d4", contact_id: null, address_id: null,
+    number: "EST-000003", estimate_type: "standard", status: "approved",
+    customer_name: "Carl Jimenez", customer_phone: "+15615550166", customer_email: null,
+    job_address: "77 Flagler Promenade, West Palm Beach", job_name: "Paver sealing",
+    subtotal_cents: 60000, discount_cents: 0, adjustment_cents: 0,
+    tax_cents: 0, tax_rate_bps: 0, total_cents: 60000, deposit_percent: 50, deposit_cents: 30000,
+    message_to_customer:
+      "Thanks for having us out. Here is your estimate. Tap to review the details and approve, and we will get you on the schedule. Any questions, just reply to this text.",
+    terms:
+      "Payment due on completion unless a deposit is agreed. Estimates are valid for 28 days. Canes Pressure Washing is not responsible for pre-existing damage, loose or failing surfaces, or oxidation revealed by cleaning. Access to water and power required. Reschedules due to weather are expected.",
+    internal_notes: null, expires_at: hrAhead(28 * 24), public_token: "demo-token-est3",
+    sent_at: min(58), viewed_at: min(45), approved_at: min(30),
+    declined_at: null, decline_reason: null, signature_name: "Carl Jimenez", employee: "Sebastian",
+  },
+];
+
+export const DEMO_ESTIMATE_ITEMS: EstimateItem[] = [
+  // est1 lines
+  {
+    id: "ei1", estimate_id: "est1", catalog_id: "cat1", position: 0,
+    name: "Driveway wash", description: "Concrete driveway surface clean", kind: "service", quantity: 1,
+    unit_price_cents: 15000, discount_cents: 0, taxable: false, line_total_cents: 15000,
+    is_option: false, is_mandatory: false, is_selected: true, package_group: null,
+  },
+  {
+    id: "ei2", estimate_id: "est1", catalog_id: "cat4", position: 1,
+    name: "Pool deck / paver clean", description: "Deck or paver surface clean", kind: "service", quantity: 1,
+    unit_price_cents: 20000, discount_cents: 0, taxable: false, line_total_cents: 20000,
+    is_option: false, is_mandatory: false, is_selected: true, package_group: null,
+  },
+  // est2 lines: mandatory house wash + optional gutter (not yet selected)
+  {
+    id: "ei3", estimate_id: "est2", catalog_id: "cat2", position: 0,
+    name: "House wash", description: "Soft wash of exterior siding", kind: "service", quantity: 1,
+    unit_price_cents: 30000, discount_cents: 0, taxable: false, line_total_cents: 30000,
+    is_option: false, is_mandatory: true, is_selected: true, package_group: null,
+  },
+  {
+    id: "ei4", estimate_id: "est2", catalog_id: "cat6", position: 1,
+    name: "Gutter brightening", description: "Remove tiger stripes from gutters", kind: "service", quantity: 1,
+    unit_price_cents: 12000, discount_cents: 0, taxable: false, line_total_cents: 12000,
+    is_option: true, is_mandatory: false, is_selected: false, package_group: null,
+  },
+  // est3 line
+  {
+    id: "ei5", estimate_id: "est3", catalog_id: "cat5", position: 0,
+    name: "Paver sealing", description: "Clean and seal pavers", kind: "service", quantity: 1,
+    unit_price_cents: 60000, discount_cents: 0, taxable: false, line_total_cents: 60000,
+    is_option: false, is_mandatory: false, is_selected: true, package_group: null,
+  },
+];
+
+export const DEMO_JOBS: Job[] = [
+  {
+    id: "job1", created_at: min(30), estimate_id: "est3", lead_id: "d4", contact_id: null,
+    status: "unscheduled", customer_name: "Carl Jimenez",
+    job_address: "77 Flagler Promenade, West Palm Beach",
+    total_cents: 60000, deposit_cents: 30000, scheduled_at: null, assigned_to: null, notes: null,
+  },
 ];

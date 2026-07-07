@@ -33,3 +33,7 @@ export function twilioConfigured(): boolean {
       process.env.CANES_TWILIO_NUMBER,
   );
 }
+
+export function squareConfigured(): boolean {
+  return Boolean(process.env.CANES_SQUARE_ACCESS_TOKEN && process.env.CANES_SQUARE_LOCATION_ID);
+}
