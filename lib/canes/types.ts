@@ -69,7 +69,8 @@ export type TaskKind =
   | "follow_up"
   | "digest"
   | "estimate_send"
-  | "estimate_reminder";
+  | "estimate_reminder"
+  | "job_confirmation";
 
 export type AutomationTask = {
   id: string;
@@ -107,6 +108,8 @@ export type CanesSettings = {
   deposit_presets: number[];
   estimate_expiry_days: number;
   estimate_tax_rate_bps: number;
+  job_confirmation_template: string;
+  job_confirmation_offset_hours: number;
 };
 
 export type Thread = {
@@ -287,9 +290,50 @@ export type Job = {
   contact_id: string | null; status: JobStatus; customer_name: string | null;
   job_address: string | null; total_cents: number; deposit_cents: number;
   scheduled_at: string | null; assigned_to: string | null; notes: string | null;
+  // ── scheduler additions (0004_scheduler.sql) ──
+  duration_minutes: number;
+  ends_at: string | null;
+  arrival_window_minutes: number;
+  crew_id: string | null;
+  confirmed_at: string | null;
+  customer_phone: string | null;
+  job_name: string | null;
+  gate_code: string | null;
+  site_notes: string | null;
+  canceled_reason: string | null;
 };
 
+export type Crew = {
+  id: string; created_at: string; name: string;
+  color: string; active: boolean; sort: number;
+};
+
+export type JobItem = {
+  id: string; job_id: string; estimate_item_id: string | null;
+  position: number; name: string; description: string | null;
+  quantity: number; line_total_cents: number; done: boolean;
+};
+
+export type CalendarEventKind = "block" | "time_off" | "holiday" | "note";
+
+export type CalendarEvent = {
+  id: string; created_at: string; title: string;
+  starts_at: string; ends_at: string; all_day: boolean;
+  crew_id: string | null; kind: CalendarEventKind; notes: string | null;
+};
+
+// A job joined to its line-item snapshot and its assigned crew. The shape every
+// scheduler reader/UI passes around, so the calendar can render a block, its
+// crew color, and the run-sheet checklist from one object.
+export type JobWithItems = Job & { items: JobItem[]; crew: Crew | null };
+
 export type EstimateWithItems = Estimate & { items: EstimateItem[] };
+
+export const JOB_STATUS_LABEL: Record<JobStatus, string> = {
+  unscheduled: "Unscheduled", scheduled: "Scheduled", confirmed: "Confirmed",
+  in_progress: "In progress", completed: "Completed", invoiced: "Invoiced",
+  paid: "Paid", canceled: "Canceled",
+};
 
 export const ESTIMATE_STATUS_LABEL: Record<EstimateStatus, string> = {
   draft: "Draft", sent: "Sent", viewed: "Viewed",

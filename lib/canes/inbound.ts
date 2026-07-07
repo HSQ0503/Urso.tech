@@ -12,7 +12,7 @@ import {
 import { parseVendorMessage, type ParsedLead } from "@/lib/canes/parse";
 import { notifyColdLead } from "@/lib/canes/notify";
 import { fmtEt, fmtPhone, toE164 } from "@/lib/canes/types";
-import type { CanesSettings, Lead } from "@/lib/canes/types";
+import type { CanesSettings, Job, Lead } from "@/lib/canes/types";
 
 // The shared inbound-SMS pipeline. Both the Twilio webhook and the dev
 // simulator funnel through processInboundSms so the routing rules (opt-out →
@@ -306,6 +306,42 @@ async function handleLeadReply(
     await logLeadEvent(lead.id, "confirmed", "Customer replied YES");
     console.log(`[canes] appointment confirmed by ${from}`);
     return { handled: "confirmed", leadIds: [lead.id], notes: ["Appointment confirmed."] };
+  }
+
+  // No pending estimate visit to confirm (D4: the visit path above always
+  // wins). A YES here confirms the soonest upcoming scheduled job — the one the
+  // day-before text was about. Flip jobs.status → confirmed + confirmed_at.
+  if (isConfirmation(body)) {
+    const { data: jobRow } = await db
+      .from("jobs")
+      .select("*")
+      .eq("lead_id", lead.id)
+      .eq("status", "scheduled")
+      .gte("scheduled_at", new Date().toISOString())
+      .order("scheduled_at", { ascending: true, nullsFirst: false })
+      .limit(1)
+      .maybeSingle();
+    const job = jobRow as Job | null;
+    if (job) {
+      const now = new Date().toISOString();
+      await db
+        .from("jobs")
+        .update({ status: "confirmed", confirmed_at: now })
+        .eq("id", job.id)
+        .eq("status", "scheduled");
+      await db
+        .from("leads")
+        .update({ last_activity_at: now })
+        .eq("id", lead.id);
+      const firstName = lead.name ? ` ${lead.name.split(" ")[0]}` : "";
+      const ack =
+        `Thanks${firstName}! You're confirmed for ${fmtEt(job.scheduled_at)}. ` +
+        `See you then! - Canes Pressure Washing. Reply STOP to opt out.`;
+      await sendCanesSms({ to: from, body: ack, leadId: lead.id, automated: true, force: true });
+      await logLeadEvent(lead.id, "confirmed", "Customer confirmed the scheduled job");
+      console.log(`[canes] job confirmed by ${from}`);
+      return { handled: "confirmed", leadIds: [lead.id], notes: ["Job confirmed."] };
+    }
   }
 
   await logLeadEvent(lead.id, "replied", body.length > 120 ? `${body.slice(0, 117)}...` : body);

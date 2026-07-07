@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { canesConfigured, canesDb } from "@/lib/canes/supabase";
 import { getAgenda, getLead, getOverview, getSettings } from "@/lib/canes/data";
-import type { Overview } from "@/lib/canes/data";
-import { getEstimate } from "@/lib/canes/estimates";
+import { getEstimate, getJob } from "@/lib/canes/estimates";
 import { alertOwner, fillTemplate, nextAllowedSendTime, sendCanesSms } from "@/lib/canes/twilio";
-import { notifyColdEscalation, notifyUnconfirmed, sendDigestEmail } from "@/lib/canes/notify";
+import { notifyColdEscalation, notifyUnconfirmed, renderDigestHtml, sendDigestEmail } from "@/lib/canes/notify";
 import { logLeadEvent, upsertConfirmationTask } from "@/lib/canes/inbound";
 import { ET, fmtEt, fmtPhone, minutesSince } from "@/lib/canes/types";
 import type { AutomationTask, Lead } from "@/lib/canes/types";
@@ -69,7 +68,7 @@ async function drainDueTasks() {
   const { data } = await db
     .from("tasks")
     .select("*")
-    .in("kind", ["hold_text", "confirmation", "estimate_send", "estimate_reminder"])
+    .in("kind", ["hold_text", "confirmation", "estimate_send", "estimate_reminder", "job_confirmation"])
     .eq("status", "pending")
     .lte("scheduled_for", new Date().toISOString())
     .order("scheduled_for", { ascending: true })
@@ -143,6 +142,72 @@ async function drainDueTasks() {
             task.kind === "estimate_send" ? "Estimate text sent" : "Estimate reminder sent",
           );
         }
+        sent++;
+      } else if (res.skipped === "quiet_hours") {
+        const at = nextAllowedSendTime(settings) ?? new Date(Date.now() + 3_600_000);
+        await db
+          .from("tasks")
+          .update({ status: "pending", scheduled_for: at.toISOString() })
+          .eq("id", task.id);
+        deferred++;
+      } else if (res.skipped) {
+        await db.from("tasks").update({ status: "pending" }).eq("id", task.id);
+        deferred++;
+      } else {
+        await db
+          .from("tasks")
+          .update({ status: "failed", payload: { ...task.payload, error: res.error ?? "send failed" } })
+          .eq("id", task.id);
+        failed++;
+      }
+      continue;
+    }
+
+    // Day-before job confirmation: text the customer off the snapshotted
+    // jobs.customer_phone (no join). Cancel if the job left the live window, its
+    // slot moved out from under this task, or there's no phone to text.
+    if (task.kind === "job_confirmation") {
+      const jobId = typeof task.payload?.job_id === "string" ? task.payload.job_id : null;
+      const scheduledAt =
+        typeof task.payload?.scheduled_at === "string" ? task.payload.scheduled_at : null;
+      const job = jobId ? await getJob(jobId) : null;
+      if (
+        !job ||
+        (job.status !== "scheduled" && job.status !== "confirmed") ||
+        job.scheduled_at !== scheduledAt
+      ) {
+        await db.from("tasks").update({ status: "canceled" }).eq("id", task.id);
+        canceled++;
+        continue;
+      }
+      if (!job.customer_phone) {
+        await db
+          .from("tasks")
+          .update({ status: "failed", payload: { ...task.payload, error: "no customer phone" } })
+          .eq("id", task.id);
+        await alertOwner(
+          `Couldn't send the day-before text for ${job.customer_name ?? "a job"} — no phone on file.`,
+        );
+        failed++;
+        continue;
+      }
+      const body = fillTemplate(settings.job_confirmation_template, {
+        name: job.customer_name,
+        when: fmtEt(job.scheduled_at),
+        address: job.job_address,
+      });
+      const res = await sendCanesSms({
+        to: job.customer_phone,
+        body,
+        leadId: job.lead_id,
+        automated: true,
+      });
+      if (res.ok) {
+        await db
+          .from("tasks")
+          .update({ status: "sent", sent_at: new Date().toISOString() })
+          .eq("id", task.id);
+        if (job.lead_id) await logLeadEvent(job.lead_id, "automation", "Job confirmation text sent");
         sent++;
       } else if (res.skipped === "quiet_hours") {
         const at = nextAllowedSendTime(settings) ?? new Date(Date.now() + 3_600_000);
@@ -476,7 +541,7 @@ async function morningDigest() {
     month: "short",
     day: "numeric",
   }).format(now);
-  await sendDigestEmail(`Canes morning digest for ${dayLabel}`, digestHtml(overview, appts, dayLabel));
+  await sendDigestEmail(`Canes morning digest for ${dayLabel}`, await renderDigestHtml(overview, appts, dayLabel));
   await alertOwner(
     `Canes today: ${appts.length} visit${appts.length === 1 ? "" : "s"}` +
       `${unconfirmed ? ` (${unconfirmed} unconfirmed)` : ""}, ` +
@@ -485,74 +550,4 @@ async function morningDigest() {
   );
   console.log(`[canes] morning digest sent for ${day}`);
   return { sent: true, appointments: appts.length, unconfirmed };
-}
-
-function digestHtml(o: Overview, appts: Lead[], dayLabel: string): string {
-  const esc = (s: string | null) =>
-    (s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c] as string);
-  const td = 'style="padding:6px 10px;border-top:1px solid #E5E9EE;font-size:13px;color:#131B23"';
-  const h3 = 'style="font-size:14px;color:#131B23;margin:18px 0 6px"';
-  const none = '<p style="font-size:13px;color:#5B6673;margin:4px 0">None.</p>';
-  const table = (rows: string) =>
-    `<table cellpadding="0" cellspacing="0" style="border-collapse:collapse;width:100%">${rows}</table>`;
-  const link = (l: Lead, label: string) =>
-    `<a href="${APP_URL}/CanesPressure/leads/${l.id}" style="color:#0E7490;text-decoration:none;font-weight:600">${esc(label)}</a>`;
-
-  const countCell = (n: number, label: string) =>
-    `<td style="padding:8px 16px 8px 0"><div style="font-size:22px;font-weight:700;color:#131B23">${n}</div>` +
-    `<div style="font-size:12px;color:#5B6673">${label}</div></td>`;
-
-  const apptRows = appts
-    .map(
-      (l) =>
-        `<tr><td ${td}>${esc(fmtEt(l.appointment_at, { hour: "numeric", minute: "2-digit" }))}</td>` +
-        `<td ${td}>${link(l, l.name ?? fmtPhone(l.phone))}</td>` +
-        `<td ${td}>${esc(l.address)}</td>` +
-        `<td ${td}>${l.status === "confirmed" ? '<span style="color:#2F9E44;font-weight:600">Confirmed</span>' : '<span style="color:#E8590C;font-weight:600">Not confirmed</span>'}</td></tr>`,
-    )
-    .join("");
-
-  const coldRows = o.coldNeedingCall
-    .map(
-      (l) =>
-        `<tr><td ${td}>${link(l, l.name ?? fmtPhone(l.phone))}</td>` +
-        `<td ${td}>${esc(l.service)}</td>` +
-        `<td ${td}>${esc(fmtPhone(l.phone))}</td>` +
-        `<td ${td}>waiting ${minutesSince(l.created_at)}m</td></tr>`,
-    )
-    .join("");
-
-  const followRows = o.followUpsDue
-    .map(
-      (l) =>
-        `<tr><td ${td}>${link(l, l.name ?? fmtPhone(l.phone))}</td>` +
-        `<td ${td}>${esc(l.service)}</td>` +
-        `<td ${td}>last activity ${esc(fmtEt(l.last_activity_at))}</td></tr>`,
-    )
-    .join("");
-
-  return `
-  <div style="font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;max-width:560px">
-    <div style="border-left:4px solid #0E7490;padding:2px 0 2px 14px;margin-bottom:12px">
-      <div style="font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#0E7490;font-weight:700">Morning digest</div>
-      <div style="font-size:19px;font-weight:700;color:#131B23;margin-top:2px">${dayLabel}</div>
-    </div>
-    <table cellpadding="0" cellspacing="0"><tr>
-      ${countCell(o.counts.open, "Open leads")}
-      ${countCell(o.counts.hot, "Hot")}
-      ${countCell(o.counts.cold, "Cold")}
-      ${countCell(o.counts.wonThisWeek, "Won this week")}
-    </tr></table>
-    <h3 ${h3}>Today's estimate visits</h3>
-    ${apptRows ? table(apptRows) : none}
-    <h3 ${h3}>Cold leads waiting for a call</h3>
-    ${coldRows ? table(coldRows) : none}
-    <h3 ${h3}>Follow-ups due</h3>
-    ${followRows ? table(followRows) : none}
-    <div style="margin-top:18px">
-      <a href="${APP_URL}/CanesPressure"
-         style="background:#0E7490;color:#fff;text-decoration:none;font-size:14px;font-weight:600;padding:10px 18px;border-radius:10px;display:inline-block">
-        Open dashboard</a>
-    </div>
-  </div>`;
 }

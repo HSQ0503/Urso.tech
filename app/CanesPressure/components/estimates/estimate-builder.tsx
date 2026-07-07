@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 import { Check, Plus, Trash2 } from "lucide-react";
@@ -8,8 +9,15 @@ import {
   saveEstimateItems,
   sendEstimate,
   updateEstimate,
+  upsertCatalogItem,
   type ActionResult,
 } from "@/app/CanesPressure/actions";
+import {
+  ChannelPicker,
+  channelAvailability,
+  choiceToChannels,
+  type ChannelChoice,
+} from "./channel-picker";
 import {
   etLocalToIso,
   fmtMoney,
@@ -163,6 +171,7 @@ export function EstimateBuilder({
   prefill,
   depositPresets,
   readOnly = false,
+  optedOut = false,
 }: {
   mode: "create" | "edit";
   estimate?: Estimate;
@@ -182,6 +191,8 @@ export function EstimateBuilder({
   };
   depositPresets: number[];
   readOnly?: boolean;
+  // The linked lead's opt-out flag; disables the Text channel in the picker.
+  optedOut?: boolean;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -222,6 +233,9 @@ export function EstimateBuilder({
   const [customDeposit, setCustomDeposit] = useState(!depositPresets.includes(seed.depositPercent));
   const [expiry, setExpiry] = useState(isoToEtNaive(seed.expiresAtIso));
   const [lines, setLines] = useState<DraftLine[]>(() => initialItems.map(itemToDraft));
+  const [channelChoice, setChannelChoice] = useState<ChannelChoice>("both");
+  // Keys of custom lines already saved to the catalog this session (for feedback).
+  const [savedToCatalog, setSavedToCatalog] = useState<Record<string, boolean>>({});
 
   const totals = useMemo(() => {
     let subtotal = 0;
@@ -354,6 +368,10 @@ export function EstimateBuilder({
       setNotice("Add at least one line before sending.");
       return;
     }
+    if (!avail.canSend) {
+      setNotice("Add a phone or email to send this estimate.");
+      return;
+    }
     setNotice("");
     setSaved(false);
     startTransition(async () => {
@@ -362,7 +380,7 @@ export function EstimateBuilder({
         setNotice(res.notice ?? "Could not save the estimate.");
         return;
       }
-      const sent = await sendEstimate(res.estimateId, { alsoText: true });
+      const sent = await sendEstimate(res.estimateId, { channels: resolvedChannels });
       if (!sent.ok) {
         setNotice(sent.notice ?? "Saved as draft, but sending failed.");
         // Land on the estimate so the send can be retried from the rail.
@@ -373,8 +391,37 @@ export function EstimateBuilder({
     });
   }
 
+  // Save a custom (no catalog_id) line into the reusable service catalog.
+  function handleSaveToCatalog(l: DraftLine) {
+    const name = l.name.trim();
+    if (!name) return;
+    startTransition(async () => {
+      const res = await upsertCatalogItem({
+        name,
+        kind: l.kind,
+        defaultPriceCents: l.unitPriceCents,
+        taxable: l.taxable,
+      });
+      if (res.ok) {
+        setSavedToCatalog((prev) => ({ ...prev, [l.key]: true }));
+      } else {
+        setNotice(res.notice ?? "Could not save to services.");
+      }
+    });
+  }
+
   const activeCatalog = catalog.filter((c) => c.active);
   const disabled = isPending || readOnly;
+
+  // Which channels are reachable, and what the picker's choice resolves to. When
+  // a channel is unavailable (no field, or opted out of text), force it off so we
+  // never ask the server to send where it can't.
+  const avail = channelAvailability({ phone: customerPhone, email: customerEmail, optedOut });
+  const chosen = choiceToChannels(channelChoice);
+  const resolvedChannels = {
+    text: chosen.text && avail.hasPhone && !avail.textBlocked,
+    email: chosen.email && avail.hasEmail,
+  };
 
   const typeSegment = (value: EstimateType, label: string) => (
     <button
@@ -473,7 +520,17 @@ export function EstimateBuilder({
       {!readOnly && (
         <section className="cp-card p-4">
           <h2 className="text-[15px] font-semibold">Add services</h2>
-          <p className="mt-1 text-[12px] text-[var(--cp-faint)]">Tap to add a line.</p>
+          {activeCatalog.length === 0 ? (
+            <p className="mt-1 text-[12px] text-[var(--cp-faint)]">
+              No saved services yet — add a line below, or set up your service list in{" "}
+              <Link href="/CanesPressure/estimates/items" className="font-medium text-[var(--cp-brand-fill)] hover:underline">
+                Settings
+              </Link>
+              .
+            </p>
+          ) : (
+            <p className="mt-1 text-[12px] text-[var(--cp-faint)]">Tap to add a line.</p>
+          )}
           <div className="cp-scroll mt-3 -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
             {activeCatalog.map((c) => (
               <button
@@ -604,6 +661,25 @@ export function EstimateBuilder({
                             />
                             Required
                           </label>
+                        )}
+                      </div>
+                    )}
+                    {/* Custom line (no catalog match) → offer to save it for reuse. */}
+                    {!readOnly && l.catalogId === null && l.name.trim() && l.unitPriceCents > 0 && (
+                      <div className="pt-0.5">
+                        {savedToCatalog[l.key] ? (
+                          <span className="inline-flex items-center gap-1 text-[12.5px] font-medium text-[var(--cp-good)]">
+                            <Check size={13} strokeWidth={2} /> Saved to your services
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            className="text-[12.5px] font-medium text-[var(--cp-brand-fill)] hover:underline disabled:opacity-45"
+                            onClick={() => handleSaveToCatalog(l)}
+                            disabled={disabled}
+                          >
+                            Save to my services
+                          </button>
                         )}
                       </div>
                     )}
@@ -751,29 +827,42 @@ export function EstimateBuilder({
 
       {/* Save / Send */}
       {!readOnly && (
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            className="cp-btn"
-            onClick={handleSaveDraft}
-            disabled={isPending}
-          >
-            {isPending ? "Saving..." : "Save draft"}
-          </button>
-          <button
-            type="button"
-            className="cp-btn cp-btn-primary"
-            onClick={handleSend}
-            disabled={isPending}
-          >
-            {isPending ? "Working..." : "Save & send"}
-          </button>
-          {saved && (
-            <span className="inline-flex items-center gap-1 text-[13px] font-medium text-[var(--cp-good)]">
-              <Check size={14} strokeWidth={2} /> Saved
-            </span>
-          )}
-          {notice && <span className="text-[12.5px] text-[var(--cp-warn)]">{notice}</span>}
+        <div className="space-y-3">
+          <div>
+            <span className="cp-label">Send by</span>
+            <ChannelPicker
+              phone={customerPhone}
+              email={customerEmail}
+              optedOut={optedOut}
+              choice={channelChoice}
+              onChange={setChannelChoice}
+              disabled={isPending}
+            />
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              className="cp-btn"
+              onClick={handleSaveDraft}
+              disabled={isPending}
+            >
+              {isPending ? "Saving..." : "Save draft"}
+            </button>
+            <button
+              type="button"
+              className="cp-btn cp-btn-primary"
+              onClick={handleSend}
+              disabled={isPending || !avail.canSend}
+            >
+              {isPending ? "Working..." : "Save & send"}
+            </button>
+            {saved && (
+              <span className="inline-flex items-center gap-1 text-[13px] font-medium text-[var(--cp-good)]">
+                <Check size={14} strokeWidth={2} /> Saved
+              </span>
+            )}
+            {notice && <span className="text-[12.5px] text-[var(--cp-warn)]">{notice}</span>}
+          </div>
         </div>
       )}
     </div>

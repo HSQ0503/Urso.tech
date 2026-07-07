@@ -1,9 +1,13 @@
+import { ET, etLocalToIso } from "@/lib/canes/types";
 import type {
+  CalendarEvent,
   Call,
   CatalogItem,
+  Crew,
   Estimate,
   EstimateItem,
   Job,
+  JobItem,
   Lead,
   LeadEvent,
   Message,
@@ -16,6 +20,24 @@ import type {
 const now = Date.now();
 const min = (n: number) => new Date(now - n * 60_000).toISOString();
 const hrAhead = (n: number) => new Date(now + n * 3_600_000).toISOString();
+
+// ET wall-time day + time-of-day for scheduler fixtures, so demo jobs land on
+// real ET calendar days and survive DST — the same discipline scheduleJob uses.
+// `dayOffset` walks ET days from today (0 = today) off a UTC-noon anchor;
+// `hhmm` is the ET wall clock ("09:00").
+const etDay = (dayOffset: number): string => {
+  const todayEt = new Intl.DateTimeFormat("en-CA", {
+    timeZone: ET,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(now));
+  const anchor = new Date(`${todayEt}T12:00:00Z`);
+  return new Date(anchor.getTime() + dayOffset * 86_400_000).toISOString().slice(0, 10);
+};
+const etAt = (dayOffset: number, hhmm: string): string => etLocalToIso(`${etDay(dayOffset)}T${hhmm}`);
+const addMinutes = (iso: string, minutes: number): string =>
+  new Date(new Date(iso).getTime() + minutes * 60_000).toISOString();
 
 export const DEMO_LEADS: Lead[] = [
   {
@@ -360,11 +382,130 @@ export const DEMO_ESTIMATE_ITEMS: EstimateItem[] = [
   },
 ];
 
+// ── Phase 2 scheduler fixtures: crews, jobs, job line items, calendar events ──
+
+export const DEMO_CREWS: Crew[] = [
+  { id: "crewA", created_at: min(9000), name: "Crew A", color: "#0b6aa2", active: true, sort: 0 },
+  { id: "crewB", created_at: min(9000), name: "Crew B", color: "#0f7b48", active: true, sort: 1 },
+];
+
+// Scheduled windows composed as ET wall time, so ends_at stays start + duration.
+const JOB3_START = etAt(0, "09:00"); // today, Crew A
+const JOB4_START = etAt(2, "13:00"); // +2 days, Crew B
+const JOB5_START = etAt(1, "10:00"); // tomorrow, confirmed, Crew A
+
 export const DEMO_JOBS: Job[] = [
+  // job1 — unscheduled (tray): Carl's paver sealing, backs approved est3.
   {
     id: "job1", created_at: min(30), estimate_id: "est3", lead_id: "d4", contact_id: null,
     status: "unscheduled", customer_name: "Carl Jimenez",
     job_address: "77 Flagler Promenade, West Palm Beach",
     total_cents: 60000, deposit_cents: 30000, scheduled_at: null, assigned_to: null, notes: null,
+    duration_minutes: 180, ends_at: null, arrival_window_minutes: 0, crew_id: null,
+    confirmed_at: null, customer_phone: "+15615550166", job_name: "Paver sealing",
+    gate_code: "4417", site_notes: "Sealer needs 24h dry — no foot traffic after.", canceled_reason: null,
+  },
+  // job2 — unscheduled (tray): a second waiting job so the tray shows two.
+  {
+    id: "job2", created_at: min(20), estimate_id: null, lead_id: null, contact_id: null,
+    status: "unscheduled", customer_name: "Maria Delgado",
+    job_address: "214 Sandpiper Way, West Palm Beach",
+    total_cents: 35000, deposit_cents: 0, scheduled_at: null, assigned_to: null, notes: null,
+    duration_minutes: 120, ends_at: null, arrival_window_minutes: 0, crew_id: null,
+    confirmed_at: null, customer_phone: "+15615550142", job_name: "Driveway + pool deck",
+    gate_code: null, site_notes: "Backyard spigot; front hose bib is broken.", canceled_reason: null,
+  },
+  // job3 — scheduled TODAY, Crew A (populates the run sheet + Today strip).
+  {
+    id: "job3", created_at: min(500), estimate_id: null, lead_id: "d6", contact_id: null,
+    status: "scheduled", customer_name: "Priya Raman",
+    job_address: "18 Coquina Ln, Palm Beach Gardens",
+    total_cents: 42500, deposit_cents: 0, scheduled_at: JOB3_START, assigned_to: "Crew A", notes: null,
+    duration_minutes: 120, ends_at: addMinutes(JOB3_START, 120), arrival_window_minutes: 30,
+    crew_id: "crewA", confirmed_at: null, customer_phone: "+15615550133", job_name: "House wash",
+    gate_code: "0916", site_notes: "Two dogs in the yard — text on the way.", canceled_reason: null,
+  },
+  // job4 — scheduled +2 days, Crew B.
+  {
+    id: "job4", created_at: min(600), estimate_id: null, lead_id: null, contact_id: null,
+    status: "scheduled", customer_name: "Dana Osei",
+    job_address: "410 Lakeview Ct, Royal Palm Beach",
+    total_cents: 78000, deposit_cents: 0, scheduled_at: JOB4_START, assigned_to: "Crew B", notes: null,
+    duration_minutes: 240, ends_at: addMinutes(JOB4_START, 240), arrival_window_minutes: 0,
+    crew_id: "crewB", confirmed_at: null, customer_phone: "+15615550190", job_name: "Whole exterior",
+    gate_code: null, site_notes: "Graduation party Saturday — must finish by 2pm.", canceled_reason: null,
+  },
+  // job5 — confirmed tomorrow, Crew A (customer already replied YES).
+  {
+    id: "job5", created_at: min(700), estimate_id: null, lead_id: "d3", contact_id: null,
+    status: "confirmed", customer_name: "Janet Whitfield",
+    job_address: "902 Banyan Isle Dr, Palm Beach Gardens",
+    total_cents: 30000, deposit_cents: 7500, scheduled_at: JOB5_START, assigned_to: "Crew A", notes: null,
+    duration_minutes: 150, ends_at: addMinutes(JOB5_START, 150), arrival_window_minutes: 0,
+    crew_id: "crewA", confirmed_at: min(120), customer_phone: "+15615550118", job_name: "House wash + gutters",
+    gate_code: "4482", site_notes: "Gate code 4482. Two friendly dogs.", canceled_reason: null,
+  },
+];
+
+export const DEMO_JOB_ITEMS: JobItem[] = [
+  // job1 — paver sealing
+  {
+    id: "ji1", job_id: "job1", estimate_item_id: "ei5", position: 0,
+    name: "Paver sealing", description: "Clean and seal pavers", quantity: 1,
+    line_total_cents: 60000, done: false,
+  },
+  // job2 — driveway + pool deck
+  {
+    id: "ji2", job_id: "job2", estimate_item_id: "ei1", position: 0,
+    name: "Driveway wash", description: "Concrete driveway surface clean", quantity: 1,
+    line_total_cents: 15000, done: false,
+  },
+  {
+    id: "ji3", job_id: "job2", estimate_item_id: "ei2", position: 1,
+    name: "Pool deck / paver clean", description: "Deck or paver surface clean", quantity: 1,
+    line_total_cents: 20000, done: false,
+  },
+  // job3 — house wash today
+  {
+    id: "ji4", job_id: "job3", estimate_item_id: null, position: 0,
+    name: "House wash (soft wash)", description: "Soft wash of exterior siding", quantity: 1,
+    line_total_cents: 42500, done: false,
+  },
+  // job4 — whole exterior
+  {
+    id: "ji5", job_id: "job4", estimate_item_id: null, position: 0,
+    name: "House wash (soft wash)", description: "Soft wash of exterior siding", quantity: 1,
+    line_total_cents: 30000, done: false,
+  },
+  {
+    id: "ji6", job_id: "job4", estimate_item_id: null, position: 1,
+    name: "Driveway wash", description: "Concrete driveway surface clean", quantity: 1,
+    line_total_cents: 15000, done: false,
+  },
+  {
+    id: "ji7", job_id: "job4", estimate_item_id: null, position: 2,
+    name: "Roof soft-wash (tile)", description: "Soft wash tile roof, algae + oxidation", quantity: 1,
+    line_total_cents: 33000, done: false,
+  },
+  // job5 — house wash + gutters, confirmed
+  {
+    id: "ji8", job_id: "job5", estimate_item_id: "ei3", position: 0,
+    name: "House wash", description: "Soft wash of exterior siding", quantity: 1,
+    line_total_cents: 30000, done: false,
+  },
+  {
+    id: "ji9", job_id: "job5", estimate_item_id: "ei4", position: 1,
+    name: "Gutter brightening", description: "Remove tiger stripes from gutters", quantity: 1,
+    line_total_cents: 12000, done: false,
+  },
+];
+
+export const DEMO_CALENDAR_EVENTS: CalendarEvent[] = [
+  // Crew B off Friday afternoon (index +4 days) — shows the muted band + a
+  // conflict-warn scenario if a job is dropped onto it.
+  {
+    id: "cev1", created_at: min(3000), title: "Crew B — afternoon off",
+    starts_at: etAt(4, "12:00"), ends_at: etAt(4, "17:00"), all_day: false,
+    crew_id: "crewB", kind: "time_off", notes: "Equipment maintenance.",
   },
 ];

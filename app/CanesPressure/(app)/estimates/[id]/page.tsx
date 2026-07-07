@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
-import { getSettings } from "@/lib/canes/data";
+import { getLead, getSettings } from "@/lib/canes/data";
 import { getEstimate, getEstimateItems, listCatalog } from "@/lib/canes/estimates";
 import {
   fmtEt,
@@ -28,6 +28,10 @@ export default async function EstimatePage({ params }: { params: Promise<{ id: s
     getSettings(),
   ]);
   if (!estimate) notFound();
+
+  // The linked lead's opt-out gates the Text channel in the send picker.
+  const lead = estimate.lead_id ? await getLead(estimate.lead_id) : null;
+  const optedOut = Boolean(lead?.opted_out);
 
   const readOnly = estimate.status !== "draft";
 
@@ -56,7 +60,13 @@ export default async function EstimatePage({ params }: { params: Promise<{ id: s
       <div className="mt-5 grid gap-4 md:grid-cols-[2fr_1fr]">
         {/* Rail first on mobile so the primary action sits above the fold. */}
         <div className="order-1 md:order-2">
-          <EstimateActions estimateId={estimate.id} status={estimate.status} />
+          <EstimateActions
+            estimateId={estimate.id}
+            status={estimate.status}
+            phone={estimate.customer_phone ?? ""}
+            email={estimate.customer_email ?? ""}
+            optedOut={optedOut}
+          />
         </div>
         <div className="order-2 min-w-0 md:order-1">
           <EstimateBuilder
@@ -67,6 +77,7 @@ export default async function EstimatePage({ params }: { params: Promise<{ id: s
             catalog={catalog}
             depositPresets={settings.deposit_presets}
             readOnly={readOnly}
+            optedOut={optedOut}
           />
         </div>
       </div>

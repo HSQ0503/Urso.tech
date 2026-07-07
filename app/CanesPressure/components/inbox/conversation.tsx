@@ -2,7 +2,15 @@
 
 import { Fragment, useEffect, useRef } from "react";
 import Link from "next/link";
-import { ChevronLeft, Phone, PhoneIncoming, PhoneMissed, PhoneOutgoing, Voicemail } from "lucide-react";
+import {
+  ChevronLeft,
+  FileText,
+  Phone,
+  PhoneIncoming,
+  PhoneMissed,
+  PhoneOutgoing,
+  Voicemail,
+} from "lucide-react";
 import {
   ET,
   STATUS_CLASS,
@@ -79,6 +87,42 @@ function CallEvent({ call }: { call: Call }) {
   );
 }
 
+// An outbound estimate text carries the customer link "…/CanesPressure/e/<token>".
+// Pull the URL out so we can render a tidy card with an "open" action instead of
+// a raw link bubble. Display-only; no schema change.
+const ESTIMATE_LINK = /\bhttps?:\/\/\S*\/CanesPressure\/e\/\S+/;
+
+function estimateUrl(body: string): string | null {
+  return body.match(ESTIMATE_LINK)?.[0] ?? null;
+}
+
+// Mirrors CallEvent's outbound inline-event card: the estimate-sent marker in
+// the thread, with a link to open the customer estimate page.
+function EstimateSentCard({ url, title, automated, at }: { url: string; title: string; automated: boolean; at: string }) {
+  return (
+    <div className="flex max-w-[78%] flex-col items-end self-end">
+      {automated && <span className="mb-0.5 text-[11px] font-medium text-[var(--cp-faint)]">Auto</span>}
+      <div className="cp-call-card cp-call-card-out">
+        <div className="flex items-center gap-2">
+          <FileText size={15} strokeWidth={2} className="shrink-0 text-[var(--cp-muted)]" />
+          <div className="min-w-0">
+            <p className="text-[13.5px] font-semibold leading-tight">{title}</p>
+            <a
+              href={url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[12px] font-medium leading-tight text-[var(--cp-brand-fill)] hover:underline"
+            >
+              Open estimate
+            </a>
+          </div>
+        </div>
+      </div>
+      <span className="mt-1 text-[11px] tabular-nums text-[var(--cp-faint)]">{stamp(at)}</span>
+    </div>
+  );
+}
+
 type StreamItem = { at: string; key: string; node: React.ReactNode };
 
 export function Conversation({
@@ -109,6 +153,17 @@ export function Conversation({
   const stream: StreamItem[] = [
     ...messages.map((m) => {
       const out = m.direction === "out";
+      const estUrl = out ? estimateUrl(m.body) : null;
+      if (estUrl) {
+        // Both the initial send and the day-2/5 reminders carry the /e/ link;
+        // the reminder body says "following up", so label the card accordingly.
+        const title = /following up/i.test(m.body) ? "Estimate reminder" : "Estimate sent";
+        return {
+          at: m.created_at,
+          key: `m-${m.id}`,
+          node: <EstimateSentCard url={estUrl} title={title} automated={Boolean(m.automated)} at={m.created_at} />,
+        };
+      }
       return {
         at: m.created_at,
         key: `m-${m.id}`,

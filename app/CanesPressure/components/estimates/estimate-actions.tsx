@@ -9,6 +9,12 @@ import {
   type ActionResult,
 } from "@/app/CanesPressure/actions";
 import type { EstimateStatus } from "@/lib/canes/types";
+import {
+  ChannelPicker,
+  channelAvailability,
+  choiceToChannels,
+  type ChannelChoice,
+} from "./channel-picker";
 
 // Owner-side action rail for the estimate detail page. The detail page is a
 // Server Component, so Send/Resend and Void (the two mutations) live here in a
@@ -45,12 +51,26 @@ function Notice({ value }: { value: Feedback }) {
 export function EstimateActions({
   estimateId,
   status,
+  phone,
+  email,
+  optedOut,
 }: {
   estimateId: string;
   status: EstimateStatus;
+  phone: string;
+  email: string;
+  optedOut: boolean;
 }) {
   const { isPending, feedback, run } = useAction();
   const [voidOpen, setVoidOpen] = useState(false);
+  const [channelChoice, setChannelChoice] = useState<ChannelChoice>("both");
+
+  const avail = channelAvailability({ phone, email, optedOut });
+  const chosen = choiceToChannels(channelChoice);
+  const resolvedChannels = {
+    text: chosen.text && avail.hasPhone && !avail.textBlocked,
+    email: chosen.email && avail.hasEmail,
+  };
 
   // Terminal states: nothing left to send or void. Approved estimates spawned a
   // job on approval, so point the owner at the schedule where it landed.
@@ -82,11 +102,19 @@ export function EstimateActions({
 
   return (
     <div className="space-y-2.5">
+      <ChannelPicker
+        phone={phone}
+        email={email}
+        optedOut={optedOut}
+        choice={channelChoice}
+        onChange={setChannelChoice}
+        disabled={isPending}
+      />
       <button
         type="button"
         className="cp-btn cp-btn-primary w-full"
-        disabled={isPending}
-        onClick={() => run(() => sendEstimate(estimateId))}
+        disabled={isPending || !avail.canSend}
+        onClick={() => run(() => sendEstimate(estimateId, { channels: resolvedChannels }))}
       >
         <Send size={16} strokeWidth={2} />
         {isPending ? "Sending..." : isDraft ? "Send estimate" : "Resend estimate"}

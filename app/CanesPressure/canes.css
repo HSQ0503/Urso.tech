@@ -245,3 +245,128 @@
   background: var(--cp-surface);
 }
 .cp-scroll { scrollbar-width: thin; scrollbar-color: var(--cp-line-strong) transparent; }
+
+/* ── Dispatch calendar (Phase 2 scheduler) ───────────────────────────────────
+   Two calendar objects, never conflated: a JOB is a solid crew-color block
+   (soft tint fill + solid left rail); an estimate VISIT is a hairline slate
+   outline chip. Shape + fill carry the distinction so it survives grayscale
+   print of the run sheet. calendar_events render as a muted hatched band below
+   both. Flat, no gradients/pills/blink; crew colors are cool-only (brand orange
+   stays chrome). Each crew block sets --cp-crew inline to its stored color. */
+
+.cp-cal-col {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 160px;
+  padding: 8px;
+  border: 1px solid var(--cp-line);
+  border-radius: 6px;
+  background: var(--cp-surface);
+}
+.cp-cal-col[data-today="true"] { border-color: var(--cp-line-strong); }
+.cp-cal-col[data-today="true"] .cp-cal-col-head { color: var(--cp-brand-deep); }
+.cp-cal-col[data-dropactive="true"] {
+  background: var(--cp-brand-soft);
+  border-color: var(--cp-brand-fill);
+}
+.cp-cal-col-head {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--cp-muted);
+  font-feature-settings: "tnum" 1;
+}
+
+/* a scheduled job: soft crew tint + solid crew rail. --cp-crew = crew color;
+   default slate for an unassigned job (dashed rail = "assign a crew"). */
+.cp-job-block {
+  --cp-crew: #3e4a56;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 8px 6px 9px;
+  border: 1px solid var(--cp-line);
+  border-left: 3px solid var(--cp-crew);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--cp-crew) 8%, var(--cp-surface));
+  color: var(--cp-ink);
+  font-size: 12.5px;
+  line-height: 1.3;
+  text-align: left;
+  cursor: pointer;
+  font-feature-settings: "tnum" 1;
+}
+.cp-job-block:hover { border-color: var(--cp-line-strong); }
+.cp-job-block[data-unassigned="true"] {
+  border-left-style: dashed;
+  background: var(--cp-surface);
+}
+
+/* an estimate visit: hairline slate outline, transparent fill, its own lane */
+.cp-visit-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border: 1px solid var(--cp-line-strong);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--cp-muted);
+  font-size: 12px;
+  line-height: 1.25;
+  font-feature-settings: "tnum" 1;
+}
+
+/* a non-job calendar block (time off / holiday): muted hatched background band,
+   reads as "unavailable ground" below jobs and visits. */
+.cp-event-band {
+  padding: 4px 8px;
+  border: 1px solid var(--cp-line);
+  border-radius: 4px;
+  color: var(--cp-faint);
+  font-size: 11.5px;
+  line-height: 1.25;
+  background-color: var(--cp-hover);
+  background-image: repeating-linear-gradient(
+    135deg,
+    transparent 0,
+    transparent 5px,
+    rgba(90, 95, 102, 0.09) 5px,
+    rgba(90, 95, 102, 0.09) 6px
+  );
+}
+
+/* same-crew overlap warning outline on the two clashing blocks */
+.cp-conflict { outline: 1.5px solid var(--cp-warn); outline-offset: -1px; }
+
+/* 8px round crew swatch; --cp-crew = crew color */
+.cp-crew-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  background: var(--cp-crew, #3e4a56);
+  flex-shrink: 0;
+}
+
+/* a draggable unscheduled-tray job card */
+.cp-tray-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 9px 11px;
+  border: 1px solid var(--cp-line);
+  border-radius: 5px;
+  background: var(--cp-surface);
+  font-feature-settings: "tnum" 1;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+.cp-tray-card:hover {
+  border-color: var(--cp-line-strong);
+  box-shadow: 0 1px 3px rgba(12, 43, 63, 0.06);
+}
+@media (min-width: 768px) {
+  .cp-tray-card { cursor: grab; }
+  .cp-tray-card:active { cursor: grabbing; }
+}

@@ -10,6 +10,9 @@ import {
   getEstimateByToken,
   getEstimateItems,
   getEstimateWithItems,
+  getJob,
+  getScheduleBoard,
+  listCrews,
   nextEstimateNumber,
   enqueueEstimateSend,
   enqueueEstimateReminders,
@@ -24,11 +27,14 @@ import {
   fmtEt,
   fmtMoney,
   toE164,
+  type CalendarEventKind,
   type CatalogKind,
   type Estimate,
   type EstimateItem,
   type EstimateType,
   type EstimateWithItems,
+  type Job,
+  type JobStatus,
   type LeadStatus,
   type LeadSource,
 } from "@/lib/canes/types";
@@ -544,7 +550,7 @@ export async function saveEstimateItems(
 
 export async function sendEstimate(
   estimateId: string,
-  opts?: { alsoText?: boolean },
+  opts?: { channels?: { email?: boolean; text?: boolean } },
 ): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
   const estimate = await getEstimate(estimateId);
@@ -567,14 +573,39 @@ export async function sendEstimate(
     ...(totals ?? {}),
   };
 
-  // Email the customer inline (best-effort); queue the SMS + reminders through
-  // the tasks outbox so quiet hours and opt-outs are respected by the cron.
-  await notifyEstimateSent(sent);
-
+  // Resolve effective channels. No opts = send to whatever is on file
+  // (back-compat). Text is gated on opt-out; both are gated on the field
+  // actually being present.
   const lead = estimate.lead_id ? await getLead(estimate.lead_id) : null;
   const optedOut = Boolean(lead?.opted_out);
-  if ((opts?.alsoText ?? true) && sent.customer_phone && !optedOut) {
-    await enqueueEstimateSend(sent);
+  const wantsText = opts?.channels?.text ?? true;
+  const wantsEmail = opts?.channels?.email ?? true;
+  const canText = Boolean(sent.customer_phone) && !optedOut && wantsText;
+  const canEmail = Boolean(sent.customer_email) && wantsEmail;
+
+  // Email inline (best-effort). notifyEstimateSent no-ops without an address.
+  if (canEmail) await notifyEstimateSent(sent);
+
+  // Text inline NOW so it lands in the thread immediately (sendCanesSms logs to
+  // messages). If quiet hours or Twilio isn't configured, fall back to the tasks
+  // outbox so the cron delivers it later — never double-send.
+  let textQueued = false;
+  let textSent = false;
+  if (canText) {
+    const base = (process.env.NEXT_PUBLIC_APP_URL ?? "https://urso.ws").replace(/\/$/, "");
+    const res = await sendCanesSms({
+      to: sent.customer_phone as string,
+      body: `Here is your estimate: ${base}/CanesPressure/e/${sent.public_token}`,
+      leadId: estimate.lead_id,
+      automated: true,
+    });
+    if (res.ok) {
+      textSent = true;
+    } else {
+      // Quiet hours, Twilio not configured, OR a hard send failure — hand off to
+      // the tasks outbox so the cron retries. Never drop the text silently.
+      textQueued = await enqueueEstimateSend(sent);
+    }
   }
   await enqueueEstimateReminders(sent);
 
@@ -587,7 +618,24 @@ export async function sendEstimate(
     await touch(estimate.lead_id);
   }
   refresh();
-  return { ok: true, notice: optedOut ? "Sent by email. Customer opted out of texts, so no SMS was queued." : undefined };
+  return { ok: true, notice: sendEstimateNotice({ canEmail, optedOut, textSent, textQueued }) };
+}
+
+// Human-readable summary of what actually happened when the estimate went out.
+function sendEstimateNotice(s: {
+  canEmail: boolean;
+  optedOut: boolean;
+  textSent: boolean;
+  textQueued: boolean;
+}): string {
+  if (s.textSent && s.canEmail) return "Texted and emailed the estimate.";
+  if (s.textSent) return "Texted the estimate.";
+  if (s.textQueued && s.canEmail) return "Text queued for after quiet hours; emailed now.";
+  if (s.textQueued) return "Text queued for after quiet hours.";
+  // Opted-out surfaces regardless of the picker choice so the owner knows why no text went.
+  if (s.optedOut && s.canEmail) return "Sent by email — customer opted out of texts.";
+  if (s.canEmail) return "Emailed the estimate.";
+  return "Estimate sent.";
 }
 
 export async function voidEstimate(estimateId: string): Promise<ActionResult> {
@@ -789,6 +837,8 @@ export async function createJobFromEstimate(estimate: EstimateWithItems): Promis
       contact_id: estimate.contact_id,
       status: "unscheduled",
       customer_name: estimate.customer_name,
+      customer_phone: estimate.customer_phone,
+      job_name: estimate.job_name,
       job_address: estimate.job_address,
       total_cents: estimate.total_cents,
       deposit_cents: estimate.deposit_cents,
@@ -799,7 +849,29 @@ export async function createJobFromEstimate(estimate: EstimateWithItems): Promis
     console.error(`[canes] createJobFromEstimate failed for ${estimate.id}: ${error.message}`);
     return null;
   }
-  return data.id as string;
+  const jobId = data.id as string;
+
+  // Snapshot the sold line items into job_items (the run-sheet checklist). Only
+  // the lines that count toward the sale — the customer never sees deselected
+  // options on their run sheet. Best-effort: a failed snapshot never orphans the
+  // job (the estimate_id UNIQUE backstop still dedupes a retry).
+  const soldItems = estimate.items.filter(itemCounts);
+  if (soldItems.length > 0) {
+    const rows = soldItems.map((it, i) => ({
+      job_id: jobId,
+      estimate_item_id: it.id,
+      position: i,
+      name: it.name,
+      description: it.description,
+      quantity: it.quantity,
+      line_total_cents: it.line_total_cents,
+    }));
+    const { error: itemsErr } = await db.from("job_items").insert(rows);
+    if (itemsErr) {
+      console.error(`[canes] job_items snapshot failed for job ${jobId}: ${itemsErr.message}`);
+    }
+  }
+  return jobId;
 }
 
 // ── Service catalog ──────────────────────────────────────────────────────────
@@ -844,6 +916,284 @@ export async function deleteCatalogItem(id: string): Promise<ActionResult> {
   // Soft-delete: catalog items may be referenced by historical estimate lines,
   // so deactivate rather than remove.
   const { error } = await canesDb().from("service_catalog").update({ active: false }).eq("id", id);
+  if (error) return { ok: false, notice: error.message };
+  refresh();
+  return { ok: true };
+}
+
+// ── Scheduler (Phase 2) ──────────────────────────────────────────────────────
+//
+// Every mutation clones the setAppointment template: DEMO guard → validate →
+// write jobs/calendar_events → (re)arm the day-before job_confirmation task →
+// logJobEvent (null-lead-guarded) → refresh() → ActionResult. A schedule/move
+// never regresses a terminal job (completed|invoiced|paid|canceled), mirroring
+// the won/lost guards. ET wall-time composition happens upstream in the UI via
+// etLocalToIso; these actions receive true ISO strings. Money stays in cents.
+
+// Terminal jobs are finished work — never re-slot or re-crew them via drag.
+const TERMINAL_JOB_STATUSES: JobStatus[] = ["completed", "invoiced", "paid", "canceled"];
+// Statuses that occupy a crew's calendar for the overlap/conflict check.
+const ACTIVE_JOB_STATUSES: JobStatus[] = ["scheduled", "confirmed", "in_progress"];
+
+// Jobs may have no lead (a job created outside the estimate flow), so job event
+// logging must tolerate a null lead_id — unlike the lead-scoped logEvent.
+async function logJobEvent(leadId: string | null, detail: string): Promise<void> {
+  if (!leadId) return;
+  await logEvent(leadId, "job", detail);
+}
+
+function crewLabel(crew: { name: string } | null): string {
+  return crew?.name ?? "no crew";
+}
+
+// Same crew, overlapping [scheduled_at, ends_at), active status, different job.
+// Warn-only (Sebastian may deliberately double-book two nearby small jobs).
+async function findConflictNotice(
+  jobId: string,
+  crewId: string | null,
+  startIso: string,
+  endIso: string,
+): Promise<string | undefined> {
+  if (!crewId) return undefined;
+  const start = new Date(startIso).getTime();
+  const end = new Date(endIso).getTime();
+  // Scan a generous window around the slot so any same-crew overlap is caught.
+  const board = await getScheduleBoard(new Date(start - 7 * 86_400_000).toISOString(), 21);
+  const clash = board.find((j) => {
+    if (j.id === jobId || j.crew_id !== crewId) return false;
+    if (!ACTIVE_JOB_STATUSES.includes(j.status)) return false;
+    if (!j.scheduled_at || !j.ends_at) return false;
+    const s = new Date(j.scheduled_at).getTime();
+    const e = new Date(j.ends_at).getTime();
+    return start < e && s < end; // half-open interval overlap
+  });
+  if (!clash) return undefined;
+  return `Heads up: overlaps ${clash.customer_name ?? "another job"} ${fmtEt(clash.scheduled_at)} for ${crewLabel(clash.crew)}.`;
+}
+
+// Arm / re-arm the day-before customer confirmation for a scheduled job. The
+// dedupe_key includes the time so a reschedule mints a fresh task; stale pending
+// tasks for this job on a different key are canceled first. Insert-only upsert so
+// a task that already ran is never resurrected. Mirrors setAppointment's
+// confirmation exactly, keyed off the snapshotted jobs.customer_phone.
+async function armJobConfirmation(job: Job, scheduledIso: string): Promise<void> {
+  const db = canesDb();
+  const settings = await getSettings();
+  const offsetHours = settings.job_confirmation_offset_hours;
+  const sendAt = new Date(new Date(scheduledIso).getTime() - offsetHours * 3_600_000);
+  const dedupeKey = `job_confirmation:${job.id}:${scheduledIso}`;
+  // Cancel stale pending confirmations for this job whose key differs (an old slot).
+  await db
+    .from("tasks")
+    .update({ status: "canceled" })
+    .eq("kind", "job_confirmation")
+    .eq("status", "pending")
+    .contains("payload", { job_id: job.id })
+    .neq("dedupe_key", dedupeKey);
+  await db.from("tasks").upsert(
+    {
+      lead_id: job.lead_id,
+      kind: "job_confirmation",
+      dedupe_key: dedupeKey,
+      scheduled_for: (sendAt.getTime() < Date.now() ? new Date() : sendAt).toISOString(),
+      status: "pending",
+      payload: { job_id: job.id, scheduled_at: scheduledIso },
+    },
+    { onConflict: "dedupe_key", ignoreDuplicates: true },
+  );
+}
+
+// Cancel the pending day-before confirmation when a job leaves the calendar.
+async function cancelJobConfirmation(jobId: string): Promise<void> {
+  await canesDb()
+    .from("tasks")
+    .update({ status: "canceled" })
+    .eq("kind", "job_confirmation")
+    .eq("status", "pending")
+    .contains("payload", { job_id: jobId });
+}
+
+// v1 = owner notification via the existing alertOwner path (Sebastian is the
+// crew). Schema-ready for a real per-worker contact when multi-crew ships.
+async function notifyCrewAssignment(job: Job, crewName: string, whenIso: string | null): Promise<void> {
+  const when = whenIso ? ` ${fmtEt(whenIso)}` : "";
+  await alertOwner(`Job assigned to ${crewName}: ${job.customer_name ?? "customer"}${when}.`);
+}
+
+// Place an unscheduled job onto the calendar (tray → calendar) or set/replace
+// its slot. Writes ends_at = scheduled_at + duration in the same update.
+export async function scheduleJob(
+  jobId: string,
+  scheduledIso: string,
+  durationMinutes: number,
+  crewId: string | null,
+): Promise<ActionResult> {
+  if (!canesConfigured()) return DEMO;
+  const when = new Date(scheduledIso);
+  if (Number.isNaN(when.getTime())) return { ok: false, notice: "Invalid date." };
+  const duration = Math.max(15, Math.round(durationMinutes));
+  const job = await getJob(jobId);
+  if (!job) return { ok: false, notice: "Job not found." };
+  if (TERMINAL_JOB_STATUSES.includes(job.status)) {
+    return { ok: false, notice: `Can't schedule a ${job.status} job.` };
+  }
+
+  const startIso = when.toISOString();
+  const endIso = new Date(when.getTime() + duration * 60_000).toISOString();
+  const db = canesDb();
+  const crews = crewId ? await listCrews() : [];
+  const crew = crewId ? crews.find((c) => c.id === crewId) ?? null : null;
+  const { error } = await db
+    .from("jobs")
+    .update({
+      scheduled_at: startIso,
+      ends_at: endIso,
+      duration_minutes: duration,
+      crew_id: crewId,
+      assigned_to: crew?.name ?? job.assigned_to,
+      // Rescheduling moves a job to a new, not-yet-agreed slot, so a confirmed
+      // job must drop back to scheduled and clear confirmed_at — the customer
+      // hasn't said YES to the new time. Terminal states are rejected above.
+      ...((job.status === "unscheduled" || job.status === "scheduled" || job.status === "confirmed") ? { status: "scheduled", confirmed_at: null } : {}),
+    })
+    .eq("id", jobId);
+  if (error) return { ok: false, notice: error.message };
+
+  const conflict = await findConflictNotice(jobId, crewId, startIso, endIso);
+  await armJobConfirmation(job, startIso);
+  if (crew) await notifyCrewAssignment(job, crew.name, startIso);
+  await logJobEvent(job.lead_id, `Scheduled ${fmtEt(startIso)} · ${crewLabel(crew)}`);
+  refresh();
+  return { ok: true, notice: conflict };
+}
+
+// Reschedule / re-crew an already-placed job. scheduledIso === null sends it
+// back to the tray (unschedule semantics). durationMinutes/crewId default to the
+// job's current values when omitted.
+export async function moveJob(
+  jobId: string,
+  scheduledIso: string | null,
+  durationMinutes?: number,
+  crewId?: string | null,
+): Promise<ActionResult> {
+  if (!canesConfigured()) return DEMO;
+  if (scheduledIso === null) return unscheduleJob(jobId);
+  const job = await getJob(jobId);
+  if (!job) return { ok: false, notice: "Job not found." };
+  if (TERMINAL_JOB_STATUSES.includes(job.status)) {
+    return { ok: false, notice: `Can't move a ${job.status} job.` };
+  }
+  const duration = durationMinutes !== undefined ? durationMinutes : job.duration_minutes;
+  // crewId omitted (undefined) → keep the current crew; null → clear it.
+  const nextCrewId = crewId !== undefined ? crewId : job.crew_id;
+  return scheduleJob(jobId, scheduledIso, duration, nextCrewId);
+}
+
+// Pull a job off the calendar back into the tray. Cancels its pending day-before
+// confirmation so the customer is never texted about a dropped slot.
+export async function unscheduleJob(jobId: string): Promise<ActionResult> {
+  if (!canesConfigured()) return DEMO;
+  const job = await getJob(jobId);
+  if (!job) return { ok: false, notice: "Job not found." };
+  if (TERMINAL_JOB_STATUSES.includes(job.status)) {
+    return { ok: false, notice: `Can't unschedule a ${job.status} job.` };
+  }
+  const { error } = await canesDb()
+    .from("jobs")
+    .update({ scheduled_at: null, ends_at: null, status: "unscheduled" })
+    .eq("id", jobId);
+  if (error) return { ok: false, notice: error.message };
+  await cancelJobConfirmation(jobId);
+  await logJobEvent(job.lead_id, "Returned to the unscheduled tray");
+  refresh();
+  return { ok: true };
+}
+
+// Assign / reassign a crew without changing the time.
+export async function assignJob(jobId: string, crewId: string | null): Promise<ActionResult> {
+  if (!canesConfigured()) return DEMO;
+  const job = await getJob(jobId);
+  if (!job) return { ok: false, notice: "Job not found." };
+  const crews = crewId ? await listCrews() : [];
+  const crew = crewId ? crews.find((c) => c.id === crewId) ?? null : null;
+  if (crewId && !crew) return { ok: false, notice: "Crew not found." };
+  const { error } = await canesDb()
+    .from("jobs")
+    .update({ crew_id: crewId, assigned_to: crew?.name ?? null })
+    .eq("id", jobId);
+  if (error) return { ok: false, notice: error.message };
+
+  let notice: string | undefined;
+  if (job.scheduled_at && job.ends_at) {
+    notice = await findConflictNotice(jobId, crewId, job.scheduled_at, job.ends_at);
+  }
+  if (crew) await notifyCrewAssignment(job, crew.name, job.scheduled_at);
+  await logJobEvent(job.lead_id, crew ? `Assigned to ${crew.name}` : "Crew unassigned");
+  refresh();
+  return { ok: true, notice };
+}
+
+// Drive the manual status transitions this build owns, plus cancel/no-show with
+// a reason. Cancel stores canceled_reason (no-show is a reason string) and
+// cancels the pending confirmation.
+export async function setJobStatus(
+  jobId: string,
+  status: JobStatus,
+  reason?: string,
+): Promise<ActionResult> {
+  if (!canesConfigured()) return DEMO;
+  if (status === "canceled" && !reason?.trim()) {
+    return { ok: false, notice: "A reason is required to cancel a job." };
+  }
+  const job = await getJob(jobId);
+  if (!job) return { ok: false, notice: "Job not found." };
+
+  const patch: Record<string, unknown> = { status };
+  if (status === "canceled") patch.canceled_reason = reason?.trim() ?? null;
+  if (status === "confirmed") patch.confirmed_at = new Date().toISOString();
+  const { error } = await canesDb().from("jobs").update(patch).eq("id", jobId);
+  if (error) return { ok: false, notice: error.message };
+
+  // Leaving the live window (canceled) means the day-before text is now noise.
+  if (status === "canceled") await cancelJobConfirmation(jobId);
+  await logJobEvent(
+    job.lead_id,
+    `Status set to ${status}${status === "canceled" && reason ? ` — ${reason.trim()}` : ""}`,
+  );
+  refresh();
+  return { ok: true };
+}
+
+// Create a non-job calendar block (holiday / time off / note) — the lean
+// "Create Event". Because jobs are born from estimates, we never need a
+// "Create Work Order" form.
+export async function createCalendarEvent(input: {
+  title: string;
+  startIso: string;
+  endIso: string;
+  allDay?: boolean;
+  crewId?: string | null;
+  kind?: CalendarEventKind;
+  notes?: string;
+}): Promise<ActionResult> {
+  if (!canesConfigured()) return DEMO;
+  const title = input.title.trim();
+  if (!title) return { ok: false, notice: "A title is required." };
+  const start = new Date(input.startIso);
+  const end = new Date(input.endIso);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    return { ok: false, notice: "Invalid date." };
+  }
+  if (end.getTime() <= start.getTime()) return { ok: false, notice: "End must be after start." };
+  const { error } = await canesDb().from("calendar_events").insert({
+    title,
+    starts_at: start.toISOString(),
+    ends_at: end.toISOString(),
+    all_day: input.allDay ?? false,
+    crew_id: input.crewId ?? null,
+    kind: input.kind ?? "block",
+    notes: input.notes?.trim() || null,
+  });
   if (error) return { ok: false, notice: error.message };
   refresh();
   return { ok: true };

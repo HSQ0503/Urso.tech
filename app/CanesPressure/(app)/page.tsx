@@ -1,14 +1,29 @@
 import Link from "next/link";
 import { CheckCircle2, MapPin, Phone } from "lucide-react";
 import { getAgenda, getOverview } from "@/lib/canes/data";
-import { ET, fmtEt, fmtPhone, SOURCE_LABEL, type Lead } from "@/lib/canes/types";
+import { getScheduleBoard } from "@/lib/canes/estimates";
+import { ET, etLocalToIso, fmtEt, fmtPhone, SOURCE_LABEL, type JobStatus, type Lead } from "@/lib/canes/types";
 import { WaitTimer } from "@/app/CanesPressure/components/overview/wait-timer";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Today" };
 
+// Terminal job statuses — mirrors actions.ts / estimates.ts. A terminal job can
+// keep its scheduled_at, so the Today strip must drop these or a canceled job
+// would show as active work for the day.
+const TERMINAL_JOB_STATUSES: JobStatus[] = ["completed", "invoiced", "paid", "canceled"];
+
 const leadHref = (id: string) => `/CanesPressure/leads/${id}`;
 const mapsHref = (address: string) => `https://maps.google.com/?q=${encodeURIComponent(address)}`;
+
+// The ET calendar date an instant falls on ("YYYY-MM-DD").
+const etYmd = (iso: string | Date) =>
+  new Intl.DateTimeFormat("en-CA", {
+    timeZone: ET,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(typeof iso === "string" ? new Date(iso) : iso);
 
 function SectionTitle({ label, count, tone }: { label: string; count?: number; tone?: "danger" }) {
   return (
@@ -59,8 +74,27 @@ function CallQueueCard({ lead }: { lead: Lead }) {
 }
 
 export default async function TodayPage() {
-  const [overview, agenda] = await Promise.all([getOverview(), getAgenda(2)]);
+  const todayYmd = etYmd(new Date());
+  const rangeStart = etLocalToIso(`${todayYmd}T00:00`);
+
+  const [overview, agenda, board] = await Promise.all([
+    getOverview(),
+    getAgenda(2),
+    getScheduleBoard(rangeStart, 1),
+  ]);
   const { coldNeedingCall, unconfirmedToday, todayAgenda, followUpsDue, counts } = overview;
+
+  // Today's ET scheduled jobs in time order — the crew's work for the day.
+  const todayJobs = board
+    .filter(
+      (j) =>
+        j.scheduled_at &&
+        etYmd(j.scheduled_at) === todayYmd &&
+        !TERMINAL_JOB_STATUSES.includes(j.status),
+    )
+    .sort((a, b) => (a.scheduled_at ?? "").localeCompare(b.scheduled_at ?? ""));
+  const confirmedJobs = todayJobs.filter((j) => j.status === "confirmed").length;
+  const scheduledJobs = todayJobs.length - confirmedJobs;
 
   const dateLine = new Intl.DateTimeFormat("en-US", {
     timeZone: ET,
@@ -280,6 +314,82 @@ export default async function TodayPage() {
             </Link>
           </p>
         )}
+      </section>
+
+      {/* Today's jobs — the crew's washes for the day; jobs get their own strip,
+          distinct from the visits card above (two calendar objects, never conflated) */}
+      <section>
+        <SectionTitle label="Today's jobs" />
+        <div className="cp-card mt-2.5">
+          <div className="flex flex-wrap items-center gap-x-8 gap-y-2 px-4 py-3">
+            {[
+              { label: "Total", value: todayJobs.length },
+              { label: "Confirmed", value: confirmedJobs },
+              { label: "Scheduled", value: scheduledJobs },
+            ].map((s) => (
+              <div key={s.label}>
+                <p className="text-[12px] font-medium text-[var(--cp-muted)]">{s.label}</p>
+                <p className="text-[18px] font-bold leading-tight tabular-nums">{s.value}</p>
+              </div>
+            ))}
+            <Link href="/CanesPressure/schedule" className="cp-btn cp-btn-sm ml-auto">
+              Open run sheet
+            </Link>
+          </div>
+          <div className="cp-divider" />
+          {todayJobs.length > 0 ? (
+            <div className="divide-y divide-[var(--cp-line)]">
+              {todayJobs.map((job) => {
+                const confirmed = job.status === "confirmed";
+                return (
+                  <div key={job.id} className="flex items-center gap-3 px-4 py-3">
+                    <span className="w-[70px] shrink-0 text-[14px] font-semibold tabular-nums">
+                      {fmtEt(job.scheduled_at, { hour: "numeric", minute: "2-digit" })}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <Link
+                        href="/CanesPressure/schedule"
+                        className="flex items-center gap-2 truncate text-[14px] font-medium hover:underline"
+                      >
+                        <span
+                          className="cp-crew-dot shrink-0"
+                          style={
+                            job.crew
+                              ? ({ ["--cp-crew"]: job.crew.color } as React.CSSProperties)
+                              : undefined
+                          }
+                        />
+                        <span className="truncate">{job.customer_name ?? "Customer"}</span>
+                      </Link>
+                      <p className="truncate text-[12.5px] text-[var(--cp-muted)]">
+                        {job.job_name ?? "Job"}
+                        {job.crew ? ` · ${job.crew.name}` : ""}
+                      </p>
+                    </div>
+                    <span className={`cp-chip ${confirmed ? "cp-status-confirmed" : "cp-status-appt"}`}>
+                      {confirmed ? "Confirmed" : "Scheduled"}
+                    </span>
+                    {job.job_address && (
+                      <a
+                        href={mapsHref(job.job_address)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="cp-btn cp-btn-sm px-2.5"
+                        aria-label={`Open ${job.job_address} in Maps`}
+                      >
+                        <MapPin size={15} strokeWidth={2} />
+                      </a>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="px-4 py-4 text-[13.5px] text-[var(--cp-muted)]">
+              No jobs on the calendar today.
+            </p>
+          )}
+        </div>
       </section>
     </div>
   );

@@ -39,6 +39,9 @@ const DEFAULT_SETTINGS: CanesSettings = {
   deposit_presets: [0, 25, 50],
   estimate_expiry_days: 28,
   estimate_tax_rate_bps: 0,
+  job_confirmation_template:
+    "Hi{name}, this is Canes Pressure Washing confirming your appointment {when} at {address}. Reply YES to confirm. Reply STOP to opt out.",
+  job_confirmation_offset_hours: 24,
 };
 
 export async function getSettings(): Promise<CanesSettings> {
@@ -58,6 +61,10 @@ export async function getSettings(): Promise<CanesSettings> {
     deposit_presets: map.deposit_presets ?? DEFAULT_SETTINGS.deposit_presets,
     estimate_expiry_days: Number(map.estimate_expiry_days ?? DEFAULT_SETTINGS.estimate_expiry_days),
     estimate_tax_rate_bps: Number(map.estimate_tax_rate_bps ?? DEFAULT_SETTINGS.estimate_tax_rate_bps),
+    job_confirmation_template: map.job_confirmation_template ?? DEFAULT_SETTINGS.job_confirmation_template,
+    job_confirmation_offset_hours: Number(
+      map.job_confirmation_offset_hours ?? DEFAULT_SETTINGS.job_confirmation_offset_hours,
+    ),
   };
 }
 

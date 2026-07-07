@@ -47,6 +47,7 @@ export default async function NewEstimatePage({
           mode="create"
           catalog={catalog}
           depositPresets={settings.deposit_presets}
+          optedOut={Boolean(lead?.opted_out)}
           prefill={{
             customerName: lead?.name ?? "",
             customerPhone: lead?.phone ?? "",
