@@ -90,16 +90,16 @@ export default async function InvoicesPage({
     <div>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="cp-display text-[24px] leading-tight">Invoices</h1>
+          <h1 className="cp-display text-[24px] leading-tight">
+            Invoices<span className="text-[var(--cp-brand)]">.</span>
+          </h1>
           <p className="mt-1 text-[13.5px] text-[var(--cp-muted)]">
             Every bill you have sent and collected. Bill a job from the schedule.
           </p>
         </div>
         {outstanding > 0 && (
           <div className="cp-card px-4 py-2.5 text-right">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--cp-faint)]">
-              Outstanding
-            </p>
+            <p className="cp-mono">Outstanding</p>
             <p className="tabular-nums text-[18px] font-semibold text-[var(--cp-warn)]">
               {fmtMoney(outstanding)}
             </p>

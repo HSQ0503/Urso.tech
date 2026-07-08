@@ -22,6 +22,7 @@ import {
   type Call,
   type Lead,
   type Message,
+  type ThreadKind,
 } from "@/lib/canes/types";
 import { Composer } from "./composer";
 
@@ -101,7 +102,7 @@ function estimateUrl(body: string): string | null {
 function EstimateSentCard({ url, title, automated, at }: { url: string; title: string; automated: boolean; at: string }) {
   return (
     <div className="flex max-w-[78%] flex-col items-end self-end">
-      {automated && <span className="mb-0.5 text-[11px] font-medium text-[var(--cp-faint)]">Auto</span>}
+      {automated && <span className="cp-mono mb-0.5">Auto</span>}
       <div className="cp-call-card cp-call-card-out">
         <div className="flex items-center gap-2">
           <FileText size={15} strokeWidth={2} className="shrink-0 text-[var(--cp-muted)]" />
@@ -125,19 +126,29 @@ function EstimateSentCard({ url, title, automated, at }: { url: string; title: s
 
 type StreamItem = { at: string; key: string; node: React.ReactNode };
 
+// The thread readers cap what they return (500 messages / 200 calls); render
+// only the newest slice so a very long thread opens at its latest activity
+// instead of an old page of history.
+const MAX_STREAM_ITEMS = 400;
+
 export function Conversation({
   peerPhone,
   lead,
+  displayName,
+  kind,
+  contactId,
   messages,
   calls,
-  isVendor = false,
 }: {
   peerPhone: string;
   lead: Lead | null;
+  displayName: string | null;
+  kind: ThreadKind;
+  contactId: string | null;
   messages: Message[];
   calls: Call[];
-  isVendor?: boolean;
 }) {
+  const isVendor = kind === "vendor";
   const streamRef = useRef<HTMLDivElement>(null);
   const lastKey = messages[messages.length - 1]?.id ?? calls[calls.length - 1]?.id;
 
@@ -169,9 +180,7 @@ export function Conversation({
         key: `m-${m.id}`,
         node: (
           <div className={`flex max-w-[78%] flex-col ${out ? "items-end self-end" : "items-start self-start"}`}>
-            {out && m.automated && (
-              <span className="mb-0.5 text-[11px] font-medium text-[var(--cp-faint)]">Auto</span>
-            )}
+            {out && m.automated && <span className="cp-mono mb-0.5">Auto</span>}
             <div
               className={`${
                 out ? (m.automated ? "cp-bubble-out cp-bubble-auto" : "cp-bubble-out") : "cp-bubble-in"
@@ -190,7 +199,9 @@ export function Conversation({
       };
     }),
     ...calls.map((c) => ({ at: c.created_at, key: `c-${c.id}`, node: <CallEvent call={c} /> })),
-  ].sort((a, b) => a.at.localeCompare(b.at));
+  ]
+    .sort((a, b) => a.at.localeCompare(b.at))
+    .slice(-MAX_STREAM_ITEMS);
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -205,36 +216,46 @@ export function Conversation({
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-2">
             <h2 className="truncate text-[15px] font-semibold">
-              {isVendor ? "Lead vendor" : (lead?.name ?? fmtPhone(peerPhone))}
+              {isVendor ? "Lead vendor" : (displayName ?? fmtPhone(peerPhone))}
             </h2>
             {isVendor && (
               <span className="cp-chip shrink-0 bg-[var(--cp-bg)] text-[var(--cp-muted)]">Vendor</span>
             )}
-            {!isVendor && lead && (
+            {kind === "customer" && (
+              <span className="cp-chip shrink-0 bg-[var(--cp-bg)] text-[var(--cp-muted)]">
+                Customer
+              </span>
+            )}
+            {kind === "lead" && lead && (
               <span
                 className={`cp-chip shrink-0 ${lead.type === "hot" ? "cp-badge-hot" : "cp-badge-cold"}`}
               >
                 {lead.type === "hot" ? "Hot" : "Cold"}
               </span>
             )}
-            {!isVendor && lead && (
+            {kind === "lead" && lead && (
               <span className={`cp-chip shrink-0 ${STATUS_CLASS[lead.status]} xl:hidden`}>
                 {STATUS_LABEL[lead.status]}
               </span>
             )}
           </div>
-          {(isVendor || lead?.name) && (
+          {(isVendor || displayName) && (
             <p className="text-[12px] tabular-nums text-[var(--cp-muted)]">{fmtPhone(peerPhone)}</p>
           )}
         </div>
         <div className="flex shrink-0 items-center gap-2 xl:hidden">
-          {!isVendor && lead && (
+          {kind === "customer" && contactId && (
+            <Link href={`/CanesPressure/customers/${contactId}`} className="cp-btn cp-btn-sm">
+              View profile
+            </Link>
+          )}
+          {kind === "lead" && lead && (
             <Link href={`/CanesPressure/leads/${lead.id}`} className="cp-btn cp-btn-sm">
               Open lead
             </Link>
           )}
           <a href={`tel:${peerPhone}`} className="cp-btn cp-btn-sm">
-            <Phone size={14} />
+            <Phone size={14} strokeWidth={2} />
             Call
           </a>
         </div>
@@ -253,9 +274,7 @@ export function Conversation({
         {originNote && lead && (
           <div className="flex max-w-[78%] flex-col items-start self-start">
             <div className="rounded-2xl border border-dashed border-[var(--cp-line-strong)] bg-[var(--cp-bg)] px-3.5 py-2">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.04em] text-[var(--cp-faint)]">
-                From the lead vendor
-              </p>
+              <p className="cp-mono">From the lead vendor</p>
               <p className="mt-0.5 whitespace-pre-wrap break-words text-[13px] leading-relaxed text-[var(--cp-muted)]">
                 {lead.raw_message}
               </p>

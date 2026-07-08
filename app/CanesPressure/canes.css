@@ -1,16 +1,22 @@
-/* Canes Pressure Washing — operations design system.
+/* Canes Pressure Washing — operations design system, v3.
    Layout grounded in working field-service software (Jobber-class web apps,
-   OpenPhone's inbox); colors are Urso's light mode (globals.css light tokens):
-   cool gray canvas, white cards with hairline borders, near-black ink, Urso
-   orange #fe5100 as the one accent. Raw orange is for accents (toplines,
-   dots, focus, timers); solid fills use the deepened steps so white button
-   text keeps contrast. No gradients, no washes, nothing blinks.
-   Everything scopes under .canes so the rest of urso.tech is untouched. */
+   OpenPhone's inbox); the voice is Urso's brand system: Fraunces serif for
+   display type, IBM Plex Mono for micro-labels and status chips, IBM Plex Sans
+   for everything else, near-black chrome, and Urso orange #fe5100 as the one
+   accent. Raw orange is for accents (toplines, dots, focus, timers); solid
+   fills use the deepened steps so white button text keeps contrast.
+   No gradients, no washes, nothing blinks.
+   Everything scopes under .canes so the rest of urso.tech is untouched.
+
+   Everything lives in @layer components so Tailwind v4 utilities (which live
+   in @layer utilities, later in the layer order) can override .cp-* classes —
+   unlayered rules would silently beat every utility. */
+
+@layer components {
 
 .canes {
   /* palette */
   --cp-bg: #eceef1;
-  --cp-sidebar: #f6f7f9;
   --cp-surface: #ffffff;
   --cp-ink: #14171c;
   --cp-muted: #5a5f66;
@@ -33,9 +39,22 @@
   --cp-danger: #b42318;
   --cp-danger-bg: #fdecea;
 
+  /* dark chrome — the sidebar and login field carry Urso's near-black */
+  --cp-chrome: #0d1013;
+  --cp-chrome-raise: rgba(255, 255, 255, 0.06);
+  --cp-chrome-line: rgba(255, 255, 255, 0.08);
+  --cp-chrome-ink: #f4f5f6;
+  --cp-chrome-muted: rgba(244, 245, 246, 0.6);
+  --cp-chrome-faint: rgba(244, 245, 246, 0.38);
+
+  /* type — inherited from the root layout's next/font variables */
+  --cp-font-body: var(--font-ibm-plex-sans), system-ui, -apple-system, sans-serif;
+  --cp-font-display: var(--font-fraunces), Georgia, serif;
+  --cp-font-mono: var(--font-ibm-plex-mono), ui-monospace, "SF Mono", monospace;
+
   background: var(--cp-bg);
   color: var(--cp-ink);
-  font-family: var(--font-canes-body), system-ui, -apple-system, sans-serif;
+  font-family: var(--cp-font-body);
   font-feature-settings: "tnum" 1;
   -webkit-font-smoothing: antialiased;
 }
@@ -43,9 +62,23 @@
 .canes ::selection { background: var(--cp-brand-soft); }
 .canes :focus-visible { outline: 2px solid var(--cp-brand); outline-offset: 2px; }
 
+/* display type — Fraunces, the Urso voice. Page titles, the greeting, and
+   public-page headers. Pair with an orange terminal period in JSX. */
 .cp-display {
-  font-weight: 700;
-  letter-spacing: -0.015em;
+  font-family: var(--cp-font-display);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+/* mono micro-label — THE Urso signature. Section labels, stat labels, form
+   labels, day headers. Always uppercase, always quiet. */
+.cp-mono {
+  font-family: var(--cp-font-mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--cp-muted);
 }
 
 /* surfaces — flat white, hairline border, no resting shadow.
@@ -62,16 +95,32 @@
   box-shadow: 0 1px 3px rgba(12, 43, 63, 0.06);
 }
 
-/* per-section accent: a solid 3px top border on workflow columns (Jobber) */
+/* per-stage accent on the workflow strip only (Jobber's home pattern) —
+   a solid 3px top border. Not for decoration anywhere else. */
 .cp-topline { display: block; height: 3px; }
 .cp-topline-slate { background: #3e4a56; }
 .cp-topline-brand { background: var(--cp-brand); }
 .cp-topline-cold { background: var(--cp-cold); }
 .cp-topline-good { background: var(--cp-good); }
 
-/* needs-action cards carry a red left rail instead of a tinted wash */
+/* legacy rails — kept for compatibility; new work signals urgency with a red
+   .cp-group-label header (Jobber's "Overdue") instead of colored card edges. */
 .cp-urgent { border-left: 3px solid var(--cp-danger); }
 .cp-done { border-left: 3px solid var(--cp-good); }
+
+/* group headers for grouped lists (schedule list view, call queue):
+   mono label + tone. The color carries the urgency, not the card. */
+.cp-group-label {
+  font-family: var(--cp-font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--cp-muted);
+}
+.cp-group-danger { color: var(--cp-danger); }
+.cp-group-brand { color: var(--cp-brand-deep); }
+.cp-group-good { color: var(--cp-good); }
 
 /* buttons — compact, near-square, text-first */
 .cp-btn {
@@ -98,6 +147,8 @@
 }
 .cp-btn-primary:hover { background: var(--cp-brand-deep); border-color: var(--cp-brand-deep); }
 .cp-btn-danger { color: var(--cp-danger); }
+.cp-btn-ghost { border-color: transparent; background: transparent; }
+.cp-btn-ghost:hover { background: var(--cp-hover); }
 .cp-btn-sm { min-height: 30px; padding: 0 10px; font-size: 12.5px; border-radius: 4px; }
 .cp-btn:disabled { opacity: 0.45; pointer-events: none; }
 
@@ -121,23 +172,62 @@
 }
 .cp-label {
   display: block;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
+  font-family: var(--cp-font-mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--cp-muted);
   margin-bottom: 6px;
 }
 
-/* chips + badges — small square-ish labels (Jobber), never pills */
+/* search — an input with room for a leading icon (position the icon in JSX) */
+.cp-search { padding-left: 34px; }
+
+/* segmented control — view switchers (Day / Week / Month, send channels) */
+.cp-seg {
+  display: inline-flex;
+  align-items: stretch;
+  padding: 2px;
+  gap: 2px;
+  border: 1px solid var(--cp-line-strong);
+  border-radius: 6px;
+  background: var(--cp-surface);
+}
+.cp-seg-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 0 12px;
+  border-radius: 4px;
+  border: 0;
+  background: transparent;
+  color: var(--cp-muted);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 150ms ease, color 150ms ease;
+}
+.cp-seg-btn:hover { color: var(--cp-ink); }
+.cp-seg-btn[data-active="true"] {
+  background: var(--cp-ink);
+  color: #fff;
+}
+
+/* chips + badges — Plex Mono uppercase, square-ish (Jobber), never pills */
 .cp-chip {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 2px 7px;
+  padding: 2.5px 7px;
   border-radius: 4px;
-  font-size: 11.5px;
+  font-family: var(--cp-font-mono);
+  font-size: 10px;
   font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
   line-height: 1.5;
   white-space: nowrap;
 }
@@ -151,6 +241,21 @@
 .cp-status-estimated { background: #e3f2f6; color: #0b6478; }
 .cp-status-won { background: var(--cp-good); color: #fff; }
 .cp-status-lost { background: #eceff2; color: var(--cp-faint); text-decoration: line-through; }
+
+/* avatars — initials on neutral gray; the one allowed circle */
+.cp-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 9999px;
+  background: #e8ebee;
+  color: var(--cp-muted);
+  font-size: 12.5px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
 
 /* schedule picker — selectable day/time chips, same square Jobber geometry */
 .cp-slot {
@@ -186,8 +291,10 @@
 .cp-timer-warn { background: var(--cp-warn-bg); color: var(--cp-warn); }
 .cp-timer-late { background: var(--cp-danger-bg); color: var(--cp-danger); }
 
-/* nav — light sidebar; active is a white card with a hairline ring (Jobber) */
+/* nav — dark chrome sidebar (Urso near-black; Jobber ships the same move).
+   Active = soft raise + a 2px orange left indicator. */
 .cp-nav-link {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -195,16 +302,57 @@
   border-radius: 5px;
   font-size: 13.5px;
   font-weight: 500;
-  color: var(--cp-muted);
+  color: var(--cp-chrome-muted);
   transition: background 150ms ease, color 150ms ease;
 }
-.cp-nav-link:hover { background: var(--cp-hover); color: var(--cp-ink); }
+.cp-nav-link:hover { background: var(--cp-chrome-raise); color: var(--cp-chrome-ink); }
 .cp-nav-link[data-active="true"] {
-  background: var(--cp-surface);
-  color: var(--cp-ink);
+  background: var(--cp-chrome-raise);
+  color: var(--cp-chrome-ink);
   font-weight: 600;
-  box-shadow: inset 0 0 0 1px var(--cp-line), 0 1px 2px rgba(20, 23, 28, 0.05);
 }
+.cp-nav-link[data-active="true"]::before {
+  content: "";
+  position: absolute;
+  left: -10px;
+  top: 7px;
+  bottom: 7px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--cp-brand);
+}
+
+/* mobile bottom tabs — white bar, orange active */
+.cp-tab {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  border-radius: 6px;
+  padding: 6px 2px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--cp-muted);
+}
+.cp-tab[data-active="true"] { color: var(--cp-brand-deep); }
+
+/* floating action button — mobile create (Jobber's +) */
+.cp-fab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 9999px;
+  border: 0;
+  background: var(--cp-brand-fill);
+  color: #fff;
+  box-shadow: 0 6px 16px rgba(20, 23, 28, 0.22);
+  cursor: pointer;
+}
+.cp-fab:hover { background: var(--cp-brand-deep); }
 
 /* call + voicemail events in the conversation stream (OpenPhone-style) */
 .cp-call-card {
@@ -236,6 +384,7 @@
 /* misc */
 .cp-divider { border-top: 1px solid var(--cp-line); }
 .cp-kbd {
+  font-family: var(--cp-font-mono);
   font-size: 11px;
   padding: 1px 6px;
   border: 1px solid var(--cp-line-strong);
@@ -245,6 +394,37 @@
   background: var(--cp-surface);
 }
 .cp-scroll { scrollbar-width: thin; scrollbar-color: var(--cp-line-strong) transparent; }
+
+/* bottom sheet (mobile) / side panel (desktop) shell for detail views */
+.cp-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(13, 16, 19, 0.4);
+}
+.cp-sheet {
+  position: fixed;
+  z-index: 51;
+  background: var(--cp-surface);
+  border: 1px solid var(--cp-line);
+  inset-inline: 0;
+  bottom: 0;
+  max-height: 88dvh;
+  border-radius: 12px 12px 0 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+@media (min-width: 768px) {
+  .cp-sheet {
+    inset-inline: auto 0;
+    top: 0;
+    bottom: 0;
+    width: min(440px, 92vw);
+    max-height: none;
+    border-radius: 0;
+    border-width: 0 0 0 1px;
+  }
+}
 
 /* ── Dispatch calendar (Phase 2 scheduler) ───────────────────────────────────
    Two calendar objects, never conflated: a JOB is a solid crew-color block
@@ -271,9 +451,11 @@
   border-color: var(--cp-brand-fill);
 }
 .cp-cal-col-head {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
+  font-family: var(--cp-font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
   color: var(--cp-muted);
   font-feature-settings: "tnum" 1;
 }
@@ -303,7 +485,8 @@
   background: var(--cp-surface);
 }
 
-/* an estimate visit: hairline slate outline, transparent fill, its own lane */
+/* an estimate visit: hairline slate outline, transparent fill, its own lane.
+   Clickable — opens the visit sheet, same as a job block opens the job sheet. */
 .cp-visit-chip {
   display: inline-flex;
   align-items: center;
@@ -316,7 +499,10 @@
   font-size: 12px;
   line-height: 1.25;
   font-feature-settings: "tnum" 1;
+  cursor: pointer;
+  transition: background 150ms ease, color 150ms ease;
 }
+.cp-visit-chip:hover { background: var(--cp-hover); color: var(--cp-ink); }
 
 /* a non-job calendar block (time off / holiday): muted hatched background band,
    reads as "unavailable ground" below jobs and visits. */
@@ -370,3 +556,5 @@
   .cp-tray-card { cursor: grab; }
   .cp-tray-card:active { cursor: grabbing; }
 }
+
+} /* end @layer components */

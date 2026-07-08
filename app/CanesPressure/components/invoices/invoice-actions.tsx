@@ -2,25 +2,33 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { Banknote, CalendarCheck2, CreditCard, Send, Trash2 } from "lucide-react";
+import { Banknote, CalendarCheck2, CreditCard, Pencil, Send, Trash2 } from "lucide-react";
 import {
   recordCashPayment,
   sendInvoice,
+  updateInvoice,
   voidInvoice,
   type ActionResult,
 } from "@/app/CanesPressure/actions";
-import { fmtMoney, type InvoiceStatus } from "@/lib/canes/types";
+import { fmtEt, fmtMoney, type InvoiceStatus } from "@/lib/canes/types";
 import {
   ChannelPicker,
-  channelAvailability,
   choiceToChannels,
+  isValidEmail,
+  isValidUsPhone,
+  overrideSendOpts,
+  resolveSendTarget,
+  EMPTY_OVERRIDE,
   type ChannelChoice,
+  type SendOverride,
 } from "../estimates/channel-picker";
 
 // Owner-side action rail for the invoice detail page (a Server Component). Send/
-// Resend for card, Record cash with a Verify step, and Void — each its own
-// button with an inline Notice, the multi-button useAction pattern from
-// estimate-actions.tsx. A paid invoice drops the mutations and shows the outcome.
+// Resend for card, a fix-contact expander (updateInvoice allows contact fields
+// even post-send, so a bounced bill stays deliverable), Record cash with a
+// Verify step, and Void — each its own button with an inline Notice, the
+// multi-button useAction pattern from estimate-actions.tsx. A paid invoice
+// drops the mutations and shows the outcome.
 
 type Feedback = { ok: boolean; text: string } | null;
 
@@ -60,6 +68,7 @@ export function InvoiceActions({
   optedOut,
   balanceCents,
   hasSquareUrl,
+  sentAt,
 }: {
   invoiceId: string;
   status: InvoiceStatus;
@@ -68,19 +77,27 @@ export function InvoiceActions({
   optedOut: boolean;
   balanceCents: number;
   hasSquareUrl: boolean;
+  sentAt: string | null;
 }) {
   const { isPending, feedback, run } = useAction();
   const [channelChoice, setChannelChoice] = useState<ChannelChoice>("both");
   const [voidOpen, setVoidOpen] = useState(false);
   const [cashOpen, setCashOpen] = useState(false);
   const [cashAmount, setCashAmount] = useState((balanceCents / 100).toFixed(2));
+  const [override, setOverride] = useState<SendOverride>(EMPTY_OVERRIDE);
+  const [fixOpen, setFixOpen] = useState(false);
+  const [fixPhone, setFixPhone] = useState("");
+  const [fixEmail, setFixEmail] = useState("");
 
-  const avail = channelAvailability({ phone, email, optedOut });
+  const target = resolveSendTarget({ phone, email, optedOut, override });
   const chosen = choiceToChannels(channelChoice);
   const resolvedChannels = {
-    text: chosen.text && avail.hasPhone && !avail.textBlocked,
-    email: chosen.email && avail.hasEmail,
+    text: chosen.text && target.hasPhone && !target.textBlocked,
+    email: chosen.email && target.hasEmail,
   };
+
+  const fixPhoneInvalid = Boolean(fixPhone.trim()) && !isValidUsPhone(fixPhone);
+  const fixEmailInvalid = Boolean(fixEmail.trim()) && !isValidEmail(fixEmail);
 
   if (status === "paid") {
     return (
@@ -117,21 +134,110 @@ export function InvoiceActions({
           choice={channelChoice}
           onChange={setChannelChoice}
           disabled={isPending}
+          override={override}
+          onOverrideChange={setOverride}
         />
         <button
           type="button"
           className="cp-btn cp-btn-primary w-full"
-          disabled={isPending || !avail.canSend}
-          onClick={() => run(() => sendInvoice(invoiceId, { channels: resolvedChannels }))}
+          disabled={isPending || !target.canSend}
+          onClick={() =>
+            run(() =>
+              sendInvoice(invoiceId, { channels: resolvedChannels, ...overrideSendOpts(override) }),
+            )
+          }
         >
           <CreditCard size={16} strokeWidth={2} />
-          {isPending ? "Sending..." : isDraft ? "Send invoice (pay by card)" : "Resend invoice"}
+          {isPending ? "Sending..." : isDraft ? "Send invoice (pay by card)" : "Resend"}
         </button>
+        {!isDraft && sentAt && (
+          <p className="text-[12px] tabular-nums text-[var(--cp-faint)]">Last sent {fmtEt(sentAt)}</p>
+        )}
         {!hasSquareUrl && (
           <p className="text-[12px] leading-snug text-[var(--cp-faint)]">
             <Send size={12} strokeWidth={2} className="mr-1 inline" />
             Sends your branded invoice link. Online card payment activates once Square is connected.
           </p>
+        )}
+      </div>
+
+      {/* Fix contact details — works even after send so a bad phone/email on
+          the bill is always repairable; reminders then follow the fixed row. */}
+      <div className="cp-divider pt-3">
+        {!fixOpen ? (
+          <button
+            type="button"
+            className="cp-btn cp-btn-sm w-full"
+            disabled={isPending}
+            onClick={() => {
+              setFixPhone(phone);
+              setFixEmail(email);
+              setFixOpen(true);
+            }}
+          >
+            <Pencil size={15} strokeWidth={2} /> Fix contact details
+          </button>
+        ) : (
+          <div className="space-y-2.5">
+            <p className="text-[13px] font-medium">Update where this invoice reaches the customer.</p>
+            <div>
+              <label className="cp-label" htmlFor="cp-inv-fix-phone">Phone</label>
+              <input
+                id="cp-inv-fix-phone"
+                type="tel"
+                className="cp-input tabular-nums"
+                value={fixPhone}
+                onChange={(e) => setFixPhone(e.target.value)}
+                disabled={isPending}
+                placeholder="(561) 555-0123"
+              />
+              {fixPhoneInvalid && (
+                <p className="mt-1 text-[12px] text-[var(--cp-warn)]">Enter a 10 digit US number.</p>
+              )}
+            </div>
+            <div>
+              <label className="cp-label" htmlFor="cp-inv-fix-email">Email</label>
+              <input
+                id="cp-inv-fix-email"
+                type="email"
+                className="cp-input"
+                value={fixEmail}
+                onChange={(e) => setFixEmail(e.target.value)}
+                disabled={isPending}
+                placeholder="name@email.com"
+              />
+              {fixEmailInvalid && (
+                <p className="mt-1 text-[12px] text-[var(--cp-warn)]">That email doesn&apos;t look right.</p>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                className="cp-btn cp-btn-primary cp-btn-sm flex-1"
+                disabled={isPending || fixPhoneInvalid || fixEmailInvalid}
+                onClick={() =>
+                  run(
+                    () =>
+                      updateInvoice(invoiceId, {
+                        customerPhone: fixPhone.trim(),
+                        customerEmail: fixEmail.trim(),
+                      }),
+                    () => setFixOpen(false),
+                  )
+                }
+              >
+                {isPending ? "Saving..." : "Save contact"}
+              </button>
+              <button
+                type="button"
+                className="cp-btn cp-btn-sm"
+                disabled={isPending}
+                onClick={() => setFixOpen(false)}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
         )}
       </div>
 

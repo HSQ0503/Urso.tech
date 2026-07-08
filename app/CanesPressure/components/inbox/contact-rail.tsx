@@ -1,16 +1,28 @@
 import Link from "next/link";
-import { CalendarClock, MapPin, Phone, SquareArrowOutUpRight } from "lucide-react";
+import { CalendarClock, MapPin, Phone, SquareArrowOutUpRight, UserRound } from "lucide-react";
 import {
   fmtEt,
+  fmtMoney,
   fmtPhone,
   SOURCE_LABEL,
   STATUS_CLASS,
   STATUS_LABEL,
+  type Contact,
   type Lead,
+  type ThreadKind,
 } from "@/lib/canes/types";
 
 // Contact details rail — the inbox's third pane on wide screens,
-// OpenPhone-style: identity block, quick actions, then lead properties.
+// OpenPhone-style: identity block, quick actions, then lead properties for
+// lead threads or the job-history summary for customer threads.
+
+// Slim history the page derives from getCustomer() for customer threads.
+export type CustomerHistory = {
+  jobsCount: number;
+  lifetimeCents: number;
+  openBalanceCents: number;
+  lastJobAt: string | null;
+};
 
 // Plain initials avatar (OpenPhone-style), never an icon in a brand circle.
 function initials(name: string | null): string {
@@ -22,7 +34,7 @@ function initials(name: string | null): string {
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex items-baseline justify-between gap-3 py-1.5">
-      <span className="shrink-0 text-[12.5px] text-[var(--cp-faint)]">{label}</span>
+      <span className="cp-mono shrink-0">{label}</span>
       <span className="min-w-0 text-right text-[13px] font-medium">{children}</span>
     </div>
   );
@@ -30,18 +42,22 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 
 export function ContactRail({
   peerPhone,
+  kind,
   lead,
-  isVendor = false,
+  contact,
+  history,
 }: {
   peerPhone: string;
+  kind: ThreadKind;
   lead: Lead | null;
-  isVendor?: boolean;
+  contact: Contact | null;
+  history: CustomerHistory | null;
 }) {
-  if (isVendor) {
+  if (kind === "vendor") {
     return (
       <div className="cp-scroll flex h-full min-h-0 flex-col overflow-y-auto px-4 py-5">
         <div className="flex flex-col items-center text-center">
-          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-[#e8ebee] text-[15px] font-semibold text-[var(--cp-muted)]">
+          <span className="cp-avatar" style={{ width: 48, height: 48, fontSize: 15 }}>
             LV
           </span>
           <p className="mt-2.5 text-[15px] font-semibold leading-tight">Lead vendor</p>
@@ -64,27 +80,38 @@ export function ContactRail({
       </div>
     );
   }
+
+  const isCustomer = kind === "customer";
+  const name = contact?.name ?? lead?.name ?? null;
+
   return (
     <div className="cp-scroll flex h-full min-h-0 flex-col overflow-y-auto px-4 py-5">
       {/* Identity */}
       <div className="flex flex-col items-center text-center">
-        <span className="flex h-12 w-12 items-center justify-center rounded-full bg-[#e8ebee] text-[15px] font-semibold text-[var(--cp-muted)]">
-          {initials(lead?.name ?? null)}
+        <span className="cp-avatar" style={{ width: 48, height: 48, fontSize: 15 }}>
+          {initials(name)}
         </span>
         <p className="mt-2.5 text-[15px] font-semibold leading-tight">
-          {lead?.name ?? fmtPhone(peerPhone)}
+          {name ?? fmtPhone(peerPhone)}
         </p>
         <p className="mt-0.5 text-[12.5px] tabular-nums text-[var(--cp-muted)]">
           {fmtPhone(peerPhone)}
         </p>
-        {lead && (
-          <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5">
-            <span className={`cp-chip ${lead.type === "hot" ? "cp-badge-hot" : "cp-badge-cold"}`}>
-              {lead.type === "hot" ? "Hot" : "Cold"}
-            </span>
-            <span className={`cp-chip ${STATUS_CLASS[lead.status]}`}>{STATUS_LABEL[lead.status]}</span>
-          </div>
-        )}
+        <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5">
+          {isCustomer && (
+            <span className="cp-chip bg-[var(--cp-bg)] text-[var(--cp-muted)]">Customer</span>
+          )}
+          {!isCustomer && lead && (
+            <>
+              <span className={`cp-chip ${lead.type === "hot" ? "cp-badge-hot" : "cp-badge-cold"}`}>
+                {lead.type === "hot" ? "Hot" : "Cold"}
+              </span>
+              <span className={`cp-chip ${STATUS_CLASS[lead.status]}`}>
+                {STATUS_LABEL[lead.status]}
+              </span>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Quick actions */}
@@ -92,7 +119,11 @@ export function ContactRail({
         <a href={`tel:${peerPhone}`} className="cp-btn cp-btn-sm">
           <Phone size={14} strokeWidth={2} /> Call
         </a>
-        {lead ? (
+        {isCustomer && contact ? (
+          <Link href={`/CanesPressure/customers/${contact.id}`} className="cp-btn cp-btn-sm">
+            <UserRound size={14} strokeWidth={2} /> View profile
+          </Link>
+        ) : lead ? (
           <Link href={`/CanesPressure/leads/${lead.id}`} className="cp-btn cp-btn-sm">
             <SquareArrowOutUpRight size={14} strokeWidth={2} /> Open lead
           </Link>
@@ -101,8 +132,58 @@ export function ContactRail({
         )}
       </div>
 
-      {/* Properties */}
-      {lead && (
+      {/* Customer job history */}
+      {isCustomer && (
+        <>
+          <div className="cp-divider mt-4 pt-3">
+            <p className="cp-mono">Job history</p>
+            {history ? (
+              <>
+                <p className="mt-1.5 text-[13.5px] font-semibold tabular-nums">
+                  {history.jobsCount} {history.jobsCount === 1 ? "job" : "jobs"} ·{" "}
+                  {fmtMoney(history.lifetimeCents)} lifetime
+                </p>
+                {history.lastJobAt && (
+                  <Row label="Last job">
+                    {fmtEt(history.lastJobAt, { month: "short", day: "numeric", year: "numeric" })}
+                  </Row>
+                )}
+                {history.openBalanceCents > 0 && (
+                  <Row label="Open balance">
+                    <span className="tabular-nums text-[var(--cp-warn)]">
+                      {fmtMoney(history.openBalanceCents)}
+                    </span>
+                  </Row>
+                )}
+              </>
+            ) : (
+              <p className="mt-1.5 text-[13px] text-[var(--cp-muted)]">No jobs yet.</p>
+            )}
+          </div>
+          {(contact?.email || contact?.notes) && (
+            <div className="cp-divider mt-2 pt-3">
+              {contact.email && (
+                <Row label="Email">
+                  <a href={`mailto:${contact.email}`} className="break-all hover:underline">
+                    {contact.email}
+                  </a>
+                </Row>
+              )}
+              {contact.notes && (
+                <>
+                  <p className="cp-mono mt-1.5">Notes</p>
+                  <p className="mt-1 whitespace-pre-wrap text-[13px] leading-snug text-[var(--cp-muted)]">
+                    {contact.notes}
+                  </p>
+                </>
+              )}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Lead properties */}
+      {!isCustomer && lead && (
         <>
           <div className="cp-divider mt-4 pt-3">
             <Row label="Service">{lead.service ?? "—"}</Row>
@@ -119,7 +200,7 @@ export function ContactRail({
           </div>
           {lead.address && (
             <div className="cp-divider mt-2 pt-3">
-              <p className="text-[12.5px] text-[var(--cp-faint)]">Address</p>
+              <p className="cp-mono">Address</p>
               <p className="mt-1 text-[13px] font-medium leading-snug">{lead.address}</p>
               <a
                 href={`https://maps.google.com/?q=${encodeURIComponent(lead.address)}`}
@@ -133,7 +214,7 @@ export function ContactRail({
           )}
           {lead.notes && (
             <div className="cp-divider mt-2 pt-3">
-              <p className="text-[12.5px] text-[var(--cp-faint)]">Notes</p>
+              <p className="cp-mono">Notes</p>
               <p className="mt-1 whitespace-pre-wrap text-[13px] leading-snug text-[var(--cp-muted)]">
                 {lead.notes}
               </p>

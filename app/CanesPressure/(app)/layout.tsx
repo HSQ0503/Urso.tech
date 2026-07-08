@@ -4,31 +4,36 @@ import { hasAccess } from "@/lib/canes/gate";
 import { isDemo } from "@/lib/canes/data";
 import { CanesNav } from "../components/nav";
 
-// The gated application shell: sidebar on desktop, bottom tabs on mobile.
+// The gated application shell: dark Urso chrome sidebar on desktop, five
+// bottom tabs + a More sheet on mobile.
 
 export default async function CanesAppLayout({ children }: { children: React.ReactNode }) {
   if (!(await hasAccess())) redirect("/CanesPressure/login");
 
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-[1440px]">
-      {/* Sidebar (desktop) */}
-      <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col gap-1 border-r border-[var(--cp-line)] bg-[var(--cp-sidebar)] px-3 py-5 md:flex">
+      {/* Sidebar (desktop) — near-black chrome, the Urso brand field */}
+      <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col gap-1 bg-[var(--cp-chrome)] px-3 py-5 text-[var(--cp-chrome-ink)] md:flex">
         {/* Wordmark, not an icon-in-a-box — real trade software leads with the name */}
         <Link href="/CanesPressure" className="mb-6 block px-2.5 pt-1">
-          <span className="cp-display block text-[17px] leading-tight">Canes</span>
-          <span className="block text-[10.5px] font-semibold uppercase tracking-[0.14em] text-[var(--cp-muted)]">
+          <span className="cp-display block text-[19px] leading-tight">
+            Canes<span className="text-[var(--cp-brand)]">.</span>
+          </span>
+          <span className="cp-mono mt-1 block" style={{ color: "var(--cp-chrome-faint)" }}>
             Pressure Washing
           </span>
         </Link>
         <CanesNav />
         <div className="mt-auto px-2">
           {isDemo() && (
-            <div className="rounded-md border border-[var(--cp-line)] bg-[var(--cp-bg)] px-3 py-2.5 text-[12px] leading-snug text-[var(--cp-muted)]">
-              <span className="font-semibold text-[var(--cp-warn)]">Demo data.</span> Connect the Canes
-              Supabase secret key to go live.
+            <div className="rounded-md border border-[var(--cp-chrome-line)] bg-[var(--cp-chrome-raise)] px-3 py-2.5 text-[12px] leading-snug text-[var(--cp-chrome-muted)]">
+              <span className="font-semibold text-[var(--cp-brand)]">Demo data.</span> Connect the
+              Canes Supabase secret key to go live.
             </div>
           )}
-          <p className="mt-3 px-1 text-[11px] text-[var(--cp-faint)]">Powered by Urso</p>
+          <p className="cp-mono mt-3 px-1" style={{ color: "var(--cp-chrome-faint)" }}>
+            Powered by Urso
+          </p>
         </div>
       </aside>
 

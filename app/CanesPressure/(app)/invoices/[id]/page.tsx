@@ -61,6 +61,7 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
             optedOut={optedOut}
             balanceCents={balance > 0 ? balance : invoice.total_cents}
             hasSquareUrl={Boolean(invoice.hosted_payment_url)}
+            sentAt={invoice.sent_at}
           />
           {isPublic && (
             <div className="cp-card mt-4 p-3">
@@ -128,7 +129,7 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
               )}
               <div className="flex items-center justify-between">
                 <span className="text-[14px] font-semibold">Total</span>
-                <span className="cp-display text-[18px] tabular-nums">{fmtMoney(invoice.total_cents)}</span>
+                <span className="text-[18px] font-semibold tabular-nums">{fmtMoney(invoice.total_cents)}</span>
               </div>
               {invoice.amount_paid_cents > 0 && (
                 <>

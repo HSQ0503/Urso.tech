@@ -1,13 +1,18 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import {
   CalendarClock,
   CircleSlash,
+  FileText,
   MapPin,
+  MessageSquare,
+  Pencil,
   Phone,
+  Receipt,
   Undo2,
-  X,
+  UserRound,
 } from "lucide-react";
 import {
   assignJob,
@@ -15,6 +20,7 @@ import {
   scheduleJob,
   setJobStatus,
   unscheduleJob,
+  updateJobDetails,
   type ActionResult,
 } from "@/app/CanesPressure/actions";
 import {
@@ -30,10 +36,12 @@ import {
 } from "@/lib/canes/types";
 import { isCompleteWhen, SchedulePicker } from "../leads/schedule-picker";
 import { JobBilling } from "./job-billing";
+import { SheetShell } from "./sheet-shell";
 
-// Job detail sheet (plan §4.3) — the single control surface for a job, reused
-// as the entire mobile scheduling UX. Reuses the contact-rail Row pattern, the
-// SchedulePicker, and the disposition useAction/Notice inline-notice pattern.
+// Job detail sheet — the single control surface for a job, rendered in the
+// shared .cp-sheet shell (bottom sheet on mobile, right panel on desktop).
+// Blocks: header (who + status + $), contact, job facts, links into the
+// paper trail, then the scheduling controls and the billing flow.
 
 type Feedback = { ok: boolean; text: string } | null;
 
@@ -60,16 +68,10 @@ function Notice({ value }: { value: Feedback }) {
   );
 }
 
-function initials(name: string | null): string {
-  if (!name) return "#";
-  const parts = name.trim().split(/\s+/);
-  return (((parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "")).toUpperCase() || "#").slice(0, 2);
-}
-
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex items-baseline justify-between gap-3 py-1.5">
-      <span className="shrink-0 text-[12.5px] text-[var(--cp-faint)]">{label}</span>
+      <span className="cp-mono shrink-0">{label}</span>
       <span className="min-w-0 text-right text-[13px] font-medium">{children}</span>
     </div>
   );
@@ -112,6 +114,10 @@ export function JobDetailSheet({
   const [pickCrew, setPickCrew] = useState<string>(job.crew_id ?? "");
   const [cancelOpen, setCancelOpen] = useState(false);
   const [reason, setReason] = useState("");
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [editNotes, setEditNotes] = useState("");
+  const [editGateCode, setEditGateCode] = useState("");
+  const [editSiteNotes, setEditSiteNotes] = useState("");
 
   const placed = job.scheduled_at !== null;
   const terminal =
@@ -123,291 +129,360 @@ export function JobDetailSheet({
   const mapsHref = job.job_address
     ? `https://maps.google.com/?q=${encodeURIComponent(job.job_address)}`
     : null;
+  const textHref = job.customer_phone
+    ? `/CanesPressure/inbox?t=${encodeURIComponent(job.customer_phone)}`
+    : null;
+  const hasLinks = Boolean(job.estimate_id || invoice || job.contact_id);
 
   return (
-    <div className="cp-card flex max-h-[90vh] w-full flex-col overflow-hidden sm:max-w-md">
-      {/* Header */}
-      <div className="flex items-center justify-between border-b border-[var(--cp-line)] px-4 py-3">
-        <p className="text-[13px] font-semibold">Job details</p>
-        <button
-          type="button"
-          className="flex h-8 w-8 items-center justify-center rounded-md text-[var(--cp-muted)] hover:bg-[var(--cp-hover)]"
-          onClick={onClose}
-          aria-label="Close"
-        >
-          <X size={16} strokeWidth={2} />
-        </button>
-      </div>
-
-      <div className="cp-scroll min-h-0 flex-1 overflow-y-auto px-4 py-4">
-        {/* Identity */}
-        <div className="flex flex-col items-center text-center">
-          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-[#e8ebee] text-[15px] font-semibold text-[var(--cp-muted)]">
-            {initials(job.customer_name)}
-          </span>
-          <p className="mt-2.5 text-[15px] font-semibold leading-tight">
+    <SheetShell title="Job" onClose={onClose}>
+      {/* Header: who + status + money */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[16px] font-semibold leading-tight">
             {job.customer_name ?? "Unnamed job"}
           </p>
           {job.job_name && (
             <p className="mt-0.5 text-[12.5px] text-[var(--cp-muted)]">{job.job_name}</p>
           )}
-          <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5">
-            <span className="cp-chip bg-[var(--cp-bg)] text-[var(--cp-muted)]">
-              {JOB_STATUS_LABEL[job.status]}
-            </span>
-            {job.crew && (
-              <span className="cp-chip bg-[var(--cp-bg)] text-[var(--cp-muted)]">
-                <span
-                  className="cp-crew-dot"
-                  style={{ ["--cp-crew" as string]: job.crew.color }}
-                />
-                {job.crew.name}
-              </span>
-            )}
-          </div>
         </div>
+        <span className="shrink-0 text-[15px] font-semibold tabular-nums">
+          {fmtMoney(job.total_cents)}
+        </span>
+      </div>
+      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+        <span className="cp-chip bg-[var(--cp-bg)] text-[var(--cp-muted)]">
+          {JOB_STATUS_LABEL[job.status]}
+        </span>
+        {job.crew && (
+          <span className="cp-chip bg-[var(--cp-bg)] text-[var(--cp-muted)]">
+            <span
+              className="cp-crew-dot"
+              style={{ ["--cp-crew" as string]: job.crew.color }}
+            />
+            {job.crew.name}
+          </span>
+        )}
+      </div>
 
-        {/* Quick actions */}
-        <div className="mt-4 grid grid-cols-2 gap-2">
+      {/* Quick actions */}
+      <div className="mt-4 grid grid-cols-3 gap-2">
+        {job.customer_phone ? (
+          <a href={`tel:${job.customer_phone}`} className="cp-btn cp-btn-sm">
+            <Phone size={14} strokeWidth={2} /> Call
+          </a>
+        ) : (
+          <span className="cp-btn cp-btn-sm pointer-events-none opacity-50">Call</span>
+        )}
+        {textHref ? (
+          <Link href={textHref} className="cp-btn cp-btn-sm">
+            <MessageSquare size={14} strokeWidth={2} /> Text
+          </Link>
+        ) : (
+          <span className="cp-btn cp-btn-sm pointer-events-none opacity-50">Text</span>
+        )}
+        {mapsHref ? (
+          <a href={mapsHref} target="_blank" rel="noreferrer" className="cp-btn cp-btn-sm">
+            <MapPin size={14} strokeWidth={2} /> Directions
+          </a>
+        ) : (
+          <span className="cp-btn cp-btn-sm pointer-events-none opacity-50">Directions</span>
+        )}
+      </div>
+
+      {/* Contact */}
+      <div className="cp-divider mt-4 pt-3">
+        <p className="cp-group-label">Contact</p>
+        <Row label="Phone">
           {job.customer_phone ? (
-            <a href={`tel:${job.customer_phone}`} className="cp-btn cp-btn-sm">
-              <Phone size={14} strokeWidth={2} /> Call
+            <a href={`tel:${job.customer_phone}`} className="tabular-nums hover:underline">
+              {fmtPhone(job.customer_phone)}
             </a>
           ) : (
-            <span className="cp-btn cp-btn-sm pointer-events-none opacity-50">No phone</span>
+            "—"
           )}
-          {mapsHref ? (
-            <a href={mapsHref} target="_blank" rel="noreferrer" className="cp-btn cp-btn-sm">
-              <MapPin size={14} strokeWidth={2} /> Maps
+        </Row>
+        <Row label="Email">
+          {job.customer_email ? (
+            <a href={`mailto:${job.customer_email}`} className="break-all hover:underline">
+              {job.customer_email}
             </a>
           ) : (
-            <span className="cp-btn cp-btn-sm pointer-events-none opacity-50">No address</span>
+            "—"
           )}
-        </div>
-
-        {/* Properties */}
-        <div className="cp-divider mt-4 pt-3">
-          <Row label="Customer">{job.customer_name ?? "—"}</Row>
-          <Row label="Phone">
-            {job.customer_phone ? (
-              <a href={`tel:${job.customer_phone}`} className="tabular-nums hover:underline">
-                {fmtPhone(job.customer_phone)}
-              </a>
-            ) : (
-              "—"
-            )}
-          </Row>
-          <Row label="Service">{job.job_name ?? "—"}</Row>
-          <Row label="Total">
-            <span className="tabular-nums">{fmtMoney(job.total_cents)}</span>
-          </Row>
-          <Row label="Crew">
-            {job.crew ? (
-              <span className="inline-flex items-center gap-1.5">
-                <span
-                  className="cp-crew-dot"
-                  style={{ ["--cp-crew" as string]: job.crew.color }}
-                />
-                {job.crew.name}
-              </span>
-            ) : (
-              <span className="text-[var(--cp-faint)]">Unassigned</span>
-            )}
-          </Row>
-          <Row label="Schedule">
-            <span className="tabular-nums">{scheduleSummary(job)}</span>
-          </Row>
-          {job.arrival_window_minutes > 0 && job.scheduled_at && (
-            <Row label="Arrival window">
-              <span className="tabular-nums">
-                {fmtEt(job.scheduled_at, { hour: "numeric", minute: "2-digit" })}–
-                {fmtEt(
-                  new Date(
-                    new Date(job.scheduled_at).getTime() + job.arrival_window_minutes * 60_000,
-                  ).toISOString(),
-                  { hour: "numeric", minute: "2-digit" },
-                )}
-              </span>
-            </Row>
-          )}
-        </div>
-
-        {/* Address */}
+        </Row>
         {job.job_address && (
-          <div className="cp-divider mt-2 pt-3">
-            <p className="text-[12.5px] text-[var(--cp-faint)]">Address</p>
-            <p className="mt-1 text-[13px] font-medium leading-snug">{job.job_address}</p>
+          <div className="py-1.5">
+            <p className="text-[13px] font-medium leading-snug">{job.job_address}</p>
             {mapsHref && (
               <a
                 href={mapsHref}
                 target="_blank"
                 rel="noreferrer"
-                className="mt-2 inline-flex min-h-9 items-center gap-1.5 text-[12.5px] font-semibold text-[var(--cp-brand-deep)] hover:underline"
+                className="mt-1 inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-[var(--cp-brand-deep)] hover:underline"
               >
                 <MapPin size={13} strokeWidth={2} /> Open in Maps
               </a>
             )}
           </div>
         )}
+      </div>
 
-        {/* Gate code */}
-        {job.gate_code && (
-          <div className="cp-divider mt-2 pt-3">
-            <p className="text-[12.5px] text-[var(--cp-faint)]">Gate code</p>
-            <p className="mt-1 text-[15px] font-semibold tabular-nums tracking-wide">
-              {job.gate_code}
-            </p>
-          </div>
+      {/* Job facts */}
+      <div className="cp-divider mt-3 pt-3">
+        <div className="flex items-center justify-between">
+          <p className="cp-group-label">Job</p>
+          {!detailsOpen && (
+            <button
+              type="button"
+              className="inline-flex items-center gap-1 text-[12px] font-semibold text-[var(--cp-muted)] hover:text-[var(--cp-ink)]"
+              disabled={isPending}
+              onClick={() => {
+                setEditNotes(job.notes ?? "");
+                setEditGateCode(job.gate_code ?? "");
+                setEditSiteNotes(job.site_notes ?? "");
+                setDetailsOpen(true);
+              }}
+            >
+              <Pencil size={12} strokeWidth={2} /> Edit
+            </button>
+          )}
+        </div>
+        <Row label="Duration">
+          <span className="tabular-nums">{durationLabel(job.duration_minutes)}</span>
+        </Row>
+        <Row label="Crew">
+          {job.crew ? (
+            <span className="inline-flex items-center gap-1.5">
+              <span
+                className="cp-crew-dot"
+                style={{ ["--cp-crew" as string]: job.crew.color }}
+              />
+              {job.crew.name}
+            </span>
+          ) : (
+            <span className="text-[var(--cp-faint)]">Unassigned</span>
+          )}
+        </Row>
+        <Row label="Schedule">
+          <span className="tabular-nums">{scheduleSummary(job)}</span>
+        </Row>
+        {job.arrival_window_minutes > 0 && job.scheduled_at && (
+          <Row label="Arrival window">
+            <span className="tabular-nums">
+              {fmtEt(job.scheduled_at, { hour: "numeric", minute: "2-digit" })}–
+              {fmtEt(
+                new Date(
+                  new Date(job.scheduled_at).getTime() + job.arrival_window_minutes * 60_000,
+                ).toISOString(),
+                { hour: "numeric", minute: "2-digit" },
+              )}
+            </span>
+          </Row>
+        )}
+        {!detailsOpen && job.gate_code && (
+          <Row label="Gate code">
+            <span className="tabular-nums tracking-wide">{job.gate_code}</span>
+          </Row>
         )}
 
-        {/* Site notes */}
-        {job.site_notes && (
-          <div className="cp-divider mt-2 pt-3">
-            <p className="text-[12.5px] text-[var(--cp-faint)]">Site notes</p>
+        {/* Line items */}
+        {job.items.length > 0 && (
+          <ul className="mt-1.5 space-y-1.5 border-t border-[var(--cp-line)] pt-2">
+            {job.items.map((item) => (
+              <li key={item.id} className="flex items-baseline justify-between gap-3">
+                <span className="min-w-0 text-[13px]">
+                  {item.quantity !== 1 && (
+                    <span className="text-[var(--cp-faint)] tabular-nums">
+                      {item.quantity}×{" "}
+                    </span>
+                  )}
+                  {item.name}
+                </span>
+                <span className="shrink-0 text-[13px] tabular-nums text-[var(--cp-muted)]">
+                  {fmtMoney(item.line_total_cents)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {!detailsOpen && job.site_notes && (
+          <div className="mt-2 border-t border-[var(--cp-line)] pt-2">
+            <p className="cp-mono">Site notes</p>
             <p className="mt-1 whitespace-pre-wrap text-[13px] leading-snug text-[var(--cp-muted)]">
               {job.site_notes}
             </p>
           </div>
         )}
 
-        {/* Line items */}
-        <div className="cp-divider mt-2 pt-3">
-          <p className="text-[12.5px] text-[var(--cp-faint)]">Line items</p>
-          {job.items.length === 0 ? (
-            <p className="mt-1 text-[13px] text-[var(--cp-muted)]">No line items on this job.</p>
-          ) : (
-            <ul className="mt-1.5 space-y-1.5">
-              {job.items.map((item) => (
-                <li key={item.id} className="flex items-baseline justify-between gap-3">
-                  <span className="min-w-0 text-[13px]">
-                    {item.quantity !== 1 && (
-                      <span className="text-[var(--cp-faint)] tabular-nums">
-                        {item.quantity}×{" "}
-                      </span>
-                    )}
-                    {item.name}
-                  </span>
-                  <span className="shrink-0 text-[13px] tabular-nums text-[var(--cp-muted)]">
-                    {fmtMoney(item.line_total_cents)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
+        {!detailsOpen && job.notes && (
+          <div className="mt-2 border-t border-[var(--cp-line)] pt-2">
+            <p className="cp-mono">Notes</p>
+            <p className="mt-1 whitespace-pre-wrap text-[13px] leading-snug text-[var(--cp-muted)]">
+              {job.notes}
+            </p>
+          </div>
+        )}
+
+        {/* Inline edit for the on-site facts; reads swap out while open so the
+            sheet never shows two copies of the same field. */}
+        {detailsOpen && (
+          <div className="mt-2 space-y-2.5 border-t border-[var(--cp-line)] pt-2">
+            <div>
+              <p className="cp-label">Gate code</p>
+              <input
+                className="cp-input"
+                value={editGateCode}
+                onChange={(e) => setEditGateCode(e.target.value)}
+                placeholder="e.g. #4482"
+              />
+            </div>
+            <div>
+              <p className="cp-label">Site notes</p>
+              <textarea
+                className="cp-textarea"
+                rows={2}
+                value={editSiteNotes}
+                onChange={(e) => setEditSiteNotes(e.target.value)}
+                placeholder="Access, pets, hazards..."
+              />
+            </div>
+            <div>
+              <p className="cp-label">Notes</p>
+              <textarea
+                className="cp-textarea"
+                rows={3}
+                value={editNotes}
+                onChange={(e) => setEditNotes(e.target.value)}
+                placeholder="Anything the crew should know..."
+              />
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                className="cp-btn cp-btn-primary cp-btn-sm flex-1"
+                disabled={isPending}
+                onClick={() =>
+                  run(
+                    () =>
+                      updateJobDetails(job.id, {
+                        notes: editNotes,
+                        gateCode: editGateCode,
+                        siteNotes: editSiteNotes,
+                      }),
+                    () => setDetailsOpen(false),
+                  )
+                }
+              >
+                {isPending ? "Saving..." : "Save"}
+              </button>
+              <button
+                type="button"
+                className="cp-btn cp-btn-sm"
+                disabled={isPending}
+                onClick={() => setDetailsOpen(false)}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Links into the paper trail */}
+      {hasLinks && (
+        <div className="cp-divider mt-3 pt-3">
+          <p className="cp-group-label">Links</p>
+          <div className="mt-2 flex flex-col gap-2">
+            {job.estimate_id && (
+              <Link
+                href={`/CanesPressure/estimates/${job.estimate_id}`}
+                className="cp-btn cp-btn-sm" style={{ justifyContent: "flex-start" }}
+              >
+                <FileText size={14} strokeWidth={2} /> Open estimate
+              </Link>
+            )}
+            {invoice && (
+              <Link
+                href={`/CanesPressure/invoices/${invoice.id}`}
+                className="cp-btn cp-btn-sm" style={{ justifyContent: "flex-start" }}
+              >
+                <Receipt size={14} strokeWidth={2} /> Open invoice {invoice.number}
+              </Link>
+            )}
+            {job.contact_id && (
+              <Link
+                href={`/CanesPressure/customers/${job.contact_id}`}
+                className="cp-btn cp-btn-sm" style={{ justifyContent: "flex-start" }}
+              >
+                <UserRound size={14} strokeWidth={2} /> View customer
+              </Link>
+            )}
+          </div>
         </div>
+      )}
 
-        {/* ── Controls ─────────────────────────────────────────────── */}
+      {/* ── Scheduling controls ─────────────────────────────────────── */}
 
-        {!terminal && (
-          <div className="cp-divider mt-4 pt-3 space-y-3">
-            {/* Reschedule / schedule */}
-            {!rescheduleOpen ? (
-              <div className="flex flex-wrap gap-2">
+      {!terminal && (
+        <div className="cp-divider mt-4 space-y-3 pt-3">
+          <p className="cp-group-label">Manage</p>
+
+          {/* Reschedule / schedule */}
+          {!rescheduleOpen ? (
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="cp-btn cp-btn-sm"
+                disabled={isPending}
+                onClick={() => {
+                  setDuration(job.duration_minutes || 120);
+                  setPickCrew(job.crew_id ?? "");
+                  setRescheduleOpen(true);
+                }}
+              >
+                <CalendarClock size={14} strokeWidth={2} />
+                {placed ? "Reschedule" : "Schedule"}
+              </button>
+              {placed && (
                 <button
                   type="button"
                   className="cp-btn cp-btn-sm"
                   disabled={isPending}
-                  onClick={() => {
-                    setDuration(job.duration_minutes || 120);
-                    setPickCrew(job.crew_id ?? "");
-                    setRescheduleOpen(true);
-                  }}
+                  onClick={() => run(() => unscheduleJob(job.id), onClose)}
                 >
-                  <CalendarClock size={14} strokeWidth={2} />
-                  {placed ? "Reschedule" : "Schedule"}
+                  <Undo2 size={14} strokeWidth={2} /> Unschedule
                 </button>
-                {placed && (
-                  <button
-                    type="button"
-                    className="cp-btn cp-btn-sm"
-                    disabled={isPending}
-                    onClick={() => run(() => unscheduleJob(job.id), onClose)}
-                  >
-                    <Undo2 size={14} strokeWidth={2} /> Unschedule
-                  </button>
-                )}
-              </div>
-            ) : (
-              <div className="space-y-2.5">
-                <SchedulePicker value={when} onChange={setWhen} />
+              )}
+            </div>
+          ) : (
+            <div className="space-y-2.5">
+              <SchedulePicker value={when} onChange={setWhen} />
 
-                <div>
-                  <p className="cp-label">Duration</p>
-                  <div className="grid grid-cols-3 gap-1.5">
-                    {DURATIONS.map((d) => (
-                      <button
-                        key={d}
-                        type="button"
-                        className="cp-slot"
-                        data-selected={d === duration}
-                        onClick={() => setDuration(d)}
-                      >
-                        {durationLabel(d)}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <p className="cp-label">Crew</p>
-                  <select
-                    className="cp-select"
-                    value={pickCrew}
-                    onChange={(e) => setPickCrew(e.target.value)}
-                  >
-                    <option value="">Unassigned</option>
-                    {crews.map((c) => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    className="cp-btn cp-btn-primary cp-btn-sm flex-1"
-                    disabled={!isCompleteWhen(when) || isPending}
-                    onClick={() => {
-                      const iso = etLocalToIso(when);
-                      const crewId = pickCrew || null;
-                      run(
-                        () =>
-                          placed
-                            ? moveJob(job.id, iso, duration, crewId)
-                            : scheduleJob(job.id, iso, duration, crewId),
-                        () => {
-                          setRescheduleOpen(false);
-                          setWhen("");
-                        },
-                      );
-                    }}
-                  >
-                    {isPending ? "Saving..." : placed ? "Move job" : "Schedule job"}
-                  </button>
-                  <button
-                    type="button"
-                    className="cp-btn cp-btn-sm"
-                    disabled={isPending}
-                    onClick={() => {
-                      setRescheduleOpen(false);
-                      setWhen("");
-                    }}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Assign crew (quick, without rescheduling) */}
-            {!rescheduleOpen && (
               <div>
-                <p className="cp-label">Assign crew</p>
+                <p className="cp-label">Duration</p>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {DURATIONS.map((d) => (
+                    <button
+                      key={d}
+                      type="button"
+                      className="cp-slot"
+                      data-selected={d === duration}
+                      onClick={() => setDuration(d)}
+                    >
+                      {durationLabel(d)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <p className="cp-label">Crew</p>
                 <select
                   className="cp-select"
-                  value={job.crew_id ?? ""}
-                  disabled={isPending}
-                  onChange={(e) => run(() => assignJob(job.id, e.target.value || null))}
+                  value={pickCrew}
+                  onChange={(e) => setPickCrew(e.target.value)}
                 >
                   <option value="">Unassigned</option>
                   {crews.map((c) => (
@@ -415,105 +490,158 @@ export function JobDetailSheet({
                   ))}
                 </select>
               </div>
-            )}
 
-            {/* Status */}
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  className="cp-btn cp-btn-primary cp-btn-sm flex-1"
+                  disabled={!isCompleteWhen(when) || isPending}
+                  onClick={() => {
+                    const iso = etLocalToIso(when);
+                    const crewId = pickCrew || null;
+                    run(
+                      () =>
+                        placed
+                          ? moveJob(job.id, iso, duration, crewId)
+                          : scheduleJob(job.id, iso, duration, crewId),
+                      () => {
+                        setRescheduleOpen(false);
+                        setWhen("");
+                      },
+                    );
+                  }}
+                >
+                  {isPending ? "Saving..." : placed ? "Move job" : "Schedule job"}
+                </button>
+                <button
+                  type="button"
+                  className="cp-btn cp-btn-sm"
+                  disabled={isPending}
+                  onClick={() => {
+                    setRescheduleOpen(false);
+                    setWhen("");
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Assign crew (quick, without rescheduling) */}
+          {!rescheduleOpen && (
             <div>
-              <p className="cp-label">Status</p>
+              <p className="cp-label">Assign crew</p>
               <select
                 className="cp-select"
-                value={job.status}
+                value={job.crew_id ?? ""}
                 disabled={isPending}
-                onChange={(e) => {
-                  const next = e.target.value as JobStatus;
-                  if (next === "canceled") {
-                    setCancelOpen(true);
-                    return;
-                  }
-                  run(() => setJobStatus(job.id, next));
-                }}
+                onChange={(e) => run(() => assignJob(job.id, e.target.value || null))}
               >
-                {(Object.keys(JOB_STATUS_LABEL) as JobStatus[]).map((s) => (
-                  <option key={s} value={s}>{JOB_STATUS_LABEL[s]}</option>
+                <option value="">Unassigned</option>
+                {crews.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
               </select>
             </div>
+          )}
 
-            {/* Cancel / no-show with a required reason */}
-            {!cancelOpen ? (
-              <button
-                type="button"
-                className="cp-btn cp-btn-sm cp-btn-danger w-full"
-                disabled={isPending}
-                onClick={() => setCancelOpen(true)}
-              >
-                <CircleSlash size={14} strokeWidth={2} /> Cancel / no-show
-              </button>
-            ) : (
-              <div className="space-y-2">
-                <input
-                  className="cp-input"
-                  placeholder="Reason (required) — e.g. no-show, rescheduled by customer"
-                  value={reason}
-                  onChange={(e) => setReason(e.target.value)}
-                />
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    className="cp-btn cp-btn-sm cp-btn-danger flex-1"
-                    disabled={isPending || !reason.trim()}
-                    onClick={() =>
-                      run(
-                        () => setJobStatus(job.id, "canceled", reason.trim()),
-                        () => {
-                          setCancelOpen(false);
-                          setReason("");
-                        },
-                      )
-                    }
-                  >
-                    {isPending ? "Canceling..." : "Confirm cancel"}
-                  </button>
-                  <button
-                    type="button"
-                    className="cp-btn cp-btn-sm"
-                    disabled={isPending}
-                    onClick={() => {
-                      setCancelOpen(false);
-                      setReason("");
-                    }}
-                  >
-                    Keep
-                  </button>
-                </div>
+          {/* Status */}
+          <div>
+            <p className="cp-label">Status</p>
+            <select
+              className="cp-select"
+              value={job.status}
+              disabled={isPending}
+              onChange={(e) => {
+                const next = e.target.value as JobStatus;
+                if (next === "canceled") {
+                  setCancelOpen(true);
+                  return;
+                }
+                run(() => setJobStatus(job.id, next));
+              }}
+            >
+              {(Object.keys(JOB_STATUS_LABEL) as JobStatus[]).map((s) => (
+                <option key={s} value={s}>{JOB_STATUS_LABEL[s]}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Cancel / no-show with a required reason */}
+          {!cancelOpen ? (
+            <button
+              type="button"
+              className="cp-btn cp-btn-sm cp-btn-danger w-full"
+              disabled={isPending}
+              onClick={() => setCancelOpen(true)}
+            >
+              <CircleSlash size={14} strokeWidth={2} /> Cancel / no-show
+            </button>
+          ) : (
+            <div className="space-y-2">
+              <input
+                className="cp-input"
+                placeholder="Reason (required), e.g. no-show or customer rescheduled"
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+              />
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  className="cp-btn cp-btn-sm cp-btn-danger flex-1"
+                  disabled={isPending || !reason.trim()}
+                  onClick={() =>
+                    run(
+                      () => setJobStatus(job.id, "canceled", reason.trim()),
+                      () => {
+                        setCancelOpen(false);
+                        setReason("");
+                      },
+                    )
+                  }
+                >
+                  {isPending ? "Canceling..." : "Confirm cancel"}
+                </button>
+                <button
+                  type="button"
+                  className="cp-btn cp-btn-sm"
+                  disabled={isPending}
+                  onClick={() => {
+                    setCancelOpen(false);
+                    setReason("");
+                  }}
+                >
+                  Keep
+                </button>
               </div>
-            )}
-          </div>
-        )}
-
-        {/* Billing — completion → invoice → card/cash payment (Phase 2.5). Shown
-            for every job that isn't canceled; drives the whole money flow. */}
-        {job.status !== "canceled" && <JobBilling job={job} invoice={invoice ?? null} />}
-
-        {job.status === "canceled" && (
-          <div className="cp-divider mt-4 pt-3">
-            <p className="text-[12.5px] leading-snug text-[var(--cp-muted)]">
-              This job is canceled and can no longer be rescheduled.
-              {job.canceled_reason && (
-                <>
-                  {" "}
-                  <span className="font-medium text-[var(--cp-ink)]">Reason:</span>{" "}
-                  {job.canceled_reason}
-                </>
-              )}
-            </p>
-          </div>
-        )}
-
-        <div className="mt-3">
-          <Notice value={feedback} />
+            </div>
+          )}
         </div>
+      )}
+
+      {/* Billing — completion → invoice → card/cash payment. Shown for every
+          job that isn't canceled; drives the whole money flow. */}
+      {job.status !== "canceled" && <JobBilling job={job} invoice={invoice ?? null} />}
+
+      {job.status === "canceled" && (
+        <div className="cp-divider mt-4 pt-3">
+          <p className="text-[12.5px] leading-snug text-[var(--cp-muted)]">
+            This job is canceled and can no longer be rescheduled.
+            {job.canceled_reason && (
+              <>
+                {" "}
+                <span className="font-medium text-[var(--cp-ink)]">Reason:</span>{" "}
+                {job.canceled_reason}
+              </>
+            )}
+          </p>
+        </div>
+      )}
+
+      <div className="mt-3">
+        <Notice value={feedback} />
       </div>
-    </div>
+    </SheetShell>
   );
 }

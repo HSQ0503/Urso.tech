@@ -131,14 +131,27 @@ function JobBlock({
   );
 }
 
-function VisitChip({ visit }: { visit: Lead }) {
+function VisitChip({
+  visit,
+  onOpen,
+}: {
+  visit: Lead;
+  onOpen: (visit: Lead) => void;
+}) {
+  // w-full + min-w-0 keep the chip inside its day column — without them the
+  // nowrap spans push the inline-flex button wider than the column.
   return (
-    <span className="cp-visit-chip" title={visit.name ?? "Estimate visit"}>
-      <span className="tabular-nums">
+    <button
+      type="button"
+      className="cp-visit-chip w-full min-w-0 overflow-hidden"
+      title={visit.name ?? "Estimate visit"}
+      onClick={() => onOpen(visit)}
+    >
+      <span className="shrink-0 tabular-nums">
         {fmtEt(visit.appointment_at, { hour: "numeric", minute: "2-digit" })}
       </span>
-      <span className="truncate">{visit.name ?? "Visit"}</span>
-    </span>
+      <span className="min-w-0 truncate">{visit.name ?? "Visit"}</span>
+    </button>
   );
 }
 
@@ -213,6 +226,7 @@ function DayColumn({
   conflicts,
   dropActiveYmd,
   onOpenJob,
+  onOpenVisit,
   onOpenDay,
   onDropJob,
   setDropActive,
@@ -224,6 +238,7 @@ function DayColumn({
   conflicts: Set<string>;
   dropActiveYmd: string | null;
   onOpenJob: (job: JobWithItems) => void;
+  onOpenVisit: (visit: Lead) => void;
   onOpenDay: (ymd: string) => void;
   onDropJob: (ymd: string) => (e: React.DragEvent) => void;
   setDropActive: (ymd: string | null) => void;
@@ -266,12 +281,10 @@ function DayColumn({
 
       {dayVisits.length > 0 && (
         <div className="flex flex-col gap-1">
-          <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--cp-faint)]">
-            Estimate visits
-          </span>
+          <span className="cp-mono">Estimate visits</span>
           <div className="flex flex-wrap gap-1">
             {dayVisits.map((v) => (
-              <VisitChip key={v.id} visit={v} />
+              <VisitChip key={v.id} visit={v} onOpen={onOpenVisit} />
             ))}
           </div>
         </div>
@@ -312,14 +325,20 @@ function MonthGrid({
   buckets,
   conflicts,
   crewFilter,
+  dropActiveYmd,
   onOpenDay,
+  onDropJob,
+  setDropActive,
 }: {
   anchor: Date;
   todayYmd: string;
   buckets: DayBuckets;
   conflicts: Set<string>;
   crewFilter: string | null;
+  dropActiveYmd: string | null;
   onOpenDay: (ymd: string) => void;
+  onDropJob: (ymd: string) => (e: React.DragEvent) => void;
+  setDropActive: (ymd: string | null) => void;
 }) {
   const days = useMemo(() => monthGridDays(anchor), [anchor]);
   const monthIdx = anchor.getUTCMonth();
@@ -328,10 +347,7 @@ function MonthGrid({
     <div className="flex flex-col gap-1.5">
       <div className="grid grid-cols-7 gap-1.5">
         {WEEKDAY_HEADS.map((w) => (
-          <span
-            key={w}
-            className="text-center text-[10.5px] font-semibold uppercase tracking-wide text-[var(--cp-faint)]"
-          >
+          <span key={w} className="cp-mono text-center">
             {w}
           </span>
         ))}
@@ -342,16 +358,30 @@ function MonthGrid({
           const dayJobs = (buckets.jobs.get(day.ymd) ?? []).slice().sort((a, b) =>
             (a.scheduled_at ?? "").localeCompare(b.scheduled_at ?? ""),
           );
+          const visitCount = (buckets.visits.get(day.ymd) ?? []).length;
+          const eventCount = (buckets.events.get(day.ymd) ?? []).length;
           const shown = dayJobs.slice(0, 3);
           const more = dayJobs.length - shown.length;
           return (
             <button
               key={day.ymd}
               type="button"
-              className="cp-cal-col min-h-[92px] gap-1 text-left"
+              className="cp-cal-col gap-1 text-left"
               data-today={day.ymd === todayYmd}
-              style={{ opacity: inMonth ? 1 : 0.5 }}
+              data-dropactive={dropActiveYmd === day.ymd}
+              // minHeight inline: .cp-cal-col's 160px is unlayered CSS and
+              // beats a min-h-* utility; month cells want a compact 92px.
+              style={{ opacity: inMonth ? 1 : 0.5, minHeight: 92 }}
               onClick={() => onOpenDay(day.ymd)}
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = "move";
+                if (dropActiveYmd !== day.ymd) setDropActive(day.ymd);
+              }}
+              onDragLeave={(e) => {
+                if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropActive(null);
+              }}
+              onDrop={onDropJob(day.ymd)}
             >
               <span className="cp-cal-col-head">{day.anchor.getUTCDate()}</span>
               {shown.map((job) => (
@@ -359,8 +389,12 @@ function MonthGrid({
                   key={job.id}
                   className="truncate rounded-[3px] border-l-2 px-1 py-0.5 text-[10.5px] leading-tight"
                   style={{
-                    borderColor: job.crew?.color ?? "#3e4a56",
-                    background: `color-mix(in srgb, ${job.crew?.color ?? "#3e4a56"} 8%, var(--cp-surface))`,
+                    // Crew colors come from the DB; the unassigned fallback
+                    // stays a token so no raw hex leaks into TSX.
+                    ["--cp-crew" as string]: job.crew?.color,
+                    borderColor: "var(--cp-crew, var(--cp-muted))",
+                    background:
+                      "color-mix(in srgb, var(--cp-crew, var(--cp-muted)) 8%, var(--cp-surface))",
                     outline: conflicts.has(job.id) ? "1.5px solid var(--cp-warn)" : undefined,
                   }}
                 >
@@ -369,6 +403,13 @@ function MonthGrid({
               ))}
               {more > 0 && (
                 <span className="text-[10px] font-semibold text-[var(--cp-faint)]">+{more} more</span>
+              )}
+              {(visitCount > 0 || eventCount > 0) && (
+                <span className="text-[10px] leading-tight text-[var(--cp-faint)]">
+                  {visitCount > 0 && `${visitCount} visit${visitCount === 1 ? "" : "s"}`}
+                  {visitCount > 0 && eventCount > 0 && " · "}
+                  {eventCount > 0 && `${eventCount} event${eventCount === 1 ? "" : "s"}`}
+                </span>
               )}
             </button>
           );
@@ -395,6 +436,7 @@ function DayView({
   crews,
   crewFilter,
   onOpenJob,
+  onOpenVisit,
   onOpenRunSheet,
   onDropJob,
   setDropActive,
@@ -407,6 +449,7 @@ function DayView({
   crews: Crew[];
   crewFilter: string | null;
   onOpenJob: (job: JobWithItems) => void;
+  onOpenVisit: (visit: Lead) => void;
   onOpenRunSheet: (jobs: JobWithItems[], crew: Crew | null, dayLabel: string) => void;
   onDropJob: (ymd: string) => (e: React.DragEvent) => void;
   setDropActive: (ymd: string | null) => void;
@@ -454,12 +497,10 @@ function DayView({
 
       {dayVisits.length > 0 && (
         <div className="flex flex-col gap-1 pt-1">
-          <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--cp-faint)]">
-            Estimate visits
-          </span>
+          <span className="cp-mono">Estimate visits</span>
           <div className="flex flex-wrap gap-1">
             {dayVisits.map((v) => (
-              <VisitChip key={v.id} visit={v} />
+              <VisitChip key={v.id} visit={v} onOpen={onOpenVisit} />
             ))}
           </div>
         </div>
@@ -524,6 +565,7 @@ export function CalendarBoard({
   crewFilter,
   dropActiveYmd,
   onOpenJob,
+  onOpenVisit,
   onOpenRunSheet,
   onDropJob,
   onOpenDay,
@@ -541,6 +583,7 @@ export function CalendarBoard({
   crewFilter: string | null;
   dropActiveYmd: string | null;
   onOpenJob: (job: JobWithItems) => void;
+  onOpenVisit: (visit: Lead) => void;
   onOpenRunSheet: (jobs: JobWithItems[], crew: Crew | null, dayLabel: string) => void;
   // Composes ET wall-time from the dropped day + the dragged job's time-of-day.
   onDropJob: (ymd: string, payload: ReturnType<typeof readDrag>) => void;
@@ -575,7 +618,10 @@ export function CalendarBoard({
         buckets={buckets}
         conflicts={conflicts}
         crewFilter={crewFilter}
+        dropActiveYmd={dropActiveYmd}
         onOpenDay={onOpenDay}
+        onDropJob={dropHandler}
+        setDropActive={setDropActive}
       />
     );
   }
@@ -592,6 +638,7 @@ export function CalendarBoard({
         crews={crews}
         crewFilter={crewFilter}
         onOpenJob={onOpenJob}
+        onOpenVisit={onOpenVisit}
         onOpenRunSheet={onOpenRunSheet}
         onDropJob={dropHandler}
         setDropActive={setDropActive}
@@ -611,6 +658,7 @@ export function CalendarBoard({
           conflicts={conflicts}
           dropActiveYmd={dropActiveYmd}
           onOpenJob={onOpenJob}
+          onOpenVisit={onOpenVisit}
           onOpenDay={onOpenDay}
           onDropJob={dropHandler}
           setDropActive={setDropActive}

@@ -76,7 +76,7 @@ export function UnscheduledTray({
   return (
     <aside className="cp-card flex h-full min-h-0 flex-col p-3">
       <header className="flex items-baseline justify-between gap-2 pb-2.5">
-        <h2 className="text-[14px] font-semibold">Unscheduled</h2>
+        <h2 className="text-[15px] font-semibold">Unscheduled</h2>
         <span className="text-[12px] font-semibold tabular-nums text-[var(--cp-muted)]">
           {jobs.length}
         </span>

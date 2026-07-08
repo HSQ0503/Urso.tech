@@ -346,6 +346,14 @@ async function handleLeadReply(
 
   await logLeadEvent(lead.id, "replied", body.length > 120 ? `${body.slice(0, 117)}...` : body);
   await db.from("leads").update({ last_activity_at: new Date().toISOString() }).eq("id", lead.id);
+  // A known customer asking a question must never sit unseen until the inbox is
+  // opened — alert Sebastian the same way an unknown number does. The YES paths
+  // above already ack + return, so confirmations never double-ping him.
+  const preview = body.length > 80 ? `${body.slice(0, 77)}...` : body;
+  await alertOwner(
+    `Reply from ${lead.name ?? fmtPhone(lead.phone)}: ${preview} ` +
+      `Open: ${APP_URL}/CanesPressure/leads/${lead.id}`,
+  );
   return { handled: "reply", leadIds: [lead.id], notes: [] };
 }
 

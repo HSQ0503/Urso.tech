@@ -1,4 +1,4 @@
-export const metadata = { title: "Privacy Policy" };
+export const metadata = { title: "Privacy policy" };
 
 // Public privacy policy for the Canes Pressure Washing SMS program — required
 // by A2P 10DLC campaign registration (carriers verify the mobile non-sharing
@@ -8,10 +8,10 @@ export const metadata = { title: "Privacy Policy" };
 export default function CanesPrivacyPage() {
   return (
     <div className="mx-auto max-w-[640px] px-5 py-12">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--cp-muted)]">
-        Canes Pressure Washing
-      </p>
-      <h1 className="cp-display mt-1.5 text-[26px]">Privacy Policy</h1>
+      <p className="cp-mono">Canes Pressure Washing</p>
+      <h1 className="cp-display mt-1.5 text-[26px]">
+        Privacy policy<span className="text-[var(--cp-brand)]">.</span>
+      </h1>
       <p className="mt-1 text-[13px] text-[var(--cp-faint)]">Last updated July 2026</p>
 
       <div className="mt-6 space-y-5 text-[14.5px] leading-relaxed text-[var(--cp-ink)]">
@@ -23,7 +23,7 @@ export default function CanesPrivacyPage() {
         </p>
 
         <section>
-          <h2 className="cp-display text-[17px]">Information we collect</h2>
+          <h2 className="cp-mono">Information we collect</h2>
           <p className="mt-1.5">
             When you contact us by phone, text message, or through our website, we collect the
             information you provide: your name, phone number, service address, and details about
@@ -32,7 +32,7 @@ export default function CanesPrivacyPage() {
         </section>
 
         <section>
-          <h2 className="cp-display text-[17px]">How we use it</h2>
+          <h2 className="cp-mono">How we use it</h2>
           <p className="mt-1.5">
             We use your information solely to respond to your inquiries, provide quotes, schedule
             and confirm appointments, deliver our services, and send related service
@@ -41,7 +41,7 @@ export default function CanesPrivacyPage() {
         </section>
 
         <section>
-          <h2 className="cp-display text-[17px]">Text messaging</h2>
+          <h2 className="cp-mono">Text messaging</h2>
           <p className="mt-1.5">
             <strong>
               No mobile information will be shared with third parties or affiliates for marketing
@@ -55,7 +55,7 @@ export default function CanesPrivacyPage() {
         </section>
 
         <section>
-          <h2 className="cp-display text-[17px]">Contact</h2>
+          <h2 className="cp-mono">Contact</h2>
           <p className="mt-1.5">
             Canes Pressure Washing · (561) 652-6652 ·{" "}
             <a

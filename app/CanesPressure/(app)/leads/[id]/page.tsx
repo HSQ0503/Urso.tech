@@ -200,7 +200,10 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
       </Link>
 
       <div className="mt-1 flex flex-wrap items-center gap-2">
-        <h1 className="cp-display text-[24px] leading-tight">{lead.name ?? fmtPhone(lead.phone)}</h1>
+        <h1 className="cp-display text-[24px] leading-tight">
+          {lead.name ?? fmtPhone(lead.phone)}
+          <span className="text-[var(--cp-brand)]">.</span>
+        </h1>
         {lead.type === "hot" ? (
           <span className="cp-chip cp-badge-hot">Hot</span>
         ) : (
@@ -254,12 +257,17 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
         {/* Rail first on mobile: Sebastian works this page from his phone and
             the next action has to sit above the fold. */}
         <div className="order-1 space-y-4 md:order-2">
-          <section className={`cp-card ${urgent ? "cp-urgent" : ""}`}>
-            <div className="space-y-3 p-4">
-              <CardTitle>Next step</CardTitle>
-              <NextStep lead={lead} />
-            </div>
-          </section>
+          {/* Urgency reads as a red group header above a plain card, not a
+              colored card edge. */}
+          <div>
+            {urgent && <p className="cp-group-label cp-group-danger mb-1.5">Call this now</p>}
+            <section className="cp-card">
+              <div className="space-y-3 p-4">
+                <CardTitle>Next step</CardTitle>
+                <NextStep lead={lead} />
+              </div>
+            </section>
+          </div>
 
           <section className="cp-card p-4">
             <div className="flex items-center justify-between gap-2">
@@ -415,7 +423,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
             </ol>
             {lead.raw_message && (
               <figure className="mt-4 rounded-md border border-[var(--cp-line)] bg-[var(--cp-bg)] px-3.5 py-3">
-                <figcaption className="text-[11px] font-semibold uppercase tracking-[0.04em] text-[var(--cp-faint)]">
+                <figcaption className="cp-mono">
                   Original vendor text
                   {lead.parse_confidence !== null &&
                     ` · parsed at ${Math.round(lead.parse_confidence * 100)}% confidence`}

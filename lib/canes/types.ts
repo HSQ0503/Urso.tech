@@ -21,6 +21,8 @@ export type Lead = {
   status: LeadStatus;
   name: string | null;
   phone: string | null;
+  email: string | null;
+  contact_id: string | null;
   address: string | null;
   service: string | null;
   source: LeadSource;
@@ -117,9 +119,18 @@ export type CanesSettings = {
   invoice_reminder_days: number[];
 };
 
+// vendor = the lead guy's raw feed (configured number ONLY — never a heuristic,
+// so a customer thread can't be mis-pinned); customer = the phone resolves to a
+// contact with job history (or a lead already linked to one); lead = everyone else.
+export type ThreadKind = "vendor" | "lead" | "customer";
+
 export type Thread = {
   peer_phone: string;
   lead: Lead | null;
+  contact: Contact | null; // joined by normalized phone
+  contact_id: string | null;
+  kind: ThreadKind;
+  display_name: string | null; // contact name wins over lead name
   last_message: Message | null; // null for call-only threads
   last_call: Call | null;
   last_activity_at: string;
@@ -251,12 +262,34 @@ export type CatalogKind = "service" | "product";
 
 export type Contact = {
   id: string; created_at: string; name: string | null; phone: string | null;
-  email: string | null; source: LeadSource; notes: string | null; last_activity_at: string;
+  email: string | null; source: LeadSource; notes: string | null;
+  archived: boolean; last_activity_at: string;
 };
 
 export type Address = {
   id: string; created_at: string; contact_id: string | null; line: string;
   site_notes: string | null; is_primary: boolean;
+};
+
+// One row of the customers list: the contact plus the aggregates the table shows.
+export type CustomerSummary = Contact & {
+  primary_address: string | null;
+  jobs_count: number;
+  last_job_at: string | null;
+  lifetime_cents: number; // completed payments, joined through the contact's invoices
+  open_balance_cents: number; // sum(total - paid) over sent/viewed invoices
+};
+
+// Everything the customer detail page renders in one object.
+export type CustomerDetail = {
+  contact: Contact;
+  addresses: Address[];
+  lead: Lead | null;
+  estimates: Estimate[];
+  jobs: Job[];
+  invoices: Invoice[];
+  payments_total_cents: number;
+  open_balance_cents: number;
 };
 
 export type CatalogItem = {
@@ -306,6 +339,8 @@ export type Job = {
   gate_code: string | null;
   site_notes: string | null;
   canceled_reason: string | null;
+  // ── customers additions (0006_customers.sql) ──
+  customer_email: string | null;
 };
 
 export type Crew = {

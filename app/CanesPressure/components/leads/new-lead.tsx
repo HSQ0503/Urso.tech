@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { Plus } from "lucide-react";
@@ -21,6 +22,7 @@ export function NewLead() {
   const [type, setType] = useState<LeadType>("cold");
   const [when, setWhen] = useState("");
   const [notice, setNotice] = useState("");
+  const [existingId, setExistingId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -28,6 +30,7 @@ export function NewLead() {
     const fd = new FormData(e.currentTarget);
     const name = String(fd.get("name") ?? "").trim();
     const phone = String(fd.get("phone") ?? "").trim();
+    setExistingId(null);
     if (!name) {
       setNotice("Name is required.");
       return;
@@ -36,6 +39,7 @@ export function NewLead() {
       setNotice("Enter a valid 10 digit phone number.");
       return;
     }
+    const email = String(fd.get("email") ?? "").trim();
     const service = String(fd.get("service") ?? "").trim();
     const address = String(fd.get("address") ?? "").trim();
     const source = String(fd.get("source")) as LeadSource;
@@ -46,6 +50,7 @@ export function NewLead() {
         phone,
         type,
         source,
+        email: email || undefined,
         service: service || undefined,
         address: address || undefined,
         appointmentIso: type === "hot" && isCompleteWhen(when) ? etLocalToIso(when) : undefined,
@@ -56,22 +61,13 @@ export function NewLead() {
         setWhen("");
         router.refresh();
       } else {
+        // Phone conflict: the number already has a lead — route to it instead
+        // of leaving the owner stuck on a duplicate error.
+        setExistingId(res.existingLeadId ?? null);
         setNotice(res.notice ?? "Could not add the lead.");
       }
     });
   }
-
-  const segment = (value: LeadType, label: string, activeClass: string) => (
-    <button
-      type="button"
-      onClick={() => setType(value)}
-      className={`min-h-[32px] cursor-pointer rounded text-[13px] font-semibold transition-colors ${
-        type === value ? activeClass : "text-[var(--cp-muted)] hover:text-[var(--cp-ink)]"
-      }`}
-    >
-      {label}
-    </button>
-  );
 
   return (
     <>
@@ -82,6 +78,7 @@ export function NewLead() {
         onClick={() => {
           setOpen((o) => !o);
           setNotice("");
+          setExistingId(null);
         }}
       >
         <Plus size={16} strokeWidth={2} /> Add lead
@@ -99,10 +96,28 @@ export function NewLead() {
               <input id="new-phone" name="phone" type="tel" required className="cp-input" placeholder="(561) 555-0123" />
             </div>
             <div>
+              <label className="cp-label" htmlFor="new-email">Email (optional)</label>
+              <input id="new-email" name="email" type="email" className="cp-input" placeholder="name@example.com" />
+            </div>
+            <div>
               <span className="cp-label">Lead type</span>
-              <div className="grid grid-cols-2 gap-1 rounded-md border border-[var(--cp-line)] bg-[var(--cp-surface)] p-1">
-                {segment("hot", "Hot", "bg-[var(--cp-hot-bg)] text-[var(--cp-hot)]")}
-                {segment("cold", "Cold", "bg-[var(--cp-cold-bg)] text-[var(--cp-cold)]")}
+              <div className="cp-seg w-full">
+                <button
+                  type="button"
+                  className="cp-seg-btn flex-1"
+                  data-active={type === "hot"}
+                  onClick={() => setType("hot")}
+                >
+                  Hot
+                </button>
+                <button
+                  type="button"
+                  className="cp-seg-btn flex-1"
+                  data-active={type === "cold"}
+                  onClick={() => setType("cold")}
+                >
+                  Cold
+                </button>
               </div>
               <p className="mt-1.5 text-[12px] text-[var(--cp-faint)]">
                 {type === "hot" ? "Appointment already set with the customer." : "Needs a call to quote and book."}
@@ -138,7 +153,22 @@ export function NewLead() {
             <button type="button" className="cp-btn" onClick={() => setOpen(false)}>
               Cancel
             </button>
-            {notice && <span className="text-[12.5px] text-[var(--cp-warn)]">{notice}</span>}
+            {notice && (
+              <span className="text-[12.5px] text-[var(--cp-warn)]">
+                {notice}
+                {existingId && (
+                  <>
+                    {" "}
+                    <Link
+                      href={`/CanesPressure/leads/${existingId}`}
+                      className="font-semibold text-[var(--cp-brand-deep)] hover:underline"
+                    >
+                      Open lead
+                    </Link>
+                  </>
+                )}
+              </span>
+            )}
           </div>
         </form>
       )}

@@ -1,13 +1,36 @@
 "use client";
 
+import { useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, MessageSquare, Filter, FileText, CalendarDays, Receipt, BarChart3, Settings } from "lucide-react";
+import {
+  LayoutDashboard,
+  MessageSquare,
+  Filter,
+  Users,
+  FileText,
+  CalendarDays,
+  Receipt,
+  BarChart3,
+  Settings,
+  MoreHorizontal,
+  X,
+} from "lucide-react";
 
-const LINKS = [
+type NavItem = {
+  href: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+  exact: boolean;
+};
+
+// Funnel order: people first (leads → customers), then the work, then money.
+const LINKS: NavItem[] = [
   { href: "/CanesPressure", label: "Today", icon: LayoutDashboard, exact: true },
   { href: "/CanesPressure/inbox", label: "Inbox", icon: MessageSquare, exact: false },
   { href: "/CanesPressure/leads", label: "Leads", icon: Filter, exact: false },
+  { href: "/CanesPressure/customers", label: "Customers", icon: Users, exact: false },
   { href: "/CanesPressure/estimates", label: "Estimates", icon: FileText, exact: false },
   { href: "/CanesPressure/schedule", label: "Schedule", icon: CalendarDays, exact: false },
   { href: "/CanesPressure/invoices", label: "Invoices", icon: Receipt, exact: false },
@@ -15,26 +38,90 @@ const LINKS = [
   { href: "/CanesPressure/settings", label: "Settings", icon: Settings, exact: false },
 ];
 
+// Mobile: Sebastian's daily loop gets a tab; everything else lives in More
+// (Jobber's pattern) — five targets beat nine microscopic ones.
+const MOBILE_TABS = LINKS.filter((l) =>
+  ["Today", "Inbox", "Leads", "Schedule"].includes(l.label),
+);
+const MOBILE_MORE = LINKS.filter(
+  (l) => !MOBILE_TABS.includes(l),
+);
+
 export function CanesNav({ mobile = false }: { mobile?: boolean }) {
   const pathname = usePathname();
+  const [moreOpen, setMoreOpen] = useState(false);
+
   const isActive = (href: string, exact: boolean) =>
     exact ? pathname === href : pathname.startsWith(href);
+  const moreActive = MOBILE_MORE.some((l) => isActive(l.href, l.exact));
 
   if (mobile) {
     return (
-      <div className="flex items-stretch justify-around px-1 py-1.5 pb-[max(6px,env(safe-area-inset-bottom))]">
-        {LINKS.map(({ href, label, icon: Icon, exact }) => (
-          <Link
-            key={href}
-            href={href}
-            className="flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-md px-0.5 py-1.5 text-[9.5px] font-semibold"
-            style={{ color: isActive(href, exact) ? "var(--cp-brand-deep)" : "var(--cp-muted)" }}
+      <>
+        <div className="flex items-stretch justify-around px-1 py-1 pb-[max(6px,env(safe-area-inset-bottom))]">
+          {MOBILE_TABS.map(({ href, label, icon: Icon, exact }) => (
+            <Link key={href} href={href} className="cp-tab" data-active={isActive(href, exact)}>
+              <Icon size={20} strokeWidth={2} className="shrink-0" />
+              <span className="max-w-full truncate">{label}</span>
+            </Link>
+          ))}
+          <button
+            type="button"
+            className="cp-tab"
+            data-active={moreActive}
+            onClick={() => setMoreOpen(true)}
           >
-            <Icon size={19} strokeWidth={2} className="shrink-0" />
-            <span className="max-w-full truncate">{label}</span>
-          </Link>
-        ))}
-      </div>
+            <MoreHorizontal size={20} strokeWidth={2} className="shrink-0" />
+            <span className="max-w-full truncate">More</span>
+          </button>
+        </div>
+
+        {/* Portal: the tab bar's backdrop-blur creates a containing block, so
+            fixed-position children would anchor to the bar instead of the
+            viewport (no dim, dead tap-outside). The .canes wrapper keeps the
+            cp-* custom properties alive outside the app tree. */}
+        {moreOpen &&
+          createPortal(
+            <div className="canes">
+              <button
+                type="button"
+                aria-label="Close menu"
+                className="cp-sheet-backdrop"
+                onClick={() => setMoreOpen(false)}
+              />
+            <div className="fixed inset-x-0 bottom-0 z-[51] rounded-t-xl border border-[var(--cp-line)] bg-[var(--cp-surface)] pb-[max(10px,env(safe-area-inset-bottom))]">
+              <div className="flex items-center justify-between px-4 pb-1 pt-3.5">
+                <span className="cp-mono">More</span>
+                <button
+                  type="button"
+                  aria-label="Close"
+                  className="cp-btn cp-btn-ghost cp-btn-sm px-2"
+                  onClick={() => setMoreOpen(false)}
+                >
+                  <X size={16} strokeWidth={2} />
+                </button>
+              </div>
+              <div className="px-2 pb-1">
+                {MOBILE_MORE.map(({ href, label, icon: Icon, exact }) => (
+                  <Link
+                    key={href}
+                    href={href}
+                    onClick={() => setMoreOpen(false)}
+                    className="flex items-center gap-3 rounded-md px-3 py-3 text-[14px] font-medium hover:bg-[var(--cp-hover)]"
+                    style={{
+                      color: isActive(href, exact) ? "var(--cp-brand-deep)" : "var(--cp-ink)",
+                    }}
+                  >
+                    <Icon size={18} strokeWidth={2} />
+                    {label}
+                  </Link>
+                ))}
+              </div>
+              </div>
+            </div>,
+            document.body,
+          )}
+      </>
     );
   }
 

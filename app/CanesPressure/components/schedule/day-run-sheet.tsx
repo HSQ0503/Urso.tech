@@ -143,9 +143,7 @@ function RunCard({ job, index }: { job: JobWithItems; index: number }) {
       {/* Line-item checklist */}
       {job.items.length > 0 && (
         <div className="mt-3 border-t border-[var(--cp-line)] pt-2 pl-6">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--cp-muted)]">
-            Work
-          </p>
+          <p className="cp-mono">Work</p>
           <ul className="mt-1">
             {job.items.map((item) => (
               <ItemRow key={item.id} item={item} />
@@ -157,9 +155,7 @@ function RunCard({ job, index }: { job: JobWithItems; index: number }) {
       {/* Site notes */}
       {job.site_notes && (
         <div className="mt-3 border-t border-[var(--cp-line)] pt-2 pl-6">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--cp-muted)]">
-            Site notes
-          </p>
+          <p className="cp-mono">Site notes</p>
           <p className="mt-1 whitespace-pre-wrap text-[13px] leading-snug text-[var(--cp-muted)]">
             {job.site_notes}
           </p>

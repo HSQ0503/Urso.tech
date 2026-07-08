@@ -20,32 +20,47 @@ export default async function CanesLogin({
   return (
     <div className="flex min-h-screen items-center justify-center px-4">
       <div className="w-full max-w-sm">
+        <div className="mb-6 text-center">
+          <p className="cp-display text-[34px] leading-tight">
+            Canes<span className="text-[var(--cp-brand)]">.</span>
+          </p>
+          <p className="cp-mono mt-1.5">Pressure Washing</p>
+        </div>
         <div className="cp-card">
           <div className="p-7">
-            <p className="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-[var(--cp-muted)]">
-              Canes Pressure Washing
-            </p>
-            <h1 className="cp-display mt-1.5 text-[20px]">Sign in to operations</h1>
+            <h1 className="text-[16px] font-semibold">Sign in to operations</h1>
             <p className="mt-1 text-[13.5px] text-[var(--cp-muted)]">
               Enter your access code to continue.
             </p>
             <form action={unlock} className="mt-5 space-y-3">
-              <input
-                className="cp-input"
-                type="password"
-                name="code"
-                placeholder="Access code"
-                autoFocus
-                required
-              />
-              {bad && <p className="text-[13px] font-medium text-[var(--cp-danger)]">Wrong code, try again.</p>}
+              <div>
+                <label className="cp-label" htmlFor="code">
+                  Access code
+                </label>
+                <input
+                  id="code"
+                  className="cp-input"
+                  type="password"
+                  name="code"
+                  placeholder="Access code"
+                  autoFocus
+                  required
+                />
+              </div>
+              {bad && (
+                <p className="text-[13px] font-medium text-[var(--cp-danger)]">
+                  Wrong code, try again.
+                </p>
+              )}
               <button className="cp-btn cp-btn-primary w-full" type="submit">
                 Open dashboard
               </button>
             </form>
           </div>
         </div>
-        <p className="mt-4 text-center text-[11.5px] text-[var(--cp-faint)]">Powered by Urso · urso.tech</p>
+        <p className="cp-mono mt-5 text-center" style={{ color: "var(--cp-faint)" }}>
+          Powered by Urso
+        </p>
       </div>
     </div>
   );

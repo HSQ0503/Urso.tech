@@ -8,12 +8,15 @@ import {
   voidEstimate,
   type ActionResult,
 } from "@/app/CanesPressure/actions";
-import type { EstimateStatus } from "@/lib/canes/types";
+import { fmtEt, type EstimateStatus } from "@/lib/canes/types";
 import {
   ChannelPicker,
-  channelAvailability,
   choiceToChannels,
+  overrideSendOpts,
+  resolveSendTarget,
+  EMPTY_OVERRIDE,
   type ChannelChoice,
+  type SendOverride,
 } from "./channel-picker";
 
 // Owner-side action rail for the estimate detail page. The detail page is a
@@ -54,22 +57,25 @@ export function EstimateActions({
   phone,
   email,
   optedOut,
+  sentAt,
 }: {
   estimateId: string;
   status: EstimateStatus;
   phone: string;
   email: string;
   optedOut: boolean;
+  sentAt: string | null;
 }) {
   const { isPending, feedback, run } = useAction();
   const [voidOpen, setVoidOpen] = useState(false);
   const [channelChoice, setChannelChoice] = useState<ChannelChoice>("both");
+  const [override, setOverride] = useState<SendOverride>(EMPTY_OVERRIDE);
 
-  const avail = channelAvailability({ phone, email, optedOut });
+  const target = resolveSendTarget({ phone, email, optedOut, override });
   const chosen = choiceToChannels(channelChoice);
   const resolvedChannels = {
-    text: chosen.text && avail.hasPhone && !avail.textBlocked,
-    email: chosen.email && avail.hasEmail,
+    text: chosen.text && target.hasPhone && !target.textBlocked,
+    email: chosen.email && target.hasEmail,
   };
 
   // Terminal states: nothing left to send or void. Approved estimates spawned a
@@ -93,7 +99,7 @@ export function EstimateActions({
       <p className="text-[13px] text-[var(--cp-muted)]">
         {status === "declined"
           ? "This estimate was declined. Start a new one from the lead if the customer changes their mind."
-          : "This estimate is no longer live."}
+          : "This estimate expired before the customer approved it. Start a new one to re-quote."}
       </p>
     );
   }
@@ -102,23 +108,38 @@ export function EstimateActions({
 
   return (
     <div className="space-y-2.5">
-      <ChannelPicker
-        phone={phone}
-        email={email}
-        optedOut={optedOut}
-        choice={channelChoice}
-        onChange={setChannelChoice}
-        disabled={isPending}
-      />
-      <button
-        type="button"
-        className="cp-btn cp-btn-primary w-full"
-        disabled={isPending || !avail.canSend}
-        onClick={() => run(() => sendEstimate(estimateId, { channels: resolvedChannels }))}
-      >
-        <Send size={16} strokeWidth={2} />
-        {isPending ? "Sending..." : isDraft ? "Send estimate" : "Resend estimate"}
-      </button>
+      {/* Drafts send from the builder's Save & send block — rendering the rail
+          picker too would put two competing send UIs on one page. */}
+      {!isDraft && (
+        <>
+          <ChannelPicker
+            phone={phone}
+            email={email}
+            optedOut={optedOut}
+            choice={channelChoice}
+            onChange={setChannelChoice}
+            disabled={isPending}
+            override={override}
+            onOverrideChange={setOverride}
+          />
+          <button
+            type="button"
+            className="cp-btn cp-btn-primary w-full"
+            disabled={isPending || !target.canSend}
+            onClick={() =>
+              run(() =>
+                sendEstimate(estimateId, { channels: resolvedChannels, ...overrideSendOpts(override) }),
+              )
+            }
+          >
+            <Send size={16} strokeWidth={2} />
+            {isPending ? "Sending..." : "Resend"}
+          </button>
+          {sentAt && (
+            <p className="text-[12px] tabular-nums text-[var(--cp-faint)]">Last sent {fmtEt(sentAt)}</p>
+          )}
+        </>
+      )}
 
       <button
         type="button"

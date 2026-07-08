@@ -1,13 +1,30 @@
 import { canesConfigured, canesDb } from "@/lib/canes/supabase";
-import { DEMO_CALLS, DEMO_EVENTS, DEMO_LEADS, DEMO_MESSAGES } from "@/lib/canes/fixtures";
+import {
+  DEMO_CALLS,
+  DEMO_CONTACTS,
+  DEMO_ESTIMATES,
+  DEMO_EVENTS,
+  DEMO_INVOICES,
+  DEMO_JOBS,
+  DEMO_LEADS,
+  DEMO_MESSAGES,
+  DEMO_PAYMENTS,
+} from "@/lib/canes/fixtures";
+import { toE164 } from "@/lib/canes/types";
 import type {
   Call,
   CanesSettings,
+  Contact,
+  Estimate,
+  Invoice,
+  Job,
   Lead,
   LeadEvent,
   LeadStatus,
   Message,
+  Payment,
   Thread,
+  ThreadKind,
 } from "@/lib/canes/types";
 
 // Data access for the Canes funnel. Every read has a demo fallback so the UI
@@ -148,20 +165,32 @@ export async function listThreads(): Promise<Thread[]> {
   let messages: Message[];
   let calls: Call[];
   let leads: Lead[];
+  let contacts: Contact[];
+  let jobs: Pick<Job, "id" | "contact_id">[];
+  let vendorPhones: string[];
   if (isDemo()) {
     messages = DEMO_MESSAGES;
     calls = DEMO_CALLS;
     leads = DEMO_LEADS;
+    contacts = DEMO_CONTACTS;
+    jobs = DEMO_JOBS;
+    vendorPhones = ["+15615550001"];
   } else {
     const db = canesDb();
-    const [m, c, l] = await Promise.all([
+    const [m, c, l, ct, j, settings] = await Promise.all([
       db.from("messages").select("*").order("created_at", { ascending: false }).limit(1000),
       db.from("calls").select("*").order("created_at", { ascending: false }).limit(500),
       db.from("leads").select("*"),
+      db.from("contacts").select("*").limit(1000),
+      db.from("jobs").select("id, contact_id").not("contact_id", "is", null).limit(1000),
+      getSettings(),
     ]);
     messages = (m.data ?? []) as Message[];
     calls = (c.data ?? []) as Call[];
     leads = (l.data ?? []) as Lead[];
+    contacts = (ct.data ?? []) as Contact[];
+    jobs = (j.data ?? []) as Pick<Job, "id" | "contact_id">[];
+    vendorPhones = settings.lead_vendor_phones.filter(Boolean).map((p) => toE164(p) ?? p);
   }
   const msgsByPeer = new Map<string, Message[]>();
   for (const msg of messages) {
@@ -175,7 +204,19 @@ export async function listThreads(): Promise<Thread[]> {
     arr.push(call);
     callsByPeer.set(call.peer_phone, arr);
   }
-  const leadByPhone = new Map(leads.filter((l) => l.phone).map((l) => [l.phone as string, l]));
+  // Phones normalized to E.164 on both sides so a manually typed lead/contact
+  // number still matches its thread.
+  const leadByPhone = new Map(
+    leads.filter((l) => l.phone).map((l) => [toE164(l.phone as string) ?? (l.phone as string), l]),
+  );
+  const contactByPhone = new Map(
+    contacts.filter((c) => c.phone).map((c) => [toE164(c.phone as string) ?? (c.phone as string), c]),
+  );
+  const contactJobCounts = new Map<string, number>();
+  for (const job of jobs) {
+    if (!job.contact_id) continue;
+    contactJobCounts.set(job.contact_id, (contactJobCounts.get(job.contact_id) ?? 0) + 1);
+  }
   const peers = new Set([...msgsByPeer.keys(), ...callsByPeer.keys()]);
   const threads: Thread[] = [];
   for (const peer of peers) {
@@ -191,9 +232,23 @@ export async function listThreads(): Promise<Thread[]> {
     const unread = callIsNewest
       ? lastCall!.direction === "in" && lastCall!.status !== "completed"
       : lastMessage?.direction === "in";
+    const lead = leadByPhone.get(peer) ?? null;
+    const contact = contactByPhone.get(peer) ?? null;
+    // Vendor is a configured-number membership ONLY — the old "unattributed
+    // inbound" heuristic must never pin a customer thread to the vendor slot.
+    // Customer = the contact has job history, or the lead is already linked.
+    const kind: ThreadKind = vendorPhones.includes(peer)
+      ? "vendor"
+      : contact && ((contactJobCounts.get(contact.id) ?? 0) > 0 || lead?.contact_id === contact.id)
+        ? "customer"
+        : "lead";
     threads.push({
       peer_phone: peer,
-      lead: leadByPhone.get(peer) ?? null,
+      lead,
+      contact,
+      contact_id: contact?.id ?? null,
+      kind,
+      display_name: contact?.name ?? lead?.name ?? null,
       last_message: lastMessage,
       last_call: lastCall,
       last_activity_at: lastAt,
@@ -254,43 +309,209 @@ export async function getAgenda(days = 7): Promise<Agenda> {
   return [...groups.entries()].map(([day, leads]) => ({ day, leads }));
 }
 
+// Estimate visits inside an arbitrary window — the schedule board pages through
+// past and future weeks, so unlike getAgenda this takes a start instead of "now".
+export async function listVisitsInRange(startIso: string, days: number): Promise<Lead[]> {
+  const start = new Date(startIso).getTime();
+  const end = start + days * 86_400_000;
+  const all = await listLeads();
+  return all
+    .filter((l) => l.appointment_at && ["appointment_set", "confirmed"].includes(l.status))
+    .filter((l) => {
+      const t = new Date(l.appointment_at as string).getTime();
+      return t >= start && t < end;
+    })
+    .sort((a, b) => (a.appointment_at as string).localeCompare(b.appointment_at as string));
+}
+
 export type Overview = {
+  counts: { open: number; hot: number; cold: number; wonThisWeek: number };
   coldNeedingCall: Lead[]; // status new, type cold — the "call now" queue
   unconfirmedToday: Lead[]; // appointment inside 24h, not confirmed
-  todayAgenda: Lead[];
   followUpsDue: Lead[];
-  counts: { open: number; hot: number; cold: number; wonThisWeek: number };
+  todayAgenda: Lead[];
+  pastDueVisits: Lead[]; // appointment came and went with no disposition — the black hole
+  pipeline: {
+    leads: { newCount: number; hotCount: number };
+    quotes: { awaitingCount: number; awaitingCents: number; declinedRecentCount: number };
+    jobs: { unscheduledCount: number; unscheduledCents: number; activeCount: number };
+    invoices: { outstandingCents: number; outstandingCount: number; overdueCount: number };
+  };
+  money: {
+    collectedThisWeekCents: number; // completed payments, rolling 7 days
+    wonThisWeekCents: number; // estimates approved, rolling 7 days
+    bookedNext7DaysCents: number; // active jobs scheduled in the next 7 days
+  };
+  recentActivity: {
+    at: string;
+    leadId: string | null;
+    leadName: string | null;
+    kind: string;
+    detail: string | null;
+  }[];
 };
 
+// ── getOverview module readers: one small targeted select each, run in a single
+//    Promise.all round from getOverview. Every one demo-branches to fixtures.
+
+type OverviewEstimate = Pick<Estimate, "status" | "total_cents" | "declined_at" | "approved_at">;
+
+async function readOverviewEstimates(): Promise<OverviewEstimate[]> {
+  if (isDemo()) return DEMO_ESTIMATES;
+  const { data } = await canesDb()
+    .from("estimates")
+    .select("status, total_cents, declined_at, approved_at")
+    .limit(500);
+  return (data ?? []) as OverviewEstimate[];
+}
+
+type OverviewJob = Pick<Job, "status" | "total_cents" | "scheduled_at">;
+
+async function readOverviewJobs(): Promise<OverviewJob[]> {
+  if (isDemo()) return DEMO_JOBS;
+  const { data } = await canesDb().from("jobs").select("status, total_cents, scheduled_at").limit(500);
+  return (data ?? []) as OverviewJob[];
+}
+
+type OverviewInvoice = Pick<Invoice, "status" | "total_cents" | "amount_paid_cents" | "sent_at">;
+
+async function readOverviewInvoices(): Promise<OverviewInvoice[]> {
+  if (isDemo()) return DEMO_INVOICES;
+  const { data } = await canesDb()
+    .from("invoices")
+    .select("status, total_cents, amount_paid_cents, sent_at")
+    .limit(500);
+  return (data ?? []) as OverviewInvoice[];
+}
+
+type OverviewPayment = Pick<Payment, "amount_cents" | "status" | "created_at">;
+
+async function readPaymentsSince(sinceIso: string): Promise<OverviewPayment[]> {
+  if (isDemo()) return DEMO_PAYMENTS.filter((p) => p.created_at >= sinceIso);
+  const { data } = await canesDb()
+    .from("payments")
+    .select("amount_cents, status, created_at")
+    .gte("created_at", sinceIso)
+    .limit(1000);
+  return (data ?? []) as OverviewPayment[];
+}
+
+async function readRecentEvents(limit: number): Promise<LeadEvent[]> {
+  if (isDemo()) {
+    return [...DEMO_EVENTS].sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, limit);
+  }
+  const { data } = await canesDb()
+    .from("events")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  return (data ?? []) as LeadEvent[];
+}
+
 export async function getOverview(): Promise<Overview> {
-  const all = await listLeads();
-  const in24h = Date.now() + 24 * 3_600_000;
-  const startOfWeek = Date.now() - 7 * 86_400_000;
+  const now = Date.now();
+  const weekAgoIso = new Date(now - 7 * 86_400_000).toISOString();
+  const [all, estimates, jobs, invoices, weekPayments, recentEvents] = await Promise.all([
+    listLeads(),
+    readOverviewEstimates(),
+    readOverviewJobs(),
+    readOverviewInvoices(),
+    readPaymentsSince(weekAgoIso),
+    readRecentEvents(8),
+  ]);
+  const in24h = now + 24 * 3_600_000;
+  const startOfWeek = now - 7 * 86_400_000;
+  const next7Days = now + 7 * 86_400_000;
   const todayKey = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", dateStyle: "short" });
   const isToday = (iso: string) => todayKey.format(new Date(iso)) === todayKey.format(new Date());
+  const leadById = new Map(all.map((l) => [l.id, l]));
+
+  const awaiting = estimates.filter((e) => e.status === "sent" || e.status === "viewed");
+  // "Recent" declines = the last 14 days — long enough to chase a save call.
+  const declinedRecent = estimates.filter(
+    (e) => e.status === "declined" && e.declined_at && new Date(e.declined_at).getTime() > now - 14 * 86_400_000,
+  );
+  const unscheduled = jobs.filter((j) => j.status === "unscheduled");
+  const activeJobs = jobs.filter((j) => ["scheduled", "confirmed", "in_progress"].includes(j.status));
+  const outstanding = invoices.filter((i) => i.status === "sent" || i.status === "viewed");
+  // No due date on invoices — "overdue" = still open past the final (day-7) reminder.
+  const overdue = outstanding.filter(
+    (i) => i.sent_at && new Date(i.sent_at).getTime() < now - 7 * 86_400_000,
+  );
+  const bookedNext7 = activeJobs.filter((j) => {
+    if (!j.scheduled_at) return false;
+    const t = new Date(j.scheduled_at).getTime();
+    return t >= now && t < next7Days;
+  });
+
   return {
-    coldNeedingCall: all.filter((l) => l.type === "cold" && l.status === "new" && !l.opted_out),
-    unconfirmedToday: all.filter(
-      (l) =>
-        l.status === "appointment_set" &&
-        l.appointment_at &&
-        new Date(l.appointment_at).getTime() < in24h &&
-        new Date(l.appointment_at).getTime() > Date.now(),
-    ),
-    todayAgenda: all
-      .filter((l) => l.appointment_at && isToday(l.appointment_at) && ["appointment_set", "confirmed"].includes(l.status))
-      .sort((a, b) => (a.appointment_at as string).localeCompare(b.appointment_at as string)),
-    followUpsDue: all.filter(
-      (l) =>
-        l.type === "cold" &&
-        l.status === "contacted" &&
-        (!l.snoozed_until || new Date(l.snoozed_until).getTime() < Date.now()),
-    ),
     counts: {
       open: all.filter((l) => !["won", "lost"].includes(l.status)).length,
       hot: all.filter((l) => l.type === "hot" && !["won", "lost"].includes(l.status)).length,
       cold: all.filter((l) => l.type === "cold" && !["won", "lost"].includes(l.status)).length,
       wonThisWeek: all.filter((l) => l.status === "won" && new Date(l.last_activity_at).getTime() > startOfWeek).length,
     },
+    coldNeedingCall: all.filter((l) => l.type === "cold" && l.status === "new" && !l.opted_out),
+    unconfirmedToday: all.filter(
+      (l) =>
+        l.status === "appointment_set" &&
+        l.appointment_at &&
+        new Date(l.appointment_at).getTime() < in24h &&
+        new Date(l.appointment_at).getTime() > now,
+    ),
+    followUpsDue: all.filter(
+      (l) =>
+        l.type === "cold" &&
+        l.status === "contacted" &&
+        (!l.snoozed_until || new Date(l.snoozed_until).getTime() < now),
+    ),
+    todayAgenda: all
+      .filter((l) => l.appointment_at && isToday(l.appointment_at) && ["appointment_set", "confirmed"].includes(l.status))
+      .sort((a, b) => (a.appointment_at as string).localeCompare(b.appointment_at as string)),
+    pastDueVisits: all
+      .filter(
+        (l) =>
+          l.appointment_at &&
+          new Date(l.appointment_at).getTime() < now &&
+          ["appointment_set", "confirmed"].includes(l.status),
+      )
+      .sort((a, b) => (b.appointment_at as string).localeCompare(a.appointment_at as string)),
+    pipeline: {
+      leads: {
+        newCount: all.filter((l) => l.status === "new" && !l.opted_out).length,
+        hotCount: all.filter((l) => l.type === "hot" && !["won", "lost"].includes(l.status)).length,
+      },
+      quotes: {
+        awaitingCount: awaiting.length,
+        awaitingCents: awaiting.reduce((sum, e) => sum + e.total_cents, 0),
+        declinedRecentCount: declinedRecent.length,
+      },
+      jobs: {
+        unscheduledCount: unscheduled.length,
+        unscheduledCents: unscheduled.reduce((sum, j) => sum + j.total_cents, 0),
+        activeCount: activeJobs.length,
+      },
+      invoices: {
+        outstandingCents: outstanding.reduce((sum, i) => sum + Math.max(0, i.total_cents - i.amount_paid_cents), 0),
+        outstandingCount: outstanding.length,
+        overdueCount: overdue.length,
+      },
+    },
+    money: {
+      collectedThisWeekCents: weekPayments
+        .filter((p) => p.status === "completed")
+        .reduce((sum, p) => sum + p.amount_cents, 0),
+      wonThisWeekCents: estimates
+        .filter((e) => e.status === "approved" && e.approved_at && new Date(e.approved_at).getTime() > startOfWeek)
+        .reduce((sum, e) => sum + e.total_cents, 0),
+      bookedNext7DaysCents: bookedNext7.reduce((sum, j) => sum + j.total_cents, 0),
+    },
+    recentActivity: recentEvents.map((e) => ({
+      at: e.created_at,
+      leadId: e.lead_id ?? null,
+      leadName: (e.lead_id ? leadById.get(e.lead_id)?.name : null) ?? null,
+      kind: e.kind,
+      detail: e.detail,
+    })),
   };
 }

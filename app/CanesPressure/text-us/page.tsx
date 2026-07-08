@@ -1,4 +1,4 @@
-export const metadata = { title: "Text Us" };
+export const metadata = { title: "Text us" };
 
 // Public CTA collateral for the A2P 10DLC campaign (error 30909 remediation):
 // the page reviewers visit to verify how customers opt in to texting. Shows
@@ -9,18 +9,16 @@ export const metadata = { title: "Text Us" };
 export default function CanesTextUsPage() {
   return (
     <div className="mx-auto max-w-[640px] px-5 py-12">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--cp-muted)]">
-        Canes Pressure Washing
-      </p>
-      <h1 className="cp-display mt-1.5 text-[26px]">Text or call us for a free quote</h1>
+      <p className="cp-mono">Canes Pressure Washing</p>
+      <h1 className="cp-display mt-1.5 text-[26px]">
+        Text or call us for a free quote<span className="text-[var(--cp-brand)]">.</span>
+      </h1>
       <p className="mt-1 text-[13px] text-[var(--cp-faint)]">
         Residential and commercial pressure washing · Palm Beach County, FL
       </p>
 
       <div className="cp-card mt-6 p-5">
-        <p className="text-[12px] font-semibold uppercase tracking-[0.05em] text-[var(--cp-muted)]">
-          Our business line
-        </p>
+        <p className="cp-mono">Our business line</p>
         <a
           href="sms:+15616526652"
           className="cp-display mt-1 block text-[24px] text-[var(--cp-brand-deep)]"
@@ -28,9 +26,9 @@ export default function CanesTextUsPage() {
           (561) 652-6652
         </a>
         <p className="mt-2 text-[14px] leading-relaxed">
-          Text us what you need washed — driveway, house, roof, patio, pavers — and we&rsquo;ll
-          reply with a quote or a free estimate visit. You can also call and we&rsquo;ll pick up or
-          text you right back.
+          Text us what you need washed: driveway, house, roof, patio, or pavers. We&rsquo;ll reply
+          with a quote or a free estimate visit. You can also call and we&rsquo;ll pick up or text
+          you right back.
         </p>
       </div>
 
@@ -54,14 +52,14 @@ export default function CanesTextUsPage() {
             className="font-semibold text-[var(--cp-brand-deep)] hover:underline"
             href="/CanesPressure/terms"
           >
-            SMS Terms &amp; Conditions
+            SMS terms &amp; conditions
           </a>
           {" · "}
           <a
             className="font-semibold text-[var(--cp-brand-deep)] hover:underline"
             href="/CanesPressure/privacy"
           >
-            Privacy Policy
+            Privacy policy
           </a>
           {" · "}
           <a

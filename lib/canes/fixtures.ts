@@ -1,8 +1,10 @@
 import { ET, etLocalToIso } from "@/lib/canes/types";
 import type {
+  Address,
   CalendarEvent,
   Call,
   CatalogItem,
+  Contact,
   Crew,
   Estimate,
   EstimateItem,
@@ -50,6 +52,8 @@ export const DEMO_LEADS: Lead[] = [
     status: "new",
     name: "Maria Delgado",
     phone: "+15615550142",
+    email: null,
+    contact_id: null,
     address: "214 Sandpiper Way, West Palm Beach",
     service: "Driveway + pool deck",
     source: "lead_vendor",
@@ -70,6 +74,8 @@ export const DEMO_LEADS: Lead[] = [
     status: "new",
     name: "Rob Tanner",
     phone: "+15615550177",
+    email: null,
+    contact_id: null,
     address: null,
     service: "Roof wash (tile)",
     source: "lead_vendor",
@@ -90,6 +96,8 @@ export const DEMO_LEADS: Lead[] = [
     status: "appointment_set",
     name: "Janet Whitfield",
     phone: "+15615550118",
+    email: "janet.whitfield@example.com",
+    contact_id: "ct4",
     address: "902 Banyan Isle Dr, Palm Beach Gardens",
     service: "House wash + gutters",
     source: "lead_vendor",
@@ -110,6 +118,8 @@ export const DEMO_LEADS: Lead[] = [
     status: "confirmed",
     name: "Carl Jimenez",
     phone: "+15615550166",
+    email: "carl.jimenez@example.com",
+    contact_id: "ct3",
     address: "77 Flagler Promenade, West Palm Beach",
     service: "Paver sealing",
     source: "lead_vendor",
@@ -130,6 +140,8 @@ export const DEMO_LEADS: Lead[] = [
     status: "contacted",
     name: "Dana Osei",
     phone: "+15615550190",
+    email: "dana.osei@example.com",
+    contact_id: "ct5",
     address: "410 Lakeview Ct, Royal Palm Beach",
     service: "Whole exterior",
     source: "referral",
@@ -150,6 +162,8 @@ export const DEMO_LEADS: Lead[] = [
     status: "won",
     name: "Priya Raman",
     phone: "+15615550133",
+    email: "priya@example.com",
+    contact_id: "ct1",
     address: "18 Coquina Ln, Palm Beach Gardens",
     service: "House wash",
     source: "website",
@@ -170,6 +184,8 @@ export const DEMO_LEADS: Lead[] = [
     status: "lost",
     name: "Gene Parker",
     phone: "+15615550109",
+    email: null,
+    contact_id: null,
     address: null,
     service: "Driveway",
     source: "lead_vendor",
@@ -182,6 +198,30 @@ export const DEMO_LEADS: Lead[] = [
     opted_out: false,
     snoozed_until: null,
     last_activity_at: min(5500),
+  },
+  // d8 — the past-due black hole: estimate visit came and went ~26h ago with no
+  // disposition, so it appears in the Today page's pastDueVisits queue.
+  {
+    id: "d8",
+    created_at: min(3200),
+    type: "hot",
+    status: "appointment_set",
+    name: "Luis Herrera",
+    phone: "+15615550129",
+    email: null,
+    contact_id: null,
+    address: "530 Tallgrass Ln, Wellington",
+    service: "Driveway + sidewalk",
+    source: "lead_vendor",
+    appointment_at: min(1560),
+    confirmed_at: null,
+    lost_reason: null,
+    notes: null,
+    raw_message: "APPT — Luis Herrera driveway + sidewalk, 530 Tallgrass Ln Wellington, 5615550129",
+    parse_confidence: 0.9,
+    opted_out: false,
+    snoozed_until: null,
+    last_activity_at: min(1700),
   },
 ];
 
@@ -235,6 +275,25 @@ export const DEMO_MESSAGES: Message[] = [
     body: "Hi Dana! Happy to help — I can swing by this week for a free estimate. Does Thursday afternoon work?",
     media_urls: [], automated: false, twilio_sid: null, delivery_status: "delivered",
   },
+  // Priya — a past customer (won lead d6, contact ct1) texting back in. The
+  // inbox should show this thread as kind "customer", not a plain lead.
+  {
+    id: "m10", created_at: min(60), lead_id: "d6", peer_phone: "+15615550133", direction: "in",
+    body: "Hi Sebastian! The house looks amazing. Could you also quote the driveway while you're at it?",
+    media_urls: [], automated: false, twilio_sid: null, delivery_status: null,
+  },
+  {
+    id: "m11", created_at: min(58), lead_id: "d6", peer_phone: "+15615550133", direction: "out",
+    body: "Thanks Priya! Absolutely — I'll text you a price this afternoon.",
+    media_urls: [], automated: false, twilio_sid: null, delivery_status: "delivered",
+  },
+  // Frank — a cash customer with NO lead row at all (contact ct2 only). Proves
+  // the customer thread kind works without a lead behind it.
+  {
+    id: "m12", created_at: min(40), lead_id: null, peer_phone: "+15615550155", direction: "in",
+    body: "Hey, it's Frank — driveway held up great. Can y'all come back next month and do it again?",
+    media_urls: [], automated: false, twilio_sid: null, delivery_status: null,
+  },
 ];
 
 export const DEMO_CALLS: Call[] = [
@@ -270,6 +329,75 @@ export const DEMO_EVENTS: LeadEvent[] = [
   { id: "e4", created_at: min(90), lead_id: "d3", kind: "automation", detail: "Confirmation text sent (T-12h)", data: {} },
   { id: "e5", created_at: min(55), lead_id: "d4", kind: "status", detail: "Customer replied YES — appointment confirmed", data: {} },
   { id: "e6", created_at: min(2800), lead_id: "d6", kind: "status", detail: "Closed won — $425", data: {} },
+  // Recent-activity texture for the Today page feed (last 8 events, joined names).
+  { id: "e7", created_at: min(30), lead_id: "d4", kind: "estimate", detail: "Estimate EST-000003 approved by Carl Jimenez", data: {} },
+  { id: "e8", created_at: min(1380), lead_id: "d6", kind: "invoice", detail: "Invoice INV-000001 sent ($425.00)", data: {} },
+  { id: "e9", created_at: min(60), lead_id: "d6", kind: "replied", detail: "Could you also quote the driveway while you're at it?", data: {} },
+  { id: "e10", created_at: min(1500), lead_id: "d5", kind: "call", detail: "Call logged — follow up: comparing two quotes", data: {} },
+];
+
+// ── Phase 3 fixtures: contacts (the customers layer) + their addresses ────────
+
+export const DEMO_CONTACTS: Contact[] = [
+  // ct1 — the repeat customer: three jobs (job3 today, job6 invoiced, job14 paid),
+  // one open invoice (inv1) and one settled (inv11).
+  {
+    id: "ct1", created_at: min(31000), name: "Priya Raman", phone: "+15615550133",
+    email: "priya@example.com", source: "website", notes: "Prefers texts. Repeat customer.",
+    archived: false, last_activity_at: min(60),
+  },
+  // ct2 — cash-only customer, no email, no lead row behind the thread.
+  {
+    id: "ct2", created_at: min(3100), name: "Frank Osei", phone: "+15615550155",
+    email: null, source: "referral", notes: "Pays cash on completion.",
+    archived: false, last_activity_at: min(40),
+  },
+  // ct3 — two properties (home + rental).
+  {
+    id: "ct3", created_at: min(400), name: "Carl Jimenez", phone: "+15615550166",
+    email: "carl.jimenez@example.com", source: "lead_vendor", notes: null,
+    archived: false, last_activity_at: min(30),
+  },
+  {
+    id: "ct4", created_at: min(200), name: "Janet Whitfield", phone: "+15615550118",
+    email: "janet.whitfield@example.com", source: "lead_vendor", notes: "Gate code 4482. Two dogs, friendly.",
+    archived: false, last_activity_at: min(90),
+  },
+  {
+    id: "ct5", created_at: min(2000), name: "Dana Osei", phone: "+15615550190",
+    email: "dana.osei@example.com", source: "referral", notes: "Referred by Carl.",
+    archived: false, last_activity_at: min(1500),
+  },
+  {
+    id: "ct6", created_at: min(8200), name: "Elaine Brooks", phone: "+15615550161",
+    email: "elaine.brooks@example.com", source: "other", notes: null,
+    archived: false, last_activity_at: min(6900),
+  },
+  // ct7 — the open-balance customer: first invoice was voided (wrong amount),
+  // re-billed invoice is sent and now overdue.
+  {
+    id: "ct7", created_at: min(18000), name: "Hector Ruiz", phone: "+15615550175",
+    email: "hector.ruiz@example.com", source: "website", notes: null,
+    archived: false, last_activity_at: min(16400),
+  },
+  // ct8 — archived: moved out of the area, history kept.
+  {
+    id: "ct8", created_at: min(130000), name: "Walter Simms", phone: "+15615550101",
+    email: null, source: "other", notes: "Moved to Tampa — keep history.",
+    archived: true, last_activity_at: min(120000),
+  },
+];
+
+export const DEMO_ADDRESSES: Address[] = [
+  { id: "adr1", created_at: min(31000), contact_id: "ct1", line: "18 Coquina Ln, Palm Beach Gardens", site_notes: null, is_primary: true },
+  { id: "adr2", created_at: min(3100), contact_id: "ct2", line: "51 Marina Blvd, West Palm Beach", site_notes: null, is_primary: true },
+  { id: "adr3", created_at: min(400), contact_id: "ct3", line: "77 Flagler Promenade, West Palm Beach", site_notes: "Gate code 4417.", is_primary: true },
+  { id: "adr4", created_at: min(300), contact_id: "ct3", line: "1120 Ocean Ridge Ct, Jupiter", site_notes: "Rental property — tenant is fine with crews.", is_primary: false },
+  { id: "adr5", created_at: min(200), contact_id: "ct4", line: "902 Banyan Isle Dr, Palm Beach Gardens", site_notes: "Gate code 4482. Two friendly dogs.", is_primary: true },
+  { id: "adr6", created_at: min(2000), contact_id: "ct5", line: "410 Lakeview Ct, Royal Palm Beach", site_notes: null, is_primary: true },
+  { id: "adr7", created_at: min(8200), contact_id: "ct6", line: "12 Sailfish Ct, Palm Beach Gardens", site_notes: null, is_primary: true },
+  { id: "adr8", created_at: min(18000), contact_id: "ct7", line: "63 Cypress Trace, Wellington", site_notes: null, is_primary: true },
+  { id: "adr9", created_at: min(130000), contact_id: "ct8", line: "9 Pelican Pt, Lake Worth", site_notes: null, is_primary: true },
 ];
 
 // ── Phase 2 fixtures: catalog, estimates, line items, jobs ───────────────────
@@ -319,12 +447,13 @@ export const DEMO_ESTIMATES: Estimate[] = [
     sent_at: null, viewed_at: null, approved_at: null,
     declined_at: null, decline_reason: null, signature_name: null, employee: "Sebastian",
   },
-  // est2 — sent with options for Janet (lead d3): mandatory house wash + optional gutter.
+  // est2 — approved options estimate for Janet (lead d3): mandatory house wash
+  // + optional gutter. Backs job5, so it must be approved before that job exists.
   {
-    id: "est2", created_at: min(130), updated_at: min(120),
-    lead_id: "d3", contact_id: null, address_id: null,
-    number: "EST-000002", estimate_type: "options", status: "sent",
-    customer_name: "Janet Whitfield", customer_phone: "+15615550118", customer_email: null,
+    id: "est2", created_at: min(760), updated_at: min(705),
+    lead_id: "d3", contact_id: "ct4", address_id: "adr5",
+    number: "EST-000002", estimate_type: "options", status: "approved",
+    customer_name: "Janet Whitfield", customer_phone: "+15615550118", customer_email: "janet.whitfield@example.com",
     job_address: "902 Banyan Isle Dr, Palm Beach Gardens", job_name: "House wash + gutters",
     subtotal_cents: 30000, discount_cents: 0, adjustment_cents: 0,
     tax_cents: 0, tax_rate_bps: 0, total_cents: 30000, deposit_percent: 25, deposit_cents: 7500,
@@ -333,15 +462,15 @@ export const DEMO_ESTIMATES: Estimate[] = [
     terms:
       "Payment due on completion unless a deposit is agreed. Estimates are valid for 28 days. Canes Pressure Washing is not responsible for pre-existing damage, loose or failing surfaces, or oxidation revealed by cleaning. Access to water and power required. Reschedules due to weather are expected.",
     internal_notes: null, expires_at: hrAhead(28 * 24), public_token: "demo-token-est2",
-    sent_at: min(120), viewed_at: null, approved_at: null,
-    declined_at: null, decline_reason: null, signature_name: null, employee: "Sebastian",
+    sent_at: min(750), viewed_at: min(730), approved_at: min(705),
+    declined_at: null, decline_reason: null, signature_name: "Janet Whitfield", employee: "Sebastian",
   },
   // est3 — approved for Carl (lead d4): paver sealing, 50% deposit, signed.
   {
     id: "est3", created_at: min(60), updated_at: min(30),
-    lead_id: "d4", contact_id: null, address_id: null,
+    lead_id: "d4", contact_id: "ct3", address_id: "adr3",
     number: "EST-000003", estimate_type: "standard", status: "approved",
-    customer_name: "Carl Jimenez", customer_phone: "+15615550166", customer_email: null,
+    customer_name: "Carl Jimenez", customer_phone: "+15615550166", customer_email: "carl.jimenez@example.com",
     job_address: "77 Flagler Promenade, West Palm Beach", job_name: "Paver sealing",
     subtotal_cents: 60000, discount_cents: 0, adjustment_cents: 0,
     tax_cents: 0, tax_rate_bps: 0, total_cents: 60000, deposit_percent: 50, deposit_cents: 30000,
@@ -428,12 +557,12 @@ const JOB5_START = etAt(1, "10:00"); // tomorrow, confirmed, Crew A
 export const DEMO_JOBS: Job[] = [
   // job1 — unscheduled (tray): Carl's paver sealing, backs approved est3.
   {
-    id: "job1", created_at: min(30), estimate_id: "est3", lead_id: "d4", contact_id: null,
+    id: "job1", created_at: min(30), estimate_id: "est3", lead_id: "d4", contact_id: "ct3",
     status: "unscheduled", customer_name: "Carl Jimenez",
     job_address: "77 Flagler Promenade, West Palm Beach",
     total_cents: 60000, deposit_cents: 30000, scheduled_at: null, assigned_to: null, notes: null,
     duration_minutes: 180, ends_at: null, arrival_window_minutes: 0, crew_id: null,
-    confirmed_at: null, customer_phone: "+15615550166", job_name: "Paver sealing",
+    confirmed_at: null, customer_phone: "+15615550166", customer_email: "carl.jimenez@example.com", job_name: "Paver sealing",
     gate_code: "4417", site_notes: "Sealer needs 24h dry — no foot traffic after.", canceled_reason: null,
   },
   // job2 — unscheduled (tray): a second waiting job so the tray shows two.
@@ -443,69 +572,69 @@ export const DEMO_JOBS: Job[] = [
     job_address: "214 Sandpiper Way, West Palm Beach",
     total_cents: 35000, deposit_cents: 0, scheduled_at: null, assigned_to: null, notes: null,
     duration_minutes: 120, ends_at: null, arrival_window_minutes: 0, crew_id: null,
-    confirmed_at: null, customer_phone: "+15615550142", job_name: "Driveway + pool deck",
+    confirmed_at: null, customer_phone: "+15615550142", customer_email: null, job_name: "Driveway + pool deck",
     gate_code: null, site_notes: "Backyard spigot; front hose bib is broken.", canceled_reason: null,
   },
   // job3 — scheduled TODAY, Crew A (populates the run sheet + Today strip).
   {
-    id: "job3", created_at: min(500), estimate_id: null, lead_id: "d6", contact_id: null,
+    id: "job3", created_at: min(500), estimate_id: null, lead_id: "d6", contact_id: "ct1",
     status: "scheduled", customer_name: "Priya Raman",
     job_address: "18 Coquina Ln, Palm Beach Gardens",
     total_cents: 42500, deposit_cents: 0, scheduled_at: JOB3_START, assigned_to: "Crew A", notes: null,
     duration_minutes: 120, ends_at: addMinutes(JOB3_START, 120), arrival_window_minutes: 30,
-    crew_id: "crewA", confirmed_at: null, customer_phone: "+15615550133", job_name: "House wash",
+    crew_id: "crewA", confirmed_at: null, customer_phone: "+15615550133", customer_email: "priya@example.com", job_name: "House wash",
     gate_code: "0916", site_notes: "Two dogs in the yard — text on the way.", canceled_reason: null,
   },
   // job4 — scheduled +2 days, Crew B.
   {
-    id: "job4", created_at: min(600), estimate_id: null, lead_id: null, contact_id: null,
+    id: "job4", created_at: min(600), estimate_id: null, lead_id: null, contact_id: "ct5",
     status: "scheduled", customer_name: "Dana Osei",
     job_address: "410 Lakeview Ct, Royal Palm Beach",
     total_cents: 78000, deposit_cents: 0, scheduled_at: JOB4_START, assigned_to: "Crew B", notes: null,
     duration_minutes: 240, ends_at: addMinutes(JOB4_START, 240), arrival_window_minutes: 0,
-    crew_id: "crewB", confirmed_at: null, customer_phone: "+15615550190", job_name: "Whole exterior",
+    crew_id: "crewB", confirmed_at: null, customer_phone: "+15615550190", customer_email: "dana.osei@example.com", job_name: "Whole exterior",
     gate_code: null, site_notes: "Graduation party Saturday — must finish by 2pm.", canceled_reason: null,
   },
   // job5 — confirmed tomorrow, Crew A (customer already replied YES).
   {
-    id: "job5", created_at: min(700), estimate_id: null, lead_id: "d3", contact_id: null,
+    id: "job5", created_at: min(700), estimate_id: null, lead_id: "d3", contact_id: "ct4",
     status: "confirmed", customer_name: "Janet Whitfield",
     job_address: "902 Banyan Isle Dr, Palm Beach Gardens",
     total_cents: 30000, deposit_cents: 7500, scheduled_at: JOB5_START, assigned_to: "Crew A", notes: null,
     duration_minutes: 150, ends_at: addMinutes(JOB5_START, 150), arrival_window_minutes: 0,
-    crew_id: "crewA", confirmed_at: min(120), customer_phone: "+15615550118", job_name: "House wash + gutters",
+    crew_id: "crewA", confirmed_at: min(120), customer_phone: "+15615550118", customer_email: "janet.whitfield@example.com", job_name: "House wash + gutters",
     gate_code: "4482", site_notes: "Gate code 4482. Two friendly dogs.", canceled_reason: null,
   },
   // job6 — completed yesterday, INVOICED and awaiting card payment (backs inv1).
   {
-    id: "job6", created_at: min(1600), estimate_id: null, lead_id: null, contact_id: null,
+    id: "job6", created_at: min(1600), estimate_id: null, lead_id: null, contact_id: "ct1",
     status: "invoiced", customer_name: "Priya Raman",
     job_address: "18 Coquina Ln, Palm Beach Gardens",
     total_cents: 42500, deposit_cents: 0, scheduled_at: etAt(-1, "09:00"), assigned_to: "Crew A", notes: null,
     duration_minutes: 120, ends_at: addMinutes(etAt(-1, "09:00"), 120), arrival_window_minutes: 0,
-    crew_id: "crewA", confirmed_at: min(1700), customer_phone: "+15615550133", job_name: "House wash",
+    crew_id: "crewA", confirmed_at: min(1700), customer_phone: "+15615550133", customer_email: "priya@example.com", job_name: "House wash",
     gate_code: null, site_notes: null, canceled_reason: null,
   },
   // job7 — completed + PAID in cash (backs inv2 + payment pay2).
   {
-    id: "job7", created_at: min(3000), estimate_id: null, lead_id: null, contact_id: null,
+    id: "job7", created_at: min(3000), estimate_id: null, lead_id: null, contact_id: "ct2",
     status: "paid", customer_name: "Frank Osei",
     job_address: "51 Marina Blvd, West Palm Beach",
     total_cents: 25000, deposit_cents: 0, scheduled_at: etAt(-2, "14:00"), assigned_to: "Crew B", notes: null,
     duration_minutes: 90, ends_at: addMinutes(etAt(-2, "14:00"), 90), arrival_window_minutes: 0,
-    crew_id: "crewB", confirmed_at: min(3100), customer_phone: "+15615550155", job_name: "Driveway wash",
+    crew_id: "crewB", confirmed_at: min(3100), customer_phone: "+15615550155", customer_email: null, job_name: "Driveway wash",
     gate_code: null, site_notes: null, canceled_reason: null,
   },
   // ── Historical paid work (last ~2 months) — the Insights dashboard's demo
   //    story: crew mix, cash/card mix, service variety. All terminal, so the
   //    schedule board never paints them as active blocks.
   {
-    id: "job8", created_at: min(8000), estimate_id: null, lead_id: null, contact_id: null,
+    id: "job8", created_at: min(8000), estimate_id: null, lead_id: null, contact_id: "ct6",
     status: "paid", customer_name: "Elaine Brooks",
     job_address: "12 Sailfish Ct, Palm Beach Gardens",
     total_cents: 42000, deposit_cents: 0, scheduled_at: etAt(-5, "09:00"), assigned_to: "Crew A", notes: null,
     duration_minutes: 150, ends_at: addMinutes(etAt(-5, "09:00"), 150), arrival_window_minutes: 0,
-    crew_id: "crewA", confirmed_at: min(8100), customer_phone: "+15615550161", job_name: "House wash + gutters",
+    crew_id: "crewA", confirmed_at: min(8100), customer_phone: "+15615550161", customer_email: "elaine.brooks@example.com", job_name: "House wash + gutters",
     gate_code: null, site_notes: null, canceled_reason: null,
   },
   {
@@ -514,7 +643,7 @@ export const DEMO_JOBS: Job[] = [
     job_address: "406 Datura St, West Palm Beach",
     total_cents: 45000, deposit_cents: 0, scheduled_at: etAt(-12, "10:00"), assigned_to: "Crew B", notes: null,
     duration_minutes: 180, ends_at: addMinutes(etAt(-12, "10:00"), 180), arrival_window_minutes: 0,
-    crew_id: "crewB", confirmed_at: min(18600), customer_phone: "+15615550148", job_name: "Roof wash (tile)",
+    crew_id: "crewB", confirmed_at: min(18600), customer_phone: "+15615550148", customer_email: null, job_name: "Roof wash (tile)",
     gate_code: null, site_notes: null, canceled_reason: null,
   },
   {
@@ -523,7 +652,7 @@ export const DEMO_JOBS: Job[] = [
     job_address: "88 Gardenia Isle Dr, Royal Palm Beach",
     total_cents: 32500, deposit_cents: 0, scheduled_at: etAt(-19, "13:00"), assigned_to: "Crew A", notes: null,
     duration_minutes: 120, ends_at: addMinutes(etAt(-19, "13:00"), 120), arrival_window_minutes: 0,
-    crew_id: "crewA", confirmed_at: min(28600), customer_phone: "+15615550183", job_name: "Driveway + patio",
+    crew_id: "crewA", confirmed_at: min(28600), customer_phone: "+15615550183", customer_email: null, job_name: "Driveway + patio",
     gate_code: null, site_notes: null, canceled_reason: null,
   },
   {
@@ -532,7 +661,7 @@ export const DEMO_JOBS: Job[] = [
     job_address: "27 Bimini Ln, West Palm Beach",
     total_cents: 60000, deposit_cents: 0, scheduled_at: etAt(-33, "09:30"), assigned_to: "Crew B", notes: null,
     duration_minutes: 240, ends_at: addMinutes(etAt(-33, "09:30"), 240), arrival_window_minutes: 0,
-    crew_id: "crewB", confirmed_at: min(48600), customer_phone: "+15615550127", job_name: "Paver sealing",
+    crew_id: "crewB", confirmed_at: min(48600), customer_phone: "+15615550127", customer_email: null, job_name: "Paver sealing",
     gate_code: null, site_notes: null, canceled_reason: null,
   },
   {
@@ -541,7 +670,7 @@ export const DEMO_JOBS: Job[] = [
     job_address: "301 Flamingo Dr, West Palm Beach",
     total_cents: 30000, deposit_cents: 0, scheduled_at: etAt(-47, "11:00"), assigned_to: "Crew A", notes: null,
     duration_minutes: 120, ends_at: addMinutes(etAt(-47, "11:00"), 120), arrival_window_minutes: 0,
-    crew_id: "crewA", confirmed_at: min(68600), customer_phone: "+15615550139", job_name: "House wash",
+    crew_id: "crewA", confirmed_at: min(68600), customer_phone: "+15615550139", customer_email: null, job_name: "House wash",
     gate_code: null, site_notes: null, canceled_reason: null,
   },
   {
@@ -550,7 +679,28 @@ export const DEMO_JOBS: Job[] = [
     job_address: "74 Ibis Blvd, Palm Beach Gardens",
     total_cents: 78000, deposit_cents: 0, scheduled_at: etAt(-63, "09:00"), assigned_to: "Crew B", notes: null,
     duration_minutes: 300, ends_at: addMinutes(etAt(-63, "09:00"), 300), arrival_window_minutes: 0,
-    crew_id: "crewB", confirmed_at: min(92100), customer_phone: "+15615550152", job_name: "Whole exterior",
+    crew_id: "crewB", confirmed_at: min(92100), customer_phone: "+15615550152", customer_email: null, job_name: "Whole exterior",
+    gate_code: null, site_notes: null, canceled_reason: null,
+  },
+  // job14 — Priya's third job (paid, ~3 weeks back) — makes ct1 the repeat customer.
+  {
+    id: "job14", created_at: min(31000), estimate_id: null, lead_id: "d6", contact_id: "ct1",
+    status: "paid", customer_name: "Priya Raman",
+    job_address: "18 Coquina Ln, Palm Beach Gardens",
+    total_cents: 38000, deposit_cents: 0, scheduled_at: etAt(-21, "09:00"), assigned_to: "Crew A", notes: null,
+    duration_minutes: 150, ends_at: addMinutes(etAt(-21, "09:00"), 150), arrival_window_minutes: 0,
+    crew_id: "crewA", confirmed_at: min(31100), customer_phone: "+15615550133", customer_email: "priya@example.com", job_name: "Roof wash (tile)",
+    gate_code: "0916", site_notes: null, canceled_reason: null,
+  },
+  // job15 — Hector's completed job: first invoice was VOIDED (wrong amount) and
+  // the job was re-billed — proves the void → re-bill path end to end.
+  {
+    id: "job15", created_at: min(17500), estimate_id: null, lead_id: null, contact_id: "ct7",
+    status: "invoiced", customer_name: "Hector Ruiz",
+    job_address: "63 Cypress Trace, Wellington",
+    total_cents: 36000, deposit_cents: 0, scheduled_at: etAt(-13, "09:00"), assigned_to: "Crew B", notes: null,
+    duration_minutes: 120, ends_at: addMinutes(etAt(-13, "09:00"), 120), arrival_window_minutes: 0,
+    crew_id: "crewB", confirmed_at: min(17600), customer_phone: "+15615550175", customer_email: "hector.ruiz@example.com", job_name: "House wash + driveway",
     gate_code: null, site_notes: null, canceled_reason: null,
   },
 ];
@@ -618,6 +768,23 @@ export const DEMO_JOB_ITEMS: JobItem[] = [
     name: "Driveway wash", description: "Concrete driveway surface clean", quantity: 1,
     line_total_cents: 25000, done: true,
   },
+  // job14 — Priya's roof wash (paid)
+  {
+    id: "ji12", job_id: "job14", estimate_item_id: null, position: 0,
+    name: "Roof wash (tile)", description: "Soft wash tile roof, algae + oxidation", quantity: 1,
+    line_total_cents: 38000, done: true,
+  },
+  // job15 — Hector's house wash + driveway (re-billed)
+  {
+    id: "ji13", job_id: "job15", estimate_item_id: null, position: 0,
+    name: "House wash", description: "Soft wash of exterior siding", quantity: 1,
+    line_total_cents: 26000, done: true,
+  },
+  {
+    id: "ji14", job_id: "job15", estimate_item_id: null, position: 1,
+    name: "Driveway wash", description: "Concrete driveway surface clean", quantity: 1,
+    line_total_cents: 10000, done: true,
+  },
 ];
 
 export const DEMO_CALENDAR_EVENTS: CalendarEvent[] = [
@@ -636,7 +803,7 @@ export const DEMO_INVOICES: Invoice[] = [
   // inv1 — SENT, awaiting card payment (backs completed job6).
   {
     id: "inv1", created_at: min(1400), updated_at: min(1380),
-    job_id: "job6", estimate_id: null, lead_id: null, contact_id: null,
+    job_id: "job6", estimate_id: null, lead_id: "d6", contact_id: "ct1",
     number: "INV-000001", status: "sent",
     customer_name: "Priya Raman", customer_phone: "+15615550133", customer_email: "priya@example.com",
     job_address: "18 Coquina Ln, Palm Beach Gardens", job_name: "House wash",
@@ -653,7 +820,7 @@ export const DEMO_INVOICES: Invoice[] = [
   // inv2 — PAID in cash (backs job7 + payment pay2).
   {
     id: "inv2", created_at: min(2900), updated_at: min(2880),
-    job_id: "job7", estimate_id: null, lead_id: null, contact_id: null,
+    job_id: "job7", estimate_id: null, lead_id: null, contact_id: "ct2",
     number: "INV-000002", status: "paid",
     customer_name: "Frank Osei", customer_phone: "+15615550155", customer_email: null,
     job_address: "51 Marina Blvd, West Palm Beach", job_name: "Driveway wash",
@@ -669,17 +836,17 @@ export const DEMO_INVOICES: Invoice[] = [
   },
   // ── Historical paid invoices backing job8–job13 (Insights demo history).
   ...([
-    { n: 3, job: "job8", name: "Elaine Brooks", phone: "+15615550161", addr: "12 Sailfish Ct, Palm Beach Gardens", jobName: "House wash + gutters", total: 42000, at: 6900 },
-    { n: 4, job: "job9", name: "Marcus Webb", phone: "+15615550148", addr: "406 Datura St, West Palm Beach", jobName: "Roof wash (tile)", total: 45000, at: 17100 },
-    { n: 5, job: "job10", name: "Rosa Marino", phone: "+15615550183", addr: "88 Gardenia Isle Dr, Royal Palm Beach", jobName: "Driveway + patio", total: 32500, at: 27200 },
-    { n: 6, job: "job11", name: "Ted Alvarez", phone: "+15615550127", addr: "27 Bimini Ln, West Palm Beach", jobName: "Paver sealing", total: 60000, at: 47300 },
-    { n: 7, job: "job12", name: "Nina Kowalski", phone: "+15615550139", addr: "301 Flamingo Dr, West Palm Beach", jobName: "House wash", total: 30000, at: 67200 },
-    { n: 8, job: "job13", name: "Owen Pratt", phone: "+15615550152", addr: "74 Ibis Blvd, Palm Beach Gardens", jobName: "Whole exterior", total: 78000, at: 90800 },
+    { n: 3, job: "job8", name: "Elaine Brooks", phone: "+15615550161", addr: "12 Sailfish Ct, Palm Beach Gardens", jobName: "House wash + gutters", total: 42000, at: 6900, contact: "ct6", email: "elaine.brooks@example.com" },
+    { n: 4, job: "job9", name: "Marcus Webb", phone: "+15615550148", addr: "406 Datura St, West Palm Beach", jobName: "Roof wash (tile)", total: 45000, at: 17100, contact: null, email: null },
+    { n: 5, job: "job10", name: "Rosa Marino", phone: "+15615550183", addr: "88 Gardenia Isle Dr, Royal Palm Beach", jobName: "Driveway + patio", total: 32500, at: 27200, contact: null, email: null },
+    { n: 6, job: "job11", name: "Ted Alvarez", phone: "+15615550127", addr: "27 Bimini Ln, West Palm Beach", jobName: "Paver sealing", total: 60000, at: 47300, contact: null, email: null },
+    { n: 7, job: "job12", name: "Nina Kowalski", phone: "+15615550139", addr: "301 Flamingo Dr, West Palm Beach", jobName: "House wash", total: 30000, at: 67200, contact: null, email: null },
+    { n: 8, job: "job13", name: "Owen Pratt", phone: "+15615550152", addr: "74 Ibis Blvd, Palm Beach Gardens", jobName: "Whole exterior", total: 78000, at: 90800, contact: null, email: null },
   ].map((r): Invoice => ({
     id: `inv${r.n}`, created_at: min(r.at + 60), updated_at: min(r.at),
-    job_id: r.job, estimate_id: null, lead_id: null, contact_id: null,
+    job_id: r.job, estimate_id: null, lead_id: null, contact_id: r.contact ?? null,
     number: `INV-${String(r.n).padStart(6, "0")}`, status: "paid",
-    customer_name: r.name, customer_phone: r.phone, customer_email: null,
+    customer_name: r.name, customer_phone: r.phone, customer_email: r.email ?? null,
     job_address: r.addr, job_name: r.jobName,
     subtotal_cents: r.total, adjustment_cents: 0, tax_cents: 0, tax_rate_bps: 0,
     total_cents: r.total, amount_paid_cents: r.total,
@@ -689,6 +856,53 @@ export const DEMO_INVOICES: Invoice[] = [
     square_invoice_id: null, square_order_id: null, hosted_payment_url: null,
     sent_at: min(r.at + 45), viewed_at: null, paid_at: min(r.at), voided_at: null, employee: "Sebastian",
   }))),
+  // ── The void → re-bill pair on job15 (both rows share job_id; only one is
+  //    live thanks to 0006's partial unique index). inv9 was billed at the wrong
+  //    amount and voided; inv10 is the corrected re-bill, still unpaid + overdue.
+  {
+    id: "inv9", created_at: min(17000), updated_at: min(16500),
+    job_id: "job15", estimate_id: null, lead_id: null, contact_id: "ct7",
+    number: "INV-000009", status: "void",
+    customer_name: "Hector Ruiz", customer_phone: "+15615550175", customer_email: "hector.ruiz@example.com",
+    job_address: "63 Cypress Trace, Wellington", job_name: "House wash + driveway",
+    subtotal_cents: 63000, adjustment_cents: 0, tax_cents: 0, tax_rate_bps: 0,
+    total_cents: 63000, amount_paid_cents: 0,
+    message_to_customer: "Thanks for choosing Canes Pressure Washing!",
+    terms: "Payment is due upon receipt. Thank you for your business.",
+    internal_notes: "Billed the wrong amount — voided and re-billed as INV-000010.",
+    public_token: "demo-token-inv9",
+    square_invoice_id: null, square_order_id: null, hosted_payment_url: null,
+    sent_at: min(16900), viewed_at: null, paid_at: null, voided_at: min(16500), employee: "Sebastian",
+  },
+  {
+    id: "inv10", created_at: min(16400), updated_at: min(16400),
+    job_id: "job15", estimate_id: null, lead_id: null, contact_id: "ct7",
+    number: "INV-000010", status: "sent",
+    customer_name: "Hector Ruiz", customer_phone: "+15615550175", customer_email: "hector.ruiz@example.com",
+    job_address: "63 Cypress Trace, Wellington", job_name: "House wash + driveway",
+    subtotal_cents: 36000, adjustment_cents: 0, tax_cents: 0, tax_rate_bps: 0,
+    total_cents: 36000, amount_paid_cents: 0,
+    message_to_customer: "Thanks for choosing Canes Pressure Washing! Corrected invoice.",
+    terms: "Payment is due upon receipt. Thank you for your business.",
+    internal_notes: null, public_token: "demo-token-inv10",
+    square_invoice_id: null, square_order_id: null, hosted_payment_url: null,
+    sent_at: min(16400), viewed_at: null, paid_at: null, voided_at: null, employee: "Sebastian",
+  },
+  // inv11 — Priya's third job, settled by card (repeat-customer lifetime value).
+  {
+    id: "inv11", created_at: min(30600), updated_at: min(30500),
+    job_id: "job14", estimate_id: null, lead_id: "d6", contact_id: "ct1",
+    number: "INV-000011", status: "paid",
+    customer_name: "Priya Raman", customer_phone: "+15615550133", customer_email: "priya@example.com",
+    job_address: "18 Coquina Ln, Palm Beach Gardens", job_name: "Roof wash (tile)",
+    subtotal_cents: 38000, adjustment_cents: 0, tax_cents: 0, tax_rate_bps: 0,
+    total_cents: 38000, amount_paid_cents: 38000,
+    message_to_customer: "Thanks for choosing Canes Pressure Washing!",
+    terms: "Payment is due upon receipt. Thank you for your business.",
+    internal_notes: null, public_token: "demo-token-inv11",
+    square_invoice_id: null, square_order_id: null, hosted_payment_url: null,
+    sent_at: min(30550), viewed_at: min(30520), paid_at: min(30500), voided_at: null, employee: "Sebastian",
+  },
 ];
 
 export const DEMO_INVOICE_ITEMS: InvoiceItem[] = [
@@ -718,6 +932,27 @@ export const DEMO_INVOICE_ITEMS: InvoiceItem[] = [
       unit_price_cents: cents as number, line_total_cents: cents as number,
     })),
   )),
+  // inv9 (voided at the wrong price) / inv10 (corrected re-bill) / inv11 (Priya).
+  {
+    id: "ii20", invoice_id: "inv9", job_item_id: "ji13", position: 0,
+    name: "House wash + driveway", description: null, quantity: 1,
+    unit_price_cents: 63000, line_total_cents: 63000,
+  },
+  {
+    id: "ii21", invoice_id: "inv10", job_item_id: "ji13", position: 0,
+    name: "House wash", description: "Soft wash of exterior siding", quantity: 1,
+    unit_price_cents: 26000, line_total_cents: 26000,
+  },
+  {
+    id: "ii22", invoice_id: "inv10", job_item_id: "ji14", position: 1,
+    name: "Driveway wash", description: "Concrete driveway surface clean", quantity: 1,
+    unit_price_cents: 10000, line_total_cents: 10000,
+  },
+  {
+    id: "ii23", invoice_id: "inv11", job_item_id: "ji12", position: 0,
+    name: "Roof wash (tile)", description: "Soft wash tile roof, algae + oxidation", quantity: 1,
+    unit_price_cents: 38000, line_total_cents: 38000,
+  },
 ];
 
 export const DEMO_PAYMENTS: Payment[] = [
@@ -746,4 +981,11 @@ export const DEMO_PAYMENTS: Payment[] = [
     external_event_id: null,
     recorded_by: r.method === "card" ? "square" : "owner", note: null,
   }))),
+  // inv11 — Priya's repeat job, settled by card through Square.
+  {
+    id: "pay9", created_at: min(30500), invoice_id: "inv11", job_id: "job14",
+    amount_cents: 38000, currency: "USD", method: "card", source: "square_webhook",
+    status: "completed", square_payment_id: "demo-sq-pay-9", external_event_id: null,
+    recorded_by: "square", note: null,
+  },
 ];

@@ -1,5 +1,5 @@
 import { canesConfigured, canesDb } from "@/lib/canes/supabase";
-import { isDemo } from "@/lib/canes/data";
+import { getSettings, isDemo } from "@/lib/canes/data";
 import { DEMO_INVOICES, DEMO_INVOICE_ITEMS, DEMO_PAYMENTS } from "@/lib/canes/fixtures";
 import type {
   Invoice,
@@ -57,14 +57,16 @@ export async function getInvoiceByToken(token: string): Promise<Invoice | null> 
   return (data as Invoice | null) ?? null;
 }
 
-// The one invoice tied to a job (job_id is UNIQUE). Drives the job sheet's
-// billing panel — "already billed?" is a single read.
+// The one LIVE invoice tied to a job (job_id is unique among non-void invoices
+// via 0006's partial index). Voided invoices are ignored so a re-bill is
+// possible — the job sheet's "already billed?" must never surface a dead bill.
 export async function getInvoiceByJob(jobId: string): Promise<Invoice | null> {
-  if (isDemo()) return DEMO_INVOICES.find((i) => i.job_id === jobId) ?? null;
+  if (isDemo()) return DEMO_INVOICES.find((i) => i.job_id === jobId && i.status !== "void") ?? null;
   const { data } = await canesDb()
     .from("invoices")
     .select("*")
     .eq("job_id", jobId)
+    .neq("status", "void")
     .maybeSingle();
   return (data as Invoice | null) ?? null;
 }
@@ -171,15 +173,20 @@ export async function enqueueInvoiceSend(invoice: Invoice): Promise<boolean> {
   return (data ?? []).length > 0;
 }
 
-// Queue the day-3 and day-7 unpaid-invoice reminders. Insert-only on dedupe_key.
+// Queue the unpaid-invoice reminders at the days configured in
+// settings.invoice_reminder_days (default [3, 7]). Insert-only on dedupe_key.
 export async function enqueueInvoiceReminders(invoice: Invoice): Promise<void> {
   if (!canesConfigured()) return;
   const db = canesDb();
   const now = Date.now();
-  const stages = [
-    { key: `invoice_reminder:${invoice.id}:d3`, at: now + 3 * 86_400_000 },
-    { key: `invoice_reminder:${invoice.id}:d7`, at: now + 7 * 86_400_000 },
-  ];
+  const settings = await getSettings();
+  const days = settings.invoice_reminder_days
+    .map((d) => Math.round(Number(d)))
+    .filter((d) => Number.isFinite(d) && d > 0);
+  const stages = days.map((d) => ({
+    key: `invoice_reminder:${invoice.id}:d${d}`,
+    at: now + d * 86_400_000,
+  }));
   for (const stage of stages) {
     const { error } = await db.from("tasks").upsert(
       {

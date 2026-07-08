@@ -1,14 +1,13 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
 import "./canes.css";
 
-// Canes Pressure Washing — Phase 1 operations app. Fully separate from the
+// Canes Pressure Washing — operations app. Fully separate from the
 // Urso marketing site and the Woof Gang /dashboard: its own Supabase project,
-// its own design language (light, field-service), its own access gate.
-// This root layout only sets fonts + the .canes scope; the gated shell lives
-// in (app)/layout.tsx so /CanesPressure/login stays outside the gate.
-
-const body = Inter({ subsets: ["latin"], variable: "--font-canes-body" });
+// its own design language (light field-service UI in Urso's brand voice), its
+// own access gate. Fonts (IBM Plex Sans/Mono, Fraunces) inherit from the root
+// layout's next/font variables; canes.css maps them to --cp-font-*.
+// This root layout only sets the .canes scope; the gated shell lives in
+// (app)/layout.tsx so /CanesPressure/login stays outside the gate.
 
 export const metadata: Metadata = {
   title: { default: "Canes Pressure Washing — Operations", template: "%s · Canes Ops" },
@@ -16,5 +15,5 @@ export const metadata: Metadata = {
 };
 
 export default function CanesRootLayout({ children }: { children: React.ReactNode }) {
-  return <div className={`canes ${body.variable} min-h-screen`}>{children}</div>;
+  return <div className="canes min-h-screen">{children}</div>;
 }

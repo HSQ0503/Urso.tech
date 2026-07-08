@@ -13,7 +13,7 @@ export const metadata = { title: "Insights" };
 
 const CASH = "var(--cp-good)";
 const CARD = "var(--cp-cold)";
-const NEUTRAL_BAR = "#dbe2e8"; // ranking bars; the leader gets brand orange
+const NEUTRAL_BAR = "var(--cp-line-strong)"; // ranking bars; the leader gets brand orange
 const LEADER = "var(--cp-brand)";
 
 const fmtMins = (m: number) =>
@@ -125,7 +125,6 @@ export default async function InsightsPage({
     {
       label: "Collected",
       value: fmtMoney(d.kpis.collectedCents),
-      topline: "cp-topline-good",
       sub:
         deltaPct !== null ? (
           <span
@@ -142,7 +141,6 @@ export default async function InsightsPage({
     {
       label: "Outstanding",
       value: fmtMoney(d.kpis.outstandingCents),
-      topline: "cp-topline-brand",
       sub: (
         <>
           {d.kpis.outstandingCount} open invoice{d.kpis.outstandingCount === 1 ? "" : "s"}
@@ -153,7 +151,6 @@ export default async function InsightsPage({
     {
       label: "Won work",
       value: fmtMoney(d.kpis.wonCents),
-      topline: "cp-topline-cold",
       sub: (
         <>
           {d.kpis.wonCount} estimate{d.kpis.wonCount === 1 ? "" : "s"} approved
@@ -163,7 +160,6 @@ export default async function InsightsPage({
     {
       label: "Avg job",
       value: d.kpis.avgJobCents !== null ? fmtMoney(d.kpis.avgJobCents) : "—",
-      topline: "cp-topline-slate",
       sub: (
         <>
           {d.kpis.paidJobs} paid job{d.kpis.paidJobs === 1 ? "" : "s"}
@@ -178,10 +174,10 @@ export default async function InsightsPage({
   const maxSrc = Math.max(1, ...d.sources.map((s) => s.leads));
 
   const ops = [
-    { label: "Jobs completed", value: String(d.ops.completed), topline: "cp-topline-good", sub: d.rangeLabel.toLowerCase() },
-    { label: "Canceled / no-show", value: String(d.ops.canceled), topline: "cp-topline-slate", sub: d.rangeLabel.toLowerCase() },
-    { label: "Waiting to schedule", value: String(d.ops.unscheduled), topline: "cp-topline-brand", sub: "in the tray now", href: "/CanesPressure/schedule" },
-    { label: "Booked next 7 days", value: String(d.ops.upcomingCount), topline: "cp-topline-cold", sub: `${fmtMoney(d.ops.upcomingCents)} on the calendar`, href: "/CanesPressure/schedule" },
+    { label: "Jobs completed", value: String(d.ops.completed), sub: d.rangeLabel.toLowerCase() },
+    { label: "Canceled / no-show", value: String(d.ops.canceled), sub: d.rangeLabel.toLowerCase() },
+    { label: "Waiting to schedule", value: String(d.ops.unscheduled), sub: "in the tray now", href: "/CanesPressure/schedule" },
+    { label: "Booked next 7 days", value: String(d.ops.upcomingCount), sub: `${fmtMoney(d.ops.upcomingCents)} on the calendar`, href: "/CanesPressure/schedule" },
   ];
 
   return (
@@ -189,18 +185,20 @@ export default async function InsightsPage({
       {/* Header + range tabs */}
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="cp-display text-[24px] leading-tight">Insights</h1>
+          <h1 className="cp-display text-[24px] leading-tight">
+            Insights<span className="text-[var(--cp-brand)]">.</span>
+          </h1>
           <p className="mt-1 text-[13.5px] text-[var(--cp-muted)]">
             How the business did — {d.rangeLabel.toLowerCase()}.
           </p>
         </div>
-        <div className="flex rounded-md border border-[var(--cp-line)] bg-[var(--cp-surface)] p-0.5">
+        <div className="cp-seg">
           {(Object.keys(RANGES) as RangeKey[]).map((k) => (
             <Link
               key={k}
               href={`/CanesPressure/insights?range=${k}`}
-              className="cp-slot h-[28px] min-w-[46px] px-2 text-[12px]"
-              data-selected={k === rangeKey}
+              className="cp-seg-btn min-w-[46px]"
+              data-active={k === rangeKey}
             >
               {RANGES[k].short}
             </Link>
@@ -208,19 +206,17 @@ export default async function InsightsPage({
         </div>
       </header>
 
-      {/* KPI strip — one segmented card, colored toplines (the Today idiom) */}
+      {/* KPI strip — one segmented card, mono stat labels. Toplines stay on
+          the Today workflow strip only. */}
       <section className="cp-card overflow-hidden">
         <div className="-mb-px -mr-px grid grid-cols-2 lg:grid-cols-4">
           {kpis.map((s) => {
             const inner = (
-              <>
-                <span className={`cp-topline ${s.topline}`} />
-                <div className="px-4 pb-3.5 pt-3">
-                  <p className="whitespace-nowrap text-[13px] font-medium text-[var(--cp-muted)]">{s.label}</p>
-                  <p className="mt-1 text-[22px] font-bold leading-tight tabular-nums">{s.value}</p>
-                  <p className="mt-0.5 truncate text-[12px] text-[var(--cp-faint)]">{s.sub}</p>
-                </div>
-              </>
+              <div className="px-4 pb-3.5 pt-3.5">
+                <p className="cp-mono whitespace-nowrap">{s.label}</p>
+                <p className="mt-1 text-[22px] font-bold leading-tight tabular-nums">{s.value}</p>
+                <p className="mt-0.5 truncate text-[12px] text-[var(--cp-faint)]">{s.sub}</p>
+              </div>
             );
             const cls = "border-b border-r border-[var(--cp-line)]";
             return s.href ? (
@@ -398,7 +394,7 @@ export default async function InsightsPage({
                   sub={`${s.leads} lead${s.leads === 1 ? "" : "s"}`}
                   value={s.wonCents > 0 ? `${fmtMoney(s.wonCents)} won` : s.won > 0 ? `${s.won} won` : "—"}
                   pct={s.leads / maxSrc}
-                  color="#3e4a56"
+                  color="var(--cp-muted)"
                 />
               ))
             )}
@@ -431,14 +427,11 @@ export default async function InsightsPage({
         <div className="-mb-px -mr-px grid grid-cols-2 lg:grid-cols-4">
           {ops.map((s) => {
             const inner = (
-              <>
-                <span className={`cp-topline ${s.topline}`} />
-                <div className="px-4 pb-3.5 pt-3">
-                  <p className="whitespace-nowrap text-[13px] font-medium text-[var(--cp-muted)]">{s.label}</p>
-                  <p className="mt-1 text-[22px] font-bold leading-tight tabular-nums">{s.value}</p>
-                  <p className="mt-0.5 truncate text-[12px] text-[var(--cp-faint)]">{s.sub}</p>
-                </div>
-              </>
+              <div className="px-4 pb-3.5 pt-3.5">
+                <p className="cp-mono whitespace-nowrap">{s.label}</p>
+                <p className="mt-1 text-[22px] font-bold leading-tight tabular-nums">{s.value}</p>
+                <p className="mt-0.5 truncate text-[12px] text-[var(--cp-faint)]">{s.sub}</p>
+              </div>
             );
             const cls = "border-b border-r border-[var(--cp-line)]";
             return s.href ? (

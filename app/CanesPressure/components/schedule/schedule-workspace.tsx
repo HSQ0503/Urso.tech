@@ -2,7 +2,13 @@
 
 import { useMemo, useOptimistic, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { CalendarPlus, ChevronLeft, ChevronRight, MapPin } from "lucide-react";
+import {
+  CalendarPlus,
+  ChevronLeft,
+  ChevronRight,
+  Plus,
+  Wrench,
+} from "lucide-react";
 import {
   moveJob,
   scheduleJob,
@@ -11,6 +17,7 @@ import {
 import {
   etLocalToIso,
   fmtEt,
+  fmtMoney,
   type CalendarEvent,
   type Crew,
   type JobInvoiceSummary,
@@ -22,11 +29,15 @@ import {
   isCompleteWhen,
 } from "@/app/CanesPressure/components/leads/schedule-picker";
 import { JobDetailSheet } from "./job-detail-sheet";
+import { VisitSheet } from "./visit-sheet";
 import { DayRunSheet } from "./day-run-sheet";
 import { CreateEventSheet } from "./create-event-sheet";
+import { CreateJobSheet } from "./create-job-sheet";
+import { SheetShell, useSheetBehavior } from "./sheet-shell";
 import {
   CalendarBoard,
   composeDropIso,
+  etTodayAnchor,
   etYmd,
   walkDays,
   type CalDay,
@@ -40,8 +51,9 @@ import {
 
 // The scheduler's client owner. One data set, two renderings:
 //   • md+ : the Unscheduled Tray + the drag-drop CalendarBoard.
-//   • <md : a stacked ET-day agenda + a collapsible "Unscheduled (N)" section
-//           with tap-to-schedule (SchedulePicker sheet) — no drag on a phone.
+//   • <md : a Jobber-style grouped list — sticky week strip, UNSCHEDULED /
+//           TODAY / TOMORROW / THIS WEEK groups, a create FAB. No drag on a
+//           phone; tray jobs keep tap-to-schedule (SchedulePicker sheet).
 // The board is optimistic: a drop moves the card locally via useOptimistic, then
 // startTransition dispatches scheduleJob/moveJob. On {ok:false} (incl. the DEMO
 // sentinel) the reducer's base reverts to server truth on the next render and the
@@ -57,7 +69,7 @@ type OptMove =
 
 type Board = { scheduled: JobWithItems[]; unscheduled: JobWithItems[] };
 
-function applyMove(board: Board, move: OptMove): Board {
+function applyMove(board: Board, move: OptMove, crews: Crew[]): Board {
   const all = [...board.scheduled, ...board.unscheduled];
   const job = all.find((j) => j.id === move.jobId);
   if (!job) return board;
@@ -75,9 +87,9 @@ function applyMove(board: Board, move: OptMove): Board {
     };
   }
 
-  const crew = move.crewId
-    ? (job.crew && job.crew.id === move.crewId ? job.crew : null)
-    : null;
+  // Resolve the crew from the roster so a cross-crew drop paints the right
+  // color immediately instead of flashing the unassigned slate.
+  const crew = move.crewId ? crews.find((c) => c.id === move.crewId) ?? null : null;
   const endIso = new Date(
     new Date(move.scheduledIso).getTime() + move.durationMinutes * 60_000,
   ).toISOString();
@@ -116,12 +128,22 @@ const DAY_TITLE = new Intl.DateTimeFormat("en-US", {
   day: "numeric",
   timeZone: "UTC",
 });
+const DOW_SHORT = new Intl.DateTimeFormat("en-US", { weekday: "short", timeZone: "UTC" });
+const MONTH_DAY = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 
 type ViewState = { view: CalView; anchor: Date; dayAnchor: Date };
 
-// ── Mobile agenda ────────────────────────────────────────────────────────────
+type DayGroup = { day: CalDay; jobs: JobWithItems[]; visits: Lead[]; events: CalendarEvent[] };
 
-const mapsHref = (address: string) => `https://maps.google.com/?q=${encodeURIComponent(address)}`;
+// The ET days an event covers, as an inclusive ymd range. ends_at is a
+// half-open bound (the all-day creator writes next-day 00:00), so pull the end
+// back a minute before taking its ET date — otherwise every all-day event
+// would bleed one day past its span.
+function eventYmdRange(event: CalendarEvent): { start: string; end: string } {
+  const start = etYmd(event.starts_at);
+  const end = etYmd(new Date(new Date(event.ends_at).getTime() - 60_000));
+  return { start, end: end < start ? start : end };
+}
 
 export function ScheduleWorkspace({
   jobs,
@@ -132,7 +154,7 @@ export function ScheduleWorkspace({
   invoices,
   view: viewProp,
   startYmd,
-  rangeDays,
+  initialJobId = null,
 }: {
   jobs: JobWithItems[];
   unscheduled: JobWithItems[];
@@ -142,7 +164,7 @@ export function ScheduleWorkspace({
   invoices: Record<string, JobInvoiceSummary>;
   view: CalView;
   startYmd: string;
-  rangeDays: number;
+  initialJobId?: string | null;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -150,7 +172,7 @@ export function ScheduleWorkspace({
 
   const [board, applyOptimistic] = useOptimistic<Board, OptMove>(
     { scheduled: jobs, unscheduled },
-    applyMove,
+    (b, m) => applyMove(b, m, crews),
   );
 
   // View + anchor derive from the URL-backed props so paging re-fetches the
@@ -169,20 +191,50 @@ export function ScheduleWorkspace({
   const [crewFilter, setCrewFilter] = useState<string | null>(null);
   const [dropActiveYmd, setDropActiveYmd] = useState<string | null>(null);
 
-  // Sheets (UI-B). Exactly one open at a time. The detail sheet tracks a job by
-  // ID and derives the live job from the (revalidated) board, so its status and
-  // billing state refresh after complete/send/record-cash instead of freezing on
-  // the click-time snapshot.
-  const [detailJobId, setDetailJobId] = useState<string | null>(null);
-  const detailJob = detailJobId
+  // Sheets. Exactly one open at a time. The job sheet tracks an id and derives
+  // the live record from (revalidated) props, so status and billing state
+  // refresh after actions. But "Complete & bill" makes the job terminal and
+  // refresh() drops it from the board mid-flow — so every board resolution is
+  // cached, and when the lookup fails the sheet renders from that snapshot,
+  // keeping the payment chooser mounted until the owner closes it.
+  // ?job= deep link opens the sheet once, as initial state — never an effect,
+  // so closing it doesn't fight the URL. An id outside the window finds no job
+  // (and has no snapshot) and simply renders nothing.
+  const [detailJobId, setDetailJobId] = useState<string | null>(initialJobId);
+  const boardDetailJob = detailJobId
     ? [...board.scheduled, ...board.unscheduled].find((j) => j.id === detailJobId) ?? null
     : null;
+  const [detailSnapshot, setDetailSnapshot] = useState<{
+    job: JobWithItems;
+    invoice: JobInvoiceSummary | null;
+  } | null>(null);
+  // Sync during render (React's adjust-state-on-props-change idiom, not an
+  // effect). The source is the server props, not the optimistic board: prop
+  // identities are stable between refreshes, so the identity guard converges
+  // in one extra render — the optimistic reducer rebuilds objects while a
+  // transition is pending and would keep the guard firing.
+  const propsDetailJob = detailJobId
+    ? [...jobs, ...unscheduled].find((j) => j.id === detailJobId) ?? null
+    : null;
+  if (propsDetailJob) {
+    const propsInvoice = invoices[propsDetailJob.id] ?? null;
+    if (detailSnapshot?.job !== propsDetailJob || detailSnapshot.invoice !== propsInvoice) {
+      setDetailSnapshot({ job: propsDetailJob, invoice: propsInvoice });
+    }
+  }
+  const detailJob =
+    boardDetailJob ??
+    (detailJobId && detailSnapshot?.job.id === detailJobId ? detailSnapshot.job : null);
+  const [visitId, setVisitId] = useState<string | null>(null);
+  const activeVisit = visitId ? visits.find((v) => v.id === visitId) ?? null : null;
   const [runSheet, setRunSheet] = useState<{ jobs: JobWithItems[]; crew: Crew | null; dayLabel: string } | null>(null);
   const [createEventOpen, setCreateEventOpen] = useState(false);
+  const [createJobOpen, setCreateJobOpen] = useState(false);
+  const [createMenuOpen, setCreateMenuOpen] = useState(false);
 
-  // Mobile scheduling sheet + collapsible tray.
+  // Mobile: tap-to-schedule target + the week strip's day filter.
   const [scheduleTarget, setScheduleTarget] = useState<JobWithItems | null>(null);
-  const [trayOpen, setTrayOpen] = useState(true);
+  const [selectedDayYmd, setSelectedDayYmd] = useState<string | null>(null);
 
   // Run an action optimistically, revert-by-reconcile on failure via the notice.
   function dispatch(move: OptMove, fn: () => Promise<ActionResult>) {
@@ -209,6 +261,7 @@ export function ScheduleWorkspace({
   }
 
   function goToday() {
+    setSelectedDayYmd(null);
     navigate(view.view, etYmd(new Date()));
   }
   function step(delta: number) {
@@ -225,6 +278,11 @@ export function ScheduleWorkspace({
     }
     navigate(view.view, etYmd(next));
   }
+  // Mobile pages a week at a time regardless of the desktop view choice.
+  function stepWeek(delta: number) {
+    setSelectedDayYmd(null);
+    navigate(view.view, etYmd(new Date(anchor.getTime() + delta * 7 * 86_400_000)));
+  }
   function openDay(ymd: string) {
     navigate("day", ymd);
   }
@@ -236,18 +294,64 @@ export function ScheduleWorkspace({
         ? new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric", timeZone: "UTC" }).format(view.anchor)
         : weekTitle(view.anchor);
 
-  // Mobile agenda: the visible ET days with their jobs + visits, grouped.
-  const agendaDays = useMemo(() => {
-    const days: CalDay[] = walkDays(new Date(`${startYmd}T12:00:00Z`), rangeDays);
-    const todayYmd = etYmd(new Date());
-    return days.map((day) => {
-      const dayJobs = board.scheduled
+  // ── Mobile week data ─────────────────────────────────────────────────────
+  const todayYmd = etYmd(new Date());
+  const tomorrowYmd = etYmd(new Date(etTodayAnchor().getTime() + 86_400_000));
+
+  const weekData: DayGroup[] = useMemo(() => {
+    return walkDays(new Date(`${startYmd}T12:00:00Z`), 7).map((day) => ({
+      day,
+      jobs: board.scheduled
         .filter((j) => j.scheduled_at && etYmd(j.scheduled_at) === day.ymd)
-        .sort((a, b) => (a.scheduled_at ?? "").localeCompare(b.scheduled_at ?? ""));
-      const dayVisits = visits.filter((v) => v.appointment_at && etYmd(v.appointment_at) === day.ymd);
-      return { day, todayYmd, jobs: dayJobs, visits: dayVisits };
-    }).filter((g) => g.jobs.length > 0 || g.visits.length > 0);
-  }, [board.scheduled, visits, startYmd, rangeDays]);
+        .sort((a, b) => (a.scheduled_at ?? "").localeCompare(b.scheduled_at ?? "")),
+      visits: visits.filter((v) => v.appointment_at && etYmd(v.appointment_at) === day.ymd),
+      // Events show on every day they overlap — the mobile FAB creates them,
+      // so the mobile list must render them or a save reads as failed.
+      events: events.filter((e) => {
+        const range = eventYmdRange(e);
+        return range.start <= day.ymd && day.ymd <= range.end;
+      }),
+    }));
+  }, [board.scheduled, visits, events, startYmd]);
+
+  const weekHasToday = weekData.some((d) => d.day.ymd === todayYmd);
+
+  // Groups for the list: a selected day shows alone; otherwise TODAY, TOMORROW,
+  // then the rest of the visible week (labeled by range when paged elsewhere).
+  const mobileGroups = useMemo(() => {
+    const dayLabel = (d: DayGroup) =>
+      d.day.ymd === todayYmd
+        ? "Today"
+        : d.day.ymd === tomorrowYmd
+          ? "Tomorrow"
+          : `${DOW_SHORT.format(d.day.anchor)} · ${MONTH_DAY.format(d.day.anchor)}`;
+
+    if (selectedDayYmd) {
+      const picked = weekData.filter((d) => d.day.ymd === selectedDayYmd);
+      return picked.map((d) => ({ label: dayLabel(d), days: [d], showDow: false }));
+    }
+
+    const withContent = weekData.filter(
+      (d) => d.jobs.length > 0 || d.visits.length > 0 || d.events.length > 0,
+    );
+    const groups: { label: string; days: DayGroup[]; showDow: boolean }[] = [];
+    const today = withContent.filter((d) => d.day.ymd === todayYmd);
+    const tomorrow = withContent.filter((d) => d.day.ymd === tomorrowYmd);
+    const rest = withContent.filter((d) => d.day.ymd !== todayYmd && d.day.ymd !== tomorrowYmd);
+    if (today.length) groups.push({ label: "Today", days: today, showDow: false });
+    if (tomorrow.length) groups.push({ label: "Tomorrow", days: tomorrow, showDow: false });
+    if (rest.length)
+      groups.push({
+        label: weekHasToday ? "This week" : `Week of ${MONTH_DAY.format(anchor)}`,
+        days: rest,
+        showDow: true,
+      });
+    return groups;
+  }, [weekData, selectedDayYmd, todayYmd, tomorrowYmd, weekHasToday, anchor]);
+
+  const mobileEmpty = mobileGroups.every((g) =>
+    g.days.every((d) => d.jobs.length === 0 && d.visits.length === 0 && d.events.length === 0),
+  );
 
   return (
     <div className="flex flex-col gap-4">
@@ -277,17 +381,17 @@ export function ScheduleWorkspace({
               <button type="button" className="cp-btn cp-btn-sm" onClick={() => step(1)} aria-label="Next">
                 <ChevronRight size={15} strokeWidth={2} />
               </button>
-              <span className="ml-1 text-[13px] font-semibold tabular-nums">{rangeTitle}</span>
+              <span className="cp-display ml-1.5 text-[16px] tabular-nums">{rangeTitle}</span>
             </div>
 
             <div className="flex items-center gap-1.5">
-              <div className="flex rounded-md border border-[var(--cp-line)] p-0.5">
+              <div className="cp-seg">
                 {(["day", "week", "month"] as CalView[]).map((v) => (
                   <button
                     key={v}
                     type="button"
-                    className="cp-slot h-[26px] min-w-[52px] px-2 text-[12px] capitalize"
-                    data-selected={view.view === v}
+                    className="cp-seg-btn capitalize"
+                    data-active={view.view === v}
                     onClick={() => navigate(v, startYmd)}
                   >
                     {v}
@@ -295,8 +399,11 @@ export function ScheduleWorkspace({
                 ))}
               </div>
 
+              {/* min-h-0: height loses to .cp-select's 38px min-height no
+                  matter the layer order, so zero it for the h-[30px] compact
+                  size to actually match the 30px cp-btn-sm toolbar buttons. */}
               <select
-                className="cp-select h-[30px] w-auto min-w-[120px] py-0 text-[12.5px]"
+                className="cp-select h-[30px] min-h-0 w-auto min-w-[120px] py-0 text-[12.5px]"
                 value={crewFilter ?? ""}
                 onChange={(e) => setCrewFilter(e.target.value || null)}
               >
@@ -323,6 +430,7 @@ export function ScheduleWorkspace({
             crewFilter={crewFilter}
             dropActiveYmd={dropActiveYmd}
             onOpenJob={(j) => setDetailJobId(j.id)}
+            onOpenVisit={(v) => setVisitId(v.id)}
             onOpenRunSheet={(sheetJobs, crew, dayLabel) => setRunSheet({ jobs: sheetJobs, crew, dayLabel })}
             onDropJob={handleDrop}
             onOpenDay={openDay}
@@ -331,153 +439,204 @@ export function ScheduleWorkspace({
         </div>
       </div>
 
-      {/* ── Mobile (<md): stacked agenda + collapsible tray + tap-to-schedule ─ */}
-      <div className="flex flex-col gap-3 md:hidden">
-        <button
-          type="button"
-          className="cp-card flex items-center justify-between px-3 py-2.5 text-left"
-          onClick={() => setTrayOpen((v) => !v)}
-        >
-          <span className="text-[13.5px] font-semibold">Unscheduled ({board.unscheduled.length})</span>
-          <ChevronRight
-            size={16}
-            strokeWidth={2}
-            className={`text-[var(--cp-muted)] transition-transform ${trayOpen ? "rotate-90" : ""}`}
-          />
-        </button>
-        {trayOpen && (
-          <div className="flex flex-col gap-2">
-            {board.unscheduled.length === 0 ? (
-              <p className="px-1 text-[12.5px] text-[var(--cp-faint)]">
-                Nothing waiting. Approved estimates land here to be scheduled.
-              </p>
-            ) : (
-              board.unscheduled.map((job) => (
+      {/* ── Mobile (<md): week strip + grouped list + create FAB ──────────── */}
+      <div className="flex flex-col gap-4 md:hidden">
+        {/* Sticky week strip: paging + 7 tappable day chips with counts */}
+        <div className="sticky top-0 z-30 -mx-4 border-b border-[var(--cp-line)] bg-[var(--cp-bg)] px-4 pb-2.5 pt-1.5">
+          <div className="flex items-center justify-between gap-2">
+            <span className="cp-display text-[15px] tabular-nums">{weekTitle(anchor)}</span>
+            {/* min-h/w-10 (40px) over cp-btn-sm's 30px: these are the primary
+                thumb targets for paging on a phone, and at 30px a tap aimed at
+                "next" too easily lands on "previous". */}
+            <div className="flex items-center gap-1">
+              <button type="button" className="cp-btn cp-btn-sm min-h-10" onClick={goToday}>
+                Today
+              </button>
+              <button
+                type="button"
+                className="cp-btn cp-btn-sm min-h-10 min-w-10"
+                onClick={() => stepWeek(-1)}
+                aria-label="Previous week"
+              >
+                <ChevronLeft size={15} strokeWidth={2} />
+              </button>
+              <button
+                type="button"
+                className="cp-btn cp-btn-sm min-h-10 min-w-10"
+                onClick={() => stepWeek(1)}
+                aria-label="Next week"
+              >
+                <ChevronRight size={15} strokeWidth={2} />
+              </button>
+            </div>
+          </div>
+          <div className="mt-2 flex gap-1">
+            {weekData.map(({ day, jobs: dayJobs, visits: dayVisits, events: dayEvents }) => {
+              const count = dayJobs.length + dayVisits.length + dayEvents.length;
+              const isToday = day.ymd === todayYmd;
+              const selected = selectedDayYmd === day.ymd;
+              return (
                 <button
-                  key={job.id}
+                  key={day.ymd}
                   type="button"
-                  className="cp-tray-card text-left"
-                  onClick={() => setScheduleTarget(job)}
+                  className="cp-slot min-w-0 flex-1"
+                  // Inline because .cp-slot's 10px side padding is unlayered
+                  // CSS and beats Tailwind utilities; 7 chips need 4px to fit.
+                  style={{ paddingInline: 4 }}
+                  data-selected={selected}
+                  onClick={() => setSelectedDayYmd(selected ? null : day.ymd)}
                 >
-                  <TrayCardBody job={job} />
-                  <span className="mt-1 text-[11.5px] font-semibold text-[var(--cp-brand-deep)]">
-                    Tap to schedule
+                  <span className={`tabular-nums ${isToday && !selected ? "text-[var(--cp-brand-deep)]" : ""}`}>
+                    {day.anchor.getUTCDate()}
+                  </span>
+                  <span className="cp-slot-sub tabular-nums">
+                    {DOW_SHORT.format(day.anchor)}
+                    {count > 0 ? ` · ${count}` : ""}
                   </span>
                 </button>
-              ))
-            )}
+              );
+            })}
           </div>
+        </div>
+
+        {/* Unscheduled group — tap a card to schedule it */}
+        {board.unscheduled.length > 0 && (
+          <section className="flex flex-col gap-2">
+            <h3 className="cp-group-label cp-group-brand">
+              Unscheduled — {board.unscheduled.length}
+            </h3>
+            {board.unscheduled.map((job) => (
+              <button
+                key={job.id}
+                type="button"
+                className="cp-tray-card text-left"
+                onClick={() => setScheduleTarget(job)}
+              >
+                <TrayCardBody job={job} />
+                <span className="mt-1 text-[11.5px] font-semibold text-[var(--cp-brand-deep)]">
+                  Tap to schedule
+                </span>
+              </button>
+            ))}
+          </section>
         )}
 
-        <div className="cp-divider pt-3">
-          {agendaDays.length === 0 ? (
-            <p className="text-[13px] text-[var(--cp-faint)]">Nothing scheduled in the next two weeks.</p>
-          ) : (
-            <div className="flex flex-col gap-4">
-              {agendaDays.map(({ day, todayYmd, jobs: dayJobs, visits: dayVisits }) => (
-                <section key={day.ymd} className="flex flex-col gap-2">
-                  <h3 className="text-[13px] font-semibold">
-                    {day.ymd === todayYmd ? "Today" : DAY_TITLE.format(day.anchor)}
-                  </h3>
-                  {dayVisits.map((v) => (
-                    <div key={v.id} className="cp-visit-chip w-full justify-start">
-                      <span className="tabular-nums">
-                        {fmtEt(v.appointment_at, { hour: "numeric", minute: "2-digit" })}
-                      </span>
-                      <span className="truncate">{v.name ?? "Estimate visit"}</span>
-                    </div>
+        {/* Day groups */}
+        {mobileGroups.length === 0 || mobileEmpty ? (
+          <p className="text-[13px] text-[var(--cp-faint)]">
+            {selectedDayYmd ? "Nothing on this day." : "Nothing scheduled this week."}
+          </p>
+        ) : (
+          mobileGroups.map((group) => (
+            <section key={group.label} className="flex flex-col gap-2">
+              <h3 className="cp-group-label">{group.label}</h3>
+              {group.days.map((d) => (
+                <div key={d.day.ymd} className="flex flex-col gap-2">
+                  {d.events.map((ev) => (
+                    <MobileEventRow
+                      key={ev.id}
+                      event={ev}
+                      dow={group.showDow ? DOW_SHORT.format(d.day.anchor) : null}
+                    />
                   ))}
-                  {dayJobs.map((job) => (
-                    <button
+                  {d.visits.map((v) => (
+                    <MobileVisitRow
+                      key={v.id}
+                      visit={v}
+                      dow={group.showDow ? DOW_SHORT.format(d.day.anchor) : null}
+                      onOpen={() => setVisitId(v.id)}
+                    />
+                  ))}
+                  {d.jobs.map((job) => (
+                    <MobileJobRow
                       key={job.id}
-                      type="button"
-                      className="cp-job-block"
-                      data-unassigned={!job.crew}
-                      style={job.crew ? ({ ["--cp-crew"]: job.crew.color } as React.CSSProperties) : undefined}
-                      onClick={() => setDetailJobId(job.id)}
-                    >
-                      <div className="flex items-baseline justify-between gap-2">
-                        <span className="font-semibold tabular-nums">
-                          {fmtEt(job.scheduled_at, { hour: "numeric", minute: "2-digit" })}
-                        </span>
-                        <span className="flex items-center gap-1.5 text-[11.5px] text-[var(--cp-muted)]">
-                          <span
-                            className="cp-crew-dot"
-                            style={job.crew ? ({ ["--cp-crew"]: job.crew.color } as React.CSSProperties) : undefined}
-                          />
-                          {job.crew?.name ?? "Assign crew"}
-                        </span>
-                      </div>
-                      <span className="text-[13px] font-semibold">{job.customer_name ?? "Customer"}</span>
-                      {job.job_name && <span className="text-[12px] text-[var(--cp-muted)]">{job.job_name}</span>}
-                      {job.job_address && (
-                        <a
-                          href={mapsHref(job.job_address)}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="mt-0.5 inline-flex items-center gap-1 text-[11.5px] font-semibold text-[var(--cp-brand-deep)]"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <MapPin size={12} strokeWidth={2} /> Maps
-                        </a>
-                      )}
-                    </button>
+                      job={job}
+                      dow={group.showDow ? DOW_SHORT.format(d.day.anchor) : null}
+                      onOpen={() => setDetailJobId(job.id)}
+                    />
                   ))}
-                </section>
+                  {d.jobs.length === 0 && d.visits.length === 0 && d.events.length === 0 && (
+                    <p className="text-[12.5px] text-[var(--cp-faint)]">Nothing on this day.</p>
+                  )}
+                </div>
               ))}
-            </div>
-          )}
-        </div>
+            </section>
+          ))
+        )}
+
+        {/* Create FAB → Job / Event menu */}
+        <button
+          type="button"
+          className="cp-fab fixed bottom-20 right-4 z-40"
+          onClick={() => setCreateMenuOpen(true)}
+          aria-label="Create"
+        >
+          <Plus size={24} strokeWidth={2} />
+        </button>
       </div>
 
       {/* ── Sheets ─────────────────────────────────────────────────────────── */}
       {detailJob && (
-        <div
-          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/30 p-4"
-          onClick={() => setDetailJobId(null)}
-        >
-          <div className="w-full max-w-md" onClick={(e) => e.stopPropagation()}>
-            <JobDetailSheet
-              job={detailJob}
-              crews={crews}
-              invoice={invoices[detailJob.id] ?? null}
-              onClose={() => setDetailJobId(null)}
-            />
-          </div>
-        </div>
+        <JobDetailSheet
+          job={detailJob}
+          crews={crews}
+          // Live map first (refresh keeps it fresh even for terminal jobs),
+          // snapshot as the fallback so billing state survives the unmount gap.
+          invoice={invoices[detailJob.id] ?? detailSnapshot?.invoice ?? null}
+          onClose={() => {
+            setDetailJobId(null);
+            setDetailSnapshot(null);
+          }}
+        />
       )}
+      {activeVisit && <VisitSheet visit={activeVisit} onClose={() => setVisitId(null)} />}
       {runSheet && (
-        <div
-          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/30 p-4 print:static print:overflow-visible print:bg-transparent print:p-0"
-          onClick={() => setRunSheet(null)}
-        >
-          <div
-            className="cp-card w-full max-w-lg p-4 print:max-w-none print:border-0 print:shadow-none"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-baseline justify-between gap-2 pb-2 print:hidden">
-              <h2 className="text-[15px] font-semibold">Run sheet</h2>
-              <button
-                type="button"
-                className="text-[13px] font-semibold text-[var(--cp-muted)] hover:underline"
-                onClick={() => setRunSheet(null)}
-              >
-                Close
-              </button>
-            </div>
-            <DayRunSheet jobs={runSheet.jobs} crew={runSheet.crew} dayLabel={runSheet.dayLabel} />
-          </div>
-        </div>
+        <RunSheetOverlay
+          jobs={runSheet.jobs}
+          crew={runSheet.crew}
+          dayLabel={runSheet.dayLabel}
+          onClose={() => setRunSheet(null)}
+        />
       )}
-      {createEventOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/30 p-4"
-          onClick={() => setCreateEventOpen(false)}
-        >
-          <div className="w-full max-w-md" onClick={(e) => e.stopPropagation()}>
-            <CreateEventSheet crews={crews} onClose={() => setCreateEventOpen(false)} />
+      {createEventOpen && <CreateEventSheet crews={crews} onClose={() => setCreateEventOpen(false)} />}
+      {createJobOpen && <CreateJobSheet crews={crews} onClose={() => setCreateJobOpen(false)} />}
+      {createMenuOpen && (
+        <SheetShell title="Create" onClose={() => setCreateMenuOpen(false)}>
+          <div className="flex flex-col gap-2">
+            <button
+              type="button"
+              className="cp-card cp-card-hover flex items-center gap-3 px-3.5 py-3 text-left"
+              onClick={() => {
+                setCreateMenuOpen(false);
+                setCreateJobOpen(true);
+              }}
+            >
+              <Wrench size={16} strokeWidth={2} className="shrink-0 text-[var(--cp-muted)]" />
+              <span className="min-w-0">
+                <span className="block text-[13.5px] font-semibold">Job</span>
+                <span className="block text-[12px] text-[var(--cp-muted)]">
+                  Add a manual job for a customer
+                </span>
+              </span>
+            </button>
+            <button
+              type="button"
+              className="cp-card cp-card-hover flex items-center gap-3 px-3.5 py-3 text-left"
+              onClick={() => {
+                setCreateMenuOpen(false);
+                setCreateEventOpen(true);
+              }}
+            >
+              <CalendarPlus size={16} strokeWidth={2} className="shrink-0 text-[var(--cp-muted)]" />
+              <span className="min-w-0">
+                <span className="block text-[13.5px] font-semibold">Event</span>
+                <span className="block text-[12px] text-[var(--cp-muted)]">
+                  Block time, time off, or a holiday
+                </span>
+              </span>
+            </button>
           </div>
-        </div>
+        </SheetShell>
       )}
       {scheduleTarget && (
         <MobileScheduleSheet
@@ -498,9 +657,154 @@ export function ScheduleWorkspace({
   );
 }
 
+// ── Run sheet overlay ────────────────────────────────────────────────────────
+// Utilities-only frame (not .cp-sheet): canes.css is unlayered so Tailwind's
+// print: variants cannot override the sheet's position:fixed — a plain overlay
+// keeps the run sheet printable as a full document.
+
+function RunSheetOverlay({
+  jobs,
+  crew,
+  dayLabel,
+  onClose,
+}: {
+  jobs: JobWithItems[];
+  crew: Crew | null;
+  dayLabel: string;
+  onClose: () => void;
+}) {
+  useSheetBehavior(onClose);
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/30 p-4 print:static print:overflow-visible print:bg-transparent print:p-0"
+      onClick={onClose}
+    >
+      <div
+        className="cp-card w-full max-w-lg p-4 print:max-w-none print:border-0 print:shadow-none"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-baseline justify-between gap-2 pb-2 print:hidden">
+          <h2 className="text-[15px] font-semibold">Run sheet</h2>
+          <button
+            type="button"
+            className="text-[13px] font-semibold text-[var(--cp-muted)] hover:underline"
+            onClick={onClose}
+          >
+            Close
+          </button>
+        </div>
+        <DayRunSheet jobs={jobs} crew={crew} dayLabel={dayLabel} />
+      </div>
+    </div>
+  );
+}
+
+// ── Mobile list rows ─────────────────────────────────────────────────────────
+// The Jobber list-row shape: time · crew dot · customer · job · $ · address.
+// Jobs are solid rows, visits stay hairline chips — the two-object discipline.
+
+function MobileJobRow({
+  job,
+  dow,
+  onOpen,
+}: {
+  job: JobWithItems;
+  dow: string | null;
+  onOpen: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="cp-card cp-card-hover flex items-center gap-3 px-3 py-2.5 text-left"
+      onClick={onOpen}
+    >
+      <span className="w-[62px] shrink-0">
+        <span className="block text-[13px] font-semibold tabular-nums leading-tight">
+          {job.scheduled_at
+            ? fmtEt(job.scheduled_at, { hour: "numeric", minute: "2-digit" })
+            : "—"}
+        </span>
+        {dow && (
+          <span className="block text-[11px] leading-tight text-[var(--cp-faint)]">{dow}</span>
+        )}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center gap-1.5">
+          <span
+            className="cp-crew-dot"
+            style={job.crew ? ({ ["--cp-crew"]: job.crew.color } as React.CSSProperties) : undefined}
+          />
+          <span className="truncate text-[13.5px] font-semibold">
+            {job.customer_name ?? "Customer"}
+          </span>
+        </span>
+        {job.job_name && (
+          <span className="block truncate text-[12px] text-[var(--cp-muted)]">{job.job_name}</span>
+        )}
+        {job.job_address && (
+          <span className="block truncate text-[11.5px] text-[var(--cp-faint)]">
+            {job.job_address}
+          </span>
+        )}
+      </span>
+      <span className="shrink-0 text-[13px] font-semibold tabular-nums">
+        {fmtMoney(job.total_cents)}
+      </span>
+    </button>
+  );
+}
+
+// A calendar event (time off / block / holiday) as a compact hatched band —
+// the same "unavailable ground" reading as the desktop board's EventBand, with
+// the list's 62px time gutter so rows align.
+function MobileEventRow({ event, dow }: { event: CalendarEvent; dow: string | null }) {
+  return (
+    <div className="cp-event-band flex items-center gap-3" title={event.notes ?? undefined}>
+      <span className="w-[62px] shrink-0">
+        <span className="block leading-tight tabular-nums">
+          {event.all_day
+            ? "All day"
+            : fmtEt(event.starts_at, { hour: "numeric", minute: "2-digit" })}
+        </span>
+        {dow && <span className="block text-[10.5px] leading-tight">{dow}</span>}
+      </span>
+      <span className="truncate">{event.title}</span>
+    </div>
+  );
+}
+
+function MobileVisitRow({
+  visit,
+  dow,
+  onOpen,
+}: {
+  visit: Lead;
+  dow: string | null;
+  onOpen: () => void;
+}) {
+  return (
+    <button type="button" className="cp-visit-chip w-full justify-start" onClick={onOpen}>
+      <span className="w-[62px] shrink-0 text-left">
+        <span className="block leading-tight tabular-nums">
+          {fmtEt(visit.appointment_at, { hour: "numeric", minute: "2-digit" })}
+        </span>
+        {dow && (
+          <span className="block text-[10.5px] leading-tight text-[var(--cp-faint)]">{dow}</span>
+        )}
+      </span>
+      <span className="truncate">{visit.name ?? "Estimate visit"}</span>
+      {visit.service && (
+        <span className="hidden truncate text-[var(--cp-faint)] min-[420px]:inline">
+          · {visit.service}
+        </span>
+      )}
+    </button>
+  );
+}
+
 // ── Mobile tap-to-schedule sheet ─────────────────────────────────────────────
 // Reuses SchedulePicker (proven, ET-aware) plus a crew picker and a duration
-// stepper. Also the desktop keyboard/a11y fallback path to drag.
+// stepper, inside the shared sheet shell.
 
 const DURATIONS = [60, 90, 120, 180, 240];
 
@@ -522,71 +826,53 @@ function MobileScheduleSheet({
   const [crewId, setCrewId] = useState<string | null>(job.crew_id);
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 md:items-center"
-      onClick={onClose}
-    >
-      <div
-        className="cp-card w-full max-w-md rounded-b-none rounded-t-xl p-4 md:rounded-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-baseline justify-between gap-2 pb-2">
-          <h2 className="text-[15px] font-semibold">Schedule job</h2>
-          <button
-            type="button"
-            className="text-[13px] font-semibold text-[var(--cp-muted)] hover:underline"
-            onClick={onClose}
-          >
-            Close
-          </button>
-        </div>
-        <p className="pb-3 text-[13px] text-[var(--cp-muted)]">
-          {job.customer_name ?? "Customer"}
-          {job.job_name ? ` · ${job.job_name}` : ""}
-        </p>
+    <SheetShell title="Schedule job" onClose={onClose}>
+      <p className="pb-3 text-[13px] text-[var(--cp-muted)]">
+        {job.customer_name ?? "Customer"}
+        {job.job_name ? ` · ${job.job_name}` : ""}
+      </p>
 
-        <SchedulePicker value={when} onChange={setWhen} />
+      <SchedulePicker value={when} onChange={setWhen} />
 
-        <div className="mt-3 flex flex-col gap-1">
-          <label className="text-[12.5px] font-semibold">Crew</label>
-          <select
-            className="cp-select"
-            value={crewId ?? ""}
-            onChange={(e) => setCrewId(e.target.value || null)}
-          >
-            <option value="">Unassigned</option>
-            {crews.map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
-          </select>
-        </div>
-
-        <div className="mt-3 flex flex-col gap-1">
-          <label className="text-[12.5px] font-semibold">Duration</label>
-          <div className="flex flex-wrap gap-1.5">
-            {DURATIONS.map((d) => (
-              <button
-                key={d}
-                type="button"
-                className="cp-slot"
-                data-selected={d === duration}
-                onClick={() => setDuration(d)}
-              >
-                {d < 120 ? `${d}m` : `${d / 60}h`}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <button
-          type="button"
-          className="cp-btn cp-btn-primary mt-4 w-full"
-          disabled={!isCompleteWhen(when) || isPending}
-          onClick={() => onSchedule(etLocalToIso(when), duration, crewId)}
+      <div className="mt-3 flex flex-col gap-1">
+        <label className="cp-label">Crew</label>
+        <select
+          className="cp-select"
+          value={crewId ?? ""}
+          onChange={(e) => setCrewId(e.target.value || null)}
         >
-          {isPending ? "Scheduling..." : "Schedule"}
-        </button>
+          <option value="">Unassigned</option>
+          {crews.map((c) => (
+            <option key={c.id} value={c.id}>{c.name}</option>
+          ))}
+        </select>
       </div>
-    </div>
+
+      <div className="mt-3 flex flex-col gap-1">
+        <label className="cp-label">Duration</label>
+        <div className="flex flex-wrap gap-1.5">
+          {DURATIONS.map((d) => (
+            <button
+              key={d}
+              type="button"
+              className="cp-slot"
+              data-selected={d === duration}
+              onClick={() => setDuration(d)}
+            >
+              {d < 120 ? `${d}m` : `${d / 60}h`}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <button
+        type="button"
+        className="cp-btn cp-btn-primary mt-4 w-full"
+        disabled={!isCompleteWhen(when) || isPending}
+        onClick={() => onSchedule(etLocalToIso(when), duration, crewId)}
+      >
+        {isPending ? "Scheduling..." : "Schedule"}
+      </button>
+    </SheetShell>
   );
 }

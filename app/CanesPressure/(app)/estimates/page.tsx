@@ -13,9 +13,9 @@ import {
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Estimates" };
 
-// Status tabs are a superset key: "all" plus the five statuses an operator
-// actually filters by day to day (expired rides under the list but isn't a tab).
-const TABS = ["all", "draft", "sent", "viewed", "approved", "declined"] as const;
+// Status tabs are a superset key: "all" plus every status the auto-expire
+// sweep can land an estimate in, so nothing rides invisibly under "all".
+const TABS = ["all", "draft", "sent", "viewed", "approved", "declined", "expired"] as const;
 type Tab = (typeof TABS)[number];
 
 const TAB_LABEL: Record<Tab, string> = {
@@ -25,6 +25,7 @@ const TAB_LABEL: Record<Tab, string> = {
   viewed: "Viewed",
   approved: "Approved",
   declined: "Declined",
+  expired: "Expired",
 };
 
 const SORTS = ["new", "old", "amount"] as const;
@@ -43,6 +44,7 @@ const EMPTY_COPY: Record<Tab, string> = {
   viewed: "No estimates have been opened by a customer yet.",
   approved: "No approved estimates yet.",
   declined: "No declined estimates.",
+  expired: "No expired estimates. Sent quotes land here when their expiry date passes.",
 };
 
 function matchesTab(e: Estimate, tab: Tab): boolean {
@@ -108,7 +110,9 @@ export default async function EstimatesPage({
     <div>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="cp-display text-[24px] leading-tight">Estimates</h1>
+          <h1 className="cp-display text-[24px] leading-tight">
+            Estimates<span className="text-[var(--cp-brand)]">.</span>
+          </h1>
           <p className="mt-1 text-[13.5px] text-[var(--cp-muted)]">
             Every quote you have drafted, sent, and closed.
           </p>

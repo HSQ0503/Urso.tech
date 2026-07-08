@@ -17,9 +17,10 @@ function Shell({ children }: { children: React.ReactNode }) {
   return (
     <div className="mx-auto max-w-[640px] px-5 py-10">
       <header className="mb-6">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--cp-muted)]">
-          Canes Pressure Washing
+        <p className="cp-display text-[19px] leading-none">
+          Canes<span className="text-[var(--cp-brand)]">.</span>
         </p>
+        <p className="cp-mono mt-1.5">Pressure washing</p>
       </header>
       {children}
       <p className="mt-8 text-center text-[11.5px] text-[var(--cp-faint)]">Powered by Urso · urso.ws</p>
@@ -53,7 +54,7 @@ export default async function PublicInvoicePage({
     <Shell>
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
         <h1 className="cp-display text-[24px] leading-tight">Your invoice</h1>
-        <span className="text-[13px] tabular-nums text-[var(--cp-muted)]">{invoice.number}</span>
+        <span className="cp-mono tabular-nums">{invoice.number}</span>
       </div>
       {(invoice.job_name || invoice.job_address) && (
         <div className="mt-1.5 space-y-0.5">
@@ -110,8 +111,7 @@ export default async function PublicInvoicePage({
       </div>
 
       {/* Totals */}
-      <div className="cp-card mt-4 overflow-hidden">
-        <span className={`cp-topline ${isPaid ? "cp-topline-good" : "cp-topline-brand"}`} />
+      <div className="cp-card mt-4">
         <div className="space-y-2 p-5">
           {invoice.adjustment_cents !== 0 && (
             <div className="flex items-center justify-between text-[13.5px] text-[var(--cp-muted)]">
@@ -147,11 +147,11 @@ export default async function PublicInvoicePage({
       {/* Pay / paid state */}
       <div className="mt-4">
         {isPaid ? (
-          <div className="cp-card cp-done">
+          <div className="cp-card">
             <div className="flex items-start gap-2.5 p-5">
               <ShieldCheck size={20} strokeWidth={2} className="mt-0.5 shrink-0 text-[var(--cp-good)]" />
               <div>
-                <p className="text-[15px] font-semibold text-[var(--cp-good)]">Paid in full — thank you!</p>
+                <p className="text-[15px] font-semibold text-[var(--cp-good)]">Paid in full. Thank you!</p>
                 <p className="mt-0.5 text-[13.5px] leading-relaxed text-[var(--cp-muted)]">
                   {payments[0]?.method === "cash"
                     ? "We recorded your cash payment."
@@ -171,7 +171,7 @@ export default async function PublicInvoicePage({
               <p className="text-[14px] font-semibold">Ready to pay?</p>
               <p className="mt-1 text-[13.5px] leading-relaxed text-[var(--cp-muted)]">
                 Online card payment for this invoice is being set up. Reply to our text or give us a
-                call and we&rsquo;ll take care of it — cash, check, or card.
+                call and we&rsquo;ll take care of it. We take cash, check, or card.
               </p>
             </div>
           </div>

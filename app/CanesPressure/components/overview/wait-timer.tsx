@@ -1,19 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { minutesSince } from "@/lib/canes/types";
 
 // Speed-to-lead chip: minutes since the lead arrived, re-checked every 30s.
-// ok < 5m, warn < 15m, late >= 15m (late pulses via canes.css).
-
-function minutesWaiting(iso: string): number {
-  return Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 60_000));
-}
+// Tone escalates ok < 5m, warn < 15m, late >= 15m — color only, nothing blinks.
 
 export function WaitTimer({ createdAt }: { createdAt: string }) {
-  const [mins, setMins] = useState(() => minutesWaiting(createdAt));
+  const [mins, setMins] = useState(() => minutesSince(createdAt));
 
   useEffect(() => {
-    const id = setInterval(() => setMins(minutesWaiting(createdAt)), 30_000);
+    const id = setInterval(() => setMins(minutesSince(createdAt)), 30_000);
     return () => clearInterval(id);
   }, [createdAt]);
 

@@ -30,16 +30,18 @@ export default async function SettingsPage() {
   return (
     <div className="flex flex-col gap-6">
       <header>
-        <h1 className="cp-display text-[24px]">Settings</h1>
+        <h1 className="cp-display text-[24px] leading-tight">
+          Settings<span className="text-[var(--cp-brand)]">.</span>
+        </h1>
         <p className="mt-1 text-[13.5px] text-[var(--cp-muted)]">
-          Templates, timing and lead sources for the automation
+          Templates, timing and lead sources for the automation.
         </p>
       </header>
 
       <SettingsForm settings={settings} />
 
       <section className="cp-card p-4 md:p-5">
-        <h2 className="cp-display text-[16px]">Connection status</h2>
+        <h2 className="text-[15px] font-semibold">Connection status</h2>
         <div className="mt-4 flex flex-col gap-4">
           <div className="flex items-start gap-3">
             <StatusDot ok={!demo} />
@@ -78,16 +80,14 @@ export default async function SettingsPage() {
       </section>
 
       <section className="cp-card p-4 md:p-5">
-        <h2 className="cp-display text-[16px]">Webhooks</h2>
+        <h2 className="text-[15px] font-semibold">Webhooks</h2>
         <p className="mt-1 text-[13px] text-[var(--cp-muted)]">
           Paste these into the Twilio phone number configuration so incoming texts and calls reach the app.
         </p>
         <div className="mt-4 flex flex-col gap-2.5">
           {webhooks.map(({ label, url }) => (
             <div key={label}>
-              <p className="text-[12px] font-semibold uppercase tracking-[0.04em] text-[var(--cp-muted)]">
-                {label}
-              </p>
+              <p className="cp-mono">{label}</p>
               <code className="mt-0.5 block break-all rounded bg-[var(--cp-bg)] px-2.5 py-1.5 font-mono text-[12.5px] text-[var(--cp-ink)]">
                 {url}
               </code>

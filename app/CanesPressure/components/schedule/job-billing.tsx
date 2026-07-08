@@ -265,7 +265,10 @@ function CashPanel({
           </span>
           <input
             id="cp-cash-amount"
-            className="cp-input pl-6 tabular-nums"
+            className="cp-input tabular-nums"
+            // Inline because .cp-input's padding is unlayered CSS and beats
+            // Tailwind's pl-*; the $ prefix needs the extra room.
+            style={{ paddingLeft: 24 }}
             inputMode="decimal"
             value={cashAmount}
             onChange={(e) => setCashAmount(e.target.value)}

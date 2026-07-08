@@ -66,6 +66,7 @@ export default async function EstimatePage({ params }: { params: Promise<{ id: s
             phone={estimate.customer_phone ?? ""}
             email={estimate.customer_email ?? ""}
             optedOut={optedOut}
+            sentAt={estimate.sent_at}
           />
         </div>
         <div className="order-2 min-w-0 md:order-1">

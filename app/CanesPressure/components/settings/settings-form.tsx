@@ -31,7 +31,7 @@ function SectionCard({
 }) {
   return (
     <section className="cp-card p-4 md:p-5">
-      <h2 className="cp-display text-[16px]">{title}</h2>
+      <h2 className="text-[15px] font-semibold">{title}</h2>
       <p className="mt-1 text-[13px] text-[var(--cp-muted)]">{description}</p>
       <div className="mt-4 flex flex-col gap-4">{children}</div>
       <div className="mt-5 flex flex-wrap items-center gap-3">

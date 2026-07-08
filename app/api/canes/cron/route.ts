@@ -7,7 +7,7 @@ import { alertOwner, fillTemplate, nextAllowedSendTime, sendCanesSms } from "@/l
 import { notifyColdEscalation, notifyUnconfirmed, renderDigestHtml, sendDigestEmail } from "@/lib/canes/notify";
 import { logLeadEvent, upsertConfirmationTask } from "@/lib/canes/inbound";
 import { ET, fmtEt, fmtPhone, minutesSince } from "@/lib/canes/types";
-import type { AutomationTask, Lead } from "@/lib/canes/types";
+import type { AutomationTask, Estimate, Lead } from "@/lib/canes/types";
 
 // The Canes automation heartbeat, hit by Vercel cron every 5 minutes
 // (vercel.json). Drains the task outbox, escalates cold leads and unconfirmed
@@ -42,6 +42,7 @@ export async function GET(req: NextRequest) {
   };
 
   await section("tasks", drainDueTasks);
+  await section("expire_estimates", expireEstimates);
   await section("safety_net", confirmationSafetyNet);
   await section("no_reply", noReplyEscalations);
   await section("cold_escalation", coldEscalations);
@@ -49,6 +50,29 @@ export async function GET(req: NextRequest) {
   await section("digest", morningDigest);
 
   return NextResponse.json(report);
+}
+
+// ── Auto-expire: sent/viewed estimates past their expires_at ─────────────────
+// Without this sweep a stale quote looks live in the list forever (nothing else
+// flips the status — approval merely rejects, and reminders quietly cancel).
+
+async function expireEstimates() {
+  const db = canesDb();
+  const nowIso = new Date().toISOString();
+  const { data, error } = await db
+    .from("estimates")
+    .update({ status: "expired", updated_at: nowIso })
+    .in("status", ["sent", "viewed"])
+    .lt("expires_at", nowIso)
+    .select("id, number, lead_id");
+  if (error) throw new Error(`expireEstimates: ${error.message}`);
+  const expired = (data ?? []) as Pick<Estimate, "id" | "number" | "lead_id">[];
+  for (const est of expired) {
+    if (est.lead_id) {
+      await logLeadEvent(est.lead_id, "estimate", `Estimate ${est.number} expired`);
+    }
+  }
+  return { expired: expired.length };
 }
 
 // ── Outbox: due hold texts + confirmation texts ──────────────────────────────

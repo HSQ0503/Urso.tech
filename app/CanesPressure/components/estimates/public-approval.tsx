@@ -120,12 +120,12 @@ export function PublicApproval({
 
   if (done === "approved") {
     return (
-      <div className="cp-card cp-done">
+      <div className="cp-card">
         <div className="space-y-3 p-5">
           <div className="flex items-start gap-2.5">
             <CheckCircle2 size={20} strokeWidth={2} className="mt-0.5 shrink-0 text-[var(--cp-good)]" />
             <div>
-              <p className="text-[15px] font-semibold">Approved — thank you!</p>
+              <p className="text-[15px] font-semibold">Approved. Thank you!</p>
               <p className="mt-0.5 text-[13.5px] leading-relaxed text-[var(--cp-muted)]">
                 We got your approval and we&rsquo;ll be in touch to get you on the schedule.
               </p>

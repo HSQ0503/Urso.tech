@@ -28,6 +28,7 @@ import {
   enqueueInvoiceSend,
   enqueueInvoiceReminders,
 } from "@/lib/canes/invoices";
+import { ensureContact, getCustomer } from "@/lib/canes/customers";
 import {
   notifyEstimateSent,
   notifyEstimateApproved,
@@ -40,6 +41,7 @@ import { cancelSquareInvoice, createDepositLink, createSquareInvoice } from "@/l
 import {
   fmtEt,
   fmtMoney,
+  fmtPhone,
   toE164,
   type CalendarEventKind,
   type CatalogKind,
@@ -78,7 +80,7 @@ async function touch(leadId: string) {
 
 export async function updateLeadFields(
   leadId: string,
-  fields: { name?: string; phone?: string; address?: string; service?: string; notes?: string; source?: LeadSource },
+  fields: { name?: string; phone?: string; email?: string; address?: string; service?: string; notes?: string; source?: LeadSource },
 ): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
   const patch: Record<string, unknown> = { ...fields };
@@ -86,6 +88,11 @@ export async function updateLeadFields(
     const e164 = fields.phone ? toE164(fields.phone) : null;
     if (fields.phone && !e164) return { ok: false, notice: "That phone number doesn't look valid." };
     patch.phone = e164;
+  }
+  if (fields.email !== undefined) {
+    const email = fields.email.trim() || null;
+    if (email && !EMAIL_RE.test(email)) return { ok: false, notice: "That email address doesn't look valid." };
+    patch.email = email;
   }
   const { error } = await canesDb().from("leads").update(patch).eq("id", leadId);
   if (error) return { ok: false, notice: error.message };
@@ -286,10 +293,11 @@ export async function createLead(fields: {
   phone: string;
   type: "hot" | "cold";
   source: LeadSource;
+  email?: string;
   service?: string;
   address?: string;
   appointmentIso?: string;
-}): Promise<ActionResult> {
+}): Promise<ActionResult & { existingLeadId?: string }> {
   if (!canesConfigured()) return DEMO;
   const e164 = toE164(fields.phone);
   if (!e164) return { ok: false, notice: "That phone number doesn't look valid." };
@@ -301,13 +309,30 @@ export async function createLead(fields: {
       phone: e164,
       type: fields.type,
       source: fields.source,
+      email: fields.email?.trim() || null,
       service: fields.service ?? null,
       address: fields.address ?? null,
       status: "new",
     })
     .select("id")
     .single();
-  if (error) return { ok: false, notice: error.message };
+  if (error) {
+    // Phone is UNIQUE on leads — surface the existing lead instead of a raw
+    // constraint error so a repeat customer routes to their history.
+    if (error.code === "23505") {
+      const { data: existing } = await db
+        .from("leads")
+        .select("id, name")
+        .eq("phone", e164)
+        .maybeSingle();
+      return {
+        ok: false,
+        notice: `A lead already exists for ${fmtPhone(e164)}${existing?.name ? ` (${existing.name})` : ""}.`,
+        existingLeadId: existing?.id as string | undefined,
+      };
+    }
+    return { ok: false, notice: error.message };
+  }
   await logEvent(data.id, "created", "Lead added manually");
   if (fields.appointmentIso) await setAppointment(data.id, fields.appointmentIso);
   refresh();
@@ -324,6 +349,14 @@ export async function createLead(fields: {
 // + logEvent/touch/refresh pattern from setAppointment.
 
 const genToken = () => randomBytes(16).toString("base64url");
+
+// Loose shape check for send-target email overrides — deliverability is the
+// mail provider's job; this only catches obvious typos.
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// The contact snapshot fields that stay editable after an estimate/invoice is
+// sent — a typo'd phone/email must be fixable or the document is undeliverable.
+const CONTACT_PATCH_KEYS = ["customerName", "customerPhone", "customerEmail"];
 
 function lineTotalCents(item: { quantity: number; unit_price_cents: number; discount_cents: number }): number {
   return Math.round(item.quantity * item.unit_price_cents) - item.discount_cents;
@@ -389,9 +422,11 @@ export async function createEstimateFromLead(
   if (!lead) return { ok: false, notice: "Lead not found." };
   return createEstimate({
     leadId,
+    contactId: lead.contact_id ?? undefined,
     estimateType: "standard",
     customerName: lead.name ?? undefined,
     customerPhone: lead.phone ?? undefined,
+    customerEmail: lead.email ?? undefined,
     jobAddress: lead.address ?? undefined,
     jobName: lead.service ?? undefined,
   });
@@ -468,7 +503,15 @@ export async function updateEstimate(
   if (!canesConfigured()) return DEMO;
   const estimate = await getEstimate(estimateId);
   if (!estimate) return { ok: false, notice: "Estimate not found." };
-  if (estimate.status !== "draft") return { ok: false, notice: "Only draft estimates can be edited." };
+  // Money/terms are frozen once sent, but the contact snapshot stays editable —
+  // a typo'd phone/email on a sent estimate must be fixable to resend it.
+  const patchKeys = Object.entries(patch)
+    .filter(([, v]) => v !== undefined)
+    .map(([k]) => k);
+  const contactOnly = patchKeys.every((k) => CONTACT_PATCH_KEYS.includes(k));
+  if (estimate.status !== "draft" && !contactOnly) {
+    return { ok: false, notice: "Only draft estimates can be edited (contact details excepted)." };
+  }
 
   const row: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (patch.customerName !== undefined) row.customer_name = patch.customerName || null;
@@ -565,38 +608,78 @@ export async function saveEstimateItems(
 
 export async function sendEstimate(
   estimateId: string,
-  opts?: { channels?: { email?: boolean; text?: boolean } },
+  opts?: { channels?: { email?: boolean; text?: boolean }; toEmail?: string; toPhone?: string },
 ): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
   const estimate = await getEstimate(estimateId);
   if (!estimate) return { ok: false, notice: "Estimate not found." };
-  if (estimate.status !== "draft") return { ok: false, notice: "This estimate has already been sent." };
+  // Draft + resend (sent/viewed) are both deliverable; terminal statuses aren't.
+  if (estimate.status === "approved") return { ok: false, notice: "This estimate is already approved." };
+  if (estimate.status === "declined") return { ok: false, notice: "This estimate was declined." };
+  if (estimate.status === "expired") return { ok: false, notice: "This estimate has expired — create a new one." };
 
   const db = canesDb();
+  const now = new Date().toISOString();
+
+  // Send-target overrides: validate, then PERSIST onto the row — the snapshot
+  // columns are the send-of-record, so the fix survives reminders and resends.
+  const overrides: Record<string, unknown> = {};
+  if (opts?.toPhone !== undefined && opts.toPhone.trim()) {
+    const phone = toE164(opts.toPhone);
+    if (!phone) return { ok: false, notice: "That phone number doesn't look valid." };
+    overrides.customer_phone = phone;
+  }
+  if (opts?.toEmail !== undefined && opts.toEmail.trim()) {
+    const email = opts.toEmail.trim();
+    if (!EMAIL_RE.test(email)) return { ok: false, notice: "That email address doesn't look valid." };
+    overrides.customer_email = email;
+  }
+  if (Object.keys(overrides).length > 0) {
+    const { error } = await db
+      .from("estimates")
+      .update({ ...overrides, updated_at: now })
+      .eq("id", estimateId);
+    if (error) return { ok: false, notice: error.message };
+  }
+  const effectivePhone = (overrides.customer_phone as string | undefined) ?? estimate.customer_phone;
+  const effectiveEmail = (overrides.customer_email as string | undefined) ?? estimate.customer_email;
+
+  // Resolve effective channels BEFORE flipping the status. No opts = send to
+  // whatever is on file (back-compat). Text is gated on opt-out; both are gated
+  // on the field actually being present.
+  const lead = estimate.lead_id ? await getLead(estimate.lead_id) : null;
+  const optedOut = Boolean(lead?.opted_out);
+  const wantsText = opts?.channels?.text ?? true;
+  const wantsEmail = opts?.channels?.email ?? true;
+  const canText = Boolean(effectivePhone) && !optedOut && wantsText;
+  const canEmail = Boolean(effectiveEmail) && wantsEmail;
+  // Never mark an estimate sent when it has nowhere to go — that used to strand
+  // a destination-less quote in an uneditable, unresendable "sent" state.
+  if (!canText && !canEmail) {
+    return {
+      ok: false,
+      notice: optedOut && Boolean(effectivePhone)
+        ? "This customer opted out of texts — add an email to send the estimate."
+        : "No destination: add a phone or email (or pick a channel) before sending.",
+    };
+  }
+
   // Lock in final totals (and deposit) before the customer ever sees them.
   const totals = await recomputeEstimateTotals(estimateId);
-  const now = new Date().toISOString();
   const { error } = await db
     .from("estimates")
-    .update({ status: "sent", sent_at: now, updated_at: now })
+    // Resends keep the original sent_at — it anchors the reminder timeline.
+    .update({ status: "sent", sent_at: estimate.sent_at ?? now, updated_at: now })
     .eq("id", estimateId);
   if (error) return { ok: false, notice: error.message };
   const sent: Estimate = {
     ...estimate,
     status: "sent",
-    sent_at: now,
+    sent_at: estimate.sent_at ?? now,
+    customer_phone: effectivePhone,
+    customer_email: effectiveEmail,
     ...(totals ?? {}),
   };
-
-  // Resolve effective channels. No opts = send to whatever is on file
-  // (back-compat). Text is gated on opt-out; both are gated on the field
-  // actually being present.
-  const lead = estimate.lead_id ? await getLead(estimate.lead_id) : null;
-  const optedOut = Boolean(lead?.opted_out);
-  const wantsText = opts?.channels?.text ?? true;
-  const wantsEmail = opts?.channels?.email ?? true;
-  const canText = Boolean(sent.customer_phone) && !optedOut && wantsText;
-  const canEmail = Boolean(sent.customer_email) && wantsEmail;
 
   // Email inline (best-effort). notifyEstimateSent no-ops without an address.
   if (canEmail) await notifyEstimateSent(sent);
@@ -629,7 +712,11 @@ export async function sendEstimate(
     if (lead && !["won", "lost"].includes(lead.status)) {
       await db.from("leads").update({ status: "estimated" }).eq("id", estimate.lead_id);
     }
-    await logEvent(estimate.lead_id, "estimate", `Estimate ${estimate.number} sent (${fmtMoney(sent.total_cents)})`);
+    await logEvent(
+      estimate.lead_id,
+      "estimate",
+      `Estimate ${estimate.number} ${estimate.sent_at ? "re-sent" : "sent"} (${fmtMoney(sent.total_cents)})`,
+    );
     await touch(estimate.lead_id);
   }
   refresh();
@@ -770,6 +857,22 @@ export async function approveEstimate(
     await touch(estimate.lead_id);
   }
 
+  // An approval IS the moment a lead becomes a customer: upsert the contact
+  // from the estimate snapshot and stamp it before the job snapshot copies it.
+  const contact = await ensureContact({
+    name: approved.customer_name,
+    phone: approved.customer_phone,
+    email: approved.customer_email,
+    address: approved.job_address,
+    leadId: estimate.lead_id,
+  });
+  if (contact && estimate.contact_id !== contact.id) {
+    await db
+      .from("estimates")
+      .update({ contact_id: contact.id, updated_at: new Date().toISOString() })
+      .eq("id", estimate.id);
+  }
+
   await alertOwner(
     `Estimate ${approved.number} approved by ${approved.customer_name ?? signature} — ` +
       `${fmtMoney(approved.total_cents)}. A job was created; time to schedule.`,
@@ -844,15 +947,31 @@ export async function createJobFromEstimate(estimate: EstimateWithItems): Promis
     .maybeSingle();
   if (existing?.id) return existing.id as string;
 
+  // Belt-and-braces contact link: approveEstimate stamps contact_id, but this
+  // is exported and callable on its own, so resolve the contact here too.
+  const contactId =
+    estimate.contact_id ??
+    (
+      await ensureContact({
+        name: estimate.customer_name,
+        phone: estimate.customer_phone,
+        email: estimate.customer_email,
+        address: estimate.job_address,
+        leadId: estimate.lead_id,
+      })
+    )?.id ??
+    null;
+
   const { data, error } = await db
     .from("jobs")
     .insert({
       estimate_id: estimate.id,
       lead_id: estimate.lead_id,
-      contact_id: estimate.contact_id,
+      contact_id: contactId,
       status: "unscheduled",
       customer_name: estimate.customer_name,
       customer_phone: estimate.customer_phone,
+      customer_email: estimate.customer_email,
       job_name: estimate.job_name,
       job_address: estimate.job_address,
       total_cents: estimate.total_cents,
@@ -1179,9 +1298,28 @@ export async function setJobStatus(
   return { ok: true };
 }
 
+// Edit the on-site facts the crew relies on (notes, gate code, site notes)
+// without touching schedule or billing state.
+export async function updateJobDetails(
+  jobId: string,
+  fields: { notes?: string; gateCode?: string; siteNotes?: string },
+): Promise<ActionResult> {
+  if (!canesConfigured()) return DEMO;
+  const job = await getJob(jobId);
+  if (!job) return { ok: false, notice: "Job not found." };
+  const patch: Record<string, unknown> = {};
+  if (fields.notes !== undefined) patch.notes = fields.notes.trim() || null;
+  if (fields.gateCode !== undefined) patch.gate_code = fields.gateCode.trim() || null;
+  if (fields.siteNotes !== undefined) patch.site_notes = fields.siteNotes.trim() || null;
+  const { error } = await canesDb().from("jobs").update(patch).eq("id", jobId);
+  if (error) return { ok: false, notice: error.message };
+  await logJobEvent(job.lead_id, "Job details updated");
+  refresh();
+  return { ok: true };
+}
+
 // Create a non-job calendar block (holiday / time off / note) — the lean
-// "Create Event". Because jobs are born from estimates, we never need a
-// "Create Work Order" form.
+// "Create Event". Jobs come from estimate approval or createManualJob below.
 export async function createCalendarEvent(input: {
   title: string;
   startIso: string;
@@ -1297,19 +1435,20 @@ export async function completeJob(jobId: string): Promise<ActionResult & { invoi
 }
 
 // Internal-ish: create the draft invoice backing a job, snapshotting job_items
-// into invoice_items. Insert-only via job_id UNIQUE. Pulls the customer email
-// from the originating estimate when present (jobs don't snapshot email).
+// into invoice_items. Insert-only via the partial unique index on job_id
+// (void invoices step aside, so a voided bill can be re-billed). The customer
+// email + contact link now copy straight off the job snapshot — no join back
+// to the originating estimate.
 export async function createInvoiceFromJob(
   jobId: string,
 ): Promise<ActionResult & { invoiceId?: string }> {
   if (!canesConfigured()) return DEMO;
-  const existing = await getInvoiceByJob(jobId);
+  const existing = await getInvoiceByJob(jobId); // ignores void — re-bill path
   if (existing) return { ok: true, invoiceId: existing.id };
   const job = await getJob(jobId);
   if (!job) return { ok: false, notice: "Job not found." };
 
   const settings = await getSettings();
-  const email = job.estimate_id ? (await getEstimate(job.estimate_id))?.customer_email ?? null : null;
   const number = await nextInvoiceNumber();
   const db = canesDb();
   const { data, error } = await db
@@ -1323,7 +1462,7 @@ export async function createInvoiceFromJob(
       status: "draft",
       customer_name: job.customer_name,
       customer_phone: job.customer_phone,
-      customer_email: email,
+      customer_email: job.customer_email,
       job_address: job.job_address,
       job_name: job.job_name,
       message_to_customer: settings.invoice_message,
@@ -1390,7 +1529,15 @@ export async function updateInvoice(
   if (!canesConfigured()) return DEMO;
   const invoice = await getInvoice(invoiceId);
   if (!invoice) return { ok: false, notice: "Invoice not found." };
-  if (invoice.status !== "draft") return { ok: false, notice: "Only draft invoices can be edited." };
+  // Same contact-fields exception as updateEstimate: amounts freeze at send,
+  // but a wrong phone/email must stay fixable or the bill is undeliverable.
+  const patchKeys = Object.entries(patch)
+    .filter(([, v]) => v !== undefined)
+    .map(([k]) => k);
+  const contactOnly = patchKeys.every((k) => CONTACT_PATCH_KEYS.includes(k));
+  if (invoice.status !== "draft" && !contactOnly) {
+    return { ok: false, notice: "Only draft invoices can be edited (contact details excepted)." };
+  }
 
   const row: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (patch.customerName !== undefined) row.customer_name = patch.customerName || null;
@@ -1420,7 +1567,7 @@ export async function updateInvoice(
 // the webhook settles us. Never sends a card link for an already-paid invoice.
 export async function sendInvoice(
   invoiceId: string,
-  opts?: { channels?: { email?: boolean; text?: boolean } },
+  opts?: { channels?: { email?: boolean; text?: boolean }; toEmail?: string; toPhone?: string },
 ): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
   const invoice = await getInvoice(invoiceId);
@@ -1429,6 +1576,47 @@ export async function sendInvoice(
   if (invoice.status === "void") return { ok: false, notice: "This invoice was voided." };
 
   const db = canesDb();
+
+  // Send-target overrides: validate, then PERSIST — the snapshot is the
+  // send-of-record, so reminders and resends follow the corrected destination.
+  const overrides: Record<string, unknown> = {};
+  if (opts?.toPhone !== undefined && opts.toPhone.trim()) {
+    const phone = toE164(opts.toPhone);
+    if (!phone) return { ok: false, notice: "That phone number doesn't look valid." };
+    overrides.customer_phone = phone;
+  }
+  if (opts?.toEmail !== undefined && opts.toEmail.trim()) {
+    const email = opts.toEmail.trim();
+    if (!EMAIL_RE.test(email)) return { ok: false, notice: "That email address doesn't look valid." };
+    overrides.customer_email = email;
+  }
+  if (Object.keys(overrides).length > 0) {
+    const { error } = await db
+      .from("invoices")
+      .update({ ...overrides, updated_at: new Date().toISOString() })
+      .eq("id", invoiceId);
+    if (error) return { ok: false, notice: error.message };
+  }
+
+  // No-destination guard BEFORE any status flip or Square publish: an invoice
+  // must never go "sent" with nowhere to deliver it.
+  const effectivePhone = (overrides.customer_phone as string | undefined) ?? invoice.customer_phone;
+  const effectiveEmail = (overrides.customer_email as string | undefined) ?? invoice.customer_email;
+  const guardLead = invoice.lead_id ? await getLead(invoice.lead_id) : null;
+  const optedOut = Boolean(guardLead?.opted_out);
+  const wantsText = opts?.channels?.text ?? true;
+  const wantsEmail = opts?.channels?.email ?? true;
+  const canText = Boolean(effectivePhone) && !optedOut && wantsText;
+  const canEmail = Boolean(effectiveEmail) && wantsEmail;
+  if (!canText && !canEmail) {
+    return {
+      ok: false,
+      notice: optedOut && Boolean(effectivePhone)
+        ? "This customer opted out of texts — add an email to send the invoice."
+        : "No destination: add a phone or email (or pick a channel) before sending.",
+    };
+  }
+
   await recomputeInvoiceTotals(invoiceId);
   const fresh = (await getInvoice(invoiceId)) ?? invoice;
 
@@ -1462,13 +1650,6 @@ export async function sendInvoice(
     .neq("status", "paid");
   if (error) return { ok: false, notice: error.message };
   const sent: Invoice = { ...fresh, status: "sent", sent_at: fresh.sent_at ?? now, hosted_payment_url: hostedUrl ?? null };
-
-  const lead = invoice.lead_id ? await getLead(invoice.lead_id) : null;
-  const optedOut = Boolean(lead?.opted_out);
-  const wantsText = opts?.channels?.text ?? true;
-  const wantsEmail = opts?.channels?.email ?? true;
-  const canText = Boolean(sent.customer_phone) && !optedOut && wantsText;
-  const canEmail = Boolean(sent.customer_email) && wantsEmail;
 
   if (canEmail) await notifyInvoiceSent(sent);
 
@@ -1609,6 +1790,17 @@ export async function voidInvoice(invoiceId: string): Promise<ActionResult> {
     .eq("id", invoiceId)
     .neq("status", "paid");
   if (error) return { ok: false, notice: error.message };
+  // A voided invoice must release its job for re-billing (the partial unique
+  // index only allows a fresh invoice once the old one is void) and kill the
+  // hosted Square link so the customer can't pay a dead document.
+  if (invoice.job_id) {
+    await canesDb()
+      .from("jobs")
+      .update({ status: "completed" })
+      .eq("id", invoice.job_id)
+      .eq("status", "invoiced");
+  }
+  if (invoice.square_invoice_id) await cancelSquareInvoice(invoice.square_invoice_id);
   await cancelInvoiceTasks(invoiceId);
   await logInvoiceEvent(invoice.lead_id, `Invoice ${invoice.number} voided`);
   if (invoice.lead_id) await touch(invoice.lead_id);
@@ -1616,16 +1808,15 @@ export async function voidInvoice(invoiceId: string): Promise<ActionResult> {
   return { ok: true };
 }
 
+// Match on the payload's invoice_id (not hardcoded dedupe keys) so every
+// reminder day configured in settings.invoice_reminder_days is caught.
 async function cancelInvoiceTasks(invoiceId: string): Promise<void> {
   await canesDb()
     .from("tasks")
     .update({ status: "canceled" })
+    .in("kind", ["invoice_send", "invoice_reminder"])
     .eq("status", "pending")
-    .in("dedupe_key", [
-      `invoice_send:${invoiceId}`,
-      `invoice_reminder:${invoiceId}:d3`,
-      `invoice_reminder:${invoiceId}:d7`,
-    ]);
+    .contains("payload", { invoice_id: invoiceId });
 }
 
 // Public, token-scoped: first open of a sent invoice flips it to viewed.
@@ -1644,4 +1835,253 @@ export async function markInvoiceViewed(token: string): Promise<ActionResult> {
   if (invoice.lead_id) await logInvoiceEvent(invoice.lead_id, `Invoice ${invoice.number} viewed by customer`);
   refresh();
   return { ok: true };
+}
+
+// ── Customers (Phase 3) ──────────────────────────────────────────────────────
+//
+// The contacts/addresses layer revived by 0006_customers.sql. Same conventions
+// as every section above: DEMO guard → validate → write → refresh() →
+// ActionResult. ensureContact (lib/canes/customers.ts) does the identity
+// matching; these actions are the page-facing surface.
+
+export async function createCustomer(fields: {
+  name: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  notes?: string;
+  source?: LeadSource;
+}): Promise<ActionResult & { id?: string }> {
+  if (!canesConfigured()) return DEMO;
+  const name = fields.name.trim();
+  if (!name) return { ok: false, notice: "A name is required." };
+  const phone = fields.phone?.trim() ? toE164(fields.phone) : null;
+  if (fields.phone?.trim() && !phone) return { ok: false, notice: "That phone number doesn't look valid." };
+  const email = fields.email?.trim() || null;
+  if (email && !EMAIL_RE.test(email)) return { ok: false, notice: "That email address doesn't look valid." };
+
+  // A phone that already belongs to a contact is the same customer — hand back
+  // the existing record instead of a raw unique-constraint error.
+  if (phone) {
+    const { data: existing } = await canesDb()
+      .from("contacts")
+      .select("id, name")
+      .eq("phone", phone)
+      .maybeSingle();
+    if (existing?.id) {
+      return {
+        ok: false,
+        notice: `A customer already exists for ${fmtPhone(phone)}${existing.name ? ` (${existing.name})` : ""}.`,
+        id: existing.id as string,
+      };
+    }
+  }
+
+  const contact = await ensureContact({
+    name,
+    phone,
+    email,
+    address: fields.address,
+    source: fields.source ?? "other",
+  });
+  if (!contact) return { ok: false, notice: "Couldn't create the customer. Please try again." };
+  if (fields.notes?.trim()) {
+    await canesDb().from("contacts").update({ notes: fields.notes.trim() }).eq("id", contact.id);
+  }
+  refresh();
+  return { ok: true, id: contact.id };
+}
+
+export async function updateCustomer(
+  id: string,
+  fields: { name?: string; phone?: string; email?: string; notes?: string; archived?: boolean },
+): Promise<ActionResult> {
+  if (!canesConfigured()) return DEMO;
+  const patch: Record<string, unknown> = { last_activity_at: new Date().toISOString() };
+  if (fields.name !== undefined) patch.name = fields.name.trim() || null;
+  if (fields.phone !== undefined) {
+    const phone = fields.phone.trim() ? toE164(fields.phone) : null;
+    if (fields.phone.trim() && !phone) return { ok: false, notice: "That phone number doesn't look valid." };
+    patch.phone = phone;
+  }
+  if (fields.email !== undefined) {
+    const email = fields.email.trim() || null;
+    if (email && !EMAIL_RE.test(email)) return { ok: false, notice: "That email address doesn't look valid." };
+    patch.email = email;
+  }
+  if (fields.notes !== undefined) patch.notes = fields.notes.trim() || null;
+  if (fields.archived !== undefined) patch.archived = fields.archived;
+  const { error } = await canesDb().from("contacts").update(patch).eq("id", id);
+  if (error) {
+    if (error.code === "23505") return { ok: false, notice: "Another customer already has that phone number." };
+    return { ok: false, notice: error.message };
+  }
+  refresh();
+  return { ok: true };
+}
+
+export async function addCustomerAddress(
+  contactId: string,
+  line: string,
+  siteNotes?: string,
+): Promise<ActionResult> {
+  if (!canesConfigured()) return DEMO;
+  const trimmed = line.trim();
+  if (!trimmed) return { ok: false, notice: "An address is required." };
+  const db = canesDb();
+  // First address on a contact becomes primary automatically.
+  const { data: existing } = await db.from("addresses").select("id").eq("contact_id", contactId).limit(1);
+  const { error } = await db.from("addresses").insert({
+    contact_id: contactId,
+    line: trimmed,
+    site_notes: siteNotes?.trim() || null,
+    is_primary: !existing || existing.length === 0,
+  });
+  if (error) return { ok: false, notice: error.message };
+  await db.from("contacts").update({ last_activity_at: new Date().toISOString() }).eq("id", contactId);
+  refresh();
+  return { ok: true };
+}
+
+export async function setPrimaryAddress(contactId: string, addressId: string): Promise<ActionResult> {
+  if (!canesConfigured()) return DEMO;
+  const db = canesDb();
+  // Demote-then-promote keeps exactly one primary per contact.
+  const { error: demoteErr } = await db
+    .from("addresses")
+    .update({ is_primary: false })
+    .eq("contact_id", contactId);
+  if (demoteErr) return { ok: false, notice: demoteErr.message };
+  const { error } = await db
+    .from("addresses")
+    .update({ is_primary: true })
+    .eq("id", addressId)
+    .eq("contact_id", contactId);
+  if (error) return { ok: false, notice: error.message };
+  refresh();
+  return { ok: true };
+}
+
+// THE standalone-job path — repeat work, referrals, anything that never went
+// through an estimate. (Supersedes the old "jobs are only born from estimates"
+// design note above.) Creates the job, links/creates the contact, snapshots a
+// single line item, and — when a slot is given — schedules it and arms the
+// day-before confirmation exactly like scheduleJob.
+export async function createManualJob(input: {
+  contactId?: string;
+  customerName: string;
+  customerPhone?: string;
+  customerEmail?: string;
+  jobAddress?: string;
+  jobName: string;
+  totalCents: number;
+  scheduledAtIso?: string;
+  durationMinutes?: number;
+  crewId?: string;
+  notes?: string;
+}): Promise<ActionResult & { jobId?: string }> {
+  if (!canesConfigured()) return DEMO;
+  const customerName = input.customerName.trim();
+  if (!customerName) return { ok: false, notice: "A customer name is required." };
+  const jobName = input.jobName.trim();
+  if (!jobName) return { ok: false, notice: "A job name is required." };
+  const total = Math.round(input.totalCents);
+  if (!Number.isFinite(total) || total < 0) return { ok: false, notice: "Enter a valid job total." };
+  const phone = input.customerPhone?.trim() ? toE164(input.customerPhone) : null;
+  if (input.customerPhone?.trim() && !phone) return { ok: false, notice: "That phone number doesn't look valid." };
+  const email = input.customerEmail?.trim() || null;
+  if (email && !EMAIL_RE.test(email)) return { ok: false, notice: "That email address doesn't look valid." };
+
+  const when = input.scheduledAtIso ? new Date(input.scheduledAtIso) : null;
+  if (when && Number.isNaN(when.getTime())) return { ok: false, notice: "Invalid date." };
+  const duration = Math.max(15, Math.round(input.durationMinutes ?? 120));
+
+  const contactId =
+    input.contactId ??
+    (
+      await ensureContact({
+        name: customerName,
+        phone,
+        email,
+        address: input.jobAddress,
+      })
+    )?.id ??
+    null;
+
+  const db = canesDb();
+  const crews = input.crewId ? await listCrews() : [];
+  const crew = input.crewId ? crews.find((c) => c.id === input.crewId) ?? null : null;
+  const lead = phone ? await findLeadIdByPhone(phone) : null;
+  const startIso = when?.toISOString() ?? null;
+  const { data, error } = await db
+    .from("jobs")
+    .insert({
+      estimate_id: null,
+      lead_id: lead,
+      contact_id: contactId,
+      status: startIso ? "scheduled" : "unscheduled",
+      customer_name: customerName,
+      customer_phone: phone,
+      customer_email: email,
+      job_name: jobName,
+      job_address: input.jobAddress?.trim() || null,
+      total_cents: total,
+      deposit_cents: 0,
+      scheduled_at: startIso,
+      ends_at: startIso ? new Date((when as Date).getTime() + duration * 60_000).toISOString() : null,
+      duration_minutes: duration,
+      crew_id: crew?.id ?? null,
+      assigned_to: crew?.name ?? null,
+      notes: input.notes?.trim() || null,
+    })
+    .select("id")
+    .single();
+  if (error) return { ok: false, notice: error.message };
+  const jobId = data.id as string;
+
+  // The single line item is the run-sheet checklist entry + the invoice line.
+  await db.from("job_items").insert({
+    job_id: jobId,
+    position: 0,
+    name: jobName,
+    quantity: 1,
+    line_total_cents: total,
+  });
+
+  if (startIso) {
+    const job = await getJob(jobId);
+    if (job) await armJobConfirmation(job, startIso);
+  }
+  await logJobEvent(lead, `Job created manually${startIso ? ` — scheduled ${fmtEt(startIso)}` : ""}`);
+  refresh();
+  return { ok: true, jobId };
+}
+
+// The lead behind a phone number, if any — manual jobs keep the lead timeline
+// attached without requiring one.
+async function findLeadIdByPhone(phone: string): Promise<string | null> {
+  const { data } = await canesDb().from("leads").select("id").eq("phone", phone).maybeSingle();
+  return (data?.id as string | undefined) ?? null;
+}
+
+// Start a fresh estimate for an existing customer — prefills from the contact,
+// their primary address, and the linked lead (which now carries the email).
+export async function createEstimateForCustomer(
+  contactId: string,
+): Promise<ActionResult & { estimateId?: string }> {
+  if (!canesConfigured()) return DEMO;
+  const detail = await getCustomer(contactId);
+  if (!detail) return { ok: false, notice: "Customer not found." };
+  const { contact, addresses, lead } = detail;
+  const primary = addresses.find((a) => a.is_primary) ?? addresses[0] ?? null;
+  return createEstimate({
+    leadId: lead?.id,
+    contactId: contact.id,
+    estimateType: "standard",
+    customerName: contact.name ?? lead?.name ?? undefined,
+    customerPhone: contact.phone ?? lead?.phone ?? undefined,
+    customerEmail: contact.email ?? lead?.email ?? undefined,
+    jobAddress: primary?.line ?? lead?.address ?? undefined,
+    jobName: lead?.service ?? undefined,
+  });
 }

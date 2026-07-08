@@ -14,9 +14,12 @@ import {
 } from "@/app/CanesPressure/actions";
 import {
   ChannelPicker,
-  channelAvailability,
   choiceToChannels,
+  overrideSendOpts,
+  resolveSendTarget,
+  EMPTY_OVERRIDE,
   type ChannelChoice,
+  type SendOverride,
 } from "./channel-picker";
 import {
   etLocalToIso,
@@ -134,6 +137,7 @@ type Prefill = {
   jobAddress: string;
   jobName: string;
   leadId: string | null;
+  contactId: string | null;
   estimateType: EstimateType;
   messageToCustomer: string;
   terms: string;
@@ -152,6 +156,7 @@ function prefillFromEstimate(e: Estimate): Prefill {
     jobAddress: e.job_address ?? "",
     jobName: e.job_name ?? "",
     leadId: e.lead_id,
+    contactId: e.contact_id,
     estimateType: e.estimate_type,
     messageToCustomer: e.message_to_customer ?? "",
     terms: e.terms ?? "",
@@ -185,6 +190,7 @@ export function EstimateBuilder({
     jobAddress?: string;
     jobName?: string;
     leadId?: string | null;
+    contactId?: string | null;
     messageToCustomer?: string;
     terms?: string;
     expiresAtIso?: string | null;
@@ -209,6 +215,7 @@ export function EstimateBuilder({
           jobAddress: prefill?.jobAddress ?? "",
           jobName: prefill?.jobName ?? "",
           leadId: prefill?.leadId ?? null,
+          contactId: prefill?.contactId ?? null,
           estimateType: "standard",
           messageToCustomer: prefill?.messageToCustomer ?? "",
           terms: prefill?.terms ?? "",
@@ -234,6 +241,7 @@ export function EstimateBuilder({
   const [expiry, setExpiry] = useState(isoToEtNaive(seed.expiresAtIso));
   const [lines, setLines] = useState<DraftLine[]>(() => initialItems.map(itemToDraft));
   const [channelChoice, setChannelChoice] = useState<ChannelChoice>("both");
+  const [override, setOverride] = useState<SendOverride>(EMPTY_OVERRIDE);
   // Keys of custom lines already saved to the catalog this session (for feedback).
   const [savedToCatalog, setSavedToCatalog] = useState<Record<string, boolean>>({});
 
@@ -329,6 +337,7 @@ export function EstimateBuilder({
     }
     const created = await createEstimate({
       leadId: seed.leadId ?? undefined,
+      contactId: seed.contactId ?? undefined,
       estimateType: type,
       customerName: customerName || undefined,
       customerPhone: customerPhone || undefined,
@@ -368,7 +377,7 @@ export function EstimateBuilder({
       setNotice("Add at least one line before sending.");
       return;
     }
-    if (!avail.canSend) {
+    if (!target.canSend) {
       setNotice("Add a phone or email to send this estimate.");
       return;
     }
@@ -380,7 +389,10 @@ export function EstimateBuilder({
         setNotice(res.notice ?? "Could not save the estimate.");
         return;
       }
-      const sent = await sendEstimate(res.estimateId, { channels: resolvedChannels });
+      const sent = await sendEstimate(res.estimateId, {
+        channels: resolvedChannels,
+        ...overrideSendOpts(override),
+      });
       if (!sent.ok) {
         setNotice(sent.notice ?? "Saved as draft, but sending failed.");
         // Land on the estimate so the send can be retried from the rail.
@@ -415,12 +427,18 @@ export function EstimateBuilder({
 
   // Which channels are reachable, and what the picker's choice resolves to. When
   // a channel is unavailable (no field, or opted out of text), force it off so we
-  // never ask the server to send where it can't.
-  const avail = channelAvailability({ phone: customerPhone, email: customerEmail, optedOut });
+  // never ask the server to send where it can't. A valid send-to-other override
+  // beats the typed contact fields, field by field.
+  const target = resolveSendTarget({
+    phone: customerPhone,
+    email: customerEmail,
+    optedOut,
+    override,
+  });
   const chosen = choiceToChannels(channelChoice);
   const resolvedChannels = {
-    text: chosen.text && avail.hasPhone && !avail.textBlocked,
-    email: chosen.email && avail.hasEmail,
+    text: chosen.text && target.hasPhone && !target.textBlocked,
+    email: chosen.email && target.hasEmail,
   };
 
   const typeSegment = (value: EstimateType, label: string) => (
@@ -837,6 +855,8 @@ export function EstimateBuilder({
               choice={channelChoice}
               onChange={setChannelChoice}
               disabled={isPending}
+              override={override}
+              onOverrideChange={setOverride}
             />
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -852,7 +872,7 @@ export function EstimateBuilder({
               type="button"
               className="cp-btn cp-btn-primary"
               onClick={handleSend}
-              disabled={isPending || !avail.canSend}
+              disabled={isPending || !target.canSend}
             >
               {isPending ? "Working..." : "Save & send"}
             </button>

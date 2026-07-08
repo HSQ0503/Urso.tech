@@ -46,7 +46,7 @@ function TrendTooltip({
   const card = get("card");
   return (
     <div className="rounded-md border border-[var(--cp-line)] bg-[var(--cp-surface)] px-3 py-2 shadow-[0_4px_12px_rgba(12,43,63,0.08)]">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--cp-faint)]">{label}</p>
+      <p className="cp-mono">{label}</p>
       <div className="mt-1.5 space-y-1">
         <Row swatch={CASH} label="Cash" value={money(cash)} />
         <Row swatch={CARD} label="Card" value={money(card)} />

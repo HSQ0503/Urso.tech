@@ -19,6 +19,7 @@ export function LeadEditor({ lead }: { lead: Lead }) {
     const fields = {
       name: String(fd.get("name") ?? "").trim(),
       phone: String(fd.get("phone") ?? "").trim(),
+      email: String(fd.get("email") ?? "").trim(),
       service: String(fd.get("service") ?? "").trim(),
       address: String(fd.get("address") ?? "").trim(),
       notes: String(fd.get("notes") ?? "").trim(),
@@ -47,6 +48,10 @@ export function LeadEditor({ lead }: { lead: Lead }) {
         <div>
           <label className="cp-label" htmlFor="lead-phone">Phone</label>
           <input id="lead-phone" name="phone" type="tel" className="cp-input" defaultValue={lead.phone ?? ""} />
+        </div>
+        <div>
+          <label className="cp-label" htmlFor="lead-email">Email</label>
+          <input id="lead-email" name="email" type="email" className="cp-input" defaultValue={lead.email ?? ""} />
         </div>
         <div>
           <label className="cp-label" htmlFor="lead-service">Service</label>

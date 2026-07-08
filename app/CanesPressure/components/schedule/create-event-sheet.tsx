@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { X } from "lucide-react";
 import {
   createCalendarEvent,
   type ActionResult,
@@ -12,6 +11,7 @@ import {
   type CalendarEventKind,
   type Crew,
 } from "@/lib/canes/types";
+import { SheetShell } from "./sheet-shell";
 
 // Create Event sheet (plan §4.1) — the lean answer to Markate's "Create Event":
 // title, date, start/end (or all-day), crew (or everyone), kind. Because jobs
@@ -57,8 +57,13 @@ export function CreateEventSheet({
   const [crewId, setCrewId] = useState("");
   const [kind, setKind] = useState<CalendarEventKind>("block");
 
+  // "HH:mm" strings compare lexicographically, so end > start is a plain string
+  // check — no Date math needed for a same-day window.
+  const timesInvalid = !allDay && !!start && !!end && end <= start;
   const canSubmit =
-    title.trim().length > 0 && date.length === 10 && (allDay || (!!start && !!end));
+    title.trim().length > 0 &&
+    date.length === 10 &&
+    (allDay || (!!start && !!end && !timesInvalid));
 
   function submit() {
     setFeedback(null);
@@ -86,26 +91,14 @@ export function CreateEventSheet({
   }
 
   return (
-    <div className="cp-card flex w-full flex-col overflow-hidden sm:max-w-sm">
-      <div className="flex items-center justify-between border-b border-[var(--cp-line)] px-4 py-3">
-        <p className="text-[13px] font-semibold">Create event</p>
-        <button
-          type="button"
-          className="flex h-8 w-8 items-center justify-center rounded-md text-[var(--cp-muted)] hover:bg-[var(--cp-hover)]"
-          onClick={onClose}
-          aria-label="Close"
-        >
-          <X size={16} strokeWidth={2} />
-        </button>
-      </div>
-
-      <div className="space-y-3 px-4 py-4">
+    <SheetShell title="Create event" onClose={onClose}>
+      <div className="space-y-3">
         <div>
           <label className="cp-label" htmlFor="event-title">Title</label>
           <input
             id="event-title"
             className="cp-input"
-            placeholder="Crew B — afternoon off"
+            placeholder="Crew B afternoon off"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
           />
@@ -145,6 +138,12 @@ export function CreateEventSheet({
               />
             </div>
           </div>
+        )}
+
+        {timesInvalid && (
+          <p className="text-[12.5px] leading-snug text-[var(--cp-warn)]">
+            End time must be after the start time.
+          </p>
         )}
 
         <label className="flex cursor-pointer items-center gap-2 text-[13px]">
@@ -217,7 +216,7 @@ export function CreateEventSheet({
           </button>
         </div>
       </div>
-    </div>
+    </SheetShell>
   );
 }
 

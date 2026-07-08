@@ -96,11 +96,19 @@ export default async function LeadsPage({
   };
   const rows = subsets[filter];
 
+  // Urgency is a red group header above plain cards (the Jobber "Overdue"
+  // move), not a colored card edge.
+  const needsCall = (l: Lead) => l.type === "cold" && l.status === "new" && !l.opted_out;
+  const callNow = rows.filter(needsCall);
+  const rest = rows.filter((l) => !needsCall(l));
+
   return (
     <div>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="cp-display text-[24px] leading-tight">Leads</h1>
+          <h1 className="cp-display text-[24px] leading-tight">
+            Leads<span className="text-[var(--cp-brand)]">.</span>
+          </h1>
           <p className="mt-1 text-[13.5px] text-[var(--cp-muted)]">
             Vendor texts, website requests, and referrals in one pipeline.
           </p>
@@ -136,7 +144,28 @@ export default async function LeadsPage({
             {EMPTY_COPY[filter]}
           </div>
         ) : (
-          rows.map((lead) => <LeadRow key={lead.id} lead={lead} />)
+          <>
+            {callNow.length > 0 && (
+              <>
+                <p className="cp-group-label cp-group-danger pt-1">
+                  Call these now — {callNow.length}
+                </p>
+                {callNow.map((lead) => (
+                  <LeadRow key={lead.id} lead={lead} />
+                ))}
+              </>
+            )}
+            {rest.length > 0 && (
+              <>
+                {callNow.length > 0 && (
+                  <p className="cp-group-label pt-3">Everything else — {rest.length}</p>
+                )}
+                {rest.map((lead) => (
+                  <LeadRow key={lead.id} lead={lead} />
+                ))}
+              </>
+            )}
+          </>
         )}
       </div>
     </div>

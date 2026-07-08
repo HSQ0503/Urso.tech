@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { ChevronDown } from "lucide-react";
+import { CheckCircle2, ChevronDown } from "lucide-react";
 import { getEstimateByToken, getEstimateItems } from "@/lib/canes/estimates";
 import { markViewed } from "@/app/CanesPressure/actions";
 import { ESTIMATE_TYPE_LABEL, fmtMoney, type EstimateItem } from "@/lib/canes/types";
@@ -21,9 +21,10 @@ function Shell({ children }: { children: React.ReactNode }) {
   return (
     <div className="mx-auto max-w-[640px] px-5 py-10">
       <header className="mb-6">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--cp-muted)]">
-          Canes Pressure Washing
+        <p className="cp-display text-[19px] leading-none">
+          Canes<span className="text-[var(--cp-brand)]">.</span>
         </p>
+        <p className="cp-mono mt-1.5">Pressure washing</p>
       </header>
       {children}
       <p className="mt-8 text-center text-[11.5px] text-[var(--cp-faint)]">
@@ -66,7 +67,7 @@ export default async function PublicEstimatePage({
     <Shell>
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
         <h1 className="cp-display text-[24px] leading-tight">Your estimate</h1>
-        <span className="text-[13px] tabular-nums text-[var(--cp-muted)]">{estimate.number}</span>
+        <span className="cp-mono tabular-nums">{estimate.number}</span>
       </div>
       {(estimate.job_name || estimate.job_address) && (
         <div className="mt-1.5 space-y-0.5">
@@ -132,8 +133,7 @@ export default async function PublicEstimatePage({
           PublicApproval owns the total so an Options estimate can never display two
           diverging figures as the customer toggles add-ons. */}
       {(terminal || expired) && (
-        <div className="cp-card mt-4 overflow-hidden">
-          <span className="cp-topline cp-topline-brand" />
+        <div className="cp-card mt-4">
           <div className="space-y-2 p-5">
             {estimate.adjustment_cents !== 0 && (
               <div className="flex items-center justify-between text-[13.5px] text-[var(--cp-muted)]">
@@ -166,17 +166,20 @@ export default async function PublicEstimatePage({
       {/* Action state: live approve/decline, or a terminal / expired notice */}
       <div className="mt-4">
         {terminal ? (
-          <div className={`cp-card ${estimate.status === "approved" ? "cp-done" : ""}`}>
+          <div className="cp-card">
             <div className="p-5">
               {estimate.status === "approved" ? (
-                <>
-                  <p className="text-[15px] font-semibold text-[var(--cp-good)]">
-                    Approved{estimate.signature_name ? ` by ${estimate.signature_name}` : ""}.
-                  </p>
-                  <p className="mt-0.5 text-[13.5px] text-[var(--cp-muted)]">
-                    Thanks! We&rsquo;ll be in touch to get you on the schedule.
-                  </p>
-                </>
+                <div className="flex items-start gap-2.5">
+                  <CheckCircle2 size={20} strokeWidth={2} className="mt-0.5 shrink-0 text-[var(--cp-good)]" />
+                  <div>
+                    <p className="text-[15px] font-semibold text-[var(--cp-good)]">
+                      Approved{estimate.signature_name ? ` by ${estimate.signature_name}` : ""}.
+                    </p>
+                    <p className="mt-0.5 text-[13.5px] text-[var(--cp-muted)]">
+                      Thanks! We&rsquo;ll be in touch to get you on the schedule.
+                    </p>
+                  </div>
+                </div>
               ) : (
                 <>
                   <p className="text-[15px] font-semibold">This estimate was declined.</p>
@@ -188,7 +191,7 @@ export default async function PublicEstimatePage({
             </div>
           </div>
         ) : expired ? (
-          <div className="cp-card cp-urgent">
+          <div className="cp-card">
             <div className="p-5">
               <p className="text-[15px] font-semibold">This estimate has expired.</p>
               <p className="mt-0.5 text-[13.5px] leading-relaxed text-[var(--cp-muted)]">
