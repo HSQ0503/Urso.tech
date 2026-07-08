@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { CalendarClock, MapPin, Phone, SquareArrowOutUpRight, UserRound } from "lucide-react";
+import { CalendarClock, MapPin, SquareArrowOutUpRight, UserRound } from "lucide-react";
+import { CallButton } from "../call-button";
 import {
   fmtEt,
   fmtMoney,
@@ -67,9 +68,7 @@ export function ContactRail({
           <span className="cp-chip mt-2 bg-[var(--cp-bg)] text-[var(--cp-muted)]">Vendor</span>
         </div>
         <div className="mt-4 grid grid-cols-1 gap-2">
-          <a href={`tel:${peerPhone}`} className="cp-btn cp-btn-sm">
-            <Phone size={14} strokeWidth={2} /> Call
-          </a>
+          <CallButton phone={peerPhone} className="cp-btn cp-btn-sm" />
         </div>
         <div className="cp-divider mt-4 pt-3">
           <p className="text-[12.5px] leading-relaxed text-[var(--cp-muted)]">
@@ -116,9 +115,8 @@ export function ContactRail({
 
       {/* Quick actions */}
       <div className="mt-4 grid grid-cols-2 gap-2">
-        <a href={`tel:${peerPhone}`} className="cp-btn cp-btn-sm">
-          <Phone size={14} strokeWidth={2} /> Call
-        </a>
+        <CallButton phone={peerPhone} leadId={lead?.id} className="cp-btn cp-btn-sm" showFeedback={false} />
+
         {isCustomer && contact ? (
           <Link href={`/CanesPressure/customers/${contact.id}`} className="cp-btn cp-btn-sm">
             <UserRound size={14} strokeWidth={2} /> View profile

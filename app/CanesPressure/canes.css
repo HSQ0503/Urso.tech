@@ -291,6 +291,18 @@
 .cp-timer-warn { background: var(--cp-warn-bg); color: var(--cp-warn); }
 .cp-timer-late { background: var(--cp-danger-bg); color: var(--cp-danger); }
 
+/* The shell centers at 1440px, so on wider screens a canvas-colored gutter sits
+   to the left of the dark sidebar. Bleed the chrome out to the viewport's left
+   edge to fill exactly that gutter (0 at ≤1440px, no horizontal overflow). */
+.cp-sidebar-rail::before {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  right: 100%;
+  width: calc((100vw - min(100vw, 1440px)) / 2);
+  background: var(--cp-chrome);
+}
+
 /* nav — dark chrome sidebar (Urso near-black; Jobber ships the same move).
    Active = soft raise + a 2px orange left indicator. */
 .cp-nav-link {

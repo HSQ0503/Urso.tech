@@ -1,9 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { CalendarClock, MessageSquareText, Phone, PhoneForwarded } from "lucide-react";
+import { CalendarClock, MessageSquareText } from "lucide-react";
 import {
-  initiateCall,
   logCallOutcome,
   sendConfirmationNow,
   setAppointment,
@@ -12,6 +11,7 @@ import {
   type ActionResult,
 } from "@/app/CanesPressure/actions";
 import { etLocalToIso, fmtEt, STATUS_LABEL, type LeadStatus } from "@/lib/canes/types";
+import { CallButton } from "../call-button";
 import { isCompleteWhen, SchedulePicker } from "./schedule-picker";
 
 // Every interactive widget for the lead-profile rail lives here: the profile
@@ -147,35 +147,11 @@ export function Disposition({ leadId }: { leadId: string }) {
 
 // ── One-shot buttons ─────────────────────────────────────────────────────────
 
-export function BridgeCallButton({
-  leadId,
-  onStarted,
-}: {
-  leadId: string;
-  onStarted?: () => void;
-}) {
-  const { isPending, feedback, run } = useAction();
-  return (
-    <div className="space-y-1.5">
-      <button
-        type="button"
-        className="cp-btn w-full"
-        disabled={isPending}
-        onClick={() => run(() => initiateCall(leadId), onStarted)}
-      >
-        <PhoneForwarded size={16} strokeWidth={2} />
-        {isPending ? "Connecting..." : "Bridge via business line"}
-      </button>
-      <Notice value={feedback} />
-    </div>
-  );
-}
-
 // ── Guided call flow ─────────────────────────────────────────────────────────
 // One dominant action per state (Sebastian's ask: less noise, tell me what to
-// do next). Stage "call" shows a single big Call button; the moment a call
-// starts — native tap or bridge — the card flips to "How did the call go?"
-// and walks the outcome: booked / follow up / no answer / lost.
+// do next). Stage "call" shows a single big Call button that bridges through
+// the business line; the moment the call starts the card flips to "How did the
+// call go?" and walks the outcome: booked / follow up / no answer / lost.
 
 export function CallFlow({ leadId, phone }: { leadId: string; phone: string | null }) {
   const [stage, setStage] = useState<"call" | "outcome">("call");
@@ -191,14 +167,14 @@ export function CallFlow({ leadId, phone }: { leadId: string; phone: string | nu
   if (stage === "call") {
     return (
       <div className="space-y-2">
-        <a
-          href={`tel:${phone}`}
+        <CallButton
+          phone={phone}
+          leadId={leadId}
+          label="Call now"
           className="cp-btn cp-btn-primary min-h-[46px] w-full text-[14.5px]"
-          onClick={() => setStage("outcome")}
-        >
-          <Phone size={18} strokeWidth={2} /> Call now
-        </a>
-        <BridgeCallButton leadId={leadId} onStarted={() => setStage("outcome")} />
+          iconSize={18}
+          onStarted={() => setStage("outcome")}
+        />
         <button
           type="button"
           className="min-h-9 w-full cursor-pointer text-center text-[12.5px] font-semibold text-[var(--cp-brand-deep)] hover:underline"

@@ -29,6 +29,7 @@ import {
   type Call,
   type Lead,
 } from "@/lib/canes/types";
+import { CallButton } from "@/app/CanesPressure/components/call-button";
 import { LeadEditor } from "@/app/CanesPressure/components/leads/lead-editor";
 import { WaitTimer } from "@/app/CanesPressure/components/leads/wait-timer";
 import {
@@ -119,11 +120,13 @@ function NextStep({ lead }: { lead: Lead }) {
             : "Waiting on the customer to reply YES to the confirmation text."}
         </p>
         <ResendConfirmationButton leadId={lead.id} />
-        {lead.phone && (
-          <a href={`tel:${lead.phone}`} className="cp-btn w-full">
-            <Phone size={16} strokeWidth={2} /> Call to confirm
-          </a>
-        )}
+        <CallButton
+          phone={lead.phone}
+          leadId={lead.id}
+          label="Call to confirm"
+          className="cp-btn w-full"
+          iconSize={16}
+        />
       </div>
     );
   }
@@ -230,9 +233,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
       <div className="mt-3 flex flex-wrap gap-2">
         {lead.phone && (
           <>
-            <a href={`tel:${lead.phone}`} className="cp-btn cp-btn-sm">
-              <Phone size={14} strokeWidth={2} /> Call
-            </a>
+            <CallButton phone={lead.phone} leadId={lead.id} className="cp-btn cp-btn-sm" />
             <Link
               href={`/CanesPressure/inbox?t=${encodeURIComponent(lead.phone)}`}
               className="cp-btn cp-btn-sm"

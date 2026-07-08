@@ -153,9 +153,39 @@ async function upsertVendorLead(
   let lead = p.phone_e164 ? await findLeadByPhone(p.phone_e164) : null;
   let created = false;
 
-  if (lead) {
-    // Vendor re-sent a number we know: only fill the blanks, never overwrite
-    // details Sebastian may have corrected by hand.
+  if (lead && ["won", "lost"].includes(lead.status)) {
+    // The vendor sent a number whose pipeline already finished — that's a NEW
+    // opportunity, not a re-send. One card per number (phone is UNIQUE and
+    // threads key on it), so reopen the card with the new ask.
+    const patch: Record<string, unknown> = {
+      type: p.type,
+      status: apptIso ? "appointment_set" : "new",
+      name: p.name ?? lead.name,
+      address: p.address ?? lead.address,
+      service: p.service ?? null,
+      notes: p.notes ?? lead.notes,
+      source: "lead_vendor",
+      appointment_at: apptIso,
+      confirmed_at: null,
+      lost_reason: null,
+      snoozed_until: null,
+      raw_message: rawBody,
+      parse_confidence: p.confidence,
+      last_activity_at: new Date().toISOString(),
+    };
+    const { error } = await db.from("leads").update(patch).eq("id", lead.id);
+    if (error) throw new Error(`vendor lead reopen: ${error.message}`);
+    lead = { ...lead, ...patch } as Lead;
+    // Fresh opportunity: greet + notify exactly like a brand-new lead.
+    created = true;
+    await logLeadEvent(
+      lead.id,
+      "created",
+      `Vendor sent a new inquiry for this number; lead reopened${p.name ? ` for ${p.name}` : ""}`,
+    );
+  } else if (lead) {
+    // Vendor re-sent a number with an ACTIVE lead: only fill the blanks, never
+    // overwrite details Sebastian may have corrected by hand.
     const patch: Record<string, unknown> = { last_activity_at: new Date().toISOString() };
     if (!lead.name && p.name) patch.name = p.name;
     if (!lead.address && p.address) patch.address = p.address;
@@ -168,7 +198,25 @@ async function upsertVendorLead(
     const { error } = await db.from("leads").update(patch).eq("id", lead.id);
     if (error) throw new Error(`vendor lead update: ${error.message}`);
     lead = { ...lead, ...patch } as Lead;
-    await logLeadEvent(lead.id, "parsed", "Vendor sent this lead again; missing details filled in");
+
+    const newName = p.name?.trim();
+    const oldName = lead.name?.trim();
+    if (newName && oldName && newName.toLowerCase() !== oldName.toLowerCase()) {
+      // Different person, same number, mid-pipeline — never clobber the active
+      // lead, but never swallow it silently either: timeline + page the owner.
+      await logLeadEvent(
+        lead.id,
+        "parsed",
+        `Vendor sent a new lead for this number under a different name: ${newName} (${p.service ?? "service TBD"})`,
+      );
+      await alertOwner(
+        `Heads up: vendor sent a new lead (${newName} - ${p.service ?? "service TBD"}) but ` +
+          `${fmtPhone(lead.phone)} already belongs to ${oldName}. ` +
+          `Open: ${APP_URL}/CanesPressure/leads/${lead.id}`,
+      );
+    } else {
+      await logLeadEvent(lead.id, "parsed", "Vendor sent this lead again; missing details filled in");
+    }
   } else {
     const { data, error } = await db
       .from("leads")

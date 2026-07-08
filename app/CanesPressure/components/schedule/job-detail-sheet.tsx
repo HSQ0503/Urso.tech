@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
+import { CallButton } from "../call-button";
 import {
   CalendarClock,
   CircleSlash,
@@ -9,7 +10,6 @@ import {
   MapPin,
   MessageSquare,
   Pencil,
-  Phone,
   Receipt,
   Undo2,
   UserRound,
@@ -167,13 +167,7 @@ export function JobDetailSheet({
 
       {/* Quick actions */}
       <div className="mt-4 grid grid-cols-3 gap-2">
-        {job.customer_phone ? (
-          <a href={`tel:${job.customer_phone}`} className="cp-btn cp-btn-sm">
-            <Phone size={14} strokeWidth={2} /> Call
-          </a>
-        ) : (
-          <span className="cp-btn cp-btn-sm pointer-events-none opacity-50">Call</span>
-        )}
+        <CallButton phone={job.customer_phone} className="cp-btn cp-btn-sm" showFeedback={false} />
         {textHref ? (
           <Link href={textHref} className="cp-btn cp-btn-sm">
             <MessageSquare size={14} strokeWidth={2} /> Text

@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { Check, Mail, Pencil, Phone } from "lucide-react";
 import { updateCustomer } from "@/app/CanesPressure/actions";
+import { CallButton } from "../call-button";
 import { fmtEt, fmtPhone, SOURCE_LABEL, type Contact } from "@/lib/canes/types";
 
 // Contact info with an inline edit toggle. The card owns its edit state; the
@@ -138,13 +139,20 @@ export function ContactInfoCard({ contact }: { contact: Contact }) {
           <div>
             <p className="cp-mono">Phone</p>
             {contact.phone ? (
-              <a
-                href={`tel:${contact.phone}`}
-                className="mt-0.5 inline-flex items-center gap-1.5 text-[14px] font-semibold tabular-nums hover:underline"
-              >
-                <Phone size={13} strokeWidth={2} className="text-[var(--cp-muted)]" />
-                {fmtPhone(contact.phone)}
-              </a>
+              <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                <a
+                  href={`tel:${contact.phone}`}
+                  className="inline-flex items-center gap-1.5 text-[14px] font-semibold tabular-nums hover:underline"
+                >
+                  <Phone size={13} strokeWidth={2} className="text-[var(--cp-muted)]" />
+                  {fmtPhone(contact.phone)}
+                </a>
+                <CallButton
+                  phone={contact.phone}
+                  className="cp-btn cp-btn-ghost cp-btn-sm"
+                  showFeedback={false}
+                />
+              </div>
             ) : (
               <p className="mt-0.5 text-[14px] text-[var(--cp-faint)]">None on file</p>
             )}

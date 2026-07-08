@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { FileText, MapPin, Phone, UserRound } from "lucide-react";
+import { FileText, MapPin, UserRound } from "lucide-react";
 import { fmtEt, fmtPhone, type Lead } from "@/lib/canes/types";
+import { CallButton } from "../call-button";
 import { SheetShell } from "./sheet-shell";
 
 // Estimate-visit detail sheet — the visit chip's click-through. A visit is a
@@ -46,13 +47,7 @@ export function VisitSheet({ visit, onClose }: { visit: Lead; onClose: () => voi
 
       {/* Quick actions */}
       <div className="mt-4 grid grid-cols-2 gap-2">
-        {visit.phone ? (
-          <a href={`tel:${visit.phone}`} className="cp-btn cp-btn-sm">
-            <Phone size={14} strokeWidth={2} /> Call
-          </a>
-        ) : (
-          <span className="cp-btn cp-btn-sm pointer-events-none opacity-50">No phone</span>
-        )}
+        <CallButton phone={visit.phone} className="cp-btn cp-btn-sm" showFeedback={false} />
         {mapsHref ? (
           <a href={mapsHref} target="_blank" rel="noreferrer" className="cp-btn cp-btn-sm">
             <MapPin size={14} strokeWidth={2} /> Directions

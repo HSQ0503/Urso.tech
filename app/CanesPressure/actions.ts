@@ -235,17 +235,24 @@ export async function sendConfirmationNow(leadId: string): Promise<ActionResult>
   return { ok: true };
 }
 
-// Click-to-call: ring Sebastian's cell first, then bridge the lead, with the
-// business number as caller ID. Requires Twilio + a public deployment URL.
-export async function initiateCall(leadId: string): Promise<ActionResult> {
+// Click-to-call, the one true outbound-voice path: Twilio rings Sebastian's own
+// phone first, then bridges the customer with the BUSINESS number as caller ID
+// (see app/api/canes/twilio/bridge). Every "Call" button in the app routes
+// through here, so customers only ever see the business line and callbacks come
+// back into our system — never Sebastian's personal cell. Requires Twilio + a
+// public deployment URL.
+export async function bridgeCall(
+  phone: string | null | undefined,
+  opts?: { leadId?: string },
+): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
-  const lead = await getLead(leadId);
-  if (!lead?.phone) return { ok: false, notice: "Lead has no phone number." };
+  const to = phone?.trim();
+  if (!to) return { ok: false, notice: "No phone number to call." };
   const owner = process.env.CANES_OWNER_PHONE;
   const { accountSid, authToken, from } = canesTwilioCreds();
-  if (!owner || !accountSid) return { ok: false, notice: "Twilio isn't configured yet — use the Call link instead." };
+  if (!owner || !accountSid) return { ok: false, notice: "Twilio isn't configured yet." };
   const base = process.env.NEXT_PUBLIC_APP_URL ?? "https://urso.ws";
-  const twimlUrl = `${base}/api/canes/twilio/bridge?to=${encodeURIComponent(lead.phone)}`;
+  const twimlUrl = `${base}/api/canes/twilio/bridge?to=${encodeURIComponent(to)}`;
   const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Calls.json`, {
     method: "POST",
     headers: {
@@ -255,9 +262,19 @@ export async function initiateCall(leadId: string): Promise<ActionResult> {
     body: new URLSearchParams({ To: owner, From: from, Url: twimlUrl }),
   });
   if (!res.ok) return { ok: false, notice: `Twilio responded ${res.status}` };
-  await canesDb().from("calls").insert({ lead_id: leadId, peer_phone: lead.phone, direction: "out", status: "initiated" });
-  await logEvent(leadId, "call", "Click-to-call started (bridging your phone)");
+  await canesDb()
+    .from("calls")
+    .insert({ lead_id: opts?.leadId ?? null, peer_phone: to, direction: "out", status: "initiated" });
+  if (opts?.leadId) await logEvent(opts.leadId, "call", "Click-to-call started (bridging your phone)");
   return { ok: true, notice: "Calling your phone now — answer to connect." };
+}
+
+// Lead-scoped convenience wrapper: look the number up from the lead, then bridge.
+export async function initiateCall(leadId: string): Promise<ActionResult> {
+  if (!canesConfigured()) return DEMO;
+  const lead = await getLead(leadId);
+  if (!lead?.phone) return { ok: false, notice: "Lead has no phone number." };
+  return bridgeCall(lead.phone, { leadId });
 }
 
 // ── Settings ─────────────────────────────────────────────────────────────────

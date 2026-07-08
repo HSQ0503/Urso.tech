@@ -2,10 +2,10 @@
 
 import { Fragment, useEffect, useRef } from "react";
 import Link from "next/link";
+import { CallButton } from "../call-button";
 import {
   ChevronLeft,
   FileText,
-  Phone,
   PhoneIncoming,
   PhoneMissed,
   PhoneOutgoing,
@@ -254,10 +254,12 @@ export function Conversation({
               Open lead
             </Link>
           )}
-          <a href={`tel:${peerPhone}`} className="cp-btn cp-btn-sm">
-            <Phone size={14} strokeWidth={2} />
-            Call
-          </a>
+          <CallButton
+            phone={peerPhone}
+            leadId={lead?.id}
+            className="cp-btn cp-btn-sm"
+            showFeedback={false}
+          />
         </div>
       </div>
 
