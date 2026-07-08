@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, MessageSquare, Filter, FileText, CalendarDays, Receipt, Settings } from "lucide-react";
+import { LayoutDashboard, MessageSquare, Filter, FileText, CalendarDays, Receipt, BarChart3, Settings } from "lucide-react";
 
 const LINKS = [
   { href: "/CanesPressure", label: "Today", icon: LayoutDashboard, exact: true },
@@ -11,6 +11,7 @@ const LINKS = [
   { href: "/CanesPressure/estimates", label: "Estimates", icon: FileText, exact: false },
   { href: "/CanesPressure/schedule", label: "Schedule", icon: CalendarDays, exact: false },
   { href: "/CanesPressure/invoices", label: "Invoices", icon: Receipt, exact: false },
+  { href: "/CanesPressure/insights", label: "Insights", icon: BarChart3, exact: false },
   { href: "/CanesPressure/settings", label: "Settings", icon: Settings, exact: false },
 ];
 
@@ -26,11 +27,11 @@ export function CanesNav({ mobile = false }: { mobile?: boolean }) {
           <Link
             key={href}
             href={href}
-            className="flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-md px-1 py-1.5 text-[10px] font-semibold"
+            className="flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-md px-0.5 py-1.5 text-[9.5px] font-semibold"
             style={{ color: isActive(href, exact) ? "var(--cp-brand-deep)" : "var(--cp-muted)" }}
           >
-            <Icon size={20} strokeWidth={2} />
-            {label}
+            <Icon size={19} strokeWidth={2} className="shrink-0" />
+            <span className="max-w-full truncate">{label}</span>
           </Link>
         ))}
       </div>

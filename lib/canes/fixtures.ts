@@ -255,6 +255,12 @@ export const DEMO_CALLS: Call[] = [
       "Hi, this is Maria — I sent the request about the driveway and pool deck. Give me a call back when you get a chance. Thanks!",
     twilio_sid: null,
   },
+  // Gene got a callback ~100 minutes in before going with a cheaper quote —
+  // gives the Insights speed-to-lead sample a third data point.
+  {
+    id: "c4", created_at: min(5700), lead_id: "d7", peer_phone: "+15615550109", direction: "out",
+    status: "completed", duration_seconds: 210, recording_url: null, transcript: null, twilio_sid: null,
+  },
 ];
 
 export const DEMO_EVENTS: LeadEvent[] = [
@@ -347,6 +353,21 @@ export const DEMO_ESTIMATES: Estimate[] = [
     sent_at: min(58), viewed_at: min(45), approved_at: min(30),
     declined_at: null, decline_reason: null, signature_name: "Carl Jimenez", employee: "Sebastian",
   },
+  // est4 — declined ~8 days ago (win-rate texture for Insights).
+  {
+    id: "est4", created_at: min(12200), updated_at: min(11600),
+    lead_id: null, contact_id: null, address_id: null,
+    number: "EST-000004", estimate_type: "standard", status: "declined",
+    customer_name: "Alan Reyes", customer_phone: "+15615550171", customer_email: null,
+    job_address: "930 Sago Palm Way, Royal Palm Beach", job_name: "Roof wash (tile)",
+    subtotal_cents: 38000, discount_cents: 0, adjustment_cents: 0,
+    tax_cents: 0, tax_rate_bps: 0, total_cents: 38000, deposit_percent: 0, deposit_cents: 0,
+    message_to_customer: "Thanks for having us out. Here is your estimate.",
+    terms: "Payment due on completion unless a deposit is agreed.",
+    internal_notes: null, expires_at: hrAhead(28 * 24), public_token: "demo-token-est4",
+    sent_at: min(12150), viewed_at: min(11900), approved_at: null,
+    declined_at: min(11600), decline_reason: "Went with a cheaper quote", signature_name: null, employee: "Sebastian",
+  },
 ];
 
 export const DEMO_ESTIMATE_ITEMS: EstimateItem[] = [
@@ -381,6 +402,13 @@ export const DEMO_ESTIMATE_ITEMS: EstimateItem[] = [
     id: "ei5", estimate_id: "est3", catalog_id: "cat5", position: 0,
     name: "Paver sealing", description: "Clean and seal pavers", kind: "service", quantity: 1,
     unit_price_cents: 60000, discount_cents: 0, taxable: false, line_total_cents: 60000,
+    is_option: false, is_mandatory: false, is_selected: true, package_group: null,
+  },
+  // est4 line (declined)
+  {
+    id: "ei6", estimate_id: "est4", catalog_id: "cat3", position: 0,
+    name: "Roof wash (tile)", description: "Soft wash tile roof, algae + oxidation", kind: "service", quantity: 1,
+    unit_price_cents: 38000, discount_cents: 0, taxable: false, line_total_cents: 38000,
     is_option: false, is_mandatory: false, is_selected: true, package_group: null,
   },
 ];
@@ -466,6 +494,63 @@ export const DEMO_JOBS: Job[] = [
     total_cents: 25000, deposit_cents: 0, scheduled_at: etAt(-2, "14:00"), assigned_to: "Crew B", notes: null,
     duration_minutes: 90, ends_at: addMinutes(etAt(-2, "14:00"), 90), arrival_window_minutes: 0,
     crew_id: "crewB", confirmed_at: min(3100), customer_phone: "+15615550155", job_name: "Driveway wash",
+    gate_code: null, site_notes: null, canceled_reason: null,
+  },
+  // ── Historical paid work (last ~2 months) — the Insights dashboard's demo
+  //    story: crew mix, cash/card mix, service variety. All terminal, so the
+  //    schedule board never paints them as active blocks.
+  {
+    id: "job8", created_at: min(8000), estimate_id: null, lead_id: null, contact_id: null,
+    status: "paid", customer_name: "Elaine Brooks",
+    job_address: "12 Sailfish Ct, Palm Beach Gardens",
+    total_cents: 42000, deposit_cents: 0, scheduled_at: etAt(-5, "09:00"), assigned_to: "Crew A", notes: null,
+    duration_minutes: 150, ends_at: addMinutes(etAt(-5, "09:00"), 150), arrival_window_minutes: 0,
+    crew_id: "crewA", confirmed_at: min(8100), customer_phone: "+15615550161", job_name: "House wash + gutters",
+    gate_code: null, site_notes: null, canceled_reason: null,
+  },
+  {
+    id: "job9", created_at: min(18500), estimate_id: null, lead_id: null, contact_id: null,
+    status: "paid", customer_name: "Marcus Webb",
+    job_address: "406 Datura St, West Palm Beach",
+    total_cents: 45000, deposit_cents: 0, scheduled_at: etAt(-12, "10:00"), assigned_to: "Crew B", notes: null,
+    duration_minutes: 180, ends_at: addMinutes(etAt(-12, "10:00"), 180), arrival_window_minutes: 0,
+    crew_id: "crewB", confirmed_at: min(18600), customer_phone: "+15615550148", job_name: "Roof wash (tile)",
+    gate_code: null, site_notes: null, canceled_reason: null,
+  },
+  {
+    id: "job10", created_at: min(28500), estimate_id: null, lead_id: null, contact_id: null,
+    status: "paid", customer_name: "Rosa Marino",
+    job_address: "88 Gardenia Isle Dr, Royal Palm Beach",
+    total_cents: 32500, deposit_cents: 0, scheduled_at: etAt(-19, "13:00"), assigned_to: "Crew A", notes: null,
+    duration_minutes: 120, ends_at: addMinutes(etAt(-19, "13:00"), 120), arrival_window_minutes: 0,
+    crew_id: "crewA", confirmed_at: min(28600), customer_phone: "+15615550183", job_name: "Driveway + patio",
+    gate_code: null, site_notes: null, canceled_reason: null,
+  },
+  {
+    id: "job11", created_at: min(48500), estimate_id: null, lead_id: null, contact_id: null,
+    status: "paid", customer_name: "Ted Alvarez",
+    job_address: "27 Bimini Ln, West Palm Beach",
+    total_cents: 60000, deposit_cents: 0, scheduled_at: etAt(-33, "09:30"), assigned_to: "Crew B", notes: null,
+    duration_minutes: 240, ends_at: addMinutes(etAt(-33, "09:30"), 240), arrival_window_minutes: 0,
+    crew_id: "crewB", confirmed_at: min(48600), customer_phone: "+15615550127", job_name: "Paver sealing",
+    gate_code: null, site_notes: null, canceled_reason: null,
+  },
+  {
+    id: "job12", created_at: min(68500), estimate_id: null, lead_id: null, contact_id: null,
+    status: "paid", customer_name: "Nina Kowalski",
+    job_address: "301 Flamingo Dr, West Palm Beach",
+    total_cents: 30000, deposit_cents: 0, scheduled_at: etAt(-47, "11:00"), assigned_to: "Crew A", notes: null,
+    duration_minutes: 120, ends_at: addMinutes(etAt(-47, "11:00"), 120), arrival_window_minutes: 0,
+    crew_id: "crewA", confirmed_at: min(68600), customer_phone: "+15615550139", job_name: "House wash",
+    gate_code: null, site_notes: null, canceled_reason: null,
+  },
+  {
+    id: "job13", created_at: min(92000), estimate_id: null, lead_id: null, contact_id: null,
+    status: "paid", customer_name: "Owen Pratt",
+    job_address: "74 Ibis Blvd, Palm Beach Gardens",
+    total_cents: 78000, deposit_cents: 0, scheduled_at: etAt(-63, "09:00"), assigned_to: "Crew B", notes: null,
+    duration_minutes: 300, ends_at: addMinutes(etAt(-63, "09:00"), 300), arrival_window_minutes: 0,
+    crew_id: "crewB", confirmed_at: min(92100), customer_phone: "+15615550152", job_name: "Whole exterior",
     gate_code: null, site_notes: null, canceled_reason: null,
   },
 ];
@@ -582,6 +667,28 @@ export const DEMO_INVOICES: Invoice[] = [
     square_invoice_id: null, square_order_id: null, hosted_payment_url: null,
     sent_at: null, viewed_at: null, paid_at: min(2880), voided_at: null, employee: "Sebastian",
   },
+  // ── Historical paid invoices backing job8–job13 (Insights demo history).
+  ...([
+    { n: 3, job: "job8", name: "Elaine Brooks", phone: "+15615550161", addr: "12 Sailfish Ct, Palm Beach Gardens", jobName: "House wash + gutters", total: 42000, at: 6900 },
+    { n: 4, job: "job9", name: "Marcus Webb", phone: "+15615550148", addr: "406 Datura St, West Palm Beach", jobName: "Roof wash (tile)", total: 45000, at: 17100 },
+    { n: 5, job: "job10", name: "Rosa Marino", phone: "+15615550183", addr: "88 Gardenia Isle Dr, Royal Palm Beach", jobName: "Driveway + patio", total: 32500, at: 27200 },
+    { n: 6, job: "job11", name: "Ted Alvarez", phone: "+15615550127", addr: "27 Bimini Ln, West Palm Beach", jobName: "Paver sealing", total: 60000, at: 47300 },
+    { n: 7, job: "job12", name: "Nina Kowalski", phone: "+15615550139", addr: "301 Flamingo Dr, West Palm Beach", jobName: "House wash", total: 30000, at: 67200 },
+    { n: 8, job: "job13", name: "Owen Pratt", phone: "+15615550152", addr: "74 Ibis Blvd, Palm Beach Gardens", jobName: "Whole exterior", total: 78000, at: 90800 },
+  ].map((r): Invoice => ({
+    id: `inv${r.n}`, created_at: min(r.at + 60), updated_at: min(r.at),
+    job_id: r.job, estimate_id: null, lead_id: null, contact_id: null,
+    number: `INV-${String(r.n).padStart(6, "0")}`, status: "paid",
+    customer_name: r.name, customer_phone: r.phone, customer_email: null,
+    job_address: r.addr, job_name: r.jobName,
+    subtotal_cents: r.total, adjustment_cents: 0, tax_cents: 0, tax_rate_bps: 0,
+    total_cents: r.total, amount_paid_cents: r.total,
+    message_to_customer: "Thanks for choosing Canes Pressure Washing!",
+    terms: "Payment is due upon receipt. Thank you for your business.",
+    internal_notes: null, public_token: `demo-token-inv${r.n}`,
+    square_invoice_id: null, square_order_id: null, hosted_payment_url: null,
+    sent_at: min(r.at + 45), viewed_at: null, paid_at: min(r.at), voided_at: null, employee: "Sebastian",
+  }))),
 ];
 
 export const DEMO_INVOICE_ITEMS: InvoiceItem[] = [
@@ -595,6 +702,22 @@ export const DEMO_INVOICE_ITEMS: InvoiceItem[] = [
     name: "Driveway wash", description: "Concrete driveway surface clean", quantity: 1,
     unit_price_cents: 25000, line_total_cents: 25000,
   },
+  // Historical paid line items — the "Top services" demo data. Names align with
+  // the catalog so revenue-by-service groups cleanly.
+  ...([
+    { n: 3, inv: "inv3", lines: [["House wash", 30000], ["Gutter brightening", 12000]] },
+    { n: 5, inv: "inv4", lines: [["Roof wash (tile)", 45000]] },
+    { n: 7, inv: "inv5", lines: [["Driveway wash", 15000], ["Pool deck / paver clean", 17500]] },
+    { n: 9, inv: "inv6", lines: [["Paver sealing", 60000]] },
+    { n: 11, inv: "inv7", lines: [["House wash", 30000]] },
+    { n: 12, inv: "inv8", lines: [["House wash", 30000], ["Driveway wash", 15000], ["Roof wash (tile)", 33000]] },
+  ].flatMap((r) =>
+    r.lines.map(([name, cents], i): InvoiceItem => ({
+      id: `ii${r.n + i}`, invoice_id: r.inv, job_item_id: null, position: i,
+      name: name as string, description: null, quantity: 1,
+      unit_price_cents: cents as number, line_total_cents: cents as number,
+    })),
+  )),
 ];
 
 export const DEMO_PAYMENTS: Payment[] = [
@@ -605,4 +728,22 @@ export const DEMO_PAYMENTS: Payment[] = [
     status: "completed", square_payment_id: null, external_event_id: null,
     recorded_by: "owner", note: null,
   },
+  // Historical ledger rows backing inv3–inv8 — cash/card mix spread over ~2
+  // months so the Insights collected trend + method share have real shape.
+  ...([
+    { n: 3, inv: "inv3", job: "job8", cents: 42000, at: 6900, method: "card" },
+    { n: 4, inv: "inv4", job: "job9", cents: 45000, at: 17100, method: "card" },
+    { n: 5, inv: "inv5", job: "job10", cents: 32500, at: 27200, method: "cash" },
+    { n: 6, inv: "inv6", job: "job11", cents: 60000, at: 47300, method: "card" },
+    { n: 7, inv: "inv7", job: "job12", cents: 30000, at: 67200, method: "cash" },
+    { n: 8, inv: "inv8", job: "job13", cents: 78000, at: 90800, method: "card" },
+  ].map((r): Payment => ({
+    id: `pay${r.n}`, created_at: min(r.at), invoice_id: r.inv, job_id: r.job,
+    amount_cents: r.cents, currency: "USD", method: r.method as Payment["method"],
+    source: r.method === "card" ? "square_webhook" : "manual",
+    status: "completed",
+    square_payment_id: r.method === "card" ? `demo-sq-pay-${r.n}` : null,
+    external_event_id: null,
+    recorded_by: r.method === "card" ? "square" : "owner", note: null,
+  }))),
 ];
