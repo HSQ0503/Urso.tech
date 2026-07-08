@@ -13,16 +13,30 @@ import {
   getJob,
   getScheduleBoard,
   listCrews,
+  listJobItems,
   nextEstimateNumber,
   enqueueEstimateSend,
   enqueueEstimateReminders,
 } from "@/lib/canes/estimates";
 import {
+  getInvoice,
+  getInvoiceByJob,
+  getInvoiceByToken,
+  getInvoiceItems,
+  nextInvoiceNumber,
+  invoicePublicUrl,
+  enqueueInvoiceSend,
+  enqueueInvoiceReminders,
+} from "@/lib/canes/invoices";
+import {
   notifyEstimateSent,
   notifyEstimateApproved,
   notifyEstimateDeclined,
+  notifyInvoiceSent,
+  notifyInvoicePaid,
+  notifyInvoiceReceipt,
 } from "@/lib/canes/notify";
-import { createDepositLink } from "@/lib/canes/square";
+import { cancelSquareInvoice, createDepositLink, createSquareInvoice } from "@/lib/canes/square";
 import {
   fmtEt,
   fmtMoney,
@@ -33,6 +47,7 @@ import {
   type EstimateItem,
   type EstimateType,
   type EstimateWithItems,
+  type Invoice,
   type Job,
   type JobStatus,
   type LeadStatus,
@@ -1195,6 +1210,438 @@ export async function createCalendarEvent(input: {
     notes: input.notes?.trim() || null,
   });
   if (error) return { ok: false, notice: error.message };
+  refresh();
+  return { ok: true };
+}
+
+// ── Job completion + invoicing + payments (Phase 2.5) ─────────────────────────
+//
+// The back half of the money pipeline. A completed job mints an invoice (the
+// estimate's twin), then either a card invoice goes to the customer (Square
+// hosted pay page, webhook-settled) or Sebastian records cash with a Verify
+// step. Money is server-authoritative; the `payments` ledger is the source of
+// truth and invoice.status is a cache. Every settle is TOCTOU-safe (conditional
+// claim on the prior status), so a double-click, a webhook redelivery, and a
+// webhook/redirect race all converge to exactly one payment. Card data never
+// touches us — Square hosts the pay page (PCI SAQ-A).
+
+// Payment public tokens are 256-bit (stronger than the estimate token) — these
+// gate a page that can move money.
+const genInvoiceToken = () => randomBytes(32).toString("base64url");
+
+async function logInvoiceEvent(leadId: string | null, detail: string): Promise<void> {
+  if (leadId) await logEvent(leadId, "invoice", detail);
+}
+
+// Invoices are non-taxable by default (FL residential); tax is a flat rate on
+// the subtotal, snapshotted per invoice. No options/discounts — every line
+// counts. Recompute server-side after any change.
+async function recomputeInvoiceTotals(invoiceId: string): Promise<void> {
+  const invoice = await getInvoice(invoiceId);
+  if (!invoice) return;
+  const items = await getInvoiceItems(invoiceId);
+  const subtotal = items.reduce((sum, it) => sum + it.line_total_cents, 0);
+  const tax = Math.round((subtotal * invoice.tax_rate_bps) / 10000);
+  // Floor at zero — a discount larger than the subtotal must never produce a
+  // negative bill (which would let a "payment" of $0 or a mismatch settle it).
+  const total = Math.max(0, subtotal + invoice.adjustment_cents + tax);
+  await canesDb()
+    .from("invoices")
+    .update({ subtotal_cents: subtotal, tax_cents: tax, total_cents: total, updated_at: new Date().toISOString() })
+    .eq("id", invoiceId);
+}
+
+// Mark a job in progress (the "Start job" tap). Guarded against terminal jobs.
+export async function startJob(jobId: string): Promise<ActionResult> {
+  if (!canesConfigured()) return DEMO;
+  const job = await getJob(jobId);
+  if (!job) return { ok: false, notice: "Job not found." };
+  if (["completed", "invoiced", "paid", "canceled"].includes(job.status)) {
+    return { ok: false, notice: `This job is already ${job.status}.` };
+  }
+  const { error } = await canesDb().from("jobs").update({ status: "in_progress" }).eq("id", jobId);
+  if (error) return { ok: false, notice: error.message };
+  await logJobEvent(job.lead_id, "Job started");
+  refresh();
+  return { ok: true };
+}
+
+// Mark a job complete and mint its draft invoice in one step — the invoice is
+// what the billing panel bills against. Idempotent: an existing invoice is
+// reused (job_id is UNIQUE), so re-completing never mints a second bill.
+export async function completeJob(jobId: string): Promise<ActionResult & { invoiceId?: string }> {
+  if (!canesConfigured()) return DEMO;
+  const job = await getJob(jobId);
+  if (!job) return { ok: false, notice: "Job not found." };
+  if (["invoiced", "paid", "canceled"].includes(job.status)) {
+    // Already past completion — just hand back the existing invoice if any.
+    const existing = await getInvoiceByJob(jobId);
+    return existing
+      ? { ok: true, invoiceId: existing.id }
+      : { ok: false, notice: `This job is ${job.status}.` };
+  }
+  const { error } = await canesDb().from("jobs").update({ status: "completed" }).eq("id", jobId);
+  if (error) return { ok: false, notice: error.message };
+  await logJobEvent(job.lead_id, "Job completed");
+  const inv = await createInvoiceFromJob(jobId);
+  refresh();
+  // Surface a failed invoice creation instead of returning ok with no id — the
+  // billing panel keys off invoiceId, so a silent undefined would strand the job.
+  if (!inv.ok || !inv.invoiceId) {
+    return {
+      ok: false,
+      notice: inv.notice ?? "Job marked complete, but the invoice couldn't be created. Open it from Invoices to bill.",
+    };
+  }
+  return { ok: true, invoiceId: inv.invoiceId };
+}
+
+// Internal-ish: create the draft invoice backing a job, snapshotting job_items
+// into invoice_items. Insert-only via job_id UNIQUE. Pulls the customer email
+// from the originating estimate when present (jobs don't snapshot email).
+export async function createInvoiceFromJob(
+  jobId: string,
+): Promise<ActionResult & { invoiceId?: string }> {
+  if (!canesConfigured()) return DEMO;
+  const existing = await getInvoiceByJob(jobId);
+  if (existing) return { ok: true, invoiceId: existing.id };
+  const job = await getJob(jobId);
+  if (!job) return { ok: false, notice: "Job not found." };
+
+  const settings = await getSettings();
+  const email = job.estimate_id ? (await getEstimate(job.estimate_id))?.customer_email ?? null : null;
+  const number = await nextInvoiceNumber();
+  const db = canesDb();
+  const { data, error } = await db
+    .from("invoices")
+    .insert({
+      job_id: jobId,
+      estimate_id: job.estimate_id,
+      lead_id: job.lead_id,
+      contact_id: job.contact_id,
+      number,
+      status: "draft",
+      customer_name: job.customer_name,
+      customer_phone: job.customer_phone,
+      customer_email: email,
+      job_address: job.job_address,
+      job_name: job.job_name,
+      message_to_customer: settings.invoice_message,
+      terms: settings.invoice_terms,
+      tax_rate_bps: 0, // FL residential non-taxable by default
+      public_token: genInvoiceToken(),
+    })
+    .select("id")
+    .single();
+  if (error) {
+    // A racing complete may have inserted first (job_id UNIQUE) — reuse it.
+    const raced = await getInvoiceByJob(jobId);
+    if (raced) return { ok: true, invoiceId: raced.id };
+    return { ok: false, notice: error.message };
+  }
+  const invoiceId = data.id as string;
+
+  const jobItems = await listJobItems(jobId);
+  if (jobItems.length > 0) {
+    const rows = jobItems.map((it, i) => ({
+      invoice_id: invoiceId,
+      job_item_id: it.id,
+      position: i,
+      name: it.name,
+      description: it.description,
+      quantity: it.quantity,
+      unit_price_cents: it.quantity > 0 ? Math.round(it.line_total_cents / it.quantity) : it.line_total_cents,
+      line_total_cents: it.line_total_cents,
+    }));
+    const { error: itemsErr } = await db.from("invoice_items").insert(rows);
+    if (itemsErr) console.error(`[canes] invoice_items snapshot failed for ${invoiceId}: ${itemsErr.message}`);
+  } else {
+    // No line items on the job (e.g. a manual job) — bill the job total as one line.
+    await db.from("invoice_items").insert({
+      invoice_id: invoiceId,
+      position: 0,
+      name: job.job_name ?? "Pressure washing service",
+      quantity: 1,
+      unit_price_cents: job.total_cents,
+      line_total_cents: job.total_cents,
+    });
+  }
+
+  await recomputeInvoiceTotals(invoiceId);
+  await logInvoiceEvent(job.lead_id, `Invoice ${number} created`);
+  refresh();
+  return { ok: true, invoiceId };
+}
+
+// Edit a draft invoice — the "actual amount" lever is adjustment_cents, plus
+// contact + message + terms. Draft-only, then recompute. Mirrors updateEstimate.
+export async function updateInvoice(
+  invoiceId: string,
+  patch: {
+    customerName?: string;
+    customerPhone?: string;
+    customerEmail?: string;
+    adjustmentCents?: number;
+    messageToCustomer?: string;
+    terms?: string;
+    internalNotes?: string;
+  },
+): Promise<ActionResult> {
+  if (!canesConfigured()) return DEMO;
+  const invoice = await getInvoice(invoiceId);
+  if (!invoice) return { ok: false, notice: "Invoice not found." };
+  if (invoice.status !== "draft") return { ok: false, notice: "Only draft invoices can be edited." };
+
+  const row: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (patch.customerName !== undefined) row.customer_name = patch.customerName || null;
+  if (patch.customerPhone !== undefined) {
+    const phone = patch.customerPhone ? toE164(patch.customerPhone) : null;
+    if (patch.customerPhone && !phone) return { ok: false, notice: "That phone number doesn't look valid." };
+    row.customer_phone = phone;
+  }
+  if (patch.customerEmail !== undefined) row.customer_email = patch.customerEmail || null;
+  if (patch.adjustmentCents !== undefined) row.adjustment_cents = Math.round(patch.adjustmentCents);
+  if (patch.messageToCustomer !== undefined) row.message_to_customer = patch.messageToCustomer || null;
+  if (patch.terms !== undefined) row.terms = patch.terms || null;
+  if (patch.internalNotes !== undefined) row.internal_notes = patch.internalNotes || null;
+
+  const { error } = await canesDb().from("invoices").update(row).eq("id", invoiceId);
+  if (error) return { ok: false, notice: error.message };
+  await recomputeInvoiceTotals(invoiceId);
+  if (invoice.lead_id) await touch(invoice.lead_id);
+  refresh();
+  return { ok: true };
+}
+
+// Send (or resend) an invoice for card payment. Publishes a Square invoice when
+// configured (captures the hosted pay URL), marks sent, texts/emails the link
+// with the same outbox fallback as sendEstimate, queues day-3/7 reminders, and
+// advances the job to `invoiced`. The customer pays on Square's hosted page;
+// the webhook settles us. Never sends a card link for an already-paid invoice.
+export async function sendInvoice(
+  invoiceId: string,
+  opts?: { channels?: { email?: boolean; text?: boolean } },
+): Promise<ActionResult> {
+  if (!canesConfigured()) return DEMO;
+  const invoice = await getInvoice(invoiceId);
+  if (!invoice) return { ok: false, notice: "Invoice not found." };
+  if (invoice.status === "paid") return { ok: false, notice: "This invoice is already paid." };
+  if (invoice.status === "void") return { ok: false, notice: "This invoice was voided." };
+
+  const db = canesDb();
+  await recomputeInvoiceTotals(invoiceId);
+  const fresh = (await getInvoice(invoiceId)) ?? invoice;
+
+  // Create + publish the Square invoice if Square is connected. Best-effort:
+  // a Square failure never blocks sending our own branded link.
+  let hostedUrl = fresh.hosted_payment_url;
+  if (!hostedUrl) {
+    const sq = await createSquareInvoice(fresh);
+    if (sq.error) {
+      await alertOwner(`Couldn't create the Square invoice for ${fresh.number}: ${sq.error}. Sent our link instead.`);
+    }
+    if (sq.squareInvoiceId || sq.hostedUrl) {
+      hostedUrl = sq.hostedUrl;
+      await db
+        .from("invoices")
+        .update({
+          square_invoice_id: sq.squareInvoiceId,
+          square_order_id: sq.squareOrderId,
+          hosted_payment_url: sq.hostedUrl,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", invoiceId);
+    }
+  }
+
+  const now = new Date().toISOString();
+  const { error } = await db
+    .from("invoices")
+    .update({ status: "sent", sent_at: fresh.sent_at ?? now, updated_at: now })
+    .eq("id", invoiceId)
+    .neq("status", "paid");
+  if (error) return { ok: false, notice: error.message };
+  const sent: Invoice = { ...fresh, status: "sent", sent_at: fresh.sent_at ?? now, hosted_payment_url: hostedUrl ?? null };
+
+  const lead = invoice.lead_id ? await getLead(invoice.lead_id) : null;
+  const optedOut = Boolean(lead?.opted_out);
+  const wantsText = opts?.channels?.text ?? true;
+  const wantsEmail = opts?.channels?.email ?? true;
+  const canText = Boolean(sent.customer_phone) && !optedOut && wantsText;
+  const canEmail = Boolean(sent.customer_email) && wantsEmail;
+
+  if (canEmail) await notifyInvoiceSent(sent);
+
+  const link = invoicePublicUrl(sent);
+  let textSent = false;
+  let textQueued = false;
+  if (canText) {
+    const res = await sendCanesSms({
+      to: sent.customer_phone as string,
+      body: `Here is your invoice from Canes Pressure Washing: ${link}`,
+      leadId: invoice.lead_id,
+      automated: true,
+    });
+    if (res.ok) textSent = true;
+    else textQueued = await enqueueInvoiceSend(sent);
+  }
+  await enqueueInvoiceReminders(sent);
+
+  // Advance the job to invoiced (never regress a paid job).
+  if (invoice.job_id) {
+    await db.from("jobs").update({ status: "invoiced" }).eq("id", invoice.job_id).eq("status", "completed");
+  }
+  await logInvoiceEvent(invoice.lead_id, `Invoice ${invoice.number} sent (${fmtMoney(sent.total_cents)})`);
+  if (invoice.lead_id) await touch(invoice.lead_id);
+  refresh();
+  return { ok: true, notice: sendInvoiceNotice({ canEmail, optedOut, textSent, textQueued }) };
+}
+
+function sendInvoiceNotice(s: { canEmail: boolean; optedOut: boolean; textSent: boolean; textQueued: boolean }): string {
+  if (s.textSent && s.canEmail) return "Texted and emailed the invoice.";
+  if (s.textSent) return "Texted the invoice.";
+  if (s.textQueued && s.canEmail) return "Text queued for after quiet hours; emailed now.";
+  if (s.textQueued) return "Text queued for after quiet hours.";
+  if (s.optedOut && s.canEmail) return "Sent by email — customer opted out of texts.";
+  if (s.canEmail) return "Emailed the invoice.";
+  return "Invoice sent.";
+}
+
+// Record a cash payment against an invoice — the Verify step. TOCTOU-safe: the
+// status claim (draft|sent|viewed → paid) is the double-record lock, so two
+// taps insert exactly one ledger row. Settles the job too.
+export async function recordCashPayment(invoiceId: string, amountCents: number): Promise<ActionResult> {
+  if (!canesConfigured()) return DEMO;
+  const amount = Math.round(amountCents);
+  if (!Number.isFinite(amount) || amount <= 0) return { ok: false, notice: "Enter the cash amount collected." };
+  const invoice = await getInvoice(invoiceId);
+  if (!invoice) return { ok: false, notice: "Invoice not found." };
+  if (invoice.status === "paid") return { ok: true, notice: "This invoice is already marked paid." };
+  if (invoice.status === "void") return { ok: false, notice: "This invoice was voided." };
+
+  const db = canesDb();
+  const now = new Date().toISOString();
+  const prior = invoice.status;
+  const priorPaid = invoice.amount_paid_cents;
+  const newPaid = priorPaid + amount;
+  // Only settle when the cumulative cash actually covers the total — an
+  // underpayment is recorded but leaves the balance open (never closes it).
+  const fullyPaid = newPaid >= invoice.total_cents;
+
+  // Optimistic lock on amount_paid_cents (its own version): the claim only wins
+  // if the paid figure is still what we read, so two concurrent taps can't both
+  // insert a ledger row. Settle to paid in the SAME update only when covered.
+  const { data: claimed, error: claimErr } = await db
+    .from("invoices")
+    .update({
+      amount_paid_cents: newPaid,
+      updated_at: now,
+      ...(fullyPaid ? { status: "paid", paid_at: now } : {}),
+    })
+    .eq("id", invoiceId)
+    .in("status", ["draft", "sent", "viewed"])
+    .eq("amount_paid_cents", priorPaid)
+    .select("id");
+  if (claimErr) return { ok: false, notice: claimErr.message };
+  if (!claimed || claimed.length === 0) {
+    return { ok: true, notice: "This invoice was already updated — refresh to see the latest." };
+  }
+
+  // Won the claim → append the immutable ledger row. If the insert fails, revert
+  // the claim so we never leave a settled invoice with no backing payment.
+  const { error: payErr } = await db.from("payments").insert({
+    invoice_id: invoiceId,
+    job_id: invoice.job_id,
+    amount_cents: amount,
+    currency: "USD",
+    method: "cash",
+    source: "manual",
+    status: "completed",
+    recorded_by: "owner",
+  });
+  if (payErr) {
+    console.error(`[canes] cash payment insert failed for ${invoiceId}: ${payErr.message}`);
+    await db
+      .from("invoices")
+      .update({ amount_paid_cents: priorPaid, status: prior, paid_at: invoice.paid_at, updated_at: now })
+      .eq("id", invoiceId);
+    return { ok: false, notice: "Couldn't record the payment. Please try again." };
+  }
+
+  if (fullyPaid) {
+    if (invoice.job_id) {
+      await db.from("jobs").update({ status: "paid" }).eq("id", invoice.job_id).neq("status", "canceled");
+    }
+    await cancelInvoiceTasks(invoiceId);
+    // Kill the Square hosted link so the customer can't also pay it by card.
+    if (invoice.square_invoice_id) await cancelSquareInvoice(invoice.square_invoice_id);
+  }
+  await logInvoiceEvent(
+    invoice.lead_id,
+    `${fullyPaid ? "Cash payment" : "Partial cash payment"} recorded — ${fmtMoney(amount)} for ${invoice.number}`,
+  );
+  if (invoice.lead_id) await touch(invoice.lead_id);
+
+  if (fullyPaid) {
+    const paid: Invoice = { ...invoice, status: "paid", paid_at: now, amount_paid_cents: newPaid };
+    await notifyInvoicePaid(paid, "cash");
+    await notifyInvoiceReceipt(paid, "cash"); // customer receipt (no-ops without an email)
+  }
+  refresh();
+  return {
+    ok: true,
+    notice: fullyPaid
+      ? `Recorded ${fmtMoney(amount)} in cash. Job marked paid.`
+      : `Recorded ${fmtMoney(amount)} — ${fmtMoney(invoice.total_cents - newPaid)} still due.`,
+  };
+}
+
+// Void an unpaid invoice — cancels pending send/reminder texts, kills the link.
+export async function voidInvoice(invoiceId: string): Promise<ActionResult> {
+  if (!canesConfigured()) return DEMO;
+  const invoice = await getInvoice(invoiceId);
+  if (!invoice) return { ok: false, notice: "Invoice not found." };
+  if (invoice.status === "paid") return { ok: false, notice: "A paid invoice can't be voided." };
+  const now = new Date().toISOString();
+  const { error } = await canesDb()
+    .from("invoices")
+    .update({ status: "void", voided_at: now, updated_at: now })
+    .eq("id", invoiceId)
+    .neq("status", "paid");
+  if (error) return { ok: false, notice: error.message };
+  await cancelInvoiceTasks(invoiceId);
+  await logInvoiceEvent(invoice.lead_id, `Invoice ${invoice.number} voided`);
+  if (invoice.lead_id) await touch(invoice.lead_id);
+  refresh();
+  return { ok: true };
+}
+
+async function cancelInvoiceTasks(invoiceId: string): Promise<void> {
+  await canesDb()
+    .from("tasks")
+    .update({ status: "canceled" })
+    .eq("status", "pending")
+    .in("dedupe_key", [
+      `invoice_send:${invoiceId}`,
+      `invoice_reminder:${invoiceId}:d3`,
+      `invoice_reminder:${invoiceId}:d7`,
+    ]);
+}
+
+// Public, token-scoped: first open of a sent invoice flips it to viewed.
+export async function markInvoiceViewed(token: string): Promise<ActionResult> {
+  if (!canesConfigured()) return DEMO;
+  const invoice = await getInvoiceByToken(token);
+  if (!invoice) return { ok: false, notice: "Invoice not found." };
+  if (invoice.status !== "sent") return { ok: true };
+  const now = new Date().toISOString();
+  const { error } = await canesDb()
+    .from("invoices")
+    .update({ status: "viewed", viewed_at: now, updated_at: now })
+    .eq("id", invoice.id)
+    .eq("status", "sent");
+  if (error) return { ok: false, notice: error.message };
+  if (invoice.lead_id) await logInvoiceEvent(invoice.lead_id, `Invoice ${invoice.number} viewed by customer`);
   refresh();
   return { ok: true };
 }

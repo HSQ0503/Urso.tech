@@ -70,7 +70,9 @@ export type TaskKind =
   | "digest"
   | "estimate_send"
   | "estimate_reminder"
-  | "job_confirmation";
+  | "job_confirmation"
+  | "invoice_send"
+  | "invoice_reminder";
 
 export type AutomationTask = {
   id: string;
@@ -110,6 +112,9 @@ export type CanesSettings = {
   estimate_tax_rate_bps: number;
   job_confirmation_template: string;
   job_confirmation_offset_hours: number;
+  invoice_terms: string;
+  invoice_message: string;
+  invoice_reminder_days: number[];
 };
 
 export type Thread = {
@@ -350,3 +355,65 @@ export const ESTIMATE_TYPE_LABEL: Record<EstimateType, string> = {
 export function fmtMoney(cents: number | null | undefined): string {
   return ((cents ?? 0) / 100).toLocaleString("en-US", { style: "currency", currency: "USD" });
 }
+
+// ── Phase 2.5: invoices + payments (mirrors supabase/canes/0005_invoicing.sql) ─
+
+export type InvoiceStatus = "draft" | "sent" | "viewed" | "paid" | "void";
+export type PaymentMethod = "cash" | "card" | "other";
+export type PaymentSource = "manual" | "square_webhook";
+
+export type Invoice = {
+  id: string; created_at: string; updated_at: string;
+  job_id: string | null; estimate_id: string | null; lead_id: string | null; contact_id: string | null;
+  number: string; status: InvoiceStatus;
+  customer_name: string | null; customer_phone: string | null; customer_email: string | null;
+  job_address: string | null; job_name: string | null;
+  subtotal_cents: number; adjustment_cents: number; tax_cents: number; tax_rate_bps: number;
+  total_cents: number; amount_paid_cents: number;
+  message_to_customer: string | null; terms: string | null; internal_notes: string | null;
+  public_token: string;
+  square_invoice_id: string | null; square_order_id: string | null; hosted_payment_url: string | null;
+  sent_at: string | null; viewed_at: string | null; paid_at: string | null; voided_at: string | null;
+  employee: string | null;
+};
+
+export type InvoiceItem = {
+  id: string; invoice_id: string; job_item_id: string | null; position: number;
+  name: string; description: string | null; quantity: number;
+  unit_price_cents: number; line_total_cents: number;
+};
+
+export type Payment = {
+  id: string; created_at: string; invoice_id: string | null; job_id: string | null;
+  amount_cents: number; currency: string; method: PaymentMethod; source: PaymentSource;
+  status: "completed" | "refunded"; square_payment_id: string | null;
+  external_event_id: string | null; recorded_by: string | null; note: string | null;
+};
+
+export type InvoiceWithItems = Invoice & { items: InvoiceItem[]; payments: Payment[] };
+
+// A slim, token-free invoice view safe to pass into client components (the
+// schedule board, the job sheet). Never carries public_token or Square ids.
+export type JobInvoiceSummary = {
+  id: string;
+  number: string;
+  status: InvoiceStatus;
+  total_cents: number;
+  amount_paid_cents: number;
+};
+
+// Balance still owed on an invoice — never below zero.
+export function invoiceBalanceCents(inv: Pick<Invoice, "total_cents" | "amount_paid_cents">): number {
+  return Math.max(0, inv.total_cents - inv.amount_paid_cents);
+}
+
+export const INVOICE_STATUS_LABEL: Record<InvoiceStatus, string> = {
+  draft: "Draft", sent: "Sent", viewed: "Viewed", paid: "Paid", void: "Void",
+};
+export const INVOICE_STATUS_CLASS: Record<InvoiceStatus, string> = {
+  draft: "cp-status-new", sent: "cp-status-contacted", viewed: "cp-status-estimated",
+  paid: "cp-status-won", void: "cp-status-lost",
+};
+export const PAYMENT_METHOD_LABEL: Record<PaymentMethod, string> = {
+  cash: "Cash", card: "Card", other: "Other",
+};

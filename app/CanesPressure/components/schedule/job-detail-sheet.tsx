@@ -24,10 +24,12 @@ import {
   fmtPhone,
   JOB_STATUS_LABEL,
   type Crew,
+  type JobInvoiceSummary,
   type JobStatus,
   type JobWithItems,
 } from "@/lib/canes/types";
 import { isCompleteWhen, SchedulePicker } from "../leads/schedule-picker";
+import { JobBilling } from "./job-billing";
 
 // Job detail sheet (plan §4.3) — the single control surface for a job, reused
 // as the entire mobile scheduling UX. Reuses the contact-rail Row pattern, the
@@ -95,10 +97,12 @@ function scheduleSummary(job: JobWithItems): string {
 export function JobDetailSheet({
   job,
   crews,
+  invoice,
   onClose,
 }: {
   job: JobWithItems;
   crews: Crew[];
+  invoice?: JobInvoiceSummary | null;
   onClose: () => void;
 }) {
   const { isPending, feedback, run } = useAction();
@@ -487,11 +491,14 @@ export function JobDetailSheet({
           </div>
         )}
 
-        {terminal && (
+        {/* Billing — completion → invoice → card/cash payment (Phase 2.5). Shown
+            for every job that isn't canceled; drives the whole money flow. */}
+        {job.status !== "canceled" && <JobBilling job={job} invoice={invoice ?? null} />}
+
+        {job.status === "canceled" && (
           <div className="cp-divider mt-4 pt-3">
             <p className="text-[12.5px] leading-snug text-[var(--cp-muted)]">
-              This job is {JOB_STATUS_LABEL[job.status].toLowerCase()} and can no longer be
-              rescheduled.
+              This job is canceled and can no longer be rescheduled.
               {job.canceled_reason && (
                 <>
                   {" "}

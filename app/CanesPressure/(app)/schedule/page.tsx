@@ -5,7 +5,8 @@ import {
   listCalendarEvents,
   listCrews,
 } from "@/lib/canes/estimates";
-import { ET, etLocalToIso } from "@/lib/canes/types";
+import { listInvoices } from "@/lib/canes/invoices";
+import { ET, etLocalToIso, type JobInvoiceSummary } from "@/lib/canes/types";
 import { ScheduleWorkspace } from "@/app/CanesPressure/components/schedule/schedule-workspace";
 
 export const dynamic = "force-dynamic";
@@ -40,16 +41,31 @@ export default async function SchedulePage({
   // Run the ET midnight through etLocalToIso so DST never shifts the boundary.
   const rangeStart = etLocalToIso(`${startYmd}T00:00`);
 
-  const [board, unscheduled, agenda, crews, events] = await Promise.all([
+  const [board, unscheduled, agenda, crews, events, invoiceRows] = await Promise.all([
     getScheduleBoard(rangeStart, days),
     getUnscheduledJobs(),
     getAgenda(days),
     listCrews(true),
     listCalendarEvents(rangeStart, days),
+    listInvoices(),
   ]);
 
   // The workspace reads visits as a flat Lead[] (it groups by ET day itself).
   const visits = agenda.flatMap((g) => g.leads);
+
+  // A token-free job→invoice summary so the job sheet can show billing state.
+  const invoices: Record<string, JobInvoiceSummary> = {};
+  for (const inv of invoiceRows) {
+    if (inv.job_id) {
+      invoices[inv.job_id] = {
+        id: inv.id,
+        number: inv.number,
+        status: inv.status,
+        total_cents: inv.total_cents,
+        amount_paid_cents: inv.amount_paid_cents,
+      };
+    }
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -66,6 +82,7 @@ export default async function SchedulePage({
         visits={visits}
         crews={crews}
         events={events}
+        invoices={invoices}
         view={view}
         startYmd={startYmd}
         rangeDays={days}

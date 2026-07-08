@@ -42,6 +42,11 @@ const DEFAULT_SETTINGS: CanesSettings = {
   job_confirmation_template:
     "Hi{name}, this is Canes Pressure Washing confirming your appointment {when} at {address}. Reply YES to confirm. Reply STOP to opt out.",
   job_confirmation_offset_hours: 24,
+  invoice_terms:
+    "Payment is due upon receipt. Thank you for your business. Canes Pressure Washing is not responsible for pre-existing damage, loose or failing surfaces, or oxidation revealed by cleaning.",
+  invoice_message:
+    "Thanks for choosing Canes Pressure Washing! Your invoice is ready. Tap to view the details and pay securely online, or reply to this text with any questions.",
+  invoice_reminder_days: [3, 7],
 };
 
 export async function getSettings(): Promise<CanesSettings> {
@@ -65,6 +70,9 @@ export async function getSettings(): Promise<CanesSettings> {
     job_confirmation_offset_hours: Number(
       map.job_confirmation_offset_hours ?? DEFAULT_SETTINGS.job_confirmation_offset_hours,
     ),
+    invoice_terms: map.invoice_terms ?? DEFAULT_SETTINGS.invoice_terms,
+    invoice_message: map.invoice_message ?? DEFAULT_SETTINGS.invoice_message,
+    invoice_reminder_days: map.invoice_reminder_days ?? DEFAULT_SETTINGS.invoice_reminder_days,
   };
 }
 

@@ -1,11 +1,13 @@
 import { Resend } from "resend";
 import { render } from "@react-email/components";
-import { fmtEt, fmtMoney, fmtPhone, minutesSince } from "@/lib/canes/types";
-import type { Estimate, Lead } from "@/lib/canes/types";
+import { fmtEt, fmtMoney, fmtPhone, invoiceBalanceCents, minutesSince } from "@/lib/canes/types";
+import type { Estimate, Invoice, Lead, PaymentMethod } from "@/lib/canes/types";
 import type { Overview } from "@/lib/canes/data";
 import { EstimateEmail } from "@/emails/canes/estimate-email";
 import { ColdLeadEmail, EscalationEmail, UnconfirmedEmail } from "@/emails/canes/lead-emails";
 import { EstimateApprovedEmail, EstimateDeclinedEmail } from "@/emails/canes/estimate-outcome-emails";
+import { InvoiceEmail } from "@/emails/canes/invoice-email";
+import { InvoiceReceiptEmail, InvoicePaidOwnerEmail } from "@/emails/canes/invoice-outcome-emails";
 import { DigestEmail } from "@/emails/canes/digest-email";
 
 // Email alerts for the Canes funnel (cold leads must never sit silently).
@@ -48,6 +50,8 @@ async function send(subject: string, html: string): Promise<void> {
 
 const leadUrl = (lead: Lead) => `${APP_URL}/CanesPressure/leads/${lead.id}`;
 const estimateUrl = (e: Estimate) => `${APP_URL}/CanesPressure/estimates/${e.id}`;
+const invoiceUrl = (i: Invoice) => `${APP_URL}/CanesPressure/invoices/${i.id}`;
+const invoicePayUrl = (i: Invoice) => `${APP_URL}/CanesPressure/i/${i.public_token}`;
 
 export async function notifyColdLead(lead: Lead): Promise<void> {
   const html = await render(
@@ -204,4 +208,91 @@ export async function notifyEstimateDeclined(estimate: Estimate): Promise<void> 
     />,
   );
   await send(`❌ Declined — ${estimate.customer_name ?? estimate.number}`, html);
+}
+
+// ── Invoice emails (Phase 2.5) ────────────────────────────────────────────────
+
+// Customer-facing: the invoice is ready to view + pay at its token link.
+export async function notifyInvoiceSent(invoice: Invoice): Promise<void> {
+  if (!invoice.customer_email) return;
+  const balance = invoiceBalanceCents(invoice);
+  const html = await render(
+    <InvoiceEmail
+      number={invoice.number}
+      customerName={invoice.customer_name}
+      customerPhone={invoice.customer_phone ? fmtPhone(invoice.customer_phone) : null}
+      jobAddress={invoice.job_address}
+      jobName={invoice.job_name}
+      total={fmtMoney(invoice.total_cents)}
+      balance={balance > 0 ? fmtMoney(balance) : null}
+      message={invoice.message_to_customer}
+      payUrl={invoicePayUrl(invoice)}
+    />,
+  );
+  const key = process.env.RESEND_API;
+  if (!key) {
+    console.warn("[canes/notify] RESEND_API not set — skipping invoice email:", invoice.number);
+    return;
+  }
+  try {
+    const resend = new Resend(key);
+    const { error } = await resend.emails.send({
+      from: FROM,
+      to: [invoice.customer_email],
+      subject: `Your invoice from Canes Pressure Washing — ${invoice.number}`,
+      html,
+    });
+    if (error) console.error("[canes/notify] resend error:", error);
+  } catch (err) {
+    console.error("[canes/notify] invoice send failed:", err);
+  }
+}
+
+// Customer-facing receipt when an invoice is paid (card or cash). No-ops without
+// an email on file.
+export async function notifyInvoiceReceipt(invoice: Invoice, method: PaymentMethod): Promise<void> {
+  if (!invoice.customer_email) return;
+  const html = await render(
+    <InvoiceReceiptEmail
+      number={invoice.number}
+      customerName={invoice.customer_name}
+      jobName={invoice.job_name}
+      jobAddress={invoice.job_address}
+      total={fmtMoney(invoice.total_cents)}
+      method={method}
+      paidOn={invoice.paid_at ? fmtEt(invoice.paid_at, { month: "short", day: "numeric", year: "numeric" }) : null}
+    />,
+  );
+  const key = process.env.RESEND_API;
+  if (!key) return;
+  try {
+    const resend = new Resend(key);
+    const { error } = await resend.emails.send({
+      from: FROM,
+      to: [invoice.customer_email],
+      subject: `Payment received — ${invoice.number}`,
+      html,
+    });
+    if (error) console.error("[canes/notify] resend error:", error);
+  } catch (err) {
+    console.error("[canes/notify] invoice receipt failed:", err);
+  }
+}
+
+// Owner-facing: money in.
+export async function notifyInvoicePaid(invoice: Invoice, method: PaymentMethod): Promise<void> {
+  const html = await render(
+    <InvoicePaidOwnerEmail
+      number={invoice.number}
+      customerName={invoice.customer_name}
+      jobName={invoice.job_name}
+      total={fmtMoney(invoice.total_cents)}
+      method={method}
+      openUrl={invoiceUrl(invoice)}
+    />,
+  );
+  await send(
+    `💵 Paid (${method}) — ${invoice.customer_name ?? invoice.number} (${fmtMoney(invoice.total_cents)})`,
+    html,
+  );
 }

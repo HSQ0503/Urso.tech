@@ -13,6 +13,7 @@ import {
   fmtEt,
   type CalendarEvent,
   type Crew,
+  type JobInvoiceSummary,
   type JobWithItems,
   type Lead,
 } from "@/lib/canes/types";
@@ -128,6 +129,7 @@ export function ScheduleWorkspace({
   visits,
   crews,
   events,
+  invoices,
   view: viewProp,
   startYmd,
   rangeDays,
@@ -137,6 +139,7 @@ export function ScheduleWorkspace({
   visits: Lead[];
   crews: Crew[];
   events: CalendarEvent[];
+  invoices: Record<string, JobInvoiceSummary>;
   view: CalView;
   startYmd: string;
   rangeDays: number;
@@ -166,8 +169,14 @@ export function ScheduleWorkspace({
   const [crewFilter, setCrewFilter] = useState<string | null>(null);
   const [dropActiveYmd, setDropActiveYmd] = useState<string | null>(null);
 
-  // Sheets (UI-B). Exactly one open at a time.
-  const [detailJob, setDetailJob] = useState<JobWithItems | null>(null);
+  // Sheets (UI-B). Exactly one open at a time. The detail sheet tracks a job by
+  // ID and derives the live job from the (revalidated) board, so its status and
+  // billing state refresh after complete/send/record-cash instead of freezing on
+  // the click-time snapshot.
+  const [detailJobId, setDetailJobId] = useState<string | null>(null);
+  const detailJob = detailJobId
+    ? [...board.scheduled, ...board.unscheduled].find((j) => j.id === detailJobId) ?? null
+    : null;
   const [runSheet, setRunSheet] = useState<{ jobs: JobWithItems[]; crew: Crew | null; dayLabel: string } | null>(null);
   const [createEventOpen, setCreateEventOpen] = useState(false);
 
@@ -253,7 +262,7 @@ export function ScheduleWorkspace({
 
       {/* ── Desktop (md+): tray + drag-drop board ─────────────────────────── */}
       <div className="hidden gap-4 md:grid md:grid-cols-[minmax(220px,260px)_1fr]">
-        <UnscheduledTray jobs={board.unscheduled} onCardClick={setDetailJob} />
+        <UnscheduledTray jobs={board.unscheduled} onCardClick={(j) => setDetailJobId(j.id)} />
 
         <div className="flex min-w-0 flex-col gap-3">
           {/* Toolbar */}
@@ -313,7 +322,7 @@ export function ScheduleWorkspace({
             crews={crews}
             crewFilter={crewFilter}
             dropActiveYmd={dropActiveYmd}
-            onOpenJob={setDetailJob}
+            onOpenJob={(j) => setDetailJobId(j.id)}
             onOpenRunSheet={(sheetJobs, crew, dayLabel) => setRunSheet({ jobs: sheetJobs, crew, dayLabel })}
             onDropJob={handleDrop}
             onOpenDay={openDay}
@@ -385,7 +394,7 @@ export function ScheduleWorkspace({
                       className="cp-job-block"
                       data-unassigned={!job.crew}
                       style={job.crew ? ({ ["--cp-crew"]: job.crew.color } as React.CSSProperties) : undefined}
-                      onClick={() => setDetailJob(job)}
+                      onClick={() => setDetailJobId(job.id)}
                     >
                       <div className="flex items-baseline justify-between gap-2">
                         <span className="font-semibold tabular-nums">
@@ -425,10 +434,15 @@ export function ScheduleWorkspace({
       {detailJob && (
         <div
           className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/30 p-4"
-          onClick={() => setDetailJob(null)}
+          onClick={() => setDetailJobId(null)}
         >
           <div className="w-full max-w-md" onClick={(e) => e.stopPropagation()}>
-            <JobDetailSheet job={detailJob} crews={crews} onClose={() => setDetailJob(null)} />
+            <JobDetailSheet
+              job={detailJob}
+              crews={crews}
+              invoice={invoices[detailJob.id] ?? null}
+              onClose={() => setDetailJobId(null)}
+            />
           </div>
         </div>
       )}

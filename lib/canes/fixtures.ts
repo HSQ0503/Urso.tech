@@ -6,11 +6,14 @@ import type {
   Crew,
   Estimate,
   EstimateItem,
+  Invoice,
+  InvoiceItem,
   Job,
   JobItem,
   Lead,
   LeadEvent,
   Message,
+  Payment,
 } from "@/lib/canes/types";
 
 // Demo fixtures — shown whenever CANES_SUPABASE_SECRET_KEY is absent so the
@@ -445,6 +448,26 @@ export const DEMO_JOBS: Job[] = [
     crew_id: "crewA", confirmed_at: min(120), customer_phone: "+15615550118", job_name: "House wash + gutters",
     gate_code: "4482", site_notes: "Gate code 4482. Two friendly dogs.", canceled_reason: null,
   },
+  // job6 — completed yesterday, INVOICED and awaiting card payment (backs inv1).
+  {
+    id: "job6", created_at: min(1600), estimate_id: null, lead_id: null, contact_id: null,
+    status: "invoiced", customer_name: "Priya Raman",
+    job_address: "18 Coquina Ln, Palm Beach Gardens",
+    total_cents: 42500, deposit_cents: 0, scheduled_at: etAt(-1, "09:00"), assigned_to: "Crew A", notes: null,
+    duration_minutes: 120, ends_at: addMinutes(etAt(-1, "09:00"), 120), arrival_window_minutes: 0,
+    crew_id: "crewA", confirmed_at: min(1700), customer_phone: "+15615550133", job_name: "House wash",
+    gate_code: null, site_notes: null, canceled_reason: null,
+  },
+  // job7 — completed + PAID in cash (backs inv2 + payment pay2).
+  {
+    id: "job7", created_at: min(3000), estimate_id: null, lead_id: null, contact_id: null,
+    status: "paid", customer_name: "Frank Osei",
+    job_address: "51 Marina Blvd, West Palm Beach",
+    total_cents: 25000, deposit_cents: 0, scheduled_at: etAt(-2, "14:00"), assigned_to: "Crew B", notes: null,
+    duration_minutes: 90, ends_at: addMinutes(etAt(-2, "14:00"), 90), arrival_window_minutes: 0,
+    crew_id: "crewB", confirmed_at: min(3100), customer_phone: "+15615550155", job_name: "Driveway wash",
+    gate_code: null, site_notes: null, canceled_reason: null,
+  },
 ];
 
 export const DEMO_JOB_ITEMS: JobItem[] = [
@@ -496,7 +519,19 @@ export const DEMO_JOB_ITEMS: JobItem[] = [
   {
     id: "ji9", job_id: "job5", estimate_item_id: "ei4", position: 1,
     name: "Gutter brightening", description: "Remove tiger stripes from gutters", quantity: 1,
-    line_total_cents: 12000, done: false,
+    line_total_cents: 12000, done: true,
+  },
+  // job6 — house wash (invoiced, unpaid)
+  {
+    id: "ji10", job_id: "job6", estimate_item_id: null, position: 0,
+    name: "House wash (soft wash)", description: "Soft wash of exterior siding", quantity: 1,
+    line_total_cents: 42500, done: true,
+  },
+  // job7 — driveway (paid cash)
+  {
+    id: "ji11", job_id: "job7", estimate_item_id: null, position: 0,
+    name: "Driveway wash", description: "Concrete driveway surface clean", quantity: 1,
+    line_total_cents: 25000, done: true,
   },
 ];
 
@@ -507,5 +542,67 @@ export const DEMO_CALENDAR_EVENTS: CalendarEvent[] = [
     id: "cev1", created_at: min(3000), title: "Crew B — afternoon off",
     starts_at: etAt(4, "12:00"), ends_at: etAt(4, "17:00"), all_day: false,
     crew_id: "crewB", kind: "time_off", notes: "Equipment maintenance.",
+  },
+];
+
+// ── Phase 2.5 fixtures: invoices, invoice line items, payments ────────────────
+
+export const DEMO_INVOICES: Invoice[] = [
+  // inv1 — SENT, awaiting card payment (backs completed job6).
+  {
+    id: "inv1", created_at: min(1400), updated_at: min(1380),
+    job_id: "job6", estimate_id: null, lead_id: null, contact_id: null,
+    number: "INV-000001", status: "sent",
+    customer_name: "Priya Raman", customer_phone: "+15615550133", customer_email: "priya@example.com",
+    job_address: "18 Coquina Ln, Palm Beach Gardens", job_name: "House wash",
+    subtotal_cents: 42500, adjustment_cents: 0, tax_cents: 0, tax_rate_bps: 0,
+    total_cents: 42500, amount_paid_cents: 0,
+    message_to_customer:
+      "Thanks for choosing Canes Pressure Washing! Your invoice is ready. Tap to view the details and pay securely online, or reply to this text with any questions.",
+    terms:
+      "Payment is due upon receipt. Thank you for your business. Canes Pressure Washing is not responsible for pre-existing damage, loose or failing surfaces, or oxidation revealed by cleaning.",
+    internal_notes: null, public_token: "demo-token-inv1",
+    square_invoice_id: null, square_order_id: null, hosted_payment_url: null,
+    sent_at: min(1380), viewed_at: min(1200), paid_at: null, voided_at: null, employee: "Sebastian",
+  },
+  // inv2 — PAID in cash (backs job7 + payment pay2).
+  {
+    id: "inv2", created_at: min(2900), updated_at: min(2880),
+    job_id: "job7", estimate_id: null, lead_id: null, contact_id: null,
+    number: "INV-000002", status: "paid",
+    customer_name: "Frank Osei", customer_phone: "+15615550155", customer_email: null,
+    job_address: "51 Marina Blvd, West Palm Beach", job_name: "Driveway wash",
+    subtotal_cents: 25000, adjustment_cents: 0, tax_cents: 0, tax_rate_bps: 0,
+    total_cents: 25000, amount_paid_cents: 25000,
+    message_to_customer:
+      "Thanks for choosing Canes Pressure Washing! Your invoice is ready.",
+    terms:
+      "Payment is due upon receipt. Thank you for your business.",
+    internal_notes: null, public_token: "demo-token-inv2",
+    square_invoice_id: null, square_order_id: null, hosted_payment_url: null,
+    sent_at: null, viewed_at: null, paid_at: min(2880), voided_at: null, employee: "Sebastian",
+  },
+];
+
+export const DEMO_INVOICE_ITEMS: InvoiceItem[] = [
+  {
+    id: "ii1", invoice_id: "inv1", job_item_id: "ji10", position: 0,
+    name: "House wash (soft wash)", description: "Soft wash of exterior siding", quantity: 1,
+    unit_price_cents: 42500, line_total_cents: 42500,
+  },
+  {
+    id: "ii2", invoice_id: "inv2", job_item_id: "ji11", position: 0,
+    name: "Driveway wash", description: "Concrete driveway surface clean", quantity: 1,
+    unit_price_cents: 25000, line_total_cents: 25000,
+  },
+];
+
+export const DEMO_PAYMENTS: Payment[] = [
+  // inv2 was settled in cash — one manual ledger row.
+  {
+    id: "pay2", created_at: min(2880), invoice_id: "inv2", job_id: "job7",
+    amount_cents: 25000, currency: "USD", method: "cash", source: "manual",
+    status: "completed", square_payment_id: null, external_event_id: null,
+    recorded_by: "owner", note: null,
   },
 ];

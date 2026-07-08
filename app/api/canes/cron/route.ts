@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { canesConfigured, canesDb } from "@/lib/canes/supabase";
 import { getAgenda, getLead, getOverview, getSettings } from "@/lib/canes/data";
 import { getEstimate, getJob } from "@/lib/canes/estimates";
+import { getInvoice, invoicePublicUrl } from "@/lib/canes/invoices";
 import { alertOwner, fillTemplate, nextAllowedSendTime, sendCanesSms } from "@/lib/canes/twilio";
 import { notifyColdEscalation, notifyUnconfirmed, renderDigestHtml, sendDigestEmail } from "@/lib/canes/notify";
 import { logLeadEvent, upsertConfirmationTask } from "@/lib/canes/inbound";
@@ -68,7 +69,15 @@ async function drainDueTasks() {
   const { data } = await db
     .from("tasks")
     .select("*")
-    .in("kind", ["hold_text", "confirmation", "estimate_send", "estimate_reminder", "job_confirmation"])
+    .in("kind", [
+      "hold_text",
+      "confirmation",
+      "estimate_send",
+      "estimate_reminder",
+      "job_confirmation",
+      "invoice_send",
+      "invoice_reminder",
+    ])
     .eq("status", "pending")
     .lte("scheduled_for", new Date().toISOString())
     .order("scheduled_for", { ascending: true })
@@ -140,6 +149,70 @@ async function drainDueTasks() {
             estimate.lead_id,
             "automation",
             task.kind === "estimate_send" ? "Estimate text sent" : "Estimate reminder sent",
+          );
+        }
+        sent++;
+      } else if (res.skipped === "quiet_hours") {
+        const at = nextAllowedSendTime(settings) ?? new Date(Date.now() + 3_600_000);
+        await db
+          .from("tasks")
+          .update({ status: "pending", scheduled_for: at.toISOString() })
+          .eq("id", task.id);
+        deferred++;
+      } else if (res.skipped) {
+        await db.from("tasks").update({ status: "pending" }).eq("id", task.id);
+        deferred++;
+      } else {
+        await db
+          .from("tasks")
+          .update({ status: "failed", payload: { ...task.payload, error: res.error ?? "send failed" } })
+          .eq("id", task.id);
+        failed++;
+      }
+      continue;
+    }
+
+    // Invoice texts key off the invoice: cancel the moment it leaves the live
+    // window (paid, void), the invoice is gone, the customer opted out, or
+    // there's no number to text. Reminders only nag sent/viewed (unpaid) bills.
+    const isInvoiceTask = task.kind === "invoice_send" || task.kind === "invoice_reminder";
+    if (isInvoiceTask) {
+      const invoiceId = typeof task.payload?.invoice_id === "string" ? task.payload.invoice_id : null;
+      const invoice = invoiceId ? await getInvoice(invoiceId) : null;
+      const optedOut = invoice?.lead_id ? (await getLead(invoice.lead_id))?.opted_out : false;
+      if (
+        !invoice ||
+        !invoice.customer_phone ||
+        optedOut ||
+        (invoice.status !== "sent" && invoice.status !== "viewed")
+      ) {
+        await db.from("tasks").update({ status: "canceled" }).eq("id", task.id);
+        canceled++;
+        continue;
+      }
+
+      const link = invoicePublicUrl(invoice);
+      const body =
+        task.kind === "invoice_send"
+          ? `Here is your invoice from Canes Pressure Washing: ${link}`
+          : `Friendly reminder — your invoice from Canes Pressure Washing is still open: ${link}`;
+      const res = await sendCanesSms({
+        to: invoice.customer_phone,
+        body,
+        leadId: invoice.lead_id,
+        automated: true,
+      });
+
+      if (res.ok) {
+        await db
+          .from("tasks")
+          .update({ status: "sent", sent_at: new Date().toISOString() })
+          .eq("id", task.id);
+        if (invoice.lead_id) {
+          await logLeadEvent(
+            invoice.lead_id,
+            "automation",
+            task.kind === "invoice_send" ? "Invoice text sent" : "Invoice reminder sent",
           );
         }
         sent++;
