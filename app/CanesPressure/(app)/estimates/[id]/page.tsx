@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, ChevronLeft } from "lucide-react";
 import { getLead, getSettings } from "@/lib/canes/data";
 import { getEstimate, getEstimateItems, listCatalog } from "@/lib/canes/estimates";
 import {
@@ -37,6 +37,27 @@ export default async function EstimatePage({ params }: { params: Promise<{ id: s
 
   return (
     <div>
+      {/* ── Mobile: iOS back row + large title header. ── */}
+      <div className="md:hidden">
+        <Link
+          href="/CanesPressure/estimates"
+          className="mb-1 inline-flex items-center gap-1 text-[13px] text-[var(--cp-muted)]"
+        >
+          <ChevronLeft size={16} strokeWidth={2} /> Estimates
+        </Link>
+        <div className="flex items-center gap-2">
+          <h1 className="cp-ios-title tabular-nums">{estimate.number}</h1>
+          <span className={`cp-chip ${ESTIMATE_STATUS_CLASS[estimate.status]}`}>
+            {ESTIMATE_STATUS_LABEL[estimate.status]}
+          </span>
+        </div>
+        <p className="mt-1 text-[13.5px] tabular-nums text-[var(--cp-muted)]">
+          {estimate.customer_name ?? "No customer"} · {fmtMoney(estimate.total_cents)}
+        </p>
+      </div>
+
+      {/* ── Desktop (md+): unchanged, frozen. ── */}
+      <div className="hidden md:block">
       <Link
         href="/CanesPressure/estimates"
         className="inline-flex min-h-11 items-center gap-1.5 text-[13px] font-medium text-[var(--cp-muted)]"
@@ -56,6 +77,7 @@ export default async function EstimatePage({ params }: { params: Promise<{ id: s
         {estimate.sent_at && <> · Sent {fmtEt(estimate.sent_at)}</>}
         {estimate.approved_at && <> · Approved {fmtEt(estimate.approved_at)}</>}
       </p>
+      </div>
 
       <div className="mt-5 grid gap-4 md:grid-cols-[2fr_1fr]">
         {/* Rail first on mobile so the primary action sits above the fold. */}

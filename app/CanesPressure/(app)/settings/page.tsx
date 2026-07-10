@@ -30,7 +30,10 @@ export default async function SettingsPage() {
   return (
     <div className="flex flex-col gap-6">
       <header>
-        <h1 className="cp-display text-[24px] leading-tight">
+        <h1 className="cp-ios-title md:hidden">
+          Settings<span className="text-[var(--cp-brand)]">.</span>
+        </h1>
+        <h1 className="cp-display hidden text-[24px] leading-tight md:block">
           Settings<span className="text-[var(--cp-brand)]">.</span>
         </h1>
         <p className="mt-1 text-[13.5px] text-[var(--cp-muted)]">
@@ -40,7 +43,7 @@ export default async function SettingsPage() {
 
       <SettingsForm settings={settings} />
 
-      <section className="cp-card p-4 md:p-5">
+      <section className="cp-card rounded-xl p-4 md:rounded-md md:p-5">
         <h2 className="text-[15px] font-semibold">Connection status</h2>
         <div className="mt-4 flex flex-col gap-4">
           <div className="flex items-start gap-3">
@@ -79,7 +82,7 @@ export default async function SettingsPage() {
         </div>
       </section>
 
-      <section className="cp-card p-4 md:p-5">
+      <section className="cp-card rounded-xl p-4 md:rounded-md md:p-5">
         <h2 className="text-[15px] font-semibold">Webhooks</h2>
         <p className="mt-1 text-[13px] text-[var(--cp-muted)]">
           Paste these into the Twilio phone number configuration so incoming texts and calls reach the app.

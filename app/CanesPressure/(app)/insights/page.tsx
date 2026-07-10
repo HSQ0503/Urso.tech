@@ -182,8 +182,30 @@ export default async function InsightsPage({
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Header + range tabs */}
-      <header className="flex flex-wrap items-end justify-between gap-3">
+      {/* Header + range tabs — mobile: iOS title + full-width segmented control */}
+      <header className="md:hidden">
+        <h1 className="cp-ios-title">
+          Insights<span className="text-[var(--cp-brand)]">.</span>
+        </h1>
+        <p className="mt-1 text-[13.5px] text-[var(--cp-muted)]">
+          How the business did — {d.rangeLabel.toLowerCase()}.
+        </p>
+        <div className="cp-seg cp-seg-ios mt-4 flex w-full">
+          {(Object.keys(RANGES) as RangeKey[]).map((k) => (
+            <Link
+              key={k}
+              href={`/CanesPressure/insights?range=${k}`}
+              className="cp-seg-btn flex-1"
+              data-active={k === rangeKey}
+            >
+              {RANGES[k].short}
+            </Link>
+          ))}
+        </div>
+      </header>
+
+      {/* Header + range tabs — desktop (frozen) */}
+      <header className="hidden flex-wrap items-end justify-between gap-3 md:flex">
         <div>
           <h1 className="cp-display text-[24px] leading-tight">
             Insights<span className="text-[var(--cp-brand)]">.</span>
@@ -207,8 +229,9 @@ export default async function InsightsPage({
       </header>
 
       {/* KPI strip — one segmented card, mono stat labels. Toplines stay on
-          the Today workflow strip only. */}
-      <section className="cp-card overflow-hidden">
+          the Today workflow strip only. rounded-xl on mobile for iOS card feel;
+          md: restores the desktop 6px. */}
+      <section className="cp-card overflow-hidden rounded-xl md:rounded-md">
         <div className="-mb-px -mr-px grid grid-cols-2 lg:grid-cols-4">
           {kpis.map((s) => {
             const inner = (
@@ -423,7 +446,7 @@ export default async function InsightsPage({
       </section>
 
       {/* Ops strip */}
-      <section className="cp-card overflow-hidden">
+      <section className="cp-card overflow-hidden rounded-xl md:rounded-md">
         <div className="-mb-px -mr-px grid grid-cols-2 lg:grid-cols-4">
           {ops.map((s) => {
             const inner = (

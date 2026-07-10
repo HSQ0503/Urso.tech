@@ -549,12 +549,14 @@ export function EstimateBuilder({
           ) : (
             <p className="mt-1 text-[12px] text-[var(--cp-faint)]">Tap to add a line.</p>
           )}
-          <div className="cp-scroll mt-3 -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+          {/* Mobile wraps the tap-to-add chips (thumb-friendly, no hidden
+              off-screen services); desktop keeps the single-row scroll strip. */}
+          <div className="cp-scroll mt-3 -mx-1 flex flex-wrap gap-2 px-1 pb-1 md:flex-nowrap md:overflow-x-auto">
             {activeCatalog.map((c) => (
               <button
                 key={c.id}
                 type="button"
-                className="cp-slot shrink-0"
+                className="cp-slot min-h-[44px] shrink-0 md:min-h-[38px]"
                 onClick={() => addLine(c)}
                 disabled={disabled}
               >
@@ -564,7 +566,7 @@ export function EstimateBuilder({
             ))}
             <button
               type="button"
-              className="cp-slot shrink-0"
+              className="cp-slot min-h-[44px] shrink-0 md:min-h-[38px]"
               onClick={addBlankLine}
               disabled={disabled}
             >
@@ -859,10 +861,12 @@ export function EstimateBuilder({
               onOverrideChange={setOverride}
             />
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          {/* Send is the primary; on mobile the two CTAs stack full-width
+              (Save & send on top), on desktop they sit inline and compact. */}
+          <div className="flex flex-col-reverse gap-2 md:flex-row md:flex-wrap md:items-center">
             <button
               type="button"
-              className="cp-btn"
+              className="cp-btn cp-btn-block md:min-h-9 md:w-auto md:rounded-[5px] md:text-[13px]"
               onClick={handleSaveDraft}
               disabled={isPending}
             >
@@ -870,7 +874,7 @@ export function EstimateBuilder({
             </button>
             <button
               type="button"
-              className="cp-btn cp-btn-primary"
+              className="cp-btn cp-btn-primary cp-btn-block md:min-h-9 md:w-auto md:rounded-[5px] md:text-[13px]"
               onClick={handleSend}
               disabled={isPending || !target.canSend}
             >

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, ExternalLink } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ExternalLink } from "lucide-react";
 import { getLead } from "@/lib/canes/data";
 import { getInvoiceWithItems } from "@/lib/canes/invoices";
 import {
@@ -31,6 +31,27 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
 
   return (
     <div>
+      {/* ── Mobile: iOS back row + large title header. ── */}
+      <div className="md:hidden">
+        <Link
+          href="/CanesPressure/invoices"
+          className="mb-1 inline-flex items-center gap-1 text-[13px] text-[var(--cp-muted)]"
+        >
+          <ChevronLeft size={16} strokeWidth={2} /> Invoices
+        </Link>
+        <div className="flex items-center gap-2">
+          <h1 className="cp-ios-title tabular-nums">{invoice.number}</h1>
+          <span className={`cp-chip ${INVOICE_STATUS_CLASS[invoice.status]}`}>
+            {INVOICE_STATUS_LABEL[invoice.status]}
+          </span>
+        </div>
+        <p className="mt-1 text-[13.5px] tabular-nums text-[var(--cp-muted)]">
+          {invoice.customer_name ?? "No customer"} · {fmtMoney(invoice.total_cents)}
+        </p>
+      </div>
+
+      {/* ── Desktop (md+): unchanged, frozen. ── */}
+      <div className="hidden md:block">
       <Link
         href="/CanesPressure/invoices"
         className="inline-flex min-h-11 items-center gap-1.5 text-[13px] font-medium text-[var(--cp-muted)]"
@@ -49,6 +70,7 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
         {invoice.sent_at && <> · Sent {fmtEt(invoice.sent_at)}</>}
         {invoice.paid_at && <> · Paid {fmtEt(invoice.paid_at)}</>}
       </p>
+      </div>
 
       <div className="mt-5 grid gap-4 md:grid-cols-[2fr_1fr]">
         {/* Rail first on mobile so the primary action sits above the fold. */}

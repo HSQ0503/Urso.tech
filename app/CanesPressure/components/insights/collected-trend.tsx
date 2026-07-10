@@ -72,7 +72,10 @@ function Row({ swatch, label, value, strong }: { swatch?: string; label: string;
 
 export function CollectedTrend({ data }: { data: TrendPoint[] }) {
   return (
-    <div className="h-[224px] w-full">
+    // min-w-0 + overflow-hidden keep the recharts island from forcing horizontal
+    // page scroll at 375px; ResponsiveContainer measures this box, chart logic
+    // is unchanged.
+    <div className="h-[224px] w-full min-w-0 overflow-hidden">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data} margin={{ top: 4, right: 4, bottom: 0, left: 4 }} barCategoryGap="28%">
           <CartesianGrid vertical={false} stroke="var(--cp-line, #e4e6e8)" />

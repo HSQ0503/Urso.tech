@@ -139,7 +139,7 @@ export function InvoiceActions({
         />
         <button
           type="button"
-          className="cp-btn cp-btn-primary w-full"
+          className="cp-btn cp-btn-primary cp-btn-block md:min-h-9 md:rounded-[5px] md:text-[13px]"
           disabled={isPending || !target.canSend}
           onClick={() =>
             run(() =>

@@ -19,9 +19,9 @@ function isExpired(expiresAt: string | null): boolean {
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="mx-auto max-w-[640px] px-5 py-10">
+    <div className="mx-auto max-w-[640px] px-5 pt-10 pb-[calc(2.5rem+env(safe-area-inset-bottom))]">
       <header className="mb-6">
-        <p className="cp-display text-[19px] leading-none">
+        <p className="cp-display text-[26px] leading-none sm:text-[19px]">
           Canes<span className="text-[var(--cp-brand)]">.</span>
         </p>
         <p className="cp-mono mt-1.5">Pressure washing</p>

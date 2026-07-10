@@ -86,15 +86,23 @@ export default async function SchedulePage({
 
   return (
     <div className="flex flex-col gap-6">
-      <header>
+      {/* Desktop header (frozen) */}
+      <header className="hidden md:block">
         <h1 className="cp-display text-[24px]">
           Schedule<span className="text-[var(--cp-brand)]">.</span>
         </h1>
         {/* Drag copy is desktop-only — mobile schedules by tap. */}
-        <p className="mt-1 hidden text-[13.5px] text-[var(--cp-muted)] md:block">
+        <p className="mt-1 text-[13.5px] text-[var(--cp-muted)]">
           Drag approved jobs onto the calendar. Estimate visits show as hairline chips.
         </p>
-        <p className="mt-1 text-[13.5px] text-[var(--cp-muted)] md:hidden">
+      </header>
+
+      {/* Mobile header — iOS large title */}
+      <header className="md:hidden">
+        <h1 className="cp-ios-title">
+          Schedule<span className="text-[var(--cp-brand)]">.</span>
+        </h1>
+        <p className="mt-1 text-[13.5px] text-[var(--cp-muted)]">
           Tap a job to schedule it. Tap anything on the calendar for details.
         </p>
       </header>

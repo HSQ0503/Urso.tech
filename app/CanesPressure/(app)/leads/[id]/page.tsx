@@ -5,9 +5,11 @@ import {
   CalendarClock,
   CheckCircle2,
   ChevronDown,
+  ChevronLeft,
   FileText,
   MapPin,
   MessageSquare,
+  Navigation,
   Pencil,
   Phone,
   Plus,
@@ -193,8 +195,90 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
 
   const urgent = lead.type === "cold" && lead.status === "new";
 
+  const statusChips = (
+    <>
+      {lead.type === "hot" ? (
+        <span className="cp-chip cp-badge-hot">Hot</span>
+      ) : (
+        <span className="cp-chip cp-badge-cold">Cold</span>
+      )}
+      <span className={`cp-chip ${STATUS_CLASS[lead.status]}`}>{STATUS_LABEL[lead.status]}</span>
+      {lead.opted_out && (
+        <span className="cp-chip bg-[var(--cp-danger-bg)] text-[var(--cp-danger)]">Opted out</span>
+      )}
+    </>
+  );
+
   return (
     <div>
+      {/* ── Mobile: iOS contact-card header ────────────────────────────────── */}
+      <div className="md:hidden">
+        <Link
+          href="/CanesPressure/leads"
+          className="mb-1 inline-flex min-h-9 items-center gap-1 text-[13px] text-[var(--cp-muted)]"
+        >
+          <ChevronLeft size={16} strokeWidth={2} /> Leads
+        </Link>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <h1 className="cp-ios-title">
+            {lead.name ?? fmtPhone(lead.phone)}
+            <span className="text-[var(--cp-brand)]">.</span>
+          </h1>
+          {statusChips}
+        </div>
+        <p className="mt-1 text-[13px] text-[var(--cp-muted)]">
+          {lead.phone ? (
+            <a href={`tel:${lead.phone}`} className="font-medium tabular-nums text-[var(--cp-brand-deep)]">
+              {fmtPhone(lead.phone)}
+            </a>
+          ) : (
+            "No phone on file"
+          )}
+          {" · "}
+          {SOURCE_LABEL[lead.source]}
+        </p>
+
+        {/* Quick actions — Telegram-style tile row */}
+        <div className="cp-quick-row mt-4">
+          <CallButton
+            phone={lead.phone}
+            leadId={lead.id}
+            className="cp-quick"
+            iconSize={20}
+            showFeedback={false}
+          />
+          {lead.phone ? (
+            <Link
+              href={`/CanesPressure/inbox?t=${encodeURIComponent(lead.phone)}`}
+              className="cp-quick"
+            >
+              <MessageSquare size={20} strokeWidth={2} /> Text
+            </Link>
+          ) : (
+            <span className="cp-quick" aria-disabled style={{ opacity: 0.4, pointerEvents: "none" }}>
+              <MessageSquare size={20} strokeWidth={2} /> Text
+            </span>
+          )}
+          {lead.address ? (
+            <a
+              href={`https://maps.google.com/?q=${encodeURIComponent(lead.address)}`}
+              target="_blank"
+              rel="noreferrer"
+              className="cp-quick"
+            >
+              <Navigation size={20} strokeWidth={2} /> Directions
+            </a>
+          ) : (
+            <span className="cp-quick" aria-disabled style={{ opacity: 0.4, pointerEvents: "none" }}>
+              <Navigation size={20} strokeWidth={2} /> Directions
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* ── Desktop (md+): the shipped header — do not alter ───────────────── */}
+      <div className="hidden md:block">
       <Link
         href="/CanesPressure/leads"
         className="inline-flex min-h-11 items-center gap-1.5 text-[13px] font-medium text-[var(--cp-muted)]"
@@ -253,6 +337,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
           </a>
         )}
       </div>
+      </div>
 
       <div className="mt-5 grid gap-4 md:grid-cols-[2fr_1fr]">
         {/* Rail first on mobile: Sebastian works this page from his phone and
@@ -262,7 +347,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
               colored card edge. */}
           <div>
             {urgent && <p className="cp-group-label cp-group-danger mb-1.5">Call this now</p>}
-            <section className="cp-card">
+            <section className="cp-card rounded-xl md:rounded-md">
               <div className="space-y-3 p-4">
                 <CardTitle>Next step</CardTitle>
                 <NextStep lead={lead} />
@@ -270,7 +355,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
             </section>
           </div>
 
-          <section className="cp-card p-4">
+          <section className="cp-card rounded-xl p-4 md:rounded-md">
             <div className="flex items-center justify-between gap-2">
               <CardTitle>Estimates</CardTitle>
               {estimates.length > 0 && (
@@ -319,7 +404,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
 
           {/* Everything that isn't the next step lives behind one disclosure —
               still a tap away, no longer competing for attention. */}
-          <details className="cp-card group">
+          <details className="cp-card group rounded-xl md:rounded-md">
             <summary className="flex min-h-[52px] cursor-pointer list-none items-center justify-between px-4 text-[15px] font-semibold [&::-webkit-details-marker]:hidden">
               More options
               <ChevronDown
@@ -354,14 +439,14 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
         </div>
 
         <div className="order-2 min-w-0 space-y-4 md:order-1">
-          <section className="cp-card p-4">
+          <section className="cp-card rounded-xl p-4 md:rounded-md">
             <CardTitle>Details</CardTitle>
             <div className="mt-3">
               <LeadEditor lead={lead} />
             </div>
           </section>
 
-          <section className="cp-card p-4">
+          <section className="cp-card rounded-xl p-4 md:rounded-md">
             <CardTitle>Conversation</CardTitle>
             <div className="mt-3">
               {lastMessages.length === 0 ? (
@@ -403,7 +488,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
             </div>
           </section>
 
-          <section className="cp-card p-4">
+          <section className="cp-card rounded-xl p-4 md:rounded-md">
             <CardTitle>Activity</CardTitle>
             <ol className="mt-3 space-y-3">
               {activity.length === 0 && (

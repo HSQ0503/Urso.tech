@@ -60,6 +60,7 @@ export function Composer({ peerPhone, leadId }: { peerPhone: string; leadId: str
       </div>
       {notice && <p className="text-[13px] text-[var(--cp-warn)]">{notice}</p>}
       <div className="flex items-end gap-2">
+        {/* Filled rounded field on mobile (iOS), bordered cp-textarea on desktop */}
         <textarea
           ref={boxRef}
           rows={2}
@@ -72,15 +73,25 @@ export function Composer({ peerPhone, leadId }: { peerPhone: string; leadId: str
             }
           }}
           placeholder="Type a message"
-          className="cp-textarea max-h-40 resize-none"
+          className="cp-textarea max-h-40 resize-none rounded-2xl border-transparent bg-[var(--cp-hover)] md:rounded-[5px] md:border-[var(--cp-line-strong)] md:bg-[var(--cp-surface)]"
         />
+        {/* Round orange send on mobile; text button on desktop */}
         <button
           type="button"
           onClick={send}
           disabled={pending || !draft.trim()}
-          className="cp-btn cp-btn-primary min-h-[44px] shrink-0 disabled:opacity-60"
+          aria-label="Send message"
+          className="cp-icon-btn cp-icon-btn-primary shrink-0 disabled:opacity-40 md:hidden"
         >
-          <Send size={16} />
+          <Send size={18} strokeWidth={2} />
+        </button>
+        <button
+          type="button"
+          onClick={send}
+          disabled={pending || !draft.trim()}
+          className="cp-btn cp-btn-primary hidden min-h-[44px] shrink-0 disabled:opacity-60 md:inline-flex"
+        >
+          <Send size={16} strokeWidth={2} />
           Send
         </button>
       </div>

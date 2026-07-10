@@ -205,13 +205,14 @@ export function Conversation({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-[var(--cp-line)] px-3 py-3 md:px-4">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-2 border-b border-[var(--cp-line)] bg-[var(--cp-surface)] px-3 py-2.5 md:gap-x-3 md:px-4 md:py-3">
         <Link
           href="/CanesPressure/inbox"
           aria-label="Back to inbox"
-          className="-ml-1 flex h-11 w-9 items-center justify-center rounded-md text-[var(--cp-muted)] md:hidden"
+          className="-ml-1 flex h-11 min-w-11 items-center gap-0.5 rounded-md pr-1 text-[15px] font-medium text-[var(--cp-brand-deep)] md:hidden"
         >
-          <ChevronLeft size={22} />
+          <ChevronLeft size={24} strokeWidth={2} />
+          <span>Inbox</span>
         </Link>
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-2">
@@ -243,7 +244,7 @@ export function Conversation({
             <p className="text-[12px] tabular-nums text-[var(--cp-muted)]">{fmtPhone(peerPhone)}</p>
           )}
         </div>
-        <div className="flex shrink-0 items-center gap-2 xl:hidden">
+        <div className="flex shrink-0 items-center gap-2 max-md:w-full max-md:justify-end xl:hidden">
           {kind === "customer" && contactId && (
             <Link href={`/CanesPressure/customers/${contactId}`} className="cp-btn cp-btn-sm">
               View profile
@@ -265,7 +266,7 @@ export function Conversation({
 
       <div
         ref={streamRef}
-        className="cp-scroll flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-3 py-4 md:px-4"
+        className="cp-scroll flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto bg-[var(--cp-surface)] px-3 py-4 md:px-4"
       >
         {isVendor && (
           <p className="mx-auto mb-1 max-w-[420px] rounded-lg bg-[var(--cp-bg)] px-3 py-2 text-center text-[12px] leading-snug text-[var(--cp-muted)]">
@@ -294,7 +295,9 @@ export function Conversation({
         ))}
       </div>
 
-      <div className="border-t border-[var(--cp-line)] px-3 py-3 md:px-4">
+      {/* Composer pinned above the mobile tab bar (z-40); pad the bottom to clear
+          it plus the home-indicator safe area. Desktop keeps its flush padding. */}
+      <div className="border-t border-[var(--cp-line)] bg-[var(--cp-surface)] px-3 py-3 pb-[calc(0.75rem+64px+env(safe-area-inset-bottom))] md:px-4 md:pb-3">
         <Composer peerPhone={peerPhone} leadId={lead?.id ?? null} />
       </div>
     </div>

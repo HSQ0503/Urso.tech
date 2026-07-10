@@ -4,7 +4,11 @@ import { findCustomerByPhone, getCustomer } from "@/lib/canes/customers";
 import { toE164, type ThreadKind } from "@/lib/canes/types";
 import { Conversation } from "@/app/CanesPressure/components/inbox/conversation";
 import { ContactRail, type CustomerHistory } from "@/app/CanesPressure/components/inbox/contact-rail";
-import { InboxPoll, ThreadList } from "@/app/CanesPressure/components/inbox/thread-list";
+import {
+  InboxPoll,
+  MobileThreadList,
+  ThreadList,
+} from "@/app/CanesPressure/components/inbox/thread-list";
 
 export const dynamic = "force-dynamic";
 
@@ -82,16 +86,15 @@ export default async function InboxPage({
   }
 
   return (
-    <div className="h-[calc(100dvh-120px)] md:h-[calc(100dvh-64px)]">
+    <>
       <InboxPoll />
-      <div className="cp-card flex h-full w-full overflow-hidden">
-        <div
-          className={`${activePhone ? "hidden md:flex" : "flex"} w-full flex-col md:w-[320px] md:shrink-0 md:border-r md:border-[var(--cp-line)]`}
-        >
-          <ThreadList threads={threads} activePhone={activePhone} />
-        </div>
-        <div className={`${activePhone ? "flex" : "hidden md:flex"} min-w-0 flex-1 flex-col`}>
-          {activePhone ? (
+
+      {/* Mobile — iOS Messages: the list, or a full-screen conversation. The
+          list scrolls with the page; the conversation owns the viewport so its
+          composer can pin above the tab bar. */}
+      <div className="md:hidden">
+        {activePhone ? (
+          <div className="fixed inset-x-0 bottom-0 top-0 z-30 flex flex-col bg-[var(--cp-surface)] pt-[max(0.5rem,env(safe-area-inset-top))]">
             <Conversation
               peerPhone={activePhone}
               lead={lead}
@@ -101,27 +104,53 @@ export default async function InboxPage({
               messages={messages}
               calls={calls}
             />
-          ) : (
-            <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center">
-              <MessageSquare size={26} strokeWidth={2} className="text-[var(--cp-faint)]" />
-              <p className="text-[13.5px] text-[var(--cp-muted)]">
-                Select a conversation to read and reply.
-              </p>
+          </div>
+        ) : (
+          <MobileThreadList threads={threads} />
+        )}
+      </div>
+
+      {/* Desktop — the three-pane inbox card, unchanged */}
+      <div className="hidden h-[calc(100dvh-64px)] md:block">
+        <div className="cp-card flex h-full w-full overflow-hidden">
+          <div
+            className={`${activePhone ? "hidden md:flex" : "flex"} w-full flex-col md:w-[320px] md:shrink-0 md:border-r md:border-[var(--cp-line)]`}
+          >
+            <ThreadList threads={threads} activePhone={activePhone} />
+          </div>
+          <div className={`${activePhone ? "flex" : "hidden md:flex"} min-w-0 flex-1 flex-col`}>
+            {activePhone ? (
+              <Conversation
+                peerPhone={activePhone}
+                lead={lead}
+                displayName={displayName}
+                kind={kind}
+                contactId={contact?.id ?? null}
+                messages={messages}
+                calls={calls}
+              />
+            ) : (
+              <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center">
+                <MessageSquare size={26} strokeWidth={2} className="text-[var(--cp-faint)]" />
+                <p className="text-[13.5px] text-[var(--cp-muted)]">
+                  Select a conversation to read and reply.
+                </p>
+              </div>
+            )}
+          </div>
+          {activePhone && (
+            <div className="hidden w-[280px] shrink-0 border-l border-[var(--cp-line)] xl:block">
+              <ContactRail
+                peerPhone={activePhone}
+                kind={kind}
+                lead={lead}
+                contact={contact}
+                history={history}
+              />
             </div>
           )}
         </div>
-        {activePhone && (
-          <div className="hidden w-[280px] shrink-0 border-l border-[var(--cp-line)] xl:block">
-            <ContactRail
-              peerPhone={activePhone}
-              kind={kind}
-              lead={lead}
-              contact={contact}
-              history={history}
-            />
-          </div>
-        )}
       </div>
-    </div>
+    </>
   );
 }

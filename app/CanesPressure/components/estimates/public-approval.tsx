@@ -141,7 +141,10 @@ export function PublicApproval({
                 holds your spot.
               </p>
               {depositUrl ? (
-                <a href={depositUrl} className="cp-btn cp-btn-primary mt-2.5 w-full">
+                <a
+                  href={depositUrl}
+                  className="cp-btn cp-btn-primary cp-btn-block mt-2.5 sm:min-h-9 sm:rounded-[5px] sm:text-[13px]"
+                >
                   <CreditCard size={16} strokeWidth={2} /> Pay deposit
                 </a>
               ) : (
@@ -273,7 +276,7 @@ export function PublicApproval({
               </div>
               <button
                 type="button"
-                className="cp-btn cp-btn-primary w-full"
+                className="cp-btn cp-btn-primary cp-btn-block sm:min-h-9 sm:rounded-[5px] sm:text-[13px]"
                 disabled={!signature.trim() || isPending}
                 onClick={submitApprove}
               >
@@ -299,7 +302,7 @@ export function PublicApproval({
               </div>
               <button
                 type="button"
-                className="cp-btn cp-btn-danger w-full"
+                className="cp-btn cp-btn-danger cp-btn-block sm:min-h-9 sm:rounded-[5px] sm:text-[13px]"
                 disabled={isPending}
                 onClick={submitDecline}
               >

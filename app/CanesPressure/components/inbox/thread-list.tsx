@@ -3,8 +3,9 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { PhoneIncoming, PhoneMissed, PhoneOutgoing, Search } from "lucide-react";
+import { Megaphone, PhoneIncoming, PhoneMissed, PhoneOutgoing, Search } from "lucide-react";
 import { fmtEt, fmtPhone, isMissedCall, minutesSince, type Thread } from "@/lib/canes/types";
+import { CustomerAvatar } from "@/app/CanesPressure/components/customers/avatar";
 
 // Left pane of the inbox: the vendor feed pinned on top as a compact row, then
 // LEADS and CUSTOMERS groups under mono headers (Jobber's grouped-list move),
@@ -220,6 +221,140 @@ export function ThreadList({
         <Group label="Leads" threads={leads} activePhone={activePhone} />
         <Group label="Customers" threads={customers} activePhone={activePhone} />
       </div>
+    </div>
+  );
+}
+
+// ── Mobile iOS Messages list ─────────────────────────────────────────────────
+// The same threads as the desktop pane, rendered as an inset-grouped list: big
+// Fraunces title, filled search, the vendor feed pinned on top, then LEADS and
+// CUSTOMERS as cp-list sections. Each row is an avatar, name + preview, and a
+// trailing time with an orange unread dot.
+
+// Vendor pinned as a single inset row above the groups — a megaphone icon tile
+// instead of an initials avatar, no unread urgency (it auto-parses to leads).
+function MobileVendorRow({ t }: { t: Thread }) {
+  return (
+    <Link href={threadHref(t)} className="cp-list-row">
+      <span className="cp-avatar bg-[var(--cp-brand-soft)] text-[var(--cp-brand-deep)]">
+        <Megaphone size={16} strokeWidth={2} />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="cp-list-title truncate">Lead vendor</p>
+        <p className="cp-list-sub truncate">Auto-parsed lead feed</p>
+      </div>
+      <span className="shrink-0 text-[12px] tabular-nums text-[var(--cp-faint)]">
+        {relTime(t.last_activity_at)}
+      </span>
+    </Link>
+  );
+}
+
+function MobileThreadRow({ t }: { t: Thread }) {
+  const unread = t.unread;
+  return (
+    <Link href={threadHref(t)} className="cp-list-row">
+      <CustomerAvatar name={t.display_name ?? fmtPhone(t.peer_phone)} />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className={`truncate text-[15px] ${unread ? "font-bold" : "font-semibold"}`}>
+            {t.display_name ?? fmtPhone(t.peer_phone)}
+          </span>
+          {t.kind === "customer" ? (
+            <span className="cp-chip shrink-0 bg-[var(--cp-bg)] text-[var(--cp-muted)]">
+              Customer
+            </span>
+          ) : t.lead ? (
+            <span
+              className={`cp-chip shrink-0 ${t.lead.type === "hot" ? "cp-badge-hot" : "cp-badge-cold"}`}
+            >
+              {t.lead.type === "hot" ? "Hot" : "Cold"}
+            </span>
+          ) : null}
+        </div>
+        <div className="mt-0.5 flex min-w-0 items-center">
+          <Preview t={t} unread={unread} />
+        </div>
+      </div>
+      <div className="flex shrink-0 flex-col items-end gap-1.5">
+        <span className="text-[12px] tabular-nums text-[var(--cp-faint)]">
+          {relTime(t.last_activity_at)}
+        </span>
+        {unread && (
+          <span
+            aria-label="Unread"
+            className="h-2.5 w-2.5 rounded-full bg-[var(--cp-brand)]"
+          />
+        )}
+      </div>
+    </Link>
+  );
+}
+
+function MobileGroup({ label, threads }: { label: string; threads: Thread[] }) {
+  if (threads.length === 0) return null;
+  return (
+    <section>
+      <p className="cp-list-header">
+        {label} — {threads.length}
+      </p>
+      <div className="cp-list">
+        {threads.map((t) => (
+          <MobileThreadRow key={t.peer_phone} t={t} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+export function MobileThreadList({ threads }: { threads: Thread[] }) {
+  const [query, setQuery] = useState("");
+  const q = query.trim().toLowerCase();
+  const qDigits = q.replace(/\D/g, "");
+  const matches = (t: Thread) => {
+    if (!q) return true;
+    const name = t.kind === "vendor" ? "lead vendor" : (t.display_name ?? "");
+    return name.toLowerCase().includes(q) || (qDigits.length > 0 && t.peer_phone.includes(qDigits));
+  };
+
+  const visible = threads.filter(matches);
+  const vendors = visible.filter((t) => t.kind === "vendor");
+  const leads = visible.filter((t) => t.kind === "lead");
+  const customers = visible.filter((t) => t.kind === "customer");
+
+  return (
+    <div className="flex flex-col gap-5">
+      <h1 className="cp-ios-title">
+        Inbox<span className="text-[var(--cp-brand)]">.</span>
+      </h1>
+      <div className="cp-search-wrap">
+        <Search size={16} strokeWidth={2} />
+        <input
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search name or phone"
+          aria-label="Search conversations"
+          className="cp-input-ios"
+        />
+      </div>
+      {visible.length === 0 ? (
+        <p className="px-1 py-6 text-[14px] text-[var(--cp-muted)]">
+          {q ? "No matches." : "No conversations yet."}
+        </p>
+      ) : (
+        <>
+          {vendors.length > 0 && (
+            <div className="cp-list">
+              {vendors.map((t) => (
+                <MobileVendorRow key={t.peer_phone} t={t} />
+              ))}
+            </div>
+          )}
+          <MobileGroup label="Leads" threads={leads} />
+          <MobileGroup label="Customers" threads={customers} />
+        </>
+      )}
     </div>
   );
 }

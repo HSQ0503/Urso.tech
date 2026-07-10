@@ -50,7 +50,10 @@ export function NewCustomerForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="cp-card p-4">
+    <form
+      onSubmit={handleSubmit}
+      className="rounded-xl border border-[var(--cp-line)] bg-[var(--cp-surface)] p-4 md:rounded-md"
+    >
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
           <label className="cp-label" htmlFor="nc-name">Name</label>
@@ -87,7 +90,35 @@ export function NewCustomerForm() {
           />
         </div>
       </div>
-      <div className="mt-4 flex flex-wrap items-center gap-3">
+      {/* Mobile: stacked block CTAs, then notices below */}
+      <div className="mt-4 md:hidden">
+        <div className="space-y-2">
+          <button type="submit" className="cp-btn cp-btn-primary cp-btn-block" disabled={isPending}>
+            {isPending ? "Saving..." : "Save customer"}
+          </button>
+          <Link
+            href="/CanesPressure/customers"
+            className="cp-btn cp-btn-block flex items-center justify-center"
+          >
+            Cancel
+          </Link>
+        </div>
+        {(notice || existingId) && (
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            {notice && <span className="text-[12.5px] text-[var(--cp-warn)]">{notice}</span>}
+            {existingId && (
+              <Link
+                href={`/CanesPressure/customers/${existingId}`}
+                className="text-[12.5px] font-semibold text-[var(--cp-brand-deep)] hover:underline"
+              >
+                Open the existing customer
+              </Link>
+            )}
+          </div>
+        )}
+      </div>
+      {/* Desktop: inline row — frozen */}
+      <div className="mt-4 hidden flex-wrap items-center gap-3 md:flex">
         <button type="submit" className="cp-btn cp-btn-primary" disabled={isPending}>
           {isPending ? "Saving..." : "Save customer"}
         </button>

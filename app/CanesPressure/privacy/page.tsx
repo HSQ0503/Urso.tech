@@ -7,7 +7,7 @@ export const metadata = { title: "Privacy policy" };
 
 export default function CanesPrivacyPage() {
   return (
-    <div className="mx-auto max-w-[640px] px-5 py-12">
+    <div className="mx-auto max-w-[640px] px-5 pb-[max(3rem,env(safe-area-inset-bottom))] pt-[max(2.5rem,env(safe-area-inset-top))] md:py-12">
       <p className="cp-mono">Canes Pressure Washing</p>
       <h1 className="cp-display mt-1.5 text-[26px]">
         Privacy policy<span className="text-[var(--cp-brand)]">.</span>

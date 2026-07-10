@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, ChevronLeft } from "lucide-react";
 import { getLead, getSettings } from "@/lib/canes/data";
 import { getCustomer } from "@/lib/canes/customers";
 import { listCatalog } from "@/lib/canes/estimates";
@@ -67,6 +67,26 @@ export default async function NewEstimatePage({
 
   return (
     <div>
+      {/* ── Mobile: iOS back row + large title. ── */}
+      <div className="md:hidden">
+        <Link
+          href={backHref}
+          className="mb-1 inline-flex items-center gap-1 text-[13px] text-[var(--cp-muted)]"
+        >
+          <ChevronLeft size={16} strokeWidth={2} /> {backLabel}
+        </Link>
+        <h1 className="cp-ios-title">
+          New estimate<span className="text-[var(--cp-brand)]">.</span>
+        </h1>
+        {(lead || contact) && (
+          <p className="mt-1 text-[13.5px] text-[var(--cp-muted)]">
+            For {forName ?? (lead ? "this lead" : "this customer")}
+          </p>
+        )}
+      </div>
+
+      {/* ── Desktop (md+): unchanged, frozen. ── */}
+      <div className="hidden md:block">
       <Link
         href={backHref}
         className="inline-flex min-h-11 items-center gap-1.5 text-[13px] font-medium text-[var(--cp-muted)]"
@@ -82,6 +102,7 @@ export default async function NewEstimatePage({
           For {forName ?? (lead ? "this lead" : "this customer")}
         </p>
       )}
+      </div>
 
       <div className="mt-5">
         <EstimateBuilder

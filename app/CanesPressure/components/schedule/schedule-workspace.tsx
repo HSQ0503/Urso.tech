@@ -44,7 +44,6 @@ import {
   type CalView,
 } from "./calendar-board";
 import {
-  TrayCardBody,
   UnscheduledTray,
   type DragPayload,
 } from "./unscheduled-tray";
@@ -479,7 +478,7 @@ export function ScheduleWorkspace({
                 <button
                   key={day.ymd}
                   type="button"
-                  className="cp-slot min-w-0 flex-1"
+                  className="cp-slot min-h-11 min-w-0 flex-1"
                   // Inline because .cp-slot's 10px side padding is unlayered
                   // CSS and beats Tailwind utilities; 7 chips need 4px to fit.
                   style={{ paddingInline: 4 }}
@@ -499,25 +498,38 @@ export function ScheduleWorkspace({
           </div>
         </div>
 
-        {/* Unscheduled group — tap a card to schedule it */}
+        {/* Unscheduled group — tap a row to schedule it */}
         {board.unscheduled.length > 0 && (
           <section className="flex flex-col gap-2">
-            <h3 className="cp-group-label cp-group-brand">
-              Unscheduled — {board.unscheduled.length}
-            </h3>
-            {board.unscheduled.map((job) => (
-              <button
-                key={job.id}
-                type="button"
-                className="cp-tray-card text-left"
-                onClick={() => setScheduleTarget(job)}
-              >
-                <TrayCardBody job={job} />
-                <span className="mt-1 text-[11.5px] font-semibold text-[var(--cp-brand-deep)]">
-                  Tap to schedule
-                </span>
-              </button>
-            ))}
+            <p className="cp-list-header cp-group-brand">
+              Unscheduled · {board.unscheduled.length}
+            </p>
+            <div className="cp-list">
+              {board.unscheduled.map((job) => (
+                <button
+                  key={job.id}
+                  type="button"
+                  className="cp-list-row"
+                  onClick={() => setScheduleTarget(job)}
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="cp-list-title flex items-center gap-1.5">
+                      <span className="truncate">{job.customer_name ?? "Customer"}</span>
+                    </span>
+                    {job.job_name && (
+                      <span className="cp-list-sub block truncate">{job.job_name}</span>
+                    )}
+                    <span className="mt-0.5 block text-[11.5px] font-semibold text-[var(--cp-brand-deep)]">
+                      Tap to schedule
+                    </span>
+                  </span>
+                  <span className="shrink-0 text-[13px] font-semibold tabular-nums">
+                    {fmtMoney(job.total_cents)}
+                  </span>
+                  <ChevronRight className="cp-list-chev" size={18} strokeWidth={2} />
+                </button>
+              ))}
+            </div>
           </section>
         )}
 
@@ -529,37 +541,33 @@ export function ScheduleWorkspace({
         ) : (
           mobileGroups.map((group) => (
             <section key={group.label} className="flex flex-col gap-2">
-              <h3 className="cp-group-label">{group.label}</h3>
-              {group.days.map((d) => (
-                <div key={d.day.ymd} className="flex flex-col gap-2">
-                  {d.events.map((ev) => (
-                    <MobileEventRow
-                      key={ev.id}
-                      event={ev}
-                      dow={group.showDow ? DOW_SHORT.format(d.day.anchor) : null}
-                    />
-                  ))}
-                  {d.visits.map((v) => (
-                    <MobileVisitRow
-                      key={v.id}
-                      visit={v}
-                      dow={group.showDow ? DOW_SHORT.format(d.day.anchor) : null}
-                      onOpen={() => setVisitId(v.id)}
-                    />
-                  ))}
-                  {d.jobs.map((job) => (
-                    <MobileJobRow
-                      key={job.id}
-                      job={job}
-                      dow={group.showDow ? DOW_SHORT.format(d.day.anchor) : null}
-                      onOpen={() => setDetailJobId(job.id)}
-                    />
-                  ))}
-                  {d.jobs.length === 0 && d.visits.length === 0 && d.events.length === 0 && (
-                    <p className="text-[12.5px] text-[var(--cp-faint)]">Nothing on this day.</p>
-                  )}
-                </div>
-              ))}
+              <p className="cp-list-header">{group.label}</p>
+              <div className="cp-list">
+                {group.days.map((d) => {
+                  const dow = group.showDow ? DOW_SHORT.format(d.day.anchor) : null;
+                  return [
+                    ...d.events.map((ev) => (
+                      <MobileEventRow key={ev.id} event={ev} dow={dow} />
+                    )),
+                    ...d.visits.map((v) => (
+                      <MobileVisitRow
+                        key={v.id}
+                        visit={v}
+                        dow={dow}
+                        onOpen={() => setVisitId(v.id)}
+                      />
+                    )),
+                    ...d.jobs.map((job) => (
+                      <MobileJobRow
+                        key={job.id}
+                        job={job}
+                        dow={dow}
+                        onOpen={() => setDetailJobId(job.id)}
+                      />
+                    )),
+                  ];
+                })}
+              </div>
             </section>
           ))
         )}
@@ -567,7 +575,7 @@ export function ScheduleWorkspace({
         {/* Create FAB → Job / Event menu */}
         <button
           type="button"
-          className="cp-fab fixed bottom-20 right-4 z-40"
+          className="cp-fab fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] right-4 z-40"
           onClick={() => setCreateMenuOpen(true)}
           aria-label="Create"
         >
@@ -700,8 +708,9 @@ function RunSheetOverlay({
 }
 
 // ── Mobile list rows ─────────────────────────────────────────────────────────
-// The Jobber list-row shape: time · crew dot · customer · job · $ · address.
-// Jobs are solid rows, visits stay hairline chips — the two-object discipline.
+// iOS inset-list rows sharing one .cp-list card. The two-object discipline
+// survives via the leading marker: a solid crew dot for a job, a hollow ring
+// for an estimate visit, a muted square for a non-bookable calendar event.
 
 function MobileJobRow({
   job,
@@ -712,67 +721,63 @@ function MobileJobRow({
   dow: string | null;
   onOpen: () => void;
 }) {
+  const time = job.scheduled_at
+    ? fmtEt(job.scheduled_at, { hour: "numeric", minute: "2-digit" })
+    : "—";
   return (
-    <button
-      type="button"
-      className="cp-card cp-card-hover flex items-center gap-3 px-3 py-2.5 text-left"
-      onClick={onOpen}
-    >
-      <span className="w-[62px] shrink-0">
-        <span className="block text-[13px] font-semibold tabular-nums leading-tight">
-          {job.scheduled_at
-            ? fmtEt(job.scheduled_at, { hour: "numeric", minute: "2-digit" })
-            : "—"}
-        </span>
-        {dow && (
-          <span className="block text-[11px] leading-tight text-[var(--cp-faint)]">{dow}</span>
-        )}
-      </span>
+    <button type="button" className="cp-list-row" onClick={onOpen}>
+      <span
+        className="cp-crew-dot"
+        style={job.crew ? ({ ["--cp-crew"]: job.crew.color } as React.CSSProperties) : undefined}
+      />
       <span className="min-w-0 flex-1">
-        <span className="flex items-center gap-1.5">
-          <span
-            className="cp-crew-dot"
-            style={job.crew ? ({ ["--cp-crew"]: job.crew.color } as React.CSSProperties) : undefined}
-          />
-          <span className="truncate text-[13.5px] font-semibold">
-            {job.customer_name ?? "Customer"}
-          </span>
+        <span className="cp-list-title block truncate">
+          {job.customer_name ?? "Customer"}
         </span>
-        {job.job_name && (
-          <span className="block truncate text-[12px] text-[var(--cp-muted)]">{job.job_name}</span>
-        )}
-        {job.job_address && (
-          <span className="block truncate text-[11.5px] text-[var(--cp-faint)]">
-            {job.job_address}
+        <span className="cp-list-sub flex items-center gap-1.5">
+          <span className="shrink-0 tabular-nums">
+            {dow ? `${dow} · ${time}` : time}
           </span>
-        )}
+          {job.job_name && (
+            <>
+              <span className="shrink-0 text-[var(--cp-faint)]">·</span>
+              <span className="truncate">{job.job_name}</span>
+            </>
+          )}
+        </span>
       </span>
       <span className="shrink-0 text-[13px] font-semibold tabular-nums">
         {fmtMoney(job.total_cents)}
       </span>
+      <ChevronRight className="cp-list-chev" size={18} strokeWidth={2} />
     </button>
   );
 }
 
-// A calendar event (time off / block / holiday) as a compact hatched band —
-// the same "unavailable ground" reading as the desktop board's EventBand, with
-// the list's 62px time gutter so rows align.
+// A calendar event (time off / block / holiday) as a muted, non-interactive
+// list row — the "unavailable ground" reading, hatched marker instead of a crew
+// dot so it never reads as a bookable job.
 function MobileEventRow({ event, dow }: { event: CalendarEvent; dow: string | null }) {
+  const time = event.all_day
+    ? "All day"
+    : fmtEt(event.starts_at, { hour: "numeric", minute: "2-digit" });
   return (
-    <div className="cp-event-band flex items-center gap-3" title={event.notes ?? undefined}>
-      <span className="w-[62px] shrink-0">
-        <span className="block leading-tight tabular-nums">
-          {event.all_day
-            ? "All day"
-            : fmtEt(event.starts_at, { hour: "numeric", minute: "2-digit" })}
+    <div className="cp-list-row" title={event.notes ?? undefined}>
+      <span className="inline-block h-2 w-2 shrink-0 rounded-[2px] bg-[var(--cp-line-strong)]" />
+      <span className="min-w-0 flex-1">
+        <span className="cp-list-title block truncate text-[var(--cp-muted)]">
+          {event.title}
         </span>
-        {dow && <span className="block text-[10.5px] leading-tight">{dow}</span>}
+        <span className="cp-list-sub block truncate tabular-nums">
+          {dow ? `${dow} · ${time}` : time}
+        </span>
       </span>
-      <span className="truncate">{event.title}</span>
     </div>
   );
 }
 
+// An estimate visit as a list row — hollow crew marker keeps the two-object
+// discipline (jobs solid, visits hairline) inside the shared inset list.
 function MobileVisitRow({
   visit,
   dow,
@@ -782,22 +787,28 @@ function MobileVisitRow({
   dow: string | null;
   onOpen: () => void;
 }) {
+  const time = fmtEt(visit.appointment_at, { hour: "numeric", minute: "2-digit" });
   return (
-    <button type="button" className="cp-visit-chip w-full justify-start" onClick={onOpen}>
-      <span className="w-[62px] shrink-0 text-left">
-        <span className="block leading-tight tabular-nums">
-          {fmtEt(visit.appointment_at, { hour: "numeric", minute: "2-digit" })}
+    <button type="button" className="cp-list-row" onClick={onOpen}>
+      <span className="inline-block h-2 w-2 shrink-0 rounded-full border border-[var(--cp-line-strong)]" />
+      <span className="min-w-0 flex-1">
+        <span className="cp-list-title flex items-center gap-1.5">
+          <span className="truncate">{visit.name ?? "Estimate visit"}</span>
         </span>
-        {dow && (
-          <span className="block text-[10.5px] leading-tight text-[var(--cp-faint)]">{dow}</span>
-        )}
+        <span className="cp-list-sub flex items-center gap-1.5">
+          <span className="shrink-0 tabular-nums">{dow ? `${dow} · ${time}` : time}</span>
+          {visit.service && (
+            <>
+              <span className="shrink-0 text-[var(--cp-faint)]">·</span>
+              <span className="truncate">{visit.service}</span>
+            </>
+          )}
+        </span>
       </span>
-      <span className="truncate">{visit.name ?? "Estimate visit"}</span>
-      {visit.service && (
-        <span className="hidden truncate text-[var(--cp-faint)] min-[420px]:inline">
-          · {visit.service}
-        </span>
-      )}
+      <span className="shrink-0 text-[11px] font-medium uppercase tracking-wide text-[var(--cp-faint)]">
+        Visit
+      </span>
+      <ChevronRight className="cp-list-chev" size={18} strokeWidth={2} />
     </button>
   );
 }

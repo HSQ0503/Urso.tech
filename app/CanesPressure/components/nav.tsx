@@ -15,6 +15,7 @@ import {
   BarChart3,
   Settings,
   MoreHorizontal,
+  ChevronRight,
   X,
 } from "lucide-react";
 
@@ -89,34 +90,39 @@ export function CanesNav({ mobile = false }: { mobile?: boolean }) {
                 className="cp-sheet-backdrop"
                 onClick={() => setMoreOpen(false)}
               />
-            <div className="fixed inset-x-0 bottom-0 z-[51] rounded-t-xl border border-[var(--cp-line)] bg-[var(--cp-surface)] pb-[max(10px,env(safe-area-inset-bottom))]">
-              <div className="flex items-center justify-between px-4 pb-1 pt-3.5">
-                <span className="cp-mono">More</span>
-                <button
-                  type="button"
-                  aria-label="Close"
-                  className="cp-btn cp-btn-ghost cp-btn-sm px-2"
-                  onClick={() => setMoreOpen(false)}
-                >
-                  <X size={16} strokeWidth={2} />
-                </button>
-              </div>
-              <div className="px-2 pb-1">
-                {MOBILE_MORE.map(({ href, label, icon: Icon, exact }) => (
-                  <Link
-                    key={href}
-                    href={href}
+              <div className="cp-sheet" style={{ width: "auto", borderInline: 0, borderBottom: 0 }}>
+                <div className="cp-grabber" />
+                <div className="flex items-center justify-between px-4 pb-2 pt-1.5">
+                  <span className="cp-mono">More</span>
+                  <button
+                    type="button"
+                    aria-label="Close"
+                    className="cp-icon-btn h-8 w-8"
                     onClick={() => setMoreOpen(false)}
-                    className="flex items-center gap-3 rounded-md px-3 py-3 text-[14px] font-medium hover:bg-[var(--cp-hover)]"
-                    style={{
-                      color: isActive(href, exact) ? "var(--cp-brand-deep)" : "var(--cp-ink)",
-                    }}
                   >
-                    <Icon size={18} strokeWidth={2} />
-                    {label}
-                  </Link>
-                ))}
-              </div>
+                    <X size={16} strokeWidth={2} />
+                  </button>
+                </div>
+                <div className="px-3 pb-3">
+                  <div className="cp-list">
+                    {MOBILE_MORE.map(({ href, label, icon: Icon, exact }) => {
+                      const active = isActive(href, exact);
+                      return (
+                        <Link
+                          key={href}
+                          href={href}
+                          onClick={() => setMoreOpen(false)}
+                          className="cp-list-row"
+                          style={active ? { color: "var(--cp-brand-deep)" } : undefined}
+                        >
+                          <Icon size={20} strokeWidth={2} className="shrink-0" />
+                          <span className="cp-list-title flex-1">{label}</span>
+                          <ChevronRight size={18} strokeWidth={2} className="cp-list-chev" />
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
             </div>,
             document.body,

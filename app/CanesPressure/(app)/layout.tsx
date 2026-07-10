@@ -37,11 +37,13 @@ export default async function CanesAppLayout({ children }: { children: React.Rea
         </div>
       </aside>
 
-      {/* Main */}
+      {/* Main — mobile content clears the notch (top) and the tab bar (bottom) */}
       <div className="flex min-h-screen min-w-0 flex-1 flex-col">
-        <main className="min-w-0 flex-1 px-4 pb-24 pt-6 md:px-8 md:pb-10">{children}</main>
-        {/* Bottom tabs (mobile) */}
-        <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-[var(--cp-line)] bg-[var(--cp-surface)]/95 backdrop-blur md:hidden">
+        <main className="min-w-0 flex-1 px-4 pb-24 pt-[max(1.25rem,env(safe-area-inset-top))] md:px-8 md:pb-10 md:pt-6">
+          {children}
+        </main>
+        {/* Bottom tabs (mobile) — translucent iOS tab bar */}
+        <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-[var(--cp-line)] bg-[var(--cp-surface)]/80 px-1 backdrop-blur-xl md:hidden">
           <CanesNav mobile />
         </nav>
       </div>

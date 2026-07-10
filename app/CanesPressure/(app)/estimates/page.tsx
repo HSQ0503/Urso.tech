@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Plus } from "lucide-react";
+import { ChevronRight, Plus } from "lucide-react";
 import { listEstimates } from "@/lib/canes/estimates";
 import {
   ESTIMATE_STATUS_CLASS,
@@ -49,6 +49,28 @@ const EMPTY_COPY: Record<Tab, string> = {
 
 function matchesTab(e: Estimate, tab: Tab): boolean {
   return tab === "all" || e.status === (tab as EstimateStatus);
+}
+
+// iOS grouped-list row (md:hidden mobile tree): number + customer, status chip,
+// trailing total, chevron.
+function MobileEstimateRow({ estimate }: { estimate: Estimate }) {
+  return (
+    <Link href={`/CanesPressure/estimates/${estimate.id}`} className="cp-list-row">
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="cp-list-title tabular-nums">{estimate.number}</span>
+          <span className={`cp-chip ${ESTIMATE_STATUS_CLASS[estimate.status]}`}>
+            {ESTIMATE_STATUS_LABEL[estimate.status]}
+          </span>
+        </div>
+        <p className="cp-list-sub truncate">{estimate.customer_name ?? "No customer name"}</p>
+      </div>
+      <span className="shrink-0 text-[15px] font-semibold tabular-nums">
+        {fmtMoney(estimate.total_cents)}
+      </span>
+      <ChevronRight className="cp-list-chev" size={18} strokeWidth={2} />
+    </Link>
+  );
 }
 
 function EstimateRow({ estimate }: { estimate: Estimate }) {
@@ -108,6 +130,59 @@ export default async function EstimatesPage({
 
   return (
     <div>
+      {/* ── Mobile: iOS screen (header + round Plus, cp-seg-ios status filter,
+          inset grouped list). Hidden at md+ where the desktop tree renders. ── */}
+      <div className="md:hidden">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="cp-ios-title">
+              Estimates<span className="text-[var(--cp-brand)]">.</span>
+            </h1>
+            <p className="cp-mono mt-1">{all.length} total</p>
+          </div>
+          <Link
+            href="/CanesPressure/estimates/new"
+            className="cp-icon-btn cp-icon-btn-primary"
+            aria-label="New estimate"
+          >
+            <Plus size={20} strokeWidth={2} />
+          </Link>
+        </div>
+
+        <div className="cp-scroll mt-4 -mx-1 overflow-x-auto px-1">
+          <div className="cp-seg cp-seg-ios w-max">
+            {TABS.map((key) => {
+              const href =
+                activeSort === "new"
+                  ? `/CanesPressure/estimates?status=${key}`
+                  : `/CanesPressure/estimates?status=${key}&sort=${activeSort}`;
+              return (
+                <Link key={key} href={href} className="cp-seg-btn" data-active={key === tab}>
+                  {TAB_LABEL[key]}
+                  <span className="tabular-nums">{counts[key]}</span>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="mt-4">
+          {rows.length === 0 ? (
+            <div className="cp-list px-4 py-10 text-center text-[13.5px] text-[var(--cp-muted)]">
+              {EMPTY_COPY[tab]}
+            </div>
+          ) : (
+            <div className="cp-list">
+              {rows.map((estimate) => (
+                <MobileEstimateRow key={estimate.id} estimate={estimate} />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Desktop (md+): unchanged, frozen. ── */}
+      <div className="hidden md:block">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="cp-display text-[24px] leading-tight">
@@ -171,6 +246,7 @@ export default async function EstimatesPage({
         ) : (
           rows.map((estimate) => <EstimateRow key={estimate.id} estimate={estimate} />)
         )}
+      </div>
       </div>
     </div>
   );

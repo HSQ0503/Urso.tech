@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Calendar } from "lucide-react";
+import { Calendar, ChevronRight } from "lucide-react";
 import { listLeads } from "@/lib/canes/data";
 import {
   fmtEt,
@@ -10,6 +10,7 @@ import {
   type Lead,
   type LeadType,
 } from "@/lib/canes/types";
+import { LeadAvatar } from "@/app/CanesPressure/components/leads/lead-avatar";
 import { NewLead } from "@/app/CanesPressure/components/leads/new-lead";
 import { WaitTimer } from "@/app/CanesPressure/components/leads/wait-timer";
 
@@ -73,6 +74,40 @@ function LeadRow({ lead }: { lead: Lead }) {
   );
 }
 
+// iOS grouped-list row: avatar, name + status chips, service·source sub, and a
+// trailing WAITING timer or appointment time before the chevron.
+function MobileLeadRow({ lead }: { lead: Lead }) {
+  const sub = [lead.service, SOURCE_LABEL[lead.source]].filter(Boolean).join(" · ");
+  const waiting = lead.type === "cold" && lead.status === "new";
+  return (
+    <Link href={`/CanesPressure/leads/${lead.id}`} className="cp-list-row">
+      <LeadAvatar name={lead.name ?? fmtPhone(lead.phone)} />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1.5">
+          <span className="cp-list-title truncate">{lead.name ?? fmtPhone(lead.phone)}</span>
+          <TypeBadge type={lead.type} />
+        </div>
+        <p className="cp-list-sub truncate">
+          {sub || "No service details yet"}
+        </p>
+      </div>
+      <div className="flex shrink-0 flex-col items-end gap-1">
+        {lead.appointment_at ? (
+          <span className="inline-flex items-center gap-1 text-[12.5px] tabular-nums text-[var(--cp-muted)]">
+            <Calendar size={12} strokeWidth={2} />
+            {fmtEt(lead.appointment_at, { month: "short", day: "numeric", hour: "numeric" })}
+          </span>
+        ) : waiting ? (
+          <WaitTimer createdAt={lead.created_at} />
+        ) : (
+          <span className={`cp-chip ${STATUS_CLASS[lead.status]}`}>{STATUS_LABEL[lead.status]}</span>
+        )}
+      </div>
+      <ChevronRight className="cp-list-chev" size={18} strokeWidth={2} />
+    </Link>
+  );
+}
+
 export default async function LeadsPage({
   searchParams,
 }: {
@@ -104,6 +139,73 @@ export default async function LeadsPage({
 
   return (
     <div>
+      {/* ── Mobile: iOS grouped-list presentation ─────────────────────────── */}
+      <div className="md:hidden">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="cp-ios-title">
+              Leads<span className="text-[var(--cp-brand)]">.</span>
+            </h1>
+            <p className="mt-1 text-[13px] text-[var(--cp-muted)]">
+              Vendor texts, website requests, and referrals.
+            </p>
+          </div>
+          <NewLead variant="icon" />
+        </div>
+
+        {/* Filter row: horizontally scrollable iOS segmented control. */}
+        <div className="-mx-4 mt-4 overflow-x-auto px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="cp-seg cp-seg-ios w-max">
+            {FILTERS.map((key) => (
+              <Link
+                key={key}
+                href={`/CanesPressure/leads?f=${key}`}
+                className="cp-seg-btn"
+                data-active={key === filter}
+              >
+                {TAB_LABEL[key]}
+                <span className="tabular-nums opacity-70">{subsets[key].length}</span>
+              </Link>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-4">
+          {rows.length === 0 ? (
+            <div className="cp-list px-4 py-10 text-center text-[13.5px] text-[var(--cp-muted)]">
+              {EMPTY_COPY[filter]}
+            </div>
+          ) : (
+            <div className="space-y-5">
+              {callNow.length > 0 && (
+                <div>
+                  <p className="cp-list-header text-[var(--cp-danger)]">Call these now · {callNow.length}</p>
+                  <div className="cp-list">
+                    {callNow.map((lead) => (
+                      <MobileLeadRow key={lead.id} lead={lead} />
+                    ))}
+                  </div>
+                </div>
+              )}
+              {rest.length > 0 && (
+                <div>
+                  {callNow.length > 0 && (
+                    <p className="cp-list-header">Everything else · {rest.length}</p>
+                  )}
+                  <div className="cp-list">
+                    {rest.map((lead) => (
+                      <MobileLeadRow key={lead.id} lead={lead} />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Desktop (md+): the shipped card list — do not alter ────────────── */}
+      <div className="hidden md:block">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="cp-display text-[24px] leading-tight">
@@ -167,6 +269,7 @@ export default async function LeadsPage({
             )}
           </>
         )}
+      </div>
       </div>
     </div>
   );

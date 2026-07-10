@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Plus, Search, Users } from "lucide-react";
+import { ChevronRight, Plus, Search, Users } from "lucide-react";
 import { listCustomers } from "@/lib/canes/customers";
 import { fmtEt, fmtMoney, fmtPhone, type CustomerSummary } from "@/lib/canes/types";
 import { CustomerAvatar } from "@/app/CanesPressure/components/customers/avatar";
@@ -8,21 +8,27 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Customers" };
 
 // Jobber client-list blueprint: one search box (server-side via ?q=), one
-// table-like card. Rows collapse into stacked cards below md.
+// table-like card. Desktop keeps the frozen grid table; mobile (md:hidden)
+// renders a single iOS inset list of avatar rows.
 
 const GRID = "md:grid-cols-[minmax(0,1.5fr)_minmax(0,1.3fr)_140px_120px_130px]";
 
-function CustomerRow({ customer }: { customer: CustomerSummary }) {
-  const lastJob = customer.last_job_at
+function lastJobLabel(customer: CustomerSummary): string {
+  return customer.last_job_at
     ? fmtEt(customer.last_job_at, { month: "short", day: "numeric", year: "numeric" })
     : "—";
+}
+
+// Desktop table row — frozen. Only rendered inside the hidden md:block tree.
+function CustomerRow({ customer }: { customer: CustomerSummary }) {
+  const lastJob = lastJobLabel(customer);
   return (
     <Link
       href={`/CanesPressure/customers/${customer.id}`}
       className="block px-4 py-3 transition-colors hover:bg-[var(--cp-hover)]"
     >
-      <div className={`flex items-center gap-3 md:grid ${GRID}`}>
-        <div className="flex min-w-0 flex-1 items-center gap-3 md:flex-none">
+      <div className={`grid items-center gap-3 ${GRID}`}>
+        <div className="flex min-w-0 flex-none items-center gap-3">
           <CustomerAvatar name={customer.name} />
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-1.5">
@@ -31,21 +37,15 @@ function CustomerRow({ customer }: { customer: CustomerSummary }) {
                 <span className="cp-chip bg-[var(--cp-bg)] text-[var(--cp-faint)]">Archived</span>
               )}
             </div>
-            <p className="mt-0.5 truncate text-[12.5px] text-[var(--cp-muted)] md:hidden">
-              {customer.primary_address ?? "No address on file"}
-            </p>
-            <p className="mt-0.5 truncate text-[12.5px] tabular-nums text-[var(--cp-faint)] md:hidden">
-              {fmtPhone(customer.phone)} · Last job {lastJob}
-            </p>
           </div>
         </div>
-        <p className="hidden truncate text-[13px] text-[var(--cp-muted)] md:block">
+        <p className="truncate text-[13px] text-[var(--cp-muted)]">
           {customer.primary_address ?? "—"}
         </p>
-        <p className="hidden truncate text-[13px] tabular-nums text-[var(--cp-muted)] md:block">
+        <p className="truncate text-[13px] tabular-nums text-[var(--cp-muted)]">
           {fmtPhone(customer.phone)}
         </p>
-        <p className="hidden text-[13px] tabular-nums text-[var(--cp-muted)] md:block">{lastJob}</p>
+        <p className="text-[13px] tabular-nums text-[var(--cp-muted)]">{lastJob}</p>
         <div className="shrink-0 text-right">
           <p className="text-[14px] font-semibold tabular-nums">{fmtMoney(customer.lifetime_cents)}</p>
           {customer.open_balance_cents > 0 && (
@@ -55,6 +55,38 @@ function CustomerRow({ customer }: { customer: CustomerSummary }) {
           )}
         </div>
       </div>
+    </Link>
+  );
+}
+
+// Mobile iOS row — avatar, name (+ archived chip), address, phone·last job,
+// trailing lifetime money + "$X due" chip, chevron.
+function CustomerListRow({ customer }: { customer: CustomerSummary }) {
+  const lastJob = lastJobLabel(customer);
+  return (
+    <Link href={`/CanesPressure/customers/${customer.id}`} className="cp-list-row">
+      <CustomerAvatar name={customer.name} />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1.5">
+          <span className="cp-list-title truncate">{customer.name ?? "No name"}</span>
+          {customer.archived && (
+            <span className="cp-chip shrink-0 bg-[var(--cp-bg)] text-[var(--cp-faint)]">Archived</span>
+          )}
+        </div>
+        <p className="cp-list-sub truncate">{customer.primary_address ?? "No address on file"}</p>
+        <p className="cp-list-sub truncate tabular-nums">
+          {fmtPhone(customer.phone)} · Last job {lastJob}
+        </p>
+      </div>
+      <div className="shrink-0 text-right">
+        <p className="text-[14px] font-semibold tabular-nums">{fmtMoney(customer.lifetime_cents)}</p>
+        {customer.open_balance_cents > 0 && (
+          <span className="cp-chip mt-1 bg-[var(--cp-warn-bg)] tabular-nums text-[var(--cp-warn)]">
+            {fmtMoney(customer.open_balance_cents)} due
+          </span>
+        )}
+      </div>
+      <ChevronRight className="cp-list-chev" size={18} strokeWidth={2} />
     </Link>
   );
 }
@@ -69,20 +101,31 @@ export default async function CustomersPage({
   const customers = await listCustomers(query || undefined);
   const archivedCount = customers.filter((c) => c.archived).length;
 
+  const countLine = query
+    ? `${customers.length} match${customers.length === 1 ? "" : "es"} for "${query}"`
+    : `${customers.length} customer${customers.length === 1 ? "" : "s"}${archivedCount > 0 ? ` · ${archivedCount} archived` : ""}`;
+
   return (
     <div>
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="cp-display text-[24px] leading-tight">
+        <div className="min-w-0">
+          <h1 className="cp-display text-[28px] leading-[1.08] md:text-[24px] md:leading-tight">
             Customers<span className="text-[var(--cp-brand)]">.</span>
           </h1>
-          <p className="mt-1 text-[13.5px] tabular-nums text-[var(--cp-muted)]">
-            {query
-              ? `${customers.length} match${customers.length === 1 ? "" : "es"} for "${query}"`
-              : `${customers.length} customer${customers.length === 1 ? "" : "s"}${archivedCount > 0 ? ` · ${archivedCount} archived` : ""}`}
-          </p>
+          <p className="mt-1 text-[13.5px] tabular-nums text-[var(--cp-muted)]">{countLine}</p>
         </div>
-        <Link href="/CanesPressure/customers/new" className="cp-btn cp-btn-primary">
+        {/* Round + on mobile; the full pill button returns at md+. */}
+        <Link
+          href="/CanesPressure/customers/new"
+          aria-label="New customer"
+          className="cp-icon-btn cp-icon-btn-primary md:hidden"
+        >
+          <Plus size={20} strokeWidth={2} />
+        </Link>
+        <Link
+          href="/CanesPressure/customers/new"
+          className="cp-btn cp-btn-primary hidden md:inline-flex"
+        >
           <Plus size={16} strokeWidth={2} />
           New customer
         </Link>
@@ -90,7 +133,20 @@ export default async function CustomersPage({
 
       {/* GET form keeps the page a server component; the URL is the filter. */}
       <form method="get" className="mt-5">
-        <div className="relative w-full sm:max-w-[340px]">
+        {/* iOS filled search on mobile */}
+        <div className="cp-search-wrap md:hidden">
+          <Search size={16} strokeWidth={2} />
+          <input
+            type="search"
+            name="q"
+            defaultValue={query}
+            className="cp-input-ios"
+            placeholder="Search name, phone, or address"
+            aria-label="Search customers"
+          />
+        </div>
+        {/* Desktop bordered search — frozen */}
+        <div className="relative hidden w-full sm:max-w-[340px] md:block">
           <Search
             size={15}
             strokeWidth={2}
@@ -109,7 +165,7 @@ export default async function CustomersPage({
 
       <div className="mt-4">
         {customers.length === 0 ? (
-          <div className="cp-card flex flex-col items-center gap-2 px-6 py-12 text-center">
+          <div className="cp-card flex flex-col items-center gap-2 rounded-xl px-6 py-12 text-center md:rounded-md">
             <Users size={20} strokeWidth={2} className="text-[var(--cp-faint)]" />
             {query ? (
               <>
@@ -135,20 +191,30 @@ export default async function CustomersPage({
             )}
           </div>
         ) : (
-          <div className="cp-card overflow-hidden">
-            <div className={`hidden border-b border-[var(--cp-line)] px-4 py-2 md:grid md:gap-3 ${GRID}`}>
-              <span className="cp-mono">Customer</span>
-              <span className="cp-mono">Property</span>
-              <span className="cp-mono">Phone</span>
-              <span className="cp-mono">Last job</span>
-              <span className="cp-mono text-right">Lifetime</span>
-            </div>
-            <div className="divide-y divide-[var(--cp-line)]">
+          <>
+            {/* Mobile: one iOS inset list of avatar rows */}
+            <div className="cp-list md:hidden">
               {customers.map((c) => (
-                <CustomerRow key={c.id} customer={c} />
+                <CustomerListRow key={c.id} customer={c} />
               ))}
             </div>
-          </div>
+
+            {/* Desktop: frozen table card */}
+            <div className="cp-card hidden overflow-hidden md:block">
+              <div className={`grid gap-3 border-b border-[var(--cp-line)] px-4 py-2 ${GRID}`}>
+                <span className="cp-mono">Customer</span>
+                <span className="cp-mono">Property</span>
+                <span className="cp-mono">Phone</span>
+                <span className="cp-mono">Last job</span>
+                <span className="cp-mono text-right">Lifetime</span>
+              </div>
+              <div className="divide-y divide-[var(--cp-line)]">
+                {customers.map((c) => (
+                  <CustomerRow key={c.id} customer={c} />
+                ))}
+              </div>
+            </div>
+          </>
         )}
       </div>
     </div>

@@ -51,6 +51,9 @@ export function SheetShell({
     <>
       <div className="cp-sheet-backdrop" onClick={onClose} />
       <div className="cp-sheet cp-scroll" role="dialog" aria-modal="true" aria-label={title}>
+        {/* Grabber — bottom-sheet affordance on mobile only; the desktop
+            right-panel has no drag handle. */}
+        <div className="cp-grabber md:hidden" />
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-[var(--cp-line)] bg-[var(--cp-surface)] px-4 py-3">
           <p className="cp-mono">{title}</p>
           <button

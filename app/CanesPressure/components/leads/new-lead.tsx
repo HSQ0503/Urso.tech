@@ -15,9 +15,13 @@ const PHONE_RE = /^\+?1?[\s.\-()]*(\d[\s.\-()]*){10}$/;
 // Disclosure form for manual leads (door-to-door, referrals). Renders the
 // trigger button plus, when open, a w-full card — the parent header row must
 // be flex-wrap so the card drops onto its own full-width line.
+// variant "icon" is the round iOS header action; "button" is the desktop pill.
 
-export function NewLead() {
+export function NewLead({ variant = "button" }: { variant?: "button" | "icon" }) {
   const router = useRouter();
+  // Both the mobile (icon) and desktop (button) triggers mount at once (Tailwind
+  // hides one via display), so field ids must differ or they collide in the DOM.
+  const idp = variant === "icon" ? "new-m-" : "new-";
   const [open, setOpen] = useState(false);
   const [type, setType] = useState<LeadType>("cold");
   const [when, setWhen] = useState("");
@@ -69,35 +73,44 @@ export function NewLead() {
     });
   }
 
+  const toggle = () => {
+    setOpen((o) => !o);
+    setNotice("");
+    setExistingId(null);
+  };
+
   return (
     <>
-      <button
-        type="button"
-        className="cp-btn cp-btn-primary"
-        aria-expanded={open}
-        onClick={() => {
-          setOpen((o) => !o);
-          setNotice("");
-          setExistingId(null);
-        }}
-      >
-        <Plus size={16} strokeWidth={2} /> Add lead
-      </button>
+      {variant === "icon" ? (
+        <button
+          type="button"
+          className="cp-icon-btn cp-icon-btn-primary"
+          aria-expanded={open}
+          aria-label="Add lead"
+          onClick={toggle}
+        >
+          <Plus size={20} strokeWidth={2} />
+        </button>
+      ) : (
+        <button type="button" className="cp-btn cp-btn-primary" aria-expanded={open} onClick={toggle}>
+          <Plus size={16} strokeWidth={2} /> Add lead
+        </button>
+      )}
 
       {open && (
-        <form onSubmit={handleSubmit} className="cp-card w-full p-4">
+        <form onSubmit={handleSubmit} className="cp-card w-full rounded-xl p-4 md:rounded-md">
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <label className="cp-label" htmlFor="new-name">Name</label>
-              <input id="new-name" name="name" required className="cp-input" placeholder="Customer name" />
+              <label className="cp-label" htmlFor={`${idp}name`}>Name</label>
+              <input id={`${idp}name`} name="name" required className="cp-input" placeholder="Customer name" />
             </div>
             <div>
-              <label className="cp-label" htmlFor="new-phone">Phone</label>
-              <input id="new-phone" name="phone" type="tel" required className="cp-input" placeholder="(561) 555-0123" />
+              <label className="cp-label" htmlFor={`${idp}phone`}>Phone</label>
+              <input id={`${idp}phone`} name="phone" type="tel" required className="cp-input" placeholder="(561) 555-0123" />
             </div>
             <div>
-              <label className="cp-label" htmlFor="new-email">Email (optional)</label>
-              <input id="new-email" name="email" type="email" className="cp-input" placeholder="name@example.com" />
+              <label className="cp-label" htmlFor={`${idp}email`}>Email (optional)</label>
+              <input id={`${idp}email`} name="email" type="email" className="cp-input" placeholder="name@example.com" />
             </div>
             <div>
               <span className="cp-label">Lead type</span>
@@ -124,20 +137,20 @@ export function NewLead() {
               </p>
             </div>
             <div>
-              <label className="cp-label" htmlFor="new-source">Source</label>
-              <select id="new-source" name="source" className="cp-select" defaultValue="referral">
+              <label className="cp-label" htmlFor={`${idp}source`}>Source</label>
+              <select id={`${idp}source`} name="source" className="cp-select" defaultValue="referral">
                 {(Object.entries(SOURCE_LABEL) as [LeadSource, string][]).map(([value, label]) => (
                   <option key={value} value={value}>{label}</option>
                 ))}
               </select>
             </div>
             <div>
-              <label className="cp-label" htmlFor="new-service">Service</label>
-              <input id="new-service" name="service" className="cp-input" placeholder="House wash, driveway..." />
+              <label className="cp-label" htmlFor={`${idp}service`}>Service</label>
+              <input id={`${idp}service`} name="service" className="cp-input" placeholder="House wash, driveway..." />
             </div>
             <div>
-              <label className="cp-label" htmlFor="new-address">Address</label>
-              <input id="new-address" name="address" className="cp-input" placeholder="Street, city" />
+              <label className="cp-label" htmlFor={`${idp}address`}>Address</label>
+              <input id={`${idp}address`} name="address" className="cp-input" placeholder="Street, city" />
             </div>
             {type === "hot" && (
               <div className="sm:col-span-2">
@@ -146,11 +159,19 @@ export function NewLead() {
               </div>
             )}
           </div>
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            <button type="submit" className="cp-btn cp-btn-primary" disabled={isPending}>
+          <div className="mt-4 flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center">
+            <button
+              type="submit"
+              className="cp-btn cp-btn-primary cp-btn-block md:w-auto md:min-h-9 md:rounded-[5px] md:text-[13px]"
+              disabled={isPending}
+            >
               {isPending ? "Adding..." : "Save lead"}
             </button>
-            <button type="button" className="cp-btn" onClick={() => setOpen(false)}>
+            <button
+              type="button"
+              className="cp-btn cp-btn-block md:w-auto md:min-h-9 md:rounded-[5px] md:text-[13px]"
+              onClick={() => setOpen(false)}
+            >
               Cancel
             </button>
             {notice && (

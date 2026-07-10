@@ -30,12 +30,34 @@ function SectionCard({
   children: React.ReactNode;
 }) {
   return (
-    <section className="cp-card p-4 md:p-5">
-      <h2 className="text-[15px] font-semibold">{title}</h2>
-      <p className="mt-1 text-[13px] text-[var(--cp-muted)]">{description}</p>
-      <div className="mt-4 flex flex-col gap-4">{children}</div>
-      <div className="mt-5 flex flex-wrap items-center gap-3">
-        <button type="button" className="cp-btn cp-btn-primary" onClick={onSave} disabled={pending}>
+    <section>
+      {/* Mobile: iOS grouped-list header sits ABOVE the inset card. Desktop keeps
+          the title/description inside the card (frozen). */}
+      <div className="mb-2 md:hidden">
+        <p className="cp-list-header">{title}</p>
+        <p className="px-1.5 text-[12.5px] leading-snug text-[var(--cp-muted)]">{description}</p>
+      </div>
+      {/* rounded-xl gives the iOS grouped-card look on mobile; md:rounded-md restores
+          the desktop 6px cp-card. Save renders block on mobile, compact on desktop. */}
+      <div className="cp-card rounded-xl p-4 md:rounded-md md:p-5">
+      <h2 className="hidden text-[15px] font-semibold md:block">{title}</h2>
+      <p className="mt-1 hidden text-[13px] text-[var(--cp-muted)] md:block">{description}</p>
+      <div className="flex flex-col gap-4 md:mt-4">{children}</div>
+      <div className="mt-5 flex flex-col gap-3 md:flex-row md:flex-wrap md:items-center">
+        <button
+          type="button"
+          className="cp-btn cp-btn-primary cp-btn-block md:hidden"
+          onClick={onSave}
+          disabled={pending}
+        >
+          {pending ? "Saving..." : "Save"}
+        </button>
+        <button
+          type="button"
+          className="cp-btn cp-btn-primary hidden md:inline-flex"
+          onClick={onSave}
+          disabled={pending}
+        >
           {pending ? "Saving..." : "Save"}
         </button>
         {notice && (
@@ -46,6 +68,7 @@ function SectionCard({
             {notice.text}
           </p>
         )}
+      </div>
       </div>
     </section>
   );
@@ -283,12 +306,12 @@ export function SettingsForm({ settings }: { settings: CanesSettings }) {
             {phones.map((p) => (
               <li
                 key={p}
-                className="flex items-center justify-between gap-3 rounded-md border border-[var(--cp-line)] px-3.5 py-2"
+                className="flex min-h-[52px] items-center justify-between gap-3 rounded-md border border-[var(--cp-line)] px-3.5 py-2 md:min-h-0"
               >
                 <span className="text-[14px] font-medium">{fmtPhone(p)}</span>
                 <button
                   type="button"
-                  className="cp-btn cp-btn-sm cp-btn-danger px-2.5"
+                  className="cp-btn cp-btn-sm cp-btn-danger min-h-[44px] min-w-[44px] px-2.5 md:min-h-[30px] md:min-w-0"
                   aria-label={`Remove ${fmtPhone(p)}`}
                   onClick={() => setPhones(phones.filter((x) => x !== p))}
                 >
@@ -302,7 +325,7 @@ export function SettingsForm({ settings }: { settings: CanesSettings }) {
         )}
         <div className="flex gap-2">
           <input
-            className="cp-input"
+            className="cp-input min-h-[44px] md:min-h-[38px]"
             placeholder="(561) 555-0100"
             inputMode="tel"
             value={draft}
@@ -314,7 +337,7 @@ export function SettingsForm({ settings }: { settings: CanesSettings }) {
               }
             }}
           />
-          <button type="button" className="cp-btn shrink-0" onClick={addPhone}>
+          <button type="button" className="cp-btn min-h-[44px] shrink-0 md:min-h-9" onClick={addPhone}>
             <Plus size={16} strokeWidth={2} />
             Add
           </button>
