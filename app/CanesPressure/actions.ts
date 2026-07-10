@@ -28,6 +28,7 @@ import {
   enqueueInvoiceSend,
   enqueueInvoiceReminders,
 } from "@/lib/canes/invoices";
+import { listJobExpenses, addJobExpenseRow, deleteJobExpenseRow } from "@/lib/canes/expenses";
 import { ensureContact, getCustomer } from "@/lib/canes/customers";
 import {
   notifyEstimateSent,
@@ -51,6 +52,7 @@ import {
   type EstimateWithItems,
   type Invoice,
   type Job,
+  type JobExpense,
   type JobStatus,
   type LeadStatus,
   type LeadSource,
@@ -1850,6 +1852,53 @@ export async function markInvoiceViewed(token: string): Promise<ActionResult> {
     .eq("status", "sent");
   if (error) return { ok: false, notice: error.message };
   if (invoice.lead_id) await logInvoiceEvent(invoice.lead_id, `Invoice ${invoice.number} viewed by customer`);
+  refresh();
+  return { ok: true };
+}
+
+// ── Job expenses (Feature B) ──────────────────────────────────────────────────
+//
+// Per-job costs (materials, gas, dump fee, sub) that turn revenue into true
+// profit per job and per crew. The read is demo-safe so the billing panel can
+// fetch its own expenses on mount; the writes follow the DEMO guard → validate →
+// snapshot crew_id (in addJobExpenseRow) → refresh() pattern of the section
+// above. logEvent needs a lead, and a job may have none, so it is skipped here.
+
+// Demo-safe read: the panel fetches its own expenses without prop-threading, so
+// this stays outside the canesConfigured guard (the reader handles isDemo()).
+export async function listJobExpensesAction(jobId: string): Promise<JobExpense[]> {
+  return listJobExpenses(jobId);
+}
+
+export async function addJobExpense(input: {
+  jobId: string;
+  amountCents: number;
+  category: string;
+  note?: string;
+}): Promise<ActionResult> {
+  if (!canesConfigured()) return DEMO;
+  const amount = Math.round(input.amountCents);
+  if (!Number.isFinite(amount) || amount <= 0) return { ok: false, notice: "Enter the expense amount." };
+  const category = input.category.trim();
+  if (!category) return { ok: false, notice: "Pick a category." };
+  const job = await getJob(input.jobId);
+  if (!job) return { ok: false, notice: "Job not found." };
+  const id = await addJobExpenseRow({
+    jobId: input.jobId,
+    amountCents: amount,
+    category,
+    note: input.note?.trim() || null,
+  });
+  if (!id) return { ok: false, notice: "Couldn't save the expense. Please try again." };
+  await logJobEvent(job.lead_id, `Expense added — ${fmtMoney(amount)} (${category})`);
+  refresh();
+  return { ok: true };
+}
+
+export async function deleteJobExpense(id: string): Promise<ActionResult> {
+  if (!canesConfigured()) return DEMO;
+  const ok = await deleteJobExpenseRow(id);
+  if (!ok) return { ok: false, notice: "Couldn't remove the expense. Please try again." };
   refresh();
   return { ok: true };
 }

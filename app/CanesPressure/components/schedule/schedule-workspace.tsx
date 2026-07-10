@@ -42,6 +42,7 @@ import {
   walkDays,
   type CalDay,
   type CalView,
+  type ContentKind,
 } from "./calendar-board";
 import {
   UnscheduledTray,
@@ -188,6 +189,7 @@ export function ScheduleWorkspace({
   }
 
   const [crewFilter, setCrewFilter] = useState<string | null>(null);
+  const [contentKind, setContentKind] = useState<ContentKind>("all");
   const [dropActiveYmd, setDropActiveYmd] = useState<string | null>(null);
 
   // Sheets. Exactly one open at a time. The job sheet tracks an id and derives
@@ -398,6 +400,28 @@ export function ScheduleWorkspace({
                 ))}
               </div>
 
+              {/* Timeline content toggle: Jobs shows only crew blocks, Quotes
+                  only estimate-visit blocks, All both. Month ignores it. */}
+              <div className="cp-seg">
+                {(
+                  [
+                    ["all", "All"],
+                    ["jobs", "Jobs"],
+                    ["quotes", "Quotes"],
+                  ] as [ContentKind, string][]
+                ).map(([k, label]) => (
+                  <button
+                    key={k}
+                    type="button"
+                    className="cp-seg-btn"
+                    data-active={contentKind === k}
+                    onClick={() => setContentKind(k)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
               {/* min-h-0: height loses to .cp-select's 38px min-height no
                   matter the layer order, so zero it for the h-[30px] compact
                   size to actually match the 30px cp-btn-sm toolbar buttons. */}
@@ -427,6 +451,7 @@ export function ScheduleWorkspace({
             events={events}
             crews={crews}
             crewFilter={crewFilter}
+            contentKind={contentKind}
             dropActiveYmd={dropActiveYmd}
             onOpenJob={(j) => setDetailJobId(j.id)}
             onOpenVisit={(v) => setVisitId(v.id)}

@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import { KeyRound, MapPin, Phone, Printer, Square } from "lucide-react";
 import {
   fmtEt,
@@ -165,6 +166,30 @@ function RunCard({ job, index }: { job: JobWithItems; index: number }) {
   );
 }
 
+// The crews with at least one job on this day, deduped and sorted the way the
+// roster is (crew.sort, then name). Jobs with no crew fold into a synthetic
+// "Unassigned" bucket so Sebastian can still hand out that pile. Derived from
+// the jobs themselves — no new prop from the parent.
+const UNASSIGNED = "__unassigned__";
+
+function crewOptions(jobs: JobWithItems[]): { id: string; crew: Crew | null }[] {
+  const byId = new Map<string, Crew | null>();
+  let hasUnassigned = false;
+  for (const job of jobs) {
+    if (job.crew) byId.set(job.crew.id, job.crew);
+    else hasUnassigned = true;
+  }
+  const crews = [...byId.values()]
+    .filter((c): c is Crew => c !== null)
+    .sort((a, b) => a.sort - b.sort || a.name.localeCompare(b.name))
+    .map((c) => ({ id: c.id, crew: c }));
+  return hasUnassigned ? [...crews, { id: UNASSIGNED, crew: null }] : crews;
+}
+
+function jobCrewKey(job: JobWithItems): string {
+  return job.crew ? job.crew.id : UNASSIGNED;
+}
+
 export function DayRunSheet({
   jobs,
   crew,
@@ -174,7 +199,24 @@ export function DayRunSheet({
   crew: Crew | null;
   dayLabel: string;
 }) {
-  const ordered = [...jobs].sort(byTime);
+  // Offer the filter only when the day actually holds more than one crew;
+  // when the parent already scoped to a single crew there is nothing to narrow.
+  const options = useMemo(() => crewOptions(jobs), [jobs]);
+  const showFilter = options.length > 1;
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+
+  const active = selectedKey ? options.find((o) => o.id === selectedKey) ?? null : null;
+  // The header crew reflects the in-sheet filter first, falling back to the
+  // crew the parent opened the sheet with. Print inherits this same scoping.
+  const headerCrew = active?.crew ?? crew;
+  const headerLabel = active
+    ? active.crew?.name ?? "Unassigned"
+    : crew?.name ?? "All crews";
+
+  const ordered = useMemo(() => {
+    const scoped = selectedKey ? jobs.filter((j) => jobCrewKey(j) === selectedKey) : jobs;
+    return [...scoped].sort(byTime);
+  }, [jobs, selectedKey]);
   const total = ordered.reduce((sum, j) => sum + j.total_cents, 0);
 
   return (
@@ -182,13 +224,11 @@ export function DayRunSheet({
       {/* Header + print affordance */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          {crew && (
-            <span className="cp-crew-dot" style={{ ["--cp-crew" as string]: crew.color }} />
+          {headerCrew && (
+            <span className="cp-crew-dot" style={{ ["--cp-crew" as string]: headerCrew.color }} />
           )}
           <div>
-            <p className="text-[15px] font-semibold leading-tight">
-              {crew ? crew.name : "All crews"}
-            </p>
+            <p className="text-[15px] font-semibold leading-tight">{headerLabel}</p>
             <p className="text-[12.5px] text-[var(--cp-muted)]">{dayLabel}</p>
           </div>
         </div>
@@ -208,10 +248,42 @@ export function DayRunSheet({
         </div>
       </div>
 
+      {/* Crew filter — narrows to one crew's jobs so each crew gets a clean
+          sheet. Kept out of the printout; the scoped list is what prints. */}
+      {showFilter && (
+        <div className="cp-seg flex-wrap print:hidden">
+          <button
+            type="button"
+            className="cp-seg-btn"
+            data-active={selectedKey === null}
+            onClick={() => setSelectedKey(null)}
+          >
+            All
+          </button>
+          {options.map((o) => (
+            <button
+              key={o.id}
+              type="button"
+              className="cp-seg-btn"
+              data-active={selectedKey === o.id}
+              onClick={() => setSelectedKey(o.id)}
+            >
+              {o.crew && (
+                <span
+                  className="cp-crew-dot"
+                  style={{ ["--cp-crew" as string]: o.crew.color }}
+                />
+              )}
+              {o.crew?.name ?? "Unassigned"}
+            </button>
+          ))}
+        </div>
+      )}
+
       {ordered.length === 0 ? (
         <div className="cp-card px-4 py-8 text-center">
           <p className="text-[13px] text-[var(--cp-muted)]">
-            No jobs scheduled for {crew ? crew.name : "any crew"} on this day.
+            No jobs scheduled for {headerLabel === "All crews" ? "any crew" : headerLabel} on this day.
           </p>
         </div>
       ) : (

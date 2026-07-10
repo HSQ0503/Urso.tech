@@ -1,16 +1,24 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
-import { BadgeDollarSign, Banknote, CheckCircle2, CreditCard, PlayCircle, Send } from "lucide-react";
+import { BadgeDollarSign, Banknote, CheckCircle2, CreditCard, PlayCircle, Plus, Receipt, Send, Trash2 } from "lucide-react";
 import {
+  addJobExpense,
   completeJob,
+  deleteJobExpense,
+  listJobExpensesAction,
   recordCashPayment,
   sendInvoice,
   startJob,
   type ActionResult,
 } from "@/app/CanesPressure/actions";
-import { fmtMoney, type JobInvoiceSummary, type JobWithItems } from "@/lib/canes/types";
+import { fmtMoney, type JobExpense, type JobInvoiceSummary, type JobWithItems } from "@/lib/canes/types";
+
+// Categories seeded into the add-expense picker. These MIRROR the
+// settings.expense_categories defaults (lib/canes/data.ts) so the panel stays
+// self-contained without threading settings through the job sheet.
+const EXPENSE_CATEGORIES = ["Materials", "Gas / travel", "Dump fee", "Subcontractor", "Equipment", "Other"];
 
 // The billing panel inside the job sheet (Phase 2.5) — the seamless "job done →
 // how are they paying?" flow. Start → Complete & bill mints the invoice, then a
@@ -88,6 +96,7 @@ export function JobBilling({
             View invoice {invoice.number}
           </Link>
         )}
+        <ExpensesPanel jobId={job.id} revenueCents={paid} />
       </div>
     );
   }
@@ -131,6 +140,7 @@ export function JobBilling({
           />
         )}
         <Notice value={feedback} />
+        <ExpensesPanel jobId={job.id} revenueCents={billedCents} />
       </div>
     );
   }
@@ -227,6 +237,155 @@ export function JobBilling({
           }
         />
       )}
+
+      <Notice value={feedback} />
+      <ExpensesPanel jobId={job.id} revenueCents={billedCents} />
+    </div>
+  );
+}
+
+// Self-contained expenses section: loads the job's expenses on mount and after
+// each mutation via listJobExpensesAction, so it never threads state through the
+// job sheet. Works in demo (the read returns fixtures; the writes no-op with a
+// notice). Margin = revenue collected/billed on this job minus total expenses.
+function ExpensesPanel({ jobId, revenueCents }: { jobId: string; revenueCents: number }) {
+  const [expenses, setExpenses] = useState<JobExpense[]>([]);
+  const [amount, setAmount] = useState("");
+  const [category, setCategory] = useState(EXPENSE_CATEGORIES[0]);
+  const [note, setNote] = useState("");
+  const [feedback, setFeedback] = useState<Feedback>(null);
+  const [isPending, startTransition] = useTransition();
+
+  function reload() {
+    listJobExpensesAction(jobId).then(setExpenses);
+  }
+  useEffect(() => {
+    listJobExpensesAction(jobId).then(setExpenses);
+  }, [jobId]);
+
+  const totalExpensesCents = expenses.reduce((sum, e) => sum + e.amount_cents, 0);
+  const marginCents = revenueCents - totalExpensesCents;
+  const amountCents = toCents(amount);
+
+  function submit() {
+    setFeedback(null);
+    startTransition(async () => {
+      const res = await addJobExpense({ jobId, amountCents, category, note: note.trim() || undefined });
+      setFeedback(res.notice ? { ok: res.ok, text: res.notice } : null);
+      if (res.ok) {
+        setAmount("");
+        setNote("");
+        reload();
+      }
+    });
+  }
+
+  function remove(id: string) {
+    setFeedback(null);
+    startTransition(async () => {
+      const res = await deleteJobExpense(id);
+      setFeedback(res.notice ? { ok: res.ok, text: res.notice } : null);
+      if (res.ok) reload();
+    });
+  }
+
+  return (
+    <div className="cp-divider mt-4 pt-3 space-y-2.5">
+      <p className="cp-label flex items-center gap-1.5">
+        <Receipt size={13} strokeWidth={2} /> Expenses
+      </p>
+
+      {expenses.length > 0 && (
+        <ul className="space-y-1.5">
+          {expenses.map((e) => (
+            <li key={e.id} className="flex items-center justify-between gap-2 text-[13px]">
+              <span className="flex min-w-0 items-baseline gap-1.5">
+                <span className="font-medium">{e.category}</span>
+                {e.note && <span className="truncate text-[12px] text-[var(--cp-faint)]">{e.note}</span>}
+              </span>
+              <span className="flex shrink-0 items-center gap-1.5">
+                <span className="tabular-nums font-semibold">{fmtMoney(e.amount_cents)}</span>
+                <button
+                  type="button"
+                  className="cp-btn cp-btn-ghost cp-btn-danger cp-btn-sm"
+                  disabled={isPending}
+                  onClick={() => remove(e.id)}
+                  aria-label="Remove expense"
+                >
+                  <Trash2 size={13} strokeWidth={2} />
+                </button>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {/* Margin: what actually stayed after costs on this job. */}
+      <div className="flex items-center justify-between text-[13px]">
+        <span className="text-[var(--cp-muted)]">
+          Margin <span className="text-[var(--cp-faint)]">({fmtMoney(revenueCents)} − {fmtMoney(totalExpensesCents)})</span>
+        </span>
+        <span
+          className="tabular-nums font-semibold"
+          style={{ color: marginCents >= 0 ? "var(--cp-good)" : "var(--cp-warn)" }}
+        >
+          {fmtMoney(marginCents)}
+        </span>
+      </div>
+
+      <div className="flex flex-wrap items-end gap-2">
+        <div className="w-[92px]">
+          <label className="cp-label" htmlFor="cp-expense-amount">
+            Amount
+          </label>
+          <div className="relative">
+            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[13px] text-[var(--cp-muted)]">
+              $
+            </span>
+            <input
+              id="cp-expense-amount"
+              className="cp-input tabular-nums"
+              // Inline for the $ prefix room — matches CashPanel's amount field.
+              style={{ paddingLeft: 24 }}
+              inputMode="decimal"
+              placeholder="0.00"
+              value={amount}
+              onChange={(ev) => setAmount(ev.target.value)}
+            />
+          </div>
+        </div>
+        <div className="min-w-[120px] flex-1">
+          <label className="cp-label" htmlFor="cp-expense-category">
+            Category
+          </label>
+          <select
+            id="cp-expense-category"
+            className="cp-select"
+            value={category}
+            onChange={(ev) => setCategory(ev.target.value)}
+          >
+            {EXPENSE_CATEGORIES.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+      <input
+        className="cp-input"
+        placeholder="Note (optional)"
+        value={note}
+        onChange={(ev) => setNote(ev.target.value)}
+      />
+      <button
+        type="button"
+        className="cp-btn cp-btn-sm"
+        disabled={isPending || amountCents <= 0}
+        onClick={submit}
+      >
+        <Plus size={14} strokeWidth={2} /> Add expense
+      </button>
 
       <Notice value={feedback} />
     </div>

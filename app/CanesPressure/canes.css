@@ -594,6 +594,205 @@
   .cp-tray-card:active { cursor: grabbing; }
 }
 
+/* ── Timeline grid (Day / Week true time-axis, md+ only) ──────────────────────
+   A pixel-per-minute vertical grid, Markate/Jobber-week style. A left hour
+   gutter labels the visible window; each day is a column; jobs/visits/events
+   place absolutely by their ET start time. --cp-winh (window height) is set
+   inline from the computed window; block tops/heights are computed in px in the
+   component. Overlapping blocks split into side-by-side sub-columns so none
+   fully occludes another. Same crew tint + conflict outline as the buckets. */
+.cp-timegrid {
+  display: grid;
+  grid-template-columns: 48px 1fr;
+  border: 1px solid var(--cp-line);
+  border-radius: 6px;
+  background: var(--cp-surface);
+  overflow: hidden;
+}
+/* header row spans both columns: a spacer over the gutter + the day heads */
+.cp-timegrid-head {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: subgrid;
+  border-bottom: 1px solid var(--cp-line);
+}
+.cp-timegrid-headspacer { border-right: 1px solid var(--cp-line); }
+.cp-timegrid-daycols {
+  display: grid;
+  grid-auto-columns: 1fr;
+  grid-auto-flow: column;
+}
+.cp-timegrid-dayhead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px;
+  padding: 7px 8px;
+  text-align: left;
+  border-left: 1px solid var(--cp-line);
+  font-family: var(--cp-font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--cp-muted);
+  cursor: pointer;
+  font-feature-settings: "tnum" 1;
+}
+.cp-timegrid-daycols > .cp-timegrid-dayhead:first-child { border-left: 0; }
+.cp-timegrid-dayhead:hover { background: var(--cp-hover); }
+.cp-timegrid-dayhead[data-today="true"] { color: var(--cp-brand-deep); }
+.cp-timegrid-dayhead .cp-timegrid-dayhead-sub {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--cp-faint);
+}
+
+/* the scrolling body: gutter + day columns, both height = --cp-winh */
+.cp-timegrid-body {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: subgrid;
+  max-height: 640px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--cp-line-strong) transparent;
+}
+.cp-timegrid-gutter {
+  position: relative;
+  height: var(--cp-winh);
+  border-right: 1px solid var(--cp-line);
+}
+.cp-timegrid-hourlabel {
+  position: absolute;
+  right: 6px;
+  transform: translateY(-50%);
+  font-family: var(--cp-font-mono);
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--cp-faint);
+  font-feature-settings: "tnum" 1;
+  white-space: nowrap;
+}
+.cp-timegrid-cols {
+  display: grid;
+  grid-auto-columns: 1fr;
+  grid-auto-flow: column;
+}
+.cp-timegrid-col {
+  position: relative;
+  height: var(--cp-winh);
+  border-left: 1px solid var(--cp-line);
+}
+.cp-timegrid-cols > .cp-timegrid-col:first-child { border-left: 0; }
+.cp-timegrid-col[data-today="true"] {
+  background: color-mix(in srgb, var(--cp-brand) 3%, var(--cp-surface));
+}
+.cp-timegrid-col[data-dropactive="true"] { background: var(--cp-brand-soft); }
+/* faint hour rules, one per hour line, positioned inline via top */
+.cp-timegrid-hour {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 1px solid var(--cp-line);
+  pointer-events: none;
+}
+
+/* an absolutely placed job block on the grid. top/height/left/width inline. */
+.cp-timegrid-block {
+  --cp-crew: #3e4a56;
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  overflow: hidden;
+  padding: 3px 6px 3px 7px;
+  border: 1px solid var(--cp-line);
+  border-left: 3px solid var(--cp-crew);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--cp-crew) 12%, var(--cp-surface));
+  color: var(--cp-ink);
+  font-size: 11.5px;
+  line-height: 1.2;
+  text-align: left;
+  cursor: pointer;
+  font-feature-settings: "tnum" 1;
+}
+.cp-timegrid-block:hover { border-color: var(--cp-line-strong); z-index: 3; }
+.cp-timegrid-block[data-unassigned="true"] {
+  border-left-style: dashed;
+  background: var(--cp-surface);
+}
+.cp-timegrid-block-time { font-weight: 600; }
+.cp-timegrid-block-crew {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--cp-muted);
+}
+
+/* an estimate visit placed on the grid: hairline outline, transparent fill */
+.cp-timegrid-visit {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  overflow: hidden;
+  padding: 3px 6px;
+  border: 1px solid var(--cp-line-strong);
+  border-radius: 4px;
+  background: var(--cp-surface);
+  color: var(--cp-muted);
+  font-size: 11px;
+  line-height: 1.2;
+  text-align: left;
+  cursor: pointer;
+  font-feature-settings: "tnum" 1;
+}
+.cp-timegrid-visit:hover { background: var(--cp-hover); color: var(--cp-ink); z-index: 3; }
+
+/* a calendar event placed on the grid: muted hatched band */
+.cp-timegrid-event {
+  position: absolute;
+  overflow: hidden;
+  padding: 3px 6px;
+  border: 1px solid var(--cp-line);
+  border-radius: 4px;
+  color: var(--cp-faint);
+  font-size: 10.5px;
+  line-height: 1.2;
+  background-color: var(--cp-hover);
+  background-image: repeating-linear-gradient(
+    135deg,
+    transparent 0,
+    transparent 5px,
+    rgba(90, 95, 102, 0.09) 5px,
+    rgba(90, 95, 102, 0.09) 6px
+  );
+}
+
+/* the current-time hairline (only on today's column, in the window) */
+.cp-timegrid-now {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 0;
+  border-top: 1.5px solid var(--cp-brand);
+  pointer-events: none;
+  z-index: 4;
+}
+.cp-timegrid-now::before {
+  content: "";
+  position: absolute;
+  left: -3px;
+  top: -3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--cp-brand);
+}
+
 /* ── iOS mobile layer ────────────────────────────────────────────────────────
    A native-feeling phone presentation for the same data the desktop shows.
    These primitives are used inside md:hidden mobile trees; the desktop trees

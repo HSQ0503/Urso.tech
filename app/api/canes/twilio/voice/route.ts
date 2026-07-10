@@ -3,13 +3,16 @@ import { canesConfigured, canesDb } from "@/lib/canes/supabase";
 import { getSettings } from "@/lib/canes/data";
 import { fillTemplate, sendCanesSms } from "@/lib/canes/twilio";
 import { createOrganicLead, findLeadByPhone, verifyTwilioRequest } from "@/lib/canes/inbound";
+import { findCustomerByPhone } from "@/lib/canes/customers";
 import { toE164 } from "@/lib/canes/types";
 import { escapeXml, xmlResponse } from "@/lib/twilio";
 
-// Twilio Voice webhook: two-step state machine. Step one (no ?step) rings
-// Sebastian's cell; when that dial finishes Twilio posts back with
-// ?step=after and the outcome, where we log the call and, on a miss, text
-// the caller back and fall to voicemail.
+// Twilio Voice webhook: a small state machine keyed on ?step. Step one (no
+// ?step) optionally greets the caller and rings Sebastian's cell. The owner
+// leg gets a whisper (?step=whisper) that announces who is calling (new vs
+// existing customer, by name) before the caller is bridged, so Sebastian knows
+// what he is answering. If he does not answer, the outer <Dial> posts back to
+// ?step=after as a miss (voicemail + text-back + cold lead).
 export const runtime = "nodejs";
 
 const VOICEMAIL_TWIML =
@@ -29,7 +32,9 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    if (req.nextUrl.searchParams.get("step") === "after") return await afterDial(params);
+    const step = req.nextUrl.searchParams.get("step");
+    if (step === "whisper") return await whisper(params);
+    if (step === "after") return await afterDial(params);
     return await firstRing(params);
   } catch (err) {
     // Never leave a caller hanging on an application error.
@@ -43,10 +48,24 @@ async function firstRing(params: Record<string, string>): Promise<Response> {
 
   const owner = process.env.CANES_OWNER_PHONE;
   if (owner) {
-    // No callerId on the Dial: Sebastian sees the customer's real number and
-    // can call back natively from his phone.
+    const settings = await getSettings();
+    // Optional caller greeting, played to the caller before the phone rings.
+    const greeting =
+      settings.call_greeting_enabled && settings.call_greeting_text
+        ? `<Say voice="alice">${escapeXml(settings.call_greeting_text)}</Say>`
+        : "";
+    // With the whisper on, dial the owner as a <Number url=...> so the "who is
+    // calling" announcement plays only to Sebastian's leg, and answerOnBridge
+    // keeps the caller on ringback (not silence) until the bridge. With it off,
+    // this is a plain <Dial>{owner}</Dial> — byte-identical to the original when
+    // the greeting is off too. No callerId either way: Sebastian sees the
+    // customer's real number and can call back natively.
+    const dialTarget = settings.call_whisper_enabled
+      ? `<Number url="/api/canes/twilio/voice?step=whisper" method="POST">${escapeXml(owner)}</Number>`
+      : escapeXml(owner);
+    const answerOnBridge = settings.call_whisper_enabled ? ` answerOnBridge="true"` : "";
     return xmlResponse(
-      `<Response><Dial timeout="20" action="/api/canes/twilio/voice?step=after" method="POST">${escapeXml(owner)}</Dial></Response>`,
+      `<Response>${greeting}<Dial timeout="20"${answerOnBridge} action="/api/canes/twilio/voice?step=after" method="POST">${dialTarget}</Dial></Response>`,
     );
   }
 
@@ -64,6 +83,40 @@ async function firstRing(params: Record<string, string>): Promise<Response> {
     });
   }
   return xmlResponse(VOICEMAIL_TWIML);
+}
+
+// Whisper played only to Sebastian's leg once he answers, before the caller is
+// bridged: it announces who is calling, then the leg completes and Twilio
+// bridges the caller automatically. (A press-to-accept / decline-to-voicemail
+// gate is intentionally NOT used here: a rejected whisper still reports
+// DialCallStatus="completed" to the outer <Dial>, so the caller would be
+// dropped instead of sent to voicemail. That needs the enqueue-based screen
+// pattern plus a live two-phone test; tracked as a follow-up.)
+async function whisper(params: Record<string, string>): Promise<Response> {
+  const line = await whisperText(params.From);
+  return xmlResponse(`<Response><Say voice="alice">${escapeXml(line)}</Say></Response>`);
+}
+
+// Build the "who is calling" line from the caller's number. A blocked/unknown
+// caller ID (toE164 returns null) or a DB error both degrade to a safe generic
+// line so the whisper never leaves Sebastian hanging.
+async function whisperText(from: string | undefined): Promise<string> {
+  const e164 = from ? toE164(from) : null;
+  if (!e164) return "New Canes call, caller ID hidden.";
+  try {
+    const contact = await findCustomerByPhone(e164);
+    if (contact?.name) return `Canes customer, ${firstName(contact.name)}, calling.`;
+    const lead = await findLeadByPhone(e164);
+    if (lead?.name) return `Canes lead, ${firstName(lead.name)}, calling.`;
+    return "New Canes lead calling.";
+  } catch (err) {
+    console.error("[canes] whisper lookup failed:", err);
+    return "New Canes call.";
+  }
+}
+
+function firstName(name: string): string {
+  return name.trim().split(/\s+/)[0];
 }
 
 async function afterDial(params: Record<string, string>): Promise<Response> {

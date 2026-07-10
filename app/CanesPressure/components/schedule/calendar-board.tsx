@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo } from "react";
-import { MapPin } from "lucide-react";
 import {
   ET,
   etLocalToIso,
@@ -62,6 +61,21 @@ export function composeDropIso(ymd: string, timeOfDay: string | null): string {
   return etLocalToIso(`${ymd}T${timeOfDay ?? "09:00"}`);
 }
 
+// Minutes-of-day (0..1439) an instant shows in ET, derived from its wall clock
+// via etHm — never local getHours, so it stays correct across DST boundaries.
+export function etMinutesOfDay(iso: string): number {
+  const [h, m] = etHm(iso).split(":").map(Number);
+  return h * 60 + m;
+}
+
+// "HH:mm" (ET wall time) for a minutes-of-day value, for composing a drop ISO.
+function hhmm(minutes: number): string {
+  const clamped = Math.max(0, Math.min(1439, minutes));
+  const h = Math.floor(clamped / 60);
+  const m = clamped % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
 const DOW = new Intl.DateTimeFormat("en-US", { weekday: "short", timeZone: "UTC" });
 const MONTH_DAY = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 
@@ -72,97 +86,12 @@ function dayHeadLabel(day: CalDay, todayYmd: string): { dow: string; sub: string
   };
 }
 
-// A coarse height class by duration — v1 uses buckets, not a pixel-per-minute
-// grid (see plan D2). Longer jobs read as taller blocks without a true timeline.
-function durationTone(minutes: number): string {
-  if (minutes >= 240) return "min-h-[74px]";
-  if (minutes >= 150) return "min-h-[58px]";
-  return "min-h-[44px]";
-}
-
 function timeWindow(job: JobWithItems): string {
   if (!job.scheduled_at) return "";
   const start = fmtEt(job.scheduled_at, { hour: "numeric", minute: "2-digit" });
   if (!job.ends_at) return start;
   const end = fmtEt(job.ends_at, { hour: "numeric", minute: "2-digit" });
   return `${start}–${end}`;
-}
-
-// ── Building blocks ──────────────────────────────────────────────────────────
-
-function JobBlock({
-  job,
-  conflicted,
-  onOpen,
-}: {
-  job: JobWithItems;
-  conflicted: boolean;
-  onOpen: (job: JobWithItems) => void;
-}) {
-  const unassigned = !job.crew;
-  return (
-    <button
-      type="button"
-      className={`cp-job-block ${durationTone(job.duration_minutes)} ${conflicted ? "cp-conflict" : ""}`}
-      data-unassigned={unassigned}
-      style={job.crew ? ({ ["--cp-crew"]: job.crew.color } as React.CSSProperties) : undefined}
-      draggable
-      onDragStart={(e) =>
-        writeDrag(e, {
-          type: "job",
-          id: job.id,
-          timeOfDay: job.scheduled_at ? etHm(job.scheduled_at) : null,
-          durationMinutes: job.duration_minutes,
-          crewId: job.crew_id,
-        })
-      }
-      onClick={() => onOpen(job)}
-    >
-      <span className="font-semibold tabular-nums leading-tight">{timeWindow(job)}</span>
-      <span className="truncate leading-tight">{job.customer_name ?? "Customer"}</span>
-      <span className="flex items-center gap-1.5 truncate leading-tight text-[var(--cp-muted)]">
-        <span
-          className="cp-crew-dot"
-          style={job.crew ? ({ ["--cp-crew"]: job.crew.color } as React.CSSProperties) : undefined}
-        />
-        <span className="truncate">{job.job_name ?? job.crew?.name ?? "Assign crew"}</span>
-      </span>
-    </button>
-  );
-}
-
-function VisitChip({
-  visit,
-  onOpen,
-}: {
-  visit: Lead;
-  onOpen: (visit: Lead) => void;
-}) {
-  // w-full + min-w-0 keep the chip inside its day column — without them the
-  // nowrap spans push the inline-flex button wider than the column.
-  return (
-    <button
-      type="button"
-      className="cp-visit-chip w-full min-w-0 overflow-hidden"
-      title={visit.name ?? "Estimate visit"}
-      onClick={() => onOpen(visit)}
-    >
-      <span className="shrink-0 tabular-nums">
-        {fmtEt(visit.appointment_at, { hour: "numeric", minute: "2-digit" })}
-      </span>
-      <span className="min-w-0 truncate">{visit.name ?? "Visit"}</span>
-    </button>
-  );
-}
-
-function EventBand({ event }: { event: CalendarEvent }) {
-  return (
-    <div className="cp-event-band" title={event.notes ?? undefined}>
-      {event.all_day
-        ? event.title
-        : `${event.title} · ${fmtEt(event.starts_at, { hour: "numeric", minute: "2-digit" })}`}
-    </div>
-  );
 }
 
 // ── Grouping ─────────────────────────────────────────────────────────────────
@@ -217,43 +146,214 @@ function conflictSet(jobs: JobWithItems[]): Set<string> {
   return bad;
 }
 
-// ── Day column (the shared drop target) ──────────────────────────────────────
+// ── Timeline grid (Day / Week true time-axis) ────────────────────────────────
+// A pixel-per-minute vertical grid. The visible window defaults to 7:00–19:00
+// but expands to include anything (job/visit/event) that starts earlier or ends
+// later on the visible days. Everything places absolutely by ET minutes-of-day.
 
-function DayColumn({
+// What the toolbar's All | Jobs | Quotes toggle filters the grid to.
+export type ContentKind = "all" | "jobs" | "quotes";
+
+const PX_PER_MIN = 0.9; // 12h window ≈ 648px; hour rules land on clean 54px steps
+const DEFAULT_WIN_START = 7 * 60; // 7:00
+const DEFAULT_WIN_END = 19 * 60; // 19:00
+const SNAP_MIN = 15;
+
+// A job block and an estimate-visit block share the timeline column; both carry
+// their ET minutes-of-day span so they pack into shared overlap lanes.
+type TimedItem =
+  | { kind: "job"; job: JobWithItems; start: number; end: number }
+  | { kind: "visit"; visit: Lead; start: number; end: number };
+
+// A calendar_event's ET minutes-of-day span, clamped to the visible day. Events
+// can be all-day or cross midnight, so an event on a given ymd is shown for the
+// portion that falls within that day (00:00 for a day it started before).
+function eventSpanForDay(event: CalendarEvent, ymd: string): { start: number; end: number } | null {
+  if (event.all_day) return null; // all-day events render as a top band, not a timed block
+  const startYmd = etYmd(event.starts_at);
+  const endInstant = new Date(new Date(event.ends_at).getTime() - 60_000);
+  const start = startYmd === ymd ? etMinutesOfDay(event.starts_at) : 0;
+  const end = etYmd(endInstant) === ymd ? etMinutesOfDay(event.ends_at) : 1440;
+  if (end <= start) return null;
+  return { start, end };
+}
+
+// The [start,end) window (minutes-of-day) to render for a set of days, expanded
+// past the 7–19 default to fit anything that spills outside it.
+function computeWindow(
+  days: CalDay[],
+  buckets: DayBuckets,
+): { start: number; end: number } {
+  let start = DEFAULT_WIN_START;
+  let end = DEFAULT_WIN_END;
+  for (const day of days) {
+    for (const j of buckets.jobs.get(day.ymd) ?? []) {
+      if (!j.scheduled_at) continue;
+      const s = etMinutesOfDay(j.scheduled_at);
+      start = Math.min(start, s);
+      end = Math.max(end, s + (j.duration_minutes || 0));
+    }
+    for (const v of buckets.visits.get(day.ymd) ?? []) {
+      if (!v.appointment_at) continue;
+      const s = etMinutesOfDay(v.appointment_at);
+      start = Math.min(start, s);
+      end = Math.max(end, s + 60);
+    }
+    for (const e of buckets.events.get(day.ymd) ?? []) {
+      const span = eventSpanForDay(e, day.ymd);
+      if (!span) continue;
+      start = Math.min(start, span.start);
+      end = Math.max(end, span.end);
+    }
+  }
+  // Snap to the hour outward, keep a sane floor of one hour of height.
+  start = Math.max(0, Math.floor(start / 60) * 60);
+  end = Math.min(1440, Math.ceil(end / 60) * 60);
+  if (end - start < 60) end = Math.min(1440, start + 60);
+  return { start, end };
+}
+
+// Pack overlapping items into side-by-side sub-columns so none fully occludes
+// another. Greedy interval coloring within a cluster: within a maximal run of
+// mutually-chained overlaps, each item takes the first lane free at its start,
+// and every item in the cluster shares the cluster's lane count for its width.
+type Placed<T> = { item: T; start: number; end: number; lane: number; lanes: number };
+
+function packOverlaps<T>(
+  items: T[],
+  span: (item: T) => { start: number; end: number },
+): Placed<T>[] {
+  const sorted = items
+    .map((item) => ({ item, ...span(item) }))
+    .sort((a, b) => a.start - b.start || a.end - b.end);
+
+  const out: Placed<T>[] = [];
+  let cluster: { item: T; start: number; end: number; lane: number }[] = [];
+  let clusterEnd = -Infinity;
+
+  const flush = () => {
+    const lanes = cluster.reduce((max, c) => Math.max(max, c.lane + 1), 0);
+    for (const c of cluster) out.push({ ...c, lanes });
+    cluster = [];
+    clusterEnd = -Infinity;
+  };
+
+  for (const s of sorted) {
+    if (cluster.length && s.start >= clusterEnd) flush();
+    // First lane whose current occupant has ended by this item's start.
+    const laneEnds: number[] = [];
+    for (const c of cluster) laneEnds[c.lane] = Math.max(laneEnds[c.lane] ?? -Infinity, c.end);
+    let lane = 0;
+    while (laneEnds[lane] !== undefined && laneEnds[lane] > s.start) lane++;
+    cluster.push({ item: s.item, start: s.start, end: s.end, lane });
+    clusterEnd = Math.max(clusterEnd, s.end);
+  }
+  if (cluster.length) flush();
+  return out;
+}
+
+// Geometry for a placed item within the window: absolute top/height/left/width.
+function blockStyle(
+  p: { start: number; end: number; lane: number; lanes: number },
+  winStart: number,
+): React.CSSProperties {
+  const top = (p.start - winStart) * PX_PER_MIN;
+  const height = Math.max(16, (p.end - p.start) * PX_PER_MIN);
+  const widthPct = 100 / p.lanes;
+  return {
+    top,
+    height,
+    left: `calc(${p.lane * widthPct}% + 2px)`,
+    width: `calc(${widthPct}% - 4px)`,
+  };
+}
+
+const HOUR_LABEL = new Intl.DateTimeFormat("en-US", { hour: "numeric", timeZone: "UTC" });
+
+function hourLabel(minutes: number): string {
+  // Format via a UTC-noon-anchored date so it never touches the device zone.
+  return HOUR_LABEL.format(new Date(Date.UTC(2000, 0, 1, Math.floor(minutes / 60), 0, 0)));
+}
+
+function TimeGridColumn({
   day,
   todayYmd,
   buckets,
   conflicts,
+  contentKind,
+  win,
+  nowMinutes,
   dropActiveYmd,
   onOpenJob,
   onOpenVisit,
-  onOpenDay,
   onDropJob,
   setDropActive,
-  wide = false,
 }: {
   day: CalDay;
   todayYmd: string;
   buckets: DayBuckets;
   conflicts: Set<string>;
+  contentKind: ContentKind;
+  win: { start: number; end: number };
+  nowMinutes: number | null;
   dropActiveYmd: string | null;
   onOpenJob: (job: JobWithItems) => void;
   onOpenVisit: (visit: Lead) => void;
-  onOpenDay: (ymd: string) => void;
-  onDropJob: (ymd: string) => (e: React.DragEvent) => void;
+  onDropJob: (ymd: string, timeOfDay: string) => (e: React.DragEvent) => void;
   setDropActive: (ymd: string | null) => void;
-  wide?: boolean;
 }) {
-  const head = dayHeadLabel(day, todayYmd);
-  const dayJobs = (buckets.jobs.get(day.ymd) ?? []).slice().sort((a, b) =>
-    (a.scheduled_at ?? "").localeCompare(b.scheduled_at ?? ""),
-  );
-  const dayVisits = buckets.visits.get(day.ymd) ?? [];
+  const showJobs = contentKind !== "quotes";
+  const showVisits = contentKind !== "jobs";
+
+  // Jobs and visits share one column, so pack them together into a single set of
+  // overlap clusters — a job and a visit at the same time then split into
+  // side-by-side lanes instead of stacking and occluding each other.
+  const timedItems: TimedItem[] = [
+    ...(showJobs
+      ? (buckets.jobs.get(day.ymd) ?? [])
+          .filter((j) => j.scheduled_at)
+          .map((job): TimedItem => {
+            const start = etMinutesOfDay(job.scheduled_at!);
+            return { kind: "job", job, start, end: start + Math.max(SNAP_MIN, job.duration_minutes || 0) };
+          })
+      : []),
+    ...(showVisits
+      ? (buckets.visits.get(day.ymd) ?? [])
+          .filter((v) => v.appointment_at)
+          .map((visit): TimedItem => {
+            const start = etMinutesOfDay(visit.appointment_at!);
+            return { kind: "visit", visit, start, end: start + 60 };
+          })
+      : []),
+  ];
+  const placements = packOverlaps(timedItems, (t) => ({ start: t.start, end: t.end }));
+
+  // Events always show (they are the ground the day is scheduled on). Timed
+  // events place by their span; all-day events pin to a band at the window top
+  // so they aren't lost off the axis.
   const dayEvents = buckets.events.get(day.ymd) ?? [];
+  const allDayEvents = dayEvents.filter((e) => e.all_day);
+  const timedEvents = dayEvents
+    .map((e) => ({ e, span: eventSpanForDay(e, day.ymd) }))
+    .filter((x): x is { e: CalendarEvent; span: { start: number; end: number } } => x.span !== null);
+
+  const hourLines: number[] = [];
+  for (let m = Math.ceil(win.start / 60) * 60; m <= win.end; m += 60) hourLines.push(m);
+
+  // Drop → time: the pointer's Y within the scrollable column maps to a minute,
+  // snapped to 15. The workspace composes ET wall time from ymd + this via
+  // etLocalToIso, so we only need to hand a fresh time-of-day up on the payload.
+  const dropAtY = (ymd: string) => (e: React.DragEvent) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const y = e.clientY - rect.top;
+    const raw = win.start + y / PX_PER_MIN;
+    const snapped = Math.round(raw / SNAP_MIN) * SNAP_MIN;
+    onDropJob(ymd, hhmm(snapped))(e);
+  };
 
   return (
     <div
-      className="cp-cal-col"
+      className="cp-timegrid-col"
       data-today={day.ymd === todayYmd}
       data-dropactive={dropActiveYmd === day.ymd}
       onDragOver={(e) => {
@@ -264,41 +364,198 @@ function DayColumn({
       onDragLeave={(e) => {
         if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropActive(null);
       }}
-      onDrop={onDropJob(day.ymd)}
+      onDrop={dropAtY(day.ymd)}
     >
-      <button
-        type="button"
-        className="cp-cal-col-head flex items-baseline justify-between gap-1 text-left"
-        onClick={() => onOpenDay(day.ymd)}
-      >
-        <span>{head.dow}</span>
-        <span className="text-[11px] font-medium text-[var(--cp-faint)]">{head.sub}</span>
-      </button>
-
-      {dayEvents.map((e) => (
-        <EventBand key={e.id} event={e} />
+      {hourLines.map((m) => (
+        <div
+          key={m}
+          className="cp-timegrid-hour"
+          style={{ top: (m - win.start) * PX_PER_MIN }}
+        />
       ))}
 
-      {dayVisits.length > 0 && (
-        <div className="flex flex-col gap-1">
-          <span className="cp-mono">Estimate visits</span>
-          <div className="flex flex-wrap gap-1">
-            {dayVisits.map((v) => (
-              <VisitChip key={v.id} visit={v} onOpen={onOpenVisit} />
-            ))}
-          </div>
+      {allDayEvents.map((e, i) => (
+        <div
+          key={e.id}
+          className="cp-timegrid-event"
+          style={{ top: 2 + i * 18, left: 2, right: 2, height: 16 }}
+          title={e.notes ?? undefined}
+        >
+          {e.title}
         </div>
-      )}
-
-      {dayJobs.length === 0 && dayVisits.length === 0 && dayEvents.length === 0 && (
-        <p className={`text-[11.5px] text-[var(--cp-faint)] ${wide ? "py-2" : ""}`}>
-          {wide ? "Nothing scheduled. Drag a job here." : "—"}
-        </p>
-      )}
-
-      {dayJobs.map((job) => (
-        <JobBlock key={job.id} job={job} conflicted={conflicts.has(job.id)} onOpen={onOpenJob} />
       ))}
+
+      {timedEvents.map(({ e, span }) => (
+        <div
+          key={e.id}
+          className="cp-timegrid-event"
+          style={blockStyle({ ...span, lane: 0, lanes: 1 }, win.start)}
+          title={e.notes ?? undefined}
+        >
+          {e.title}
+        </div>
+      ))}
+
+      {placements.map((p) => {
+        const style = blockStyle(p, win.start);
+        if (p.item.kind === "job") {
+          const job = p.item.job;
+          return (
+            <button
+              key={`job-${job.id}`}
+              type="button"
+              className={`cp-timegrid-block ${conflicts.has(job.id) ? "cp-conflict" : ""}`}
+              data-unassigned={!job.crew}
+              style={{
+                ...style,
+                ...(job.crew ? ({ ["--cp-crew"]: job.crew.color } as React.CSSProperties) : {}),
+              }}
+              draggable
+              onDragStart={(ev) =>
+                writeDrag(ev, {
+                  type: "job",
+                  id: job.id,
+                  timeOfDay: job.scheduled_at ? etHm(job.scheduled_at) : null,
+                  durationMinutes: job.duration_minutes,
+                  crewId: job.crew_id,
+                })
+              }
+              onClick={() => onOpenJob(job)}
+            >
+              <span className="cp-timegrid-block-time tabular-nums">{timeWindow(job)}</span>
+              <span className="truncate">{job.customer_name ?? "Customer"}</span>
+              <span className="cp-timegrid-block-crew truncate">
+                <span
+                  className="cp-crew-dot"
+                  style={job.crew ? ({ ["--cp-crew"]: job.crew.color } as React.CSSProperties) : undefined}
+                />
+                <span className="truncate">{job.crew?.name ?? "Assign crew"}</span>
+              </span>
+            </button>
+          );
+        }
+        const visit = p.item.visit;
+        return (
+          <button
+            key={`visit-${visit.id}`}
+            type="button"
+            className="cp-timegrid-visit"
+            style={style}
+            title={visit.name ?? "Estimate visit"}
+            onClick={() => onOpenVisit(visit)}
+          >
+            <span className="tabular-nums">
+              {fmtEt(visit.appointment_at, { hour: "numeric", minute: "2-digit" })}
+            </span>
+            <span className="truncate">{visit.name ?? "Visit"}</span>
+          </button>
+        );
+      })}
+
+      {nowMinutes !== null && (
+        <div className="cp-timegrid-now" style={{ top: (nowMinutes - win.start) * PX_PER_MIN }} />
+      )}
+    </div>
+  );
+}
+
+function TimeGrid({
+  days,
+  todayYmd,
+  buckets,
+  conflicts,
+  contentKind,
+  dropActiveYmd,
+  onOpenJob,
+  onOpenVisit,
+  onOpenDay,
+  onDropJob,
+  setDropActive,
+}: {
+  days: CalDay[];
+  todayYmd: string;
+  buckets: DayBuckets;
+  conflicts: Set<string>;
+  contentKind: ContentKind;
+  dropActiveYmd: string | null;
+  onOpenJob: (job: JobWithItems) => void;
+  onOpenVisit: (visit: Lead) => void;
+  onOpenDay: (ymd: string) => void;
+  onDropJob: (ymd: string, timeOfDay: string) => (e: React.DragEvent) => void;
+  setDropActive: (ymd: string | null) => void;
+}) {
+  const win = useMemo(() => computeWindow(days, buckets), [days, buckets]);
+  const winHeight = (win.end - win.start) * PX_PER_MIN;
+
+  // "Now" line: only when today is in view and inside the window.
+  const nowMinutes = useMemo(() => {
+    if (!days.some((d) => d.ymd === todayYmd)) return null;
+    const m = etMinutesOfDay(new Date().toISOString());
+    return m >= win.start && m <= win.end ? m : null;
+  }, [days, todayYmd, win.start, win.end]);
+
+  const hourLines: number[] = [];
+  for (let m = Math.ceil(win.start / 60) * 60; m <= win.end; m += 60) hourLines.push(m);
+
+  // Window height feeds the gutter + every column via --cp-winh; block tops and
+  // heights are computed in px inline (blockStyle), so the axis math lives in TS.
+  const gridVars = { ["--cp-winh"]: `${winHeight}px` } as React.CSSProperties;
+
+  return (
+    <div className="cp-timegrid" style={gridVars}>
+      <div className="cp-timegrid-head">
+        <div className="cp-timegrid-headspacer" />
+        <div className="cp-timegrid-daycols">
+          {days.map((day) => {
+            const head = dayHeadLabel(day, todayYmd);
+            return (
+              <button
+                key={day.ymd}
+                type="button"
+                className="cp-timegrid-dayhead"
+                data-today={day.ymd === todayYmd}
+                onClick={() => onOpenDay(day.ymd)}
+              >
+                <span>{head.dow}</span>
+                <span className="cp-timegrid-dayhead-sub">{head.sub}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="cp-timegrid-body cp-scroll">
+        <div className="cp-timegrid-gutter">
+          {hourLines.map((m) => (
+            <span
+              key={m}
+              className="cp-timegrid-hourlabel"
+              style={{ top: (m - win.start) * PX_PER_MIN }}
+            >
+              {hourLabel(m)}
+            </span>
+          ))}
+        </div>
+        <div className="cp-timegrid-cols">
+          {days.map((day) => (
+            <TimeGridColumn
+              key={day.ymd}
+              day={day}
+              todayYmd={todayYmd}
+              buckets={buckets}
+              conflicts={conflicts}
+              contentKind={contentKind}
+              win={win}
+              nowMinutes={nowMinutes}
+              dropActiveYmd={dropActiveYmd}
+              onOpenJob={onOpenJob}
+              onOpenVisit={onOpenVisit}
+              onDropJob={onDropJob}
+              setDropActive={setDropActive}
+            />
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -423,133 +680,6 @@ function MonthGrid({
   );
 }
 
-// ── Day view = run-sheet entry ───────────────────────────────────────────────
-
-const mapsHref = (address: string) => `https://maps.google.com/?q=${encodeURIComponent(address)}`;
-
-function DayView({
-  day,
-  todayYmd,
-  buckets,
-  conflicts,
-  dropActiveYmd,
-  crews,
-  crewFilter,
-  onOpenJob,
-  onOpenVisit,
-  onOpenRunSheet,
-  onDropJob,
-  setDropActive,
-}: {
-  day: CalDay;
-  todayYmd: string;
-  buckets: DayBuckets;
-  conflicts: Set<string>;
-  dropActiveYmd: string | null;
-  crews: Crew[];
-  crewFilter: string | null;
-  onOpenJob: (job: JobWithItems) => void;
-  onOpenVisit: (visit: Lead) => void;
-  onOpenRunSheet: (jobs: JobWithItems[], crew: Crew | null, dayLabel: string) => void;
-  onDropJob: (ymd: string) => (e: React.DragEvent) => void;
-  setDropActive: (ymd: string | null) => void;
-}) {
-  const dayJobs = (buckets.jobs.get(day.ymd) ?? []).slice().sort((a, b) =>
-    (a.scheduled_at ?? "").localeCompare(b.scheduled_at ?? ""),
-  );
-  const dayVisits = buckets.visits.get(day.ymd) ?? [];
-  const dayEvents = buckets.events.get(day.ymd) ?? [];
-  const label = `${dayHeadLabel(day, todayYmd).dow} · ${dayHeadLabel(day, todayYmd).sub}`;
-
-  return (
-    <div
-      className="cp-cal-col"
-      data-today={day.ymd === todayYmd}
-      data-dropactive={dropActiveYmd === day.ymd}
-      onDragOver={(e) => {
-        e.preventDefault();
-        e.dataTransfer.dropEffect = "move";
-        if (dropActiveYmd !== day.ymd) setDropActive(day.ymd);
-      }}
-      onDragLeave={(e) => {
-        if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropActive(null);
-      }}
-      onDrop={onDropJob(day.ymd)}
-    >
-      <div className="flex items-baseline justify-between gap-2">
-        <span className="text-[14px] font-semibold">{label}</span>
-        <button
-          type="button"
-          className="cp-btn cp-btn-sm"
-          disabled={dayJobs.length === 0}
-          onClick={() => {
-            const crew = crewFilter ? crews.find((c) => c.id === crewFilter) ?? null : null;
-            onOpenRunSheet(dayJobs, crew, label);
-          }}
-        >
-          Run sheet
-        </button>
-      </div>
-
-      {dayEvents.map((e) => (
-        <EventBand key={e.id} event={e} />
-      ))}
-
-      {dayVisits.length > 0 && (
-        <div className="flex flex-col gap-1 pt-1">
-          <span className="cp-mono">Estimate visits</span>
-          <div className="flex flex-wrap gap-1">
-            {dayVisits.map((v) => (
-              <VisitChip key={v.id} visit={v} onOpen={onOpenVisit} />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {dayJobs.length === 0 ? (
-        <p className="py-3 text-[12.5px] text-[var(--cp-faint)]">
-          Nothing scheduled. Drag a job here, or tap one in the tray to book it.
-        </p>
-      ) : (
-        <div className="flex flex-col gap-2 pt-1">
-          {dayJobs.map((job) => (
-            <div
-              key={job.id}
-              className={`cp-job-block ${conflicts.has(job.id) ? "cp-conflict" : ""}`}
-              data-unassigned={!job.crew}
-              style={job.crew ? ({ ["--cp-crew"]: job.crew.color } as React.CSSProperties) : undefined}
-            >
-              <div className="flex items-baseline justify-between gap-2">
-                <span className="font-semibold tabular-nums">{timeWindow(job)}</span>
-                <button
-                  type="button"
-                  className="text-[11.5px] font-semibold text-[var(--cp-brand-deep)] hover:underline"
-                  onClick={() => onOpenJob(job)}
-                >
-                  Details
-                </button>
-              </div>
-              <span className="text-[13px] font-semibold">{job.customer_name ?? "Customer"}</span>
-              {job.job_name && <span className="text-[12px] text-[var(--cp-muted)]">{job.job_name}</span>}
-              {job.job_address && (
-                <a
-                  href={mapsHref(job.job_address)}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mt-0.5 inline-flex items-center gap-1 text-[11.5px] font-semibold text-[var(--cp-brand-deep)] hover:underline"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <MapPin size={12} strokeWidth={2} /> {job.job_address}
-                </a>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ── Board ────────────────────────────────────────────────────────────────────
 
 export type CalView = "day" | "week" | "month";
@@ -563,6 +693,7 @@ export function CalendarBoard({
   events,
   crews,
   crewFilter,
+  contentKind,
   dropActiveYmd,
   onOpenJob,
   onOpenVisit,
@@ -581,6 +712,8 @@ export function CalendarBoard({
   events: CalendarEvent[];
   crews: Crew[];
   crewFilter: string | null;
+  // All | Jobs | Quotes toggle: which objects the timeline shows.
+  contentKind: ContentKind;
   dropActiveYmd: string | null;
   onOpenJob: (job: JobWithItems) => void;
   onOpenVisit: (visit: Lead) => void;
@@ -603,11 +736,21 @@ export function CalendarBoard({
   // Conflicts computed across the unfiltered set so a filtered-out clash still warns.
   const conflicts = useMemo(() => conflictSet(jobs), [jobs]);
 
-  // Native-drop wrapper: parse the payload, hand the day + payload up.
+  // Native-drop wrapper (bucket views): parse the payload, hand the day up. The
+  // dropped day keeps the dragged job's own time-of-day.
   const dropHandler = (ymd: string) => (e: React.DragEvent) => {
     e.preventDefault();
     setDropActive(null);
     onDropJob(ymd, readDrag(e));
+  };
+
+  // Timeline drop wrapper: the column resolves a snapped time-of-day from the
+  // drop Y, which overrides the payload's own time so the drop sets the hour.
+  const gridDropHandler = (ymd: string, timeOfDay: string) => (e: React.DragEvent) => {
+    e.preventDefault();
+    setDropActive(null);
+    const payload = readDrag(e);
+    onDropJob(ymd, payload ? { ...payload, timeOfDay } : payload);
   };
 
   if (view === "month") {
@@ -628,42 +771,59 @@ export function CalendarBoard({
 
   if (view === "day") {
     const day: CalDay = { ymd: dayAnchor.toISOString().slice(0, 10), anchor: dayAnchor };
+    const head = dayHeadLabel(day, todayYmd);
+    const label = `${head.dow} · ${head.sub}`;
+    // Run-sheet entry stays a Day-view affordance (the parent relies on
+    // onOpenRunSheet); it hands over the same filtered+sorted day jobs.
+    const dayJobs = (buckets.jobs.get(day.ymd) ?? []).slice().sort((a, b) =>
+      (a.scheduled_at ?? "").localeCompare(b.scheduled_at ?? ""),
+    );
     return (
-      <DayView
-        day={day}
-        todayYmd={todayYmd}
-        buckets={buckets}
-        conflicts={conflicts}
-        dropActiveYmd={dropActiveYmd}
-        crews={crews}
-        crewFilter={crewFilter}
-        onOpenJob={onOpenJob}
-        onOpenVisit={onOpenVisit}
-        onOpenRunSheet={onOpenRunSheet}
-        onDropJob={dropHandler}
-        setDropActive={setDropActive}
-      />
+      <div className="flex flex-col gap-2">
+        <div className="flex items-baseline justify-end">
+          <button
+            type="button"
+            className="cp-btn cp-btn-sm"
+            disabled={dayJobs.length === 0}
+            onClick={() => {
+              const crew = crewFilter ? crews.find((c) => c.id === crewFilter) ?? null : null;
+              onOpenRunSheet(dayJobs, crew, label);
+            }}
+          >
+            Run sheet
+          </button>
+        </div>
+        <TimeGrid
+          days={[day]}
+          todayYmd={todayYmd}
+          buckets={buckets}
+          conflicts={conflicts}
+          contentKind={contentKind}
+          dropActiveYmd={dropActiveYmd}
+          onOpenJob={onOpenJob}
+          onOpenVisit={onOpenVisit}
+          onOpenDay={onOpenDay}
+          onDropJob={gridDropHandler}
+          setDropActive={setDropActive}
+        />
+      </div>
     );
   }
 
   const week = walkDays(anchor, 7);
   return (
-    <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-7">
-      {week.map((day) => (
-        <DayColumn
-          key={day.ymd}
-          day={day}
-          todayYmd={todayYmd}
-          buckets={buckets}
-          conflicts={conflicts}
-          dropActiveYmd={dropActiveYmd}
-          onOpenJob={onOpenJob}
-          onOpenVisit={onOpenVisit}
-          onOpenDay={onOpenDay}
-          onDropJob={dropHandler}
-          setDropActive={setDropActive}
-        />
-      ))}
-    </div>
+    <TimeGrid
+      days={week}
+      todayYmd={todayYmd}
+      buckets={buckets}
+      conflicts={conflicts}
+      contentKind={contentKind}
+      dropActiveYmd={dropActiveYmd}
+      onOpenJob={onOpenJob}
+      onOpenVisit={onOpenVisit}
+      onOpenDay={onOpenDay}
+      onDropJob={gridDropHandler}
+      setDropActive={setDropActive}
+    />
   );
 }

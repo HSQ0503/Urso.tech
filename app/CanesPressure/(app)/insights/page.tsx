@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getInsights, parseRange, RANGES, type RangeKey } from "@/lib/canes/analytics";
+import { getInsights, parseRange, RANGES, type Insights, type RangeKey } from "@/lib/canes/analytics";
 import { fmtMoney } from "@/lib/canes/types";
 import { CollectedTrend } from "@/app/CanesPressure/components/insights/collected-trend";
 
@@ -69,6 +69,41 @@ function MeterRow({
           className="h-full rounded-[2px]"
           style={{ width: `${Math.max(2, Math.min(100, pct * 100))}%`, background: color }}
         />
+      </div>
+    </div>
+  );
+}
+
+// A crew row that leads with MARGIN (the per-contractor headline) over the
+// meter, then breaks down revenue minus expenses beneath it. Same crew-dot +
+// meter styling as MeterRow; the bar tracks margin against the range max.
+function CrewMarginRow({ crew, max }: { crew: Insights["revenueByCrew"][number]; max: number }) {
+  return (
+    <div className="py-1.5">
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="flex min-w-0 items-center gap-1.5 text-[13px] font-medium">
+          <span className="cp-crew-dot shrink-0" style={{ ["--cp-crew" as string]: crew.color }} />
+          <span className="truncate">{crew.name}</span>
+          <span className="shrink-0 text-[11.5px] font-normal text-[var(--cp-faint)]">
+            {crew.jobs} job{crew.jobs === 1 ? "" : "s"}
+          </span>
+        </span>
+        <span
+          className="shrink-0 text-[13px] font-semibold tabular-nums"
+          style={{ color: crew.marginCents >= 0 ? "var(--cp-good)" : "var(--cp-warn)" }}
+        >
+          {fmtMoney(crew.marginCents)}
+        </span>
+      </div>
+      <div className="mt-1 h-[5px] w-full overflow-hidden rounded-[2px] bg-[var(--cp-bg)]">
+        <div
+          className="h-full rounded-[2px]"
+          style={{ width: `${Math.max(2, Math.min(100, (crew.marginCents / max) * 100))}%`, background: crew.color }}
+        />
+      </div>
+      <div className="mt-1 flex items-center justify-between text-[11.5px] text-[var(--cp-faint)] tabular-nums">
+        <span>{fmtMoney(crew.cents)} collected</span>
+        <span>− {fmtMoney(crew.expenseCents)} expenses</span>
       </div>
     </div>
   );
@@ -169,7 +204,9 @@ export default async function InsightsPage({
   ];
 
   const funnelBase = d.funnel[0]?.count ?? 0;
-  const maxCrew = Math.max(1, ...d.revenueByCrew.map((c) => c.cents));
+  // The crew bar now tracks MARGIN (Sebastian's per-contractor headline), so the
+  // scale is the largest margin; a negative-margin crew still renders a min bar.
+  const maxCrew = Math.max(1, ...d.revenueByCrew.map((c) => c.marginCents));
   const maxSvc = Math.max(1, ...d.topServices.map((s) => s.cents));
   const maxSrc = Math.max(1, ...d.sources.map((s) => s.leads));
 
@@ -297,24 +334,22 @@ export default async function InsightsPage({
           </div>
 
           <div className="cp-card flex-1 p-4">
-            <CardTitle label="Per-crew contribution" title="Revenue by crew" />
+            <CardTitle label="Per-crew profit" title="Margin by crew" />
             <div className="mt-2">
               {d.revenueByCrew.length === 0 ? (
                 <EmptyLine>No payments in this period.</EmptyLine>
               ) : (
-                d.revenueByCrew.map((c) => (
-                  <MeterRow
-                    key={c.name}
-                    name={c.name}
-                    sub={`${c.jobs} job${c.jobs === 1 ? "" : "s"}`}
-                    value={fmtMoney(c.cents)}
-                    pct={c.cents / maxCrew}
-                    color={c.color}
-                    dot={c.color}
-                  />
-                ))
+                d.revenueByCrew.map((c) => <CrewMarginRow key={c.name} crew={c} max={maxCrew} />)
               )}
             </div>
+            {d.expensesCents > 0 && (
+              <div className="cp-divider mt-2 flex items-center justify-between pt-3 text-[12.5px]">
+                <span className="text-[var(--cp-muted)]">
+                  {fmtMoney(d.expensesCents)} in expenses across all crews
+                </span>
+                <span className="tabular-nums font-semibold">{fmtMoney(d.marginCents)} margin</span>
+              </div>
+            )}
           </div>
         </div>
       </section>

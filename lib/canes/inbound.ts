@@ -296,6 +296,9 @@ async function sendHoldText(lead: Lead, settings: CanesSettings): Promise<void> 
 // Schedule the confirmation text at T-minus the configured offset, clamped to
 // now for near-term appointments. Insert-only on dedupe_key so a task that
 // already ran is never resurrected to pending. Returns true if newly created.
+// Also enqueues the final "confirm or we release your slot" text at T-minus the
+// (shorter) final offset, on its own dedupe_key. Both key on the appointment
+// ISO so a rescheduled visit gets fresh tasks and the stale ones are ignored.
 export async function upsertConfirmationTask(lead: Lead, settings: CanesSettings): Promise<boolean> {
   if (!canesConfigured() || !lead.phone || !lead.appointment_at || lead.opted_out) return false;
   const appt = new Date(lead.appointment_at);
@@ -318,7 +321,34 @@ export async function upsertConfirmationTask(lead: Lead, settings: CanesSettings
     console.error(`[canes] confirmation task upsert failed for lead ${lead.id}: ${error.message}`);
     return false;
   }
-  return (data ?? []).length > 0;
+  const created = (data ?? []).length > 0;
+
+  // Final nudge before we release the slot. Only worth queuing when its send
+  // time is still ahead of us AND strictly before the appointment — a same-day
+  // booking inside the final window has no room for this text.
+  const finalAt = new Date(appt.getTime() - settings.confirmation_final_offset_hours * 3_600_000);
+  if (finalAt.getTime() > Date.now() && finalAt.getTime() < appt.getTime()) {
+    const { error: finalError } = await canesDb()
+      .from("tasks")
+      .upsert(
+        {
+          lead_id: lead.id,
+          kind: "confirmation_final",
+          dedupe_key: `confirmation_final:${lead.id}:${appt.toISOString()}`,
+          scheduled_for: finalAt.toISOString(),
+          status: "pending",
+          payload: { appointment_at: appt.toISOString() },
+        },
+        { onConflict: "dedupe_key", ignoreDuplicates: true },
+      );
+    if (finalError) {
+      console.error(
+        `[canes] final confirmation task upsert failed for lead ${lead.id}: ${finalError.message}`,
+      );
+    }
+  }
+
+  return created;
 }
 
 // ── Branch c: reply from a known lead ────────────────────────────────────────

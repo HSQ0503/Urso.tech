@@ -45,6 +45,7 @@ export async function GET(req: NextRequest) {
   await section("expire_estimates", expireEstimates);
   await section("safety_net", confirmationSafetyNet);
   await section("no_reply", noReplyEscalations);
+  await section("auto_release", autoReleaseUnconfirmed);
   await section("cold_escalation", coldEscalations);
   await section("follow_up", followUps);
   await section("digest", morningDigest);
@@ -96,6 +97,7 @@ async function drainDueTasks() {
     .in("kind", [
       "hold_text",
       "confirmation",
+      "confirmation_final",
       "estimate_send",
       "estimate_reminder",
       "job_confirmation",
@@ -326,6 +328,67 @@ async function drainDueTasks() {
       continue;
     }
 
+    // Final "confirm or we release your slot" nudge. Reload the lead: if it is
+    // no longer awaiting confirmation (confirmed, lost, appointment cleared) or
+    // opted out, this text is noise — cancel and send nothing. Otherwise send
+    // the same fill as the first confirmation, then page Sebastian the same way
+    // no_reply_escalation does so he can chase it before he drives out.
+    if (task.kind === "confirmation_final") {
+      const lead = task.lead_id ? await getLead(task.lead_id) : null;
+      if (
+        !lead ||
+        !lead.phone ||
+        lead.opted_out ||
+        lead.status !== "appointment_set" ||
+        !lead.appointment_at ||
+        // Never send a "confirm or we release your slot" text once the
+        // appointment has already passed (late fire, or quiet-hours deferral
+        // pushed the send past the appointment) — it would only confuse.
+        new Date(lead.appointment_at).getTime() <= Date.now()
+      ) {
+        await db.from("tasks").update({ status: "canceled" }).eq("id", task.id);
+        canceled++;
+        continue;
+      }
+      const body = fillTemplate(settings.confirmation_final_template, {
+        name: lead.name,
+        when: fmtEt(lead.appointment_at),
+        address: lead.address,
+      });
+      const res = await sendCanesSms({ to: lead.phone, body, leadId: lead.id, automated: true });
+      if (res.ok) {
+        await db
+          .from("tasks")
+          .update({ status: "sent", sent_at: new Date().toISOString() })
+          .eq("id", task.id);
+        await logLeadEvent(lead.id, "automation", "Final confirmation text sent");
+        const when = fmtEt(lead.appointment_at);
+        await notifyUnconfirmed(lead, when);
+        await alertOwner(
+          `Final notice sent to ${lead.name ?? fmtPhone(lead.phone)} for the ${when} estimate ` +
+            `(still no YES). Open: ${APP_URL}/CanesPressure/leads/${lead.id}`,
+        );
+        sent++;
+      } else if (res.skipped === "quiet_hours") {
+        const at = nextAllowedSendTime(settings) ?? new Date(Date.now() + 3_600_000);
+        await db
+          .from("tasks")
+          .update({ status: "pending", scheduled_for: at.toISOString() })
+          .eq("id", task.id);
+        deferred++;
+      } else if (res.skipped) {
+        await db.from("tasks").update({ status: "pending" }).eq("id", task.id);
+        deferred++;
+      } else {
+        await db
+          .from("tasks")
+          .update({ status: "failed", payload: { ...task.payload, error: res.error ?? "send failed" } })
+          .eq("id", task.id);
+        failed++;
+      }
+      continue;
+    }
+
     const lead = task.lead_id ? await getLead(task.lead_id) : null;
     // The moment a lead confirms, wins, loses, or opts out, its queued
     // automated texts are noise — cancel instead of sending.
@@ -452,6 +515,61 @@ async function noReplyEscalations() {
     alerted++;
   }
   return { due: tasks.length, alerted, canceled };
+}
+
+// ── Opt-in auto-release: drop the slot when the estimate visit came and went ──
+// with no YES and no reply. Off unless settings.confirmation_auto_release is on.
+// Conservative by design: never touches a lead that confirmed or texted back —
+// any inbound message on the thread means they engaged, so we leave it for
+// Sebastian. Releasing = clear the appointment, drop status back to contacted,
+// cancel the now-moot confirmation/final/escalation tasks, and log the reason.
+
+async function autoReleaseUnconfirmed() {
+  const settings = await getSettings();
+  if (!settings.confirmation_auto_release) return { skipped: "auto-release disabled" };
+
+  const db = canesDb();
+  const { data } = await db
+    .from("leads")
+    .select("*")
+    .eq("status", "appointment_set")
+    .is("confirmed_at", null)
+    .eq("opted_out", false)
+    .lt("appointment_at", new Date().toISOString())
+    .not("appointment_at", "is", null)
+    .limit(200);
+  const leads = (data ?? []) as Lead[];
+  let released = 0;
+  let skipped = 0;
+
+  for (const lead of leads) {
+    // Any inbound text on this lead means the customer engaged — never release.
+    const { count } = await db
+      .from("messages")
+      .select("id", { count: "exact", head: true })
+      .eq("lead_id", lead.id)
+      .eq("direction", "in");
+    if ((count ?? 0) > 0) {
+      skipped++;
+      continue;
+    }
+
+    await db
+      .from("leads")
+      .update({ status: "contacted", appointment_at: null, last_activity_at: new Date().toISOString() })
+      .eq("id", lead.id)
+      .eq("status", "appointment_set")
+      .is("confirmed_at", null);
+    await db
+      .from("tasks")
+      .update({ status: "canceled" })
+      .eq("lead_id", lead.id)
+      .in("kind", ["confirmation", "confirmation_final", "no_reply_escalation"])
+      .eq("status", "pending");
+    await logLeadEvent(lead.id, "automation", "Appointment released, no confirmation");
+    released++;
+  }
+  return { candidates: leads.length, released, skipped };
 }
 
 // ── Cold leads sitting uncalled (15m, then 45m) ──────────────────────────────

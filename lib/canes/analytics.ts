@@ -4,6 +4,7 @@ import { listCrews, listEstimates, listJobs } from "@/lib/canes/estimates";
 import { listInvoices } from "@/lib/canes/invoices";
 import {
   DEMO_CALLS,
+  DEMO_EXPENSES,
   DEMO_INVOICE_ITEMS,
   DEMO_MESSAGES,
   DEMO_PAYMENTS,
@@ -15,6 +16,7 @@ import {
   type Call,
   type InvoiceItem,
   type Job,
+  type JobExpense,
   type LeadSource,
   type LeadStatus,
   type Message,
@@ -61,7 +63,18 @@ export type Insights = {
   };
   trend: TrendPoint[];
   methodShare: { cash: number; card: number; other: number }; // cents
-  revenueByCrew: { name: string; color: string; cents: number; jobs: number }[];
+  // cents = revenue collected in range; expenseCents = costs booked against the
+  // crew's paid-in-range jobs; marginCents = cents - expenseCents (true profit).
+  revenueByCrew: {
+    name: string;
+    color: string;
+    cents: number;
+    jobs: number;
+    expenseCents: number;
+    marginCents: number;
+  }[];
+  expensesCents: number; // total costs on jobs paid in range
+  marginCents: number; // collectedCents - expensesCents
   topServices: { name: string; cents: number; count: number }[];
   funnel: { label: string; count: number }[]; // [0] = all leads in range
   estimates: {
@@ -149,6 +162,18 @@ async function listInvoiceItemsFor(invoiceIds: string[]): Promise<InvoiceItem[]>
     .limit(2000);
   if (error) throw new Error(`listInvoiceItemsFor: ${error.message}`);
   return (data ?? []) as InvoiceItem[];
+}
+
+async function listExpensesForJobs(jobIds: string[]): Promise<JobExpense[]> {
+  if (jobIds.length === 0) return [];
+  if (isDemo()) return DEMO_EXPENSES.filter((e) => jobIds.includes(e.job_id));
+  const { data, error } = await canesDb()
+    .from("job_expenses")
+    .select("*")
+    .in("job_id", jobIds)
+    .limit(2000);
+  if (error) throw new Error(`listExpensesForJobs: ${error.message}`);
+  return (data ?? []) as JobExpense[];
 }
 
 // ── ET bucketing ──────────────────────────────────────────────────────────────
@@ -289,21 +314,61 @@ export async function getInsights(key: RangeKey): Promise<Insights> {
 
   // Revenue by crew (per-contractor contribution): ledger → job → crew.
   const jobById = new Map(jobs.map((j) => [j.id, j]));
-  const crewAgg = new Map<string, { name: string; color: string; cents: number; jobs: Set<string> }>();
+  const crewAgg = new Map<
+    string,
+    { name: string; color: string; cents: number; jobs: Set<string>; expenseCents: number }
+  >();
+  // The set of jobs whose payment counts in-range — the exact bucketing rule for
+  // crew revenue. An expense counts iff its job appears here, so cost and revenue
+  // land in the same period no matter when the expense row was created.
+  const paidJobIds = new Set<string>();
   for (const p of rangePayments) {
     const job = p.job_id ? jobById.get(p.job_id) : undefined;
     const crew = job?.crew_id ? crews.find((c) => c.id === job.crew_id) : undefined;
     const k = crew?.id ?? "none";
     const entry =
       crewAgg.get(k) ??
-      { name: crew?.name ?? "Unassigned", color: crew?.color ?? "#84888f", cents: 0, jobs: new Set<string>() };
+      { name: crew?.name ?? "Unassigned", color: crew?.color ?? "#84888f", cents: 0, jobs: new Set<string>(), expenseCents: 0 };
     entry.cents += p.amount_cents;
-    if (p.job_id) entry.jobs.add(p.job_id);
+    if (p.job_id) {
+      entry.jobs.add(p.job_id);
+      paidJobIds.add(p.job_id);
+    }
     crewAgg.set(k, entry);
   }
+
+  // Fold expenses into the crew breakdown. Attribute each expense to the SAME
+  // crew bucket its job's revenue lands in (the job's current crew_id), falling
+  // back to the snapshotted crew_id only if the job is gone — otherwise
+  // re-crewing a paid job would split its revenue and cost onto two crews. Only
+  // expenses on jobs paid in range are counted, matching crew revenue above.
+  const expenses = await listExpensesForJobs([...paidJobIds]);
+  let expensesCents = 0;
+  for (const e of expenses) {
+    if (!paidJobIds.has(e.job_id)) continue;
+    const job = jobById.get(e.job_id);
+    const crewId = job?.crew_id ?? e.crew_id ?? null;
+    const crew = crewId ? crews.find((c) => c.id === crewId) : undefined;
+    const k = crew?.id ?? "none";
+    const entry =
+      crewAgg.get(k) ??
+      { name: crew?.name ?? "Unassigned", color: crew?.color ?? "#84888f", cents: 0, jobs: new Set<string>(), expenseCents: 0 };
+    entry.expenseCents += e.amount_cents;
+    crewAgg.set(k, entry);
+    expensesCents += e.amount_cents;
+  }
+  const marginCents = collectedCents - expensesCents;
+
   const revenueByCrew = [...crewAgg.values()]
-    .map((c) => ({ name: c.name, color: c.color, cents: c.cents, jobs: c.jobs.size }))
-    .sort((a, b) => b.cents - a.cents);
+    .map((c) => ({
+      name: c.name,
+      color: c.color,
+      cents: c.cents,
+      jobs: c.jobs.size,
+      expenseCents: c.expenseCents,
+      marginCents: c.cents - c.expenseCents,
+    }))
+    .sort((a, b) => b.marginCents - a.marginCents);
 
   // Top services: line items across invoices PAID in range.
   const paidIds = paidInvoices.map((i) => i.id);
@@ -437,6 +502,8 @@ export async function getInsights(key: RangeKey): Promise<Insights> {
     trend: points,
     methodShare,
     revenueByCrew,
+    expensesCents,
+    marginCents,
     topServices,
     funnel,
     estimates: estimateStats,
