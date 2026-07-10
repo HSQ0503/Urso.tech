@@ -74,7 +74,8 @@ export type TaskKind =
   | "estimate_reminder"
   | "job_confirmation"
   | "invoice_send"
-  | "invoice_reminder";
+  | "invoice_reminder"
+  | "confirmation_final";
 
 export type AutomationTask = {
   id: string;
@@ -117,6 +118,15 @@ export type CanesSettings = {
   invoice_terms: string;
   invoice_message: string;
   invoice_reminder_days: number[];
+  // ── 0007 ops feedback: final-confirmation escalation + call greeting/whisper ──
+  confirmation_final_template: string;
+  confirmation_final_offset_hours: number;
+  confirmation_auto_release: boolean; // opt-in: clear the appt if still unconfirmed
+  call_greeting_enabled: boolean;
+  call_greeting_text: string;
+  call_whisper_enabled: boolean;
+  call_ivr_enabled: boolean; // optional "press 1 / press 2" menu, off by default
+  expense_categories: string[];
 };
 
 // vendor = the lead guy's raw feed (configured number ONLY — never a heuristic,
@@ -352,6 +362,15 @@ export type JobItem = {
   id: string; job_id: string; estimate_item_id: string | null;
   position: number; name: string; description: string | null;
   quantity: number; line_total_cents: number; done: boolean;
+};
+
+// Per-job cost (materials, gas, dump fee, sub) — 0007_ops_feedback.sql. Money in
+// integer cents; category is free text seeded from settings.expense_categories.
+// Crew is snapshotted so per-crew margin survives a later crew reassignment.
+export type JobExpense = {
+  id: string; created_at: string; job_id: string;
+  amount_cents: number; category: string; note: string | null;
+  crew_id: string | null; created_by: string | null;
 };
 
 export type CalendarEventKind = "block" | "time_off" | "holiday" | "note";

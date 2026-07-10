@@ -64,6 +64,16 @@ const DEFAULT_SETTINGS: CanesSettings = {
   invoice_message:
     "Thanks for choosing Canes Pressure Washing! Your invoice is ready. Tap to view the details and pay securely online, or reply to this text with any questions.",
   invoice_reminder_days: [3, 7],
+  confirmation_final_offset_hours: 2,
+  confirmation_final_template:
+    "Hi{name}, we still need a YES to confirm your Canes Pressure Washing appointment {when} at {address}. If we do not hear back we will have to release the slot. Just reply with a day and time that works (tomorrow or the day after is perfect) and we will lock it in. Reply STOP to opt out.",
+  confirmation_auto_release: false,
+  call_greeting_enabled: true,
+  call_greeting_text:
+    "Thank you for calling Canes Pressure Washing. Please hold while we connect you.",
+  call_whisper_enabled: true,
+  call_ivr_enabled: false,
+  expense_categories: ["Materials", "Gas / travel", "Dump fee", "Subcontractor", "Equipment", "Other"],
 };
 
 export async function getSettings(): Promise<CanesSettings> {
@@ -90,6 +100,16 @@ export async function getSettings(): Promise<CanesSettings> {
     invoice_terms: map.invoice_terms ?? DEFAULT_SETTINGS.invoice_terms,
     invoice_message: map.invoice_message ?? DEFAULT_SETTINGS.invoice_message,
     invoice_reminder_days: map.invoice_reminder_days ?? DEFAULT_SETTINGS.invoice_reminder_days,
+    confirmation_final_offset_hours: Number(
+      map.confirmation_final_offset_hours ?? DEFAULT_SETTINGS.confirmation_final_offset_hours,
+    ),
+    confirmation_final_template: map.confirmation_final_template ?? DEFAULT_SETTINGS.confirmation_final_template,
+    confirmation_auto_release: Boolean(map.confirmation_auto_release ?? DEFAULT_SETTINGS.confirmation_auto_release),
+    call_greeting_enabled: Boolean(map.call_greeting_enabled ?? DEFAULT_SETTINGS.call_greeting_enabled),
+    call_greeting_text: map.call_greeting_text ?? DEFAULT_SETTINGS.call_greeting_text,
+    call_whisper_enabled: Boolean(map.call_whisper_enabled ?? DEFAULT_SETTINGS.call_whisper_enabled),
+    call_ivr_enabled: Boolean(map.call_ivr_enabled ?? DEFAULT_SETTINGS.call_ivr_enabled),
+    expense_categories: map.expense_categories ?? DEFAULT_SETTINGS.expense_categories,
   };
 }
 

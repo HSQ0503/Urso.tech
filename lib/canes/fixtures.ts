@@ -11,6 +11,7 @@ import type {
   Invoice,
   InvoiceItem,
   Job,
+  JobExpense,
   JobItem,
   Lead,
   LeadEvent,
@@ -703,6 +704,21 @@ export const DEMO_JOBS: Job[] = [
     crew_id: "crewB", confirmed_at: min(17600), customer_phone: "+15615550175", customer_email: "hector.ruiz@example.com", job_name: "House wash + driveway",
     gate_code: null, site_notes: null, canceled_reason: null,
   },
+];
+
+// Per-job expenses (0007) — materials/gas/dump/sub across paid jobs so Insights
+// shows true margin and per-crew profit. crew_id snapshots the job's crew.
+export const DEMO_EXPENSES: JobExpense[] = [
+  { id: "exp1",  created_at: min(2980),  job_id: "job7",  amount_cents: 3500,  category: "Gas / travel",  note: null, crew_id: "crewB", created_by: null },
+  { id: "exp2",  created_at: min(7950),  job_id: "job8",  amount_cents: 6000,  category: "Materials",     note: "SH + surfactant", crew_id: "crewA", created_by: null },
+  { id: "exp3",  created_at: min(18450), job_id: "job9",  amount_cents: 5000,  category: "Materials",     note: null, crew_id: "crewB", created_by: null },
+  { id: "exp4",  created_at: min(18440), job_id: "job9",  amount_cents: 2000,  category: "Dump fee",      note: null, crew_id: "crewB", created_by: null },
+  { id: "exp5",  created_at: min(28450), job_id: "job10", amount_cents: 2500,  category: "Gas / travel",  note: null, crew_id: "crewA", created_by: null },
+  { id: "exp6",  created_at: min(48450), job_id: "job11", amount_cents: 9000,  category: "Materials",     note: "Sealer, 2 buckets", crew_id: "crewB", created_by: null },
+  { id: "exp7",  created_at: min(48440), job_id: "job11", amount_cents: 12000, category: "Subcontractor", note: "Extra hand for the day", crew_id: "crewB", created_by: null },
+  { id: "exp8",  created_at: min(68450), job_id: "job12", amount_cents: 4000,  category: "Materials",     note: null, crew_id: "crewA", created_by: null },
+  { id: "exp9",  created_at: min(91950), job_id: "job13", amount_cents: 11000, category: "Materials",     note: null, crew_id: "crewB", created_by: null },
+  { id: "exp10", created_at: min(30950), job_id: "job14", amount_cents: 3000,  category: "Gas / travel",  note: null, crew_id: "crewA", created_by: null },
 ];
 
 export const DEMO_JOB_ITEMS: JobItem[] = [
