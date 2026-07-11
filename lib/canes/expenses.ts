@@ -30,6 +30,24 @@ export async function sumJobExpensesCents(jobId: string): Promise<number> {
   return rows.reduce((sum, e) => sum + e.amount_cents, 0);
 }
 
+// All job expenses logged in [startIso, endIso) — for the Expenses tab period
+// roll-up and the payouts P&L. Cash-basis: an expense counts in the period it
+// was recorded (created_at).
+export async function listJobExpensesInRange(startIso: string, endIso: string): Promise<JobExpense[]> {
+  if (isDemo()) {
+    return DEMO_EXPENSES.filter((e) => e.created_at >= startIso && e.created_at < endIso);
+  }
+  const { data, error } = await canesDb()
+    .from("job_expenses")
+    .select("*")
+    .gte("created_at", startIso)
+    .lt("created_at", endIso)
+    .order("created_at", { ascending: false })
+    .limit(1000);
+  if (error) throw new Error(`listJobExpensesInRange: ${error.message}`);
+  return (data ?? []) as JobExpense[];
+}
+
 // Insert a job expense, snapshotting the job's current crew_id so per-crew
 // margin is stable even if the job is re-crewed afterward. Returns the new id.
 export async function addJobExpenseRow(input: {

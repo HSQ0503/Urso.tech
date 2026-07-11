@@ -1,6 +1,7 @@
 import { ET, etLocalToIso } from "@/lib/canes/types";
 import type {
   Address,
+  BusinessExpense,
   CalendarEvent,
   Call,
   CatalogItem,
@@ -17,6 +18,7 @@ import type {
   LeadEvent,
   Message,
   Payment,
+  TeamMember,
 } from "@/lib/canes/types";
 
 // Demo fixtures — shown whenever CANES_SUPABASE_SECRET_KEY is absent so the
@@ -719,6 +721,29 @@ export const DEMO_EXPENSES: JobExpense[] = [
   { id: "exp8",  created_at: min(68450), job_id: "job12", amount_cents: 4000,  category: "Materials",     note: null, crew_id: "crewA", created_by: null },
   { id: "exp9",  created_at: min(91950), job_id: "job13", amount_cents: 11000, category: "Materials",     note: null, crew_id: "crewB", created_by: null },
   { id: "exp10", created_at: min(30950), job_id: "job14", amount_cents: 3000,  category: "Gas / travel",  note: null, crew_id: "crewA", created_by: null },
+];
+
+// Business / overhead expenses (0008) — subscriptions, insurance, truck, gear.
+// Recurring rows drive the monthly-overhead total + the payouts P&L; one-time
+// rows count in the month they land. incurred_on is an ET date string.
+export const DEMO_BUSINESS_EXPENSES: BusinessExpense[] = [
+  { id: "be1", created_at: min(120000), name: "Urso platform",              amount_cents: 25000, category: "Software",        recurring: true,  frequency: "monthly",  incurred_on: etDay(-120), ends_on: null, active: true, note: "Monthly retainer" },
+  { id: "be2", created_at: min(150000), name: "General liability insurance", amount_cents: 22000, category: "Insurance",       recurring: true,  frequency: "monthly",  incurred_on: etDay(-150), ends_on: null, active: true, note: null },
+  { id: "be3", created_at: min(200000), name: "Truck payment",              amount_cents: 65000, category: "Truck / vehicle", recurring: true,  frequency: "monthly",  incurred_on: etDay(-200), ends_on: null, active: true, note: "F-250" },
+  { id: "be4", created_at: min(90000),  name: "Website + hosting",          amount_cents: 3000,  category: "Software",        recurring: true,  frequency: "monthly",  incurred_on: etDay(-90),  ends_on: null, active: true, note: null },
+  { id: "be5", created_at: min(50000),  name: "Surface cleaner attachment", amount_cents: 42000, category: "Equipment",       recurring: false, frequency: "one_time", incurred_on: etDay(-18),  ends_on: null, active: true, note: "16in whirl-a-way" },
+  { id: "be6", created_at: min(30000),  name: "LLC annual filing",          amount_cents: 15000, category: "Other",           recurring: true,  frequency: "yearly",   incurred_on: etDay(-12),  ends_on: null, active: true, note: null },
+];
+
+// Team + comp (0008). Owner/partner split the distributable profit (60/40); the
+// ops manager takes 20% of gross; workers are hourly, tied to a crew for the
+// labor-hours proxy.
+export const DEMO_TEAM: TeamMember[] = [
+  { id: "tm1", created_at: min(120000), name: "Sebastian",       role: "owner",       comp_type: "profit_split", comp_bps: 6000, hourly_cents: 0,    crew_id: null,    active: true, sort: 0 },
+  { id: "tm2", created_at: min(120000), name: "Ricky (brother)", role: "partner",     comp_type: "profit_split", comp_bps: 4000, hourly_cents: 0,    crew_id: null,    active: true, sort: 1 },
+  { id: "tm3", created_at: min(100000), name: "Diego",           role: "ops_manager", comp_type: "profit_share", comp_bps: 2000, hourly_cents: 0,    crew_id: null,    active: true, sort: 2 },
+  { id: "tm4", created_at: min(80000),  name: "Luis",            role: "worker",      comp_type: "hourly",       comp_bps: 0,    hourly_cents: 2000, crew_id: "crewA", active: true, sort: 3 },
+  { id: "tm5", created_at: min(80000),  name: "Andre",           role: "worker",      comp_type: "hourly",       comp_bps: 0,    hourly_cents: 2000, crew_id: "crewB", active: true, sort: 4 },
 ];
 
 export const DEMO_JOB_ITEMS: JobItem[] = [

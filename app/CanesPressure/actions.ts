@@ -29,6 +29,7 @@ import {
   enqueueInvoiceReminders,
 } from "@/lib/canes/invoices";
 import { listJobExpenses, addJobExpenseRow, deleteJobExpenseRow } from "@/lib/canes/expenses";
+import { addBusinessExpenseRow, deleteBusinessExpenseRow } from "@/lib/canes/overhead";
 import { ensureContact, getCustomer } from "@/lib/canes/customers";
 import {
   notifyEstimateSent,
@@ -56,6 +57,9 @@ import {
   type JobStatus,
   type LeadStatus,
   type LeadSource,
+  type TeamRole,
+  type CompType,
+  type ExpenseFrequency,
 } from "@/lib/canes/types";
 
 // Server actions for the Canes UI. Every mutation returns { ok, notice? } and
@@ -1899,6 +1903,119 @@ export async function deleteJobExpense(id: string): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
   const ok = await deleteJobExpenseRow(id);
   if (!ok) return { ok: false, notice: "Couldn't remove the expense. Please try again." };
+  refresh();
+  return { ok: true };
+}
+
+// ── Phase 5: business/overhead expenses + team payouts (0008_growth.sql) ──────
+
+function todayEtYmd(): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
+}
+
+export async function addBusinessExpense(input: {
+  name: string;
+  amountCents: number;
+  category: string;
+  recurring: boolean;
+  frequency: ExpenseFrequency;
+  incurredOn?: string;
+  endsOn?: string | null;
+  note?: string;
+}): Promise<ActionResult> {
+  if (!canesConfigured()) return DEMO;
+  const name = input.name.trim();
+  if (!name) return { ok: false, notice: "Name the expense." };
+  const amount = Math.round(input.amountCents);
+  if (!Number.isFinite(amount) || amount <= 0) return { ok: false, notice: "Enter the expense amount." };
+  const id = await addBusinessExpenseRow({
+    name,
+    amountCents: amount,
+    category: input.category.trim() || "Other",
+    recurring: input.recurring,
+    frequency: input.frequency,
+    incurredOn: input.incurredOn || todayEtYmd(),
+    endsOn: input.endsOn ?? null,
+    note: input.note?.trim() || null,
+  });
+  if (!id) return { ok: false, notice: "Couldn't save the expense. Please try again." };
+  refresh();
+  return { ok: true };
+}
+
+export async function deleteBusinessExpense(id: string): Promise<ActionResult> {
+  if (!canesConfigured()) return DEMO;
+  const ok = await deleteBusinessExpenseRow(id);
+  if (!ok) return { ok: false, notice: "Couldn't remove the expense. Please try again." };
+  refresh();
+  return { ok: true };
+}
+
+export async function addTeamMember(input: {
+  name: string;
+  role: TeamRole;
+  compType: CompType;
+  compBps?: number;
+  hourlyCents?: number;
+  crewId?: string | null;
+}): Promise<ActionResult> {
+  if (!canesConfigured()) return DEMO;
+  const name = input.name.trim();
+  if (!name) return { ok: false, notice: "A name is required." };
+  const { error } = await canesDb().from("team_members").insert({
+    name,
+    role: input.role,
+    comp_type: input.compType,
+    comp_bps: Math.max(0, Math.round(input.compBps ?? 0)),
+    hourly_cents: Math.max(0, Math.round(input.hourlyCents ?? 0)),
+    crew_id: input.crewId ?? null,
+  });
+  if (error) {
+    console.error(`[canes] addTeamMember: ${error.message}`);
+    return { ok: false, notice: "Couldn't add the team member. Please try again." };
+  }
+  refresh();
+  return { ok: true };
+}
+
+export async function updateTeamMember(
+  id: string,
+  patch: {
+    name?: string;
+    role?: TeamRole;
+    compType?: CompType;
+    compBps?: number;
+    hourlyCents?: number;
+    crewId?: string | null;
+    active?: boolean;
+  },
+): Promise<ActionResult> {
+  if (!canesConfigured()) return DEMO;
+  const upd: Record<string, unknown> = {};
+  if (patch.name !== undefined) upd.name = patch.name.trim();
+  if (patch.role !== undefined) upd.role = patch.role;
+  if (patch.compType !== undefined) upd.comp_type = patch.compType;
+  if (patch.compBps !== undefined) upd.comp_bps = Math.max(0, Math.round(patch.compBps));
+  if (patch.hourlyCents !== undefined) upd.hourly_cents = Math.max(0, Math.round(patch.hourlyCents));
+  if (patch.crewId !== undefined) upd.crew_id = patch.crewId;
+  if (patch.active !== undefined) upd.active = patch.active;
+  if (Object.keys(upd).length === 0) return { ok: true };
+  const { error } = await canesDb().from("team_members").update(upd).eq("id", id);
+  if (error) {
+    console.error(`[canes] updateTeamMember: ${error.message}`);
+    return { ok: false, notice: "Couldn't update the team member. Please try again." };
+  }
+  refresh();
+  return { ok: true };
+}
+
+export async function removeTeamMember(id: string): Promise<ActionResult> {
+  if (!canesConfigured()) return DEMO;
+  const { error } = await canesDb().from("team_members").update({ active: false }).eq("id", id);
+  if (error) {
+    console.error(`[canes] removeTeamMember: ${error.message}`);
+    return { ok: false, notice: "Couldn't remove the team member. Please try again." };
+  }
   refresh();
   return { ok: true };
 }

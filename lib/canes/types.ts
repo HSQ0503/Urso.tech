@@ -12,7 +12,14 @@ export type LeadStatus =
   | "won"
   | "lost";
 
-export type LeadSource = "lead_vendor" | "website" | "referral" | "other";
+export type LeadSource =
+  | "lead_vendor"
+  | "website"
+  | "referral"
+  | "meta_ads"
+  | "yard_sign"
+  | "door_hanger"
+  | "other";
 
 export type Lead = {
   id: string;
@@ -198,6 +205,9 @@ export const SOURCE_LABEL: Record<LeadSource, string> = {
   lead_vendor: "Lead vendor",
   website: "Website",
   referral: "Referral",
+  meta_ads: "Meta ads",
+  yard_sign: "Yard sign",
+  door_hanger: "Door hanger",
   other: "Other",
 };
 
@@ -371,6 +381,69 @@ export type JobExpense = {
   id: string; created_at: string; job_id: string;
   amount_cents: number; category: string; note: string | null;
   crew_id: string | null; created_by: string | null;
+};
+
+// ── Phase 5: business overhead expenses + payouts (0008_growth.sql) ───────────
+
+export type ExpenseFrequency = "one_time" | "monthly" | "yearly";
+
+// A cost NOT tied to a job — subscriptions, insurance, truck, marketing. A
+// recurring row (monthly/yearly) counts every period it is active between
+// incurred_on and ends_on; a one_time row counts once, on incurred_on.
+export type BusinessExpense = {
+  id: string; created_at: string; name: string;
+  amount_cents: number; category: string;
+  recurring: boolean; frequency: ExpenseFrequency;
+  incurred_on: string;    // "YYYY-MM-DD" (ET); recurring start
+  ends_on: string | null; // recurring end, null = ongoing
+  active: boolean; note: string | null;
+};
+
+export type TeamRole = "owner" | "partner" | "ops_manager" | "worker";
+
+// How a team member is paid. profit_split = a share of the distributable profit
+// after everyone else is paid (owner/partner); profit_share = a % of gross profit
+// taken before the split (ops manager); hourly = rate x hours worked; none =
+// tracked but not paid through this waterfall.
+export type CompType = "profit_split" | "profit_share" | "hourly" | "none";
+
+export type TeamMember = {
+  id: string; created_at: string; name: string; role: TeamRole;
+  comp_type: CompType;
+  comp_bps: number;     // profit_split / profit_share: basis points (6000 = 60%)
+  hourly_cents: number; // hourly workers, cents per hour
+  crew_id: string | null; // worker -> crew, for the labor-hours proxy
+  active: boolean; sort: number;
+};
+
+export const TEAM_ROLE_LABEL: Record<TeamRole, string> = {
+  owner: "Owner",
+  partner: "Partner",
+  ops_manager: "Operations manager",
+  worker: "Worker",
+};
+
+// One line of the payouts view — a person and what they are owed for the period.
+export type PayoutLine = {
+  member_id: string; name: string; role: TeamRole; comp_type: CompType;
+  amount_cents: number;
+  basis: string; // human-readable: "60% of $4,200", "18.5h x $20/hr"
+};
+
+export type PayoutRangeKey = "day" | "week" | "month" | "year";
+
+// The full payouts waterfall for a period. Every figure in integer cents.
+export type PayoutSummary = {
+  rangeKey: PayoutRangeKey;
+  rangeLabel: string;
+  collectedCents: number;
+  jobExpensesCents: number;
+  overheadCents: number;
+  laborCents: number;
+  grossProfitCents: number;   // collected - job expenses - overhead - labor
+  opsShareCents: number;      // ops-manager profit share (of gross)
+  distributableCents: number; // gross - opsShare, split among owner/partner
+  lines: PayoutLine[];        // per person
 };
 
 export type CalendarEventKind = "block" | "time_off" | "holiday" | "note";
