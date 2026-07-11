@@ -93,7 +93,15 @@ export type Insights = {
     sampled: number;
     uncontacted: number;
   };
-  sources: { source: LeadSource; label: string; leads: number; won: number; wonCents: number }[];
+  // Channel attribution: leads + collected revenue + won value, per source.
+  sources: {
+    source: LeadSource;
+    label: string;
+    leads: number;
+    won: number;
+    wonCents: number;
+    collectedCents: number; // money actually received, credited to the lead's channel
+  }[];
   ops: {
     completed: number;
     canceled: number;
@@ -449,11 +457,17 @@ export async function getInsights(key: RangeKey): Promise<Insights> {
     uncontacted,
   };
 
-  // ── Sources (lead-gen ROI) ──
+  // ── Sources (channel attribution: leads AND collected revenue) ──
+  // TODO: cost-per-lead / ROI needs ad-spend input per channel (the Meta
+  // integration is shelved, so we have no spend data yet). Until then this ranks
+  // channels by money in, not return on spend — no cost/ROI numbers are invented.
   const leadById = new Map(leads.map((l) => [l.id, l]));
-  const srcAgg = new Map<LeadSource, { leads: number; won: number; wonCents: number }>();
+  const invoiceById = new Map(invoices.map((i) => [i.id, i]));
+  const srcAgg = new Map<LeadSource, { leads: number; won: number; wonCents: number; collectedCents: number }>();
+  const srcEntry = (source: LeadSource) =>
+    srcAgg.get(source) ?? { leads: 0, won: 0, wonCents: 0, collectedCents: 0 };
   for (const l of rangeLeads) {
-    const entry = srcAgg.get(l.source) ?? { leads: 0, won: 0, wonCents: 0 };
+    const entry = srcEntry(l.source);
     entry.leads += 1;
     if (l.status === "won") entry.won += 1;
     srcAgg.set(l.source, entry);
@@ -461,13 +475,26 @@ export async function getInsights(key: RangeKey): Promise<Insights> {
   for (const e of approvedInRange) {
     const lead = e.lead_id ? leadById.get(e.lead_id) : undefined;
     if (!lead) continue;
-    const entry = srcAgg.get(lead.source) ?? { leads: 0, won: 0, wonCents: 0 };
+    const entry = srcEntry(lead.source);
     entry.wonCents += e.total_cents;
     srcAgg.set(lead.source, entry);
   }
+  // Attribute each in-range payment to a channel: payment → job → lead.source,
+  // falling back to payment → invoice → lead.source when the payment has no job.
+  // Anything that resolves to no lead/source lands in the 'other' bucket, so the
+  // per-channel collected totals still sum to the headline Collected figure.
+  for (const p of rangePayments) {
+    const job = p.job_id ? jobById.get(p.job_id) : undefined;
+    const invoice = p.invoice_id ? invoiceById.get(p.invoice_id) : undefined;
+    const leadId = job?.lead_id ?? invoice?.lead_id ?? null;
+    const source: LeadSource = (leadId ? leadById.get(leadId)?.source : undefined) ?? "other";
+    const entry = srcEntry(source);
+    entry.collectedCents += p.amount_cents;
+    srcAgg.set(source, entry);
+  }
   const sources = [...srcAgg.entries()]
     .map(([source, v]) => ({ source, label: SOURCE_LABEL[source], ...v }))
-    .sort((a, b) => b.leads - a.leads);
+    .sort((a, b) => b.collectedCents - a.collectedCents || b.leads - a.leads);
 
   // ── Ops ──
   const upcomingEnd = nowMs + 7 * 86_400_000;

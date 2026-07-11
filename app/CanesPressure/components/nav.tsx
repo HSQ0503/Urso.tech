@@ -12,6 +12,8 @@ import {
   FileText,
   CalendarDays,
   Receipt,
+  Wallet,
+  HandCoins,
   BarChart3,
   Settings,
   MoreHorizontal,
@@ -35,6 +37,8 @@ const LINKS: NavItem[] = [
   { href: "/CanesPressure/estimates", label: "Estimates", icon: FileText, exact: false },
   { href: "/CanesPressure/schedule", label: "Schedule", icon: CalendarDays, exact: false },
   { href: "/CanesPressure/invoices", label: "Invoices", icon: Receipt, exact: false },
+  { href: "/CanesPressure/expenses", label: "Expenses", icon: Wallet, exact: false },
+  { href: "/CanesPressure/payouts", label: "Payouts", icon: HandCoins, exact: false },
   { href: "/CanesPressure/insights", label: "Insights", icon: BarChart3, exact: false },
   { href: "/CanesPressure/settings", label: "Settings", icon: Settings, exact: false },
 ];

@@ -208,7 +208,8 @@ export default async function InsightsPage({
   // scale is the largest margin; a negative-margin crew still renders a min bar.
   const maxCrew = Math.max(1, ...d.revenueByCrew.map((c) => c.marginCents));
   const maxSvc = Math.max(1, ...d.topServices.map((s) => s.cents));
-  const maxSrc = Math.max(1, ...d.sources.map((s) => s.leads));
+  // Channels rank by collected revenue now, so the meter scales to the top earner.
+  const maxSrc = Math.max(1, ...d.sources.map((s) => s.collectedCents));
 
   const ops = [
     { label: "Jobs completed", value: String(d.ops.completed), sub: d.rangeLabel.toLowerCase() },
@@ -440,23 +441,30 @@ export default async function InsightsPage({
       {/* Sources + services */}
       <section className="grid gap-4 md:grid-cols-2">
         <div className="cp-card p-4">
-          <CardTitle label="Lead generation" title="Where leads come from" />
+          <CardTitle label="Channels" title="Leads and revenue by source" />
           <div className="mt-2">
             {d.sources.length === 0 ? (
               <EmptyLine>No leads created in this period.</EmptyLine>
             ) : (
-              d.sources.map((s) => (
-                <MeterRow
-                  key={s.source}
-                  name={s.label}
-                  sub={`${s.leads} lead${s.leads === 1 ? "" : "s"}`}
-                  value={s.wonCents > 0 ? `${fmtMoney(s.wonCents)} won` : s.won > 0 ? `${s.won} won` : "—"}
-                  pct={s.leads / maxSrc}
-                  color="var(--cp-muted)"
-                />
-              ))
+              d.sources.map((s, i) => {
+                const leadLabel = `${s.leads} lead${s.leads === 1 ? "" : "s"}`;
+                const sub = s.wonCents > 0 ? `${leadLabel} · ${fmtMoney(s.wonCents)} won` : leadLabel;
+                return (
+                  <MeterRow
+                    key={s.source}
+                    name={s.label}
+                    sub={sub}
+                    value={s.collectedCents > 0 ? fmtMoney(s.collectedCents) : "—"}
+                    pct={s.collectedCents / maxSrc}
+                    color={i === 0 ? LEADER : NEUTRAL_BAR}
+                  />
+                );
+              })
             )}
           </div>
+          <p className="mt-3 text-[11.5px] leading-snug text-[var(--cp-faint)]">
+            Collected is credited to the channel that first brought the lead in.
+          </p>
         </div>
 
         <div className="cp-card p-4">

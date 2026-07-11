@@ -226,6 +226,32 @@ export const DEMO_LEADS: Lead[] = [
     snoozed_until: null,
     last_activity_at: min(1700),
   },
+  // Won leads from the new marketing channels (0008) — recent + this-month, so
+  // they populate channel attribution and the current payouts period.
+  {
+    id: "d20", created_at: min(9200), type: "cold", status: "won", name: "Gwen Fisher",
+    phone: "+15615550210", email: "gwen.fisher@example.com", contact_id: null,
+    address: "120 Egret Landing, Jupiter", service: "House wash", source: "meta_ads",
+    appointment_at: null, confirmed_at: null, lost_reason: null,
+    notes: "Came in from the Facebook ad.", raw_message: null, parse_confidence: null,
+    opted_out: false, snoozed_until: null, last_activity_at: min(8600),
+  },
+  {
+    id: "d21", created_at: min(6600), type: "cold", status: "won", name: "Trevor Nolan",
+    phone: "+15615550211", email: null, contact_id: null,
+    address: "44 Sabal Palm Dr, Palm Beach Gardens", service: "Driveway + patio", source: "yard_sign",
+    appointment_at: null, confirmed_at: null, lost_reason: null,
+    notes: "Saw a yard sign in the neighborhood.", raw_message: null, parse_confidence: null,
+    opted_out: false, snoozed_until: null, last_activity_at: min(5700),
+  },
+  {
+    id: "d22", created_at: min(3600), type: "cold", status: "won", name: "Bianca Reyes",
+    phone: "+15615550212", email: "bianca.reyes@example.com", contact_id: null,
+    address: "9 Heron Cove, Jupiter", service: "Roof wash (tile)", source: "door_hanger",
+    appointment_at: null, confirmed_at: null, lost_reason: null,
+    notes: "Kept the door hanger, called two weeks later.", raw_message: null, parse_confidence: null,
+    opted_out: false, snoozed_until: null, last_activity_at: min(2800),
+  },
 ];
 
 export const DEMO_MESSAGES: Message[] = [
@@ -706,6 +732,35 @@ export const DEMO_JOBS: Job[] = [
     crew_id: "crewB", confirmed_at: min(17600), customer_phone: "+15615550175", customer_email: "hector.ruiz@example.com", job_name: "House wash + driveway",
     gate_code: null, site_notes: null, canceled_reason: null,
   },
+  // Recent paid jobs (0008) from the new channels — this-month revenue + labor,
+  // so the payouts month and per-channel attribution both read healthy.
+  {
+    id: "job16", created_at: min(9200), estimate_id: null, lead_id: "d20", contact_id: null,
+    status: "paid", customer_name: "Gwen Fisher",
+    job_address: "120 Egret Landing, Jupiter",
+    total_cents: 48500, deposit_cents: 0, scheduled_at: etAt(-6, "09:00"), assigned_to: "Crew A", notes: null,
+    duration_minutes: 120, ends_at: addMinutes(etAt(-6, "09:00"), 120), arrival_window_minutes: 0,
+    crew_id: "crewA", confirmed_at: min(8800), customer_phone: "+15615550210", customer_email: "gwen.fisher@example.com", job_name: "House wash",
+    gate_code: null, site_notes: null, canceled_reason: null,
+  },
+  {
+    id: "job17", created_at: min(6600), estimate_id: null, lead_id: "d21", contact_id: null,
+    status: "paid", customer_name: "Trevor Nolan",
+    job_address: "44 Sabal Palm Dr, Palm Beach Gardens",
+    total_cents: 55000, deposit_cents: 0, scheduled_at: etAt(-4, "13:00"), assigned_to: "Crew B", notes: null,
+    duration_minutes: 150, ends_at: addMinutes(etAt(-4, "13:00"), 150), arrival_window_minutes: 0,
+    crew_id: "crewB", confirmed_at: min(5800), customer_phone: "+15615550211", customer_email: null, job_name: "Driveway + patio",
+    gate_code: null, site_notes: null, canceled_reason: null,
+  },
+  {
+    id: "job18", created_at: min(3600), estimate_id: null, lead_id: "d22", contact_id: null,
+    status: "paid", customer_name: "Bianca Reyes",
+    job_address: "9 Heron Cove, Jupiter",
+    total_cents: 62000, deposit_cents: 0, scheduled_at: etAt(-2, "10:00"), assigned_to: "Crew A", notes: null,
+    duration_minutes: 180, ends_at: addMinutes(etAt(-2, "10:00"), 180), arrival_window_minutes: 0,
+    crew_id: "crewA", confirmed_at: min(2900), customer_phone: "+15615550212", customer_email: "bianca.reyes@example.com", job_name: "Roof wash (tile)",
+    gate_code: null, site_notes: null, canceled_reason: null,
+  },
 ];
 
 // Per-job expenses (0007) — materials/gas/dump/sub across paid jobs so Insights
@@ -727,11 +782,11 @@ export const DEMO_EXPENSES: JobExpense[] = [
 // Recurring rows drive the monthly-overhead total + the payouts P&L; one-time
 // rows count in the month they land. incurred_on is an ET date string.
 export const DEMO_BUSINESS_EXPENSES: BusinessExpense[] = [
-  { id: "be1", created_at: min(120000), name: "Urso platform",              amount_cents: 25000, category: "Software",        recurring: true,  frequency: "monthly",  incurred_on: etDay(-120), ends_on: null, active: true, note: "Monthly retainer" },
-  { id: "be2", created_at: min(150000), name: "General liability insurance", amount_cents: 22000, category: "Insurance",       recurring: true,  frequency: "monthly",  incurred_on: etDay(-150), ends_on: null, active: true, note: null },
-  { id: "be3", created_at: min(200000), name: "Truck payment",              amount_cents: 65000, category: "Truck / vehicle", recurring: true,  frequency: "monthly",  incurred_on: etDay(-200), ends_on: null, active: true, note: "F-250" },
+  { id: "be1", created_at: min(120000), name: "Urso platform",              amount_cents: 20000, category: "Software",        recurring: true,  frequency: "monthly",  incurred_on: etDay(-120), ends_on: null, active: true, note: "Monthly retainer" },
+  { id: "be2", created_at: min(150000), name: "General liability insurance", amount_cents: 18000, category: "Insurance",       recurring: true,  frequency: "monthly",  incurred_on: etDay(-150), ends_on: null, active: true, note: null },
+  { id: "be3", created_at: min(200000), name: "Truck payment",              amount_cents: 35000, category: "Truck / vehicle", recurring: true,  frequency: "monthly",  incurred_on: etDay(-200), ends_on: null, active: true, note: "F-250" },
   { id: "be4", created_at: min(90000),  name: "Website + hosting",          amount_cents: 3000,  category: "Software",        recurring: true,  frequency: "monthly",  incurred_on: etDay(-90),  ends_on: null, active: true, note: null },
-  { id: "be5", created_at: min(50000),  name: "Surface cleaner attachment", amount_cents: 42000, category: "Equipment",       recurring: false, frequency: "one_time", incurred_on: etDay(-18),  ends_on: null, active: true, note: "16in whirl-a-way" },
+  { id: "be5", created_at: min(50000),  name: "Surface cleaner attachment", amount_cents: 42000, category: "Equipment",       recurring: false, frequency: "one_time", incurred_on: etDay(-45),  ends_on: null, active: true, note: "16in whirl-a-way" },
   { id: "be6", created_at: min(30000),  name: "LLC annual filing",          amount_cents: 15000, category: "Other",           recurring: true,  frequency: "yearly",   incurred_on: etDay(-12),  ends_on: null, active: true, note: null },
 ];
 
@@ -1027,6 +1082,25 @@ export const DEMO_PAYMENTS: Payment[] = [
     id: "pay9", created_at: min(30500), invoice_id: "inv11", job_id: "job14",
     amount_cents: 38000, currency: "USD", method: "card", source: "square_webhook",
     status: "completed", square_payment_id: "demo-sq-pay-9", external_event_id: null,
+    recorded_by: "square", note: null,
+  },
+  // Payments for the new-channel jobs (0008) — this-month collected.
+  {
+    id: "pay10", created_at: min(8600), invoice_id: null, job_id: "job16",
+    amount_cents: 48500, currency: "USD", method: "card", source: "square_webhook",
+    status: "completed", square_payment_id: "demo-sq-pay-10", external_event_id: null,
+    recorded_by: "square", note: null,
+  },
+  {
+    id: "pay11", created_at: min(5700), invoice_id: null, job_id: "job17",
+    amount_cents: 55000, currency: "USD", method: "cash", source: "manual",
+    status: "completed", square_payment_id: null, external_event_id: null,
+    recorded_by: "owner", note: null,
+  },
+  {
+    id: "pay12", created_at: min(2800), invoice_id: null, job_id: "job18",
+    amount_cents: 62000, currency: "USD", method: "card", source: "square_webhook",
+    status: "completed", square_payment_id: "demo-sq-pay-12", external_event_id: null,
     recorded_by: "square", note: null,
   },
 ];
