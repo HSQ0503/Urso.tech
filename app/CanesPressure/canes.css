@@ -317,11 +317,22 @@
   color: var(--cp-chrome-muted);
   transition: background 150ms ease, color 150ms ease;
 }
-.cp-nav-link:hover { background: var(--cp-chrome-raise); color: var(--cp-chrome-ink); }
+.cp-nav-link:hover { background: rgba(255, 255, 255, 0.045); color: var(--cp-chrome-ink); }
 .cp-nav-link[data-active="true"] {
-  background: var(--cp-chrome-raise);
+  background: rgba(255, 255, 255, 0.085);
   color: var(--cp-chrome-ink);
   font-weight: 600;
+}
+
+/* quiet mono section headers in the dark sidebar */
+.cp-nav-section {
+  padding: 6px 10px 3px;
+  font-family: var(--cp-font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--cp-chrome-faint);
 }
 .cp-nav-link[data-active="true"]::before {
   content: "";

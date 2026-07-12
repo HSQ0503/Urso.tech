@@ -52,6 +52,16 @@ const MOBILE_MORE = LINKS.filter(
   (l) => !MOBILE_TABS.includes(l),
 );
 
+// Desktop groups the same links so a ten-item list reads as a hierarchy — the
+// daily loop, then the work, then the money — instead of a flat wall, and the
+// grouping fills the sidebar's dead space. Settings pins to the bottom.
+const NAV_GROUPS: { label?: string; items: NavItem[] }[] = [
+  { items: LINKS.filter((l) => ["Today", "Inbox", "Leads", "Customers"].includes(l.label)) },
+  { label: "Work", items: LINKS.filter((l) => ["Estimates", "Schedule"].includes(l.label)) },
+  { label: "Money", items: LINKS.filter((l) => ["Invoices", "Expenses", "Payouts", "Insights"].includes(l.label)) },
+];
+const SETTINGS_LINK = LINKS.find((l) => l.label === "Settings")!;
+
 export function CanesNav({ mobile = false }: { mobile?: boolean }) {
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
@@ -135,14 +145,30 @@ export function CanesNav({ mobile = false }: { mobile?: boolean }) {
     );
   }
 
+  const SettingsIcon = SETTINGS_LINK.icon;
   return (
-    <nav className="flex flex-col gap-1">
-      {LINKS.map(({ href, label, icon: Icon, exact }) => (
-        <Link key={href} href={href} className="cp-nav-link" data-active={isActive(href, exact)}>
-          <Icon size={16} strokeWidth={2} />
-          {label}
-        </Link>
+    <nav className="flex flex-1 flex-col gap-5">
+      {NAV_GROUPS.map((group, gi) => (
+        <div key={gi} className="flex flex-col gap-0.5">
+          {group.label && <span className="cp-nav-section">{group.label}</span>}
+          {group.items.map(({ href, label, icon: Icon, exact }) => (
+            <Link key={href} href={href} className="cp-nav-link" data-active={isActive(href, exact)}>
+              <Icon size={16} strokeWidth={2} />
+              {label}
+            </Link>
+          ))}
+        </div>
       ))}
+      <div className="mt-auto border-t border-[color:var(--cp-chrome-line)] pt-3">
+        <Link
+          href={SETTINGS_LINK.href}
+          className="cp-nav-link"
+          data-active={isActive(SETTINGS_LINK.href, SETTINGS_LINK.exact)}
+        >
+          <SettingsIcon size={16} strokeWidth={2} />
+          {SETTINGS_LINK.label}
+        </Link>
+      </div>
     </nav>
   );
 }
