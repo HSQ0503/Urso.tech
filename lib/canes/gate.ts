@@ -1,5 +1,6 @@
 import { createHmac } from "node:crypto";
 import { cookies } from "next/headers";
+import { getAdminSession } from "@/lib/urso-auth";
 
 // Lightweight passcode gate for /CanesPressure until Phase 2 brings real
 // role-based auth. When CANES_ACCESS_CODE is unset the area is open (demo
@@ -24,6 +25,9 @@ export function gateEnabled(): boolean {
 }
 
 export async function hasAccess(): Promise<boolean> {
+  // Provisioned admins (Sebastian, Han) authenticated through the Urso
+  // magic-link login always have access — their session cookie is the gate.
+  if (await getAdminSession()) return true;
   const code = process.env.CANES_ACCESS_CODE;
   if (!code) return true;
   const store = await cookies();

@@ -2,13 +2,16 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { hasAccess } from "@/lib/canes/gate";
 import { isDemo } from "@/lib/canes/data";
+import { getAdminSession } from "@/lib/urso-auth";
+import { signOutAdmin } from "@/app/login/actions";
 import { CanesNav } from "../components/nav";
 
 // The gated application shell: dark Urso chrome sidebar on desktop, five
 // bottom tabs + a More sheet on mobile.
 
 export default async function CanesAppLayout({ children }: { children: React.ReactNode }) {
-  if (!(await hasAccess())) redirect("/CanesPressure/login");
+  if (!(await hasAccess())) redirect("/login");
+  const admin = await getAdminSession();
 
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-[1440px]">
@@ -29,6 +32,22 @@ export default async function CanesAppLayout({ children }: { children: React.Rea
             <div className="rounded-md border border-[var(--cp-chrome-line)] bg-[var(--cp-chrome-raise)] px-3 py-2.5 text-[12px] leading-snug text-[var(--cp-chrome-muted)]">
               <span className="font-semibold text-[var(--cp-brand)]">Demo data.</span> Connect the
               Canes Supabase secret key to go live.
+            </div>
+          )}
+          {admin && (
+            <div className="mt-3 flex items-center justify-between gap-2 px-1">
+              <span className="cp-mono min-w-0 truncate" style={{ color: "var(--cp-chrome-faint)" }} title={admin.email}>
+                {admin.email}
+              </span>
+              <form action={signOutAdmin}>
+                <button
+                  type="submit"
+                  className="cp-mono shrink-0 transition-colors hover:text-[var(--cp-chrome-ink)]"
+                  style={{ color: "var(--cp-chrome-muted)" }}
+                >
+                  Sign out
+                </button>
+              </form>
             </div>
           )}
           <p className="cp-mono mt-3 px-1" style={{ color: "var(--cp-chrome-faint)" }}>
