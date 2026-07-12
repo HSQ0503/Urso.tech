@@ -1,6 +1,7 @@
 import { getSettings, isDemo } from "@/lib/canes/data";
 import { twilioConfigured } from "@/lib/canes/supabase";
 import { SettingsForm } from "@/app/CanesPressure/components/settings/settings-form";
+import { TourReplayButton } from "@/app/CanesPressure/components/tour/replay-button";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Settings" };
@@ -79,6 +80,17 @@ export default async function SettingsPage() {
               </p>
             </div>
           </div>
+        </div>
+      </section>
+
+      <section className="cp-card rounded-xl p-4 md:rounded-md md:p-5">
+        <h2 className="text-[15px] font-semibold">Product tour</h2>
+        <p className="mt-1 text-[13px] text-[var(--cp-muted)]">
+          A guided walkthrough of every page, from leads to payouts. It ran on your first
+          sign-in; replay it anytime.
+        </p>
+        <div className="mt-3">
+          <TourReplayButton />
         </div>
       </section>
 

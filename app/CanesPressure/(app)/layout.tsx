@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { hasAccess, gateEnabled } from "@/lib/canes/gate";
@@ -5,6 +6,7 @@ import { isDemo } from "@/lib/canes/data";
 import { getAdminSession } from "@/lib/urso-auth";
 import { signOutAdmin } from "@/app/login/actions";
 import { CanesNav } from "../components/nav";
+import { CanesTour } from "../components/tour";
 
 // The gated application shell: dark Urso chrome sidebar on desktop, five
 // bottom tabs + a More sheet on mobile.
@@ -68,6 +70,11 @@ export default async function CanesAppLayout({ children }: { children: React.Rea
           <CanesNav mobile />
         </nav>
       </div>
+
+      {/* First-login onboarding tour — self-contained; never blocks the page */}
+      <Suspense fallback={null}>
+        <CanesTour />
+      </Suspense>
     </div>
   );
 }
