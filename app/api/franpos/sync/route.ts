@@ -23,17 +23,27 @@ export async function GET(req: NextRequest) {
 
   try {
     const summary = await syncFranpos();
+    const failed = summary.stores.filter((s) => s.error);
     await sendCronReport({
       job: "FranPOS store sync",
       status: "success",
       rows: [
         ...summary.stores.map((s) => ({
           label: s.id.toUpperCase(),
-          value: `${s.orders} orders · ${s.items} items · ${s.customers} customers`,
+          value: s.error
+            ? `⚠ failed — ${s.error}`
+            : s.skipped
+              ? `skipped — ${s.skipped}`
+              : `${s.orders} orders · ${s.items} items · ${s.customers} customers`,
         })),
         { label: "API calls", value: String(summary.calls) },
         { label: "Duration", value: `${(summary.ms / 1000).toFixed(1)}s` },
       ],
+      note: failed.length
+        ? `${failed.length} of ${summary.stores.length} stores timed out or errored this run (${failed
+            .map((s) => s.id.toUpperCase())
+            .join(", ")}). The rest synced and their metrics are updated; the laggards re-pull automatically on the next run.`
+        : undefined,
     });
     return NextResponse.json(summary);
   } catch (e) {
