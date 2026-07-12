@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { getSession, homePathFor } from "@/lib/auth";
 import {
@@ -80,5 +81,7 @@ export async function confirmPasscode(formData: FormData) {
 // password session).
 export async function signOutAdmin() {
   await clearAdminSession();
+  // Also drop the legacy shared-passcode cookie so one sign-out revokes both gates.
+  (await cookies()).delete("canes_access");
   redirect("/login");
 }

@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { hasAccess } from "@/lib/canes/gate";
+import { hasAccess, gateEnabled } from "@/lib/canes/gate";
 import { isDemo } from "@/lib/canes/data";
 import { getAdminSession } from "@/lib/urso-auth";
 import { signOutAdmin } from "@/app/login/actions";
@@ -10,7 +10,9 @@ import { CanesNav } from "../components/nav";
 // bottom tabs + a More sheet on mobile.
 
 export default async function CanesAppLayout({ children }: { children: React.ReactNode }) {
-  if (!(await hasAccess())) redirect("/login");
+  // Locked out → the shared-passcode page if that gate is configured, otherwise
+  // the Urso admin login (the primary path for Sebastian + Han).
+  if (!(await hasAccess())) redirect(gateEnabled() ? "/CanesPressure/login" : "/login");
   const admin = await getAdminSession();
 
   return (

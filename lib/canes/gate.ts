@@ -1,6 +1,7 @@
 import { createHmac } from "node:crypto";
 import { cookies } from "next/headers";
 import { getAdminSession } from "@/lib/urso-auth";
+import { canesConfigured } from "@/lib/canes/supabase";
 
 // Lightweight passcode gate for /CanesPressure until Phase 2 brings real
 // role-based auth. When CANES_ACCESS_CODE is unset the area is open (demo
@@ -29,9 +30,14 @@ export async function hasAccess(): Promise<boolean> {
   // magic-link login always have access — their session cookie is the gate.
   if (await getAdminSession()) return true;
   const code = process.env.CANES_ACCESS_CODE;
-  if (!code) return true;
-  const store = await cookies();
-  return store.get(COOKIE)?.value === tokenFor(code);
+  if (code) {
+    const store = await cookies();
+    return store.get(COOKIE)?.value === tokenFor(code);
+  }
+  // No shared passcode configured: open only in demo/unconfigured. A live deploy
+  // (real Canes keys, CANES_DEMO unset) requires the admin login — never leave
+  // real data ungated just because the legacy passcode is unset.
+  return !canesConfigured();
 }
 
 export async function grantAccess(attempt: string): Promise<boolean> {
