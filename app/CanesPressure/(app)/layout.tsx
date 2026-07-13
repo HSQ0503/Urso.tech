@@ -13,13 +13,23 @@ import { getTechnicianActor } from "@/lib/canes/crew-auth";
 // bottom tabs + a More sheet on mobile.
 
 export default async function CanesAppLayout({ children }: { children: React.ReactNode }) {
+  const [admin, technician] = await Promise.all([
+    getAdminSession(),
+    getTechnicianActor(),
+  ]);
+  const demo = isDemo();
+  // A technician session must never inherit owner access from the legacy shared
+  // passcode cookie. A real owner session wins if both cookies exist.
+  if (technician && !admin) redirect("/CanesPressure/crew");
+  // Live CRM data is owner-account only. The old shared access-code cookie is
+  // retained solely for an unconfigured/demo environment.
+  if (!admin && !demo) redirect("/login");
+
   // Locked out → the shared-passcode page if that gate is configured, otherwise
-  // the Urso admin login (the primary path for Sebastian + Han).
+  // the Urso admin login. This branch is now only reachable in demo mode.
   if (!(await hasAccess())) {
-    if (await getTechnicianActor()) redirect("/CanesPressure/crew");
     redirect(gateEnabled() ? "/CanesPressure/login" : "/login");
   }
-  const admin = await getAdminSession();
 
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-[1440px]">
@@ -36,7 +46,7 @@ export default async function CanesAppLayout({ children }: { children: React.Rea
         </Link>
         <CanesNav />
         <div className="mt-auto px-2">
-          {isDemo() && (
+          {demo && (
             <div className="rounded-md border border-[var(--cp-chrome-line)] bg-[var(--cp-chrome-raise)] px-3 py-2.5 text-[12px] leading-snug text-[var(--cp-chrome-muted)]">
               <span className="font-semibold text-[var(--cp-brand)]">Demo data.</span> Connect the
               Canes Supabase secret key to go live.

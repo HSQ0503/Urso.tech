@@ -372,6 +372,8 @@ export type JobItem = {
   id: string; job_id: string; estimate_item_id: string | null;
   position: number; name: string; description: string | null;
   quantity: number; line_total_cents: number; done: boolean;
+  required?: boolean; technician_note?: string | null; blocked?: boolean;
+  completed_at?: string | null; checklist_only?: boolean;
 };
 
 // Per-job cost (materials, gas, dump fee, sub) — 0007_ops_feedback.sql. Money in

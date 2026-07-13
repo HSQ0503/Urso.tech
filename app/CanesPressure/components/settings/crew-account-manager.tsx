@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Plus, ShieldCheck, UserRoundCheck, UserRoundX } from "lucide-react";
+import { Plus, ShieldCheck, UsersRound, UserRoundCheck, UserRoundX } from "lucide-react";
 import {
+  addCrew,
   addApprovedTechnician,
   setTechnicianActive,
   type CrewOwnerActionResult,
@@ -19,7 +20,8 @@ export function CrewAccountManager({
   rows: TechnicianAccountAdminRow[];
   crews: Crew[];
 }) {
-  const [showAdd, setShowAdd] = useState(false);
+  const [showAddTechnician, setShowAddTechnician] = useState(false);
+  const [showAddCrew, setShowAddCrew] = useState(false);
   const [result, setResult] = useState<CrewOwnerActionResult | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -38,20 +40,101 @@ export function CrewAccountManager({
     <section className="cp-card rounded-xl p-4 md:rounded-md md:p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-[15px] font-semibold">Technician accounts</h2>
+          <h2 className="text-[15px] font-semibold">Crews & technician accounts</h2>
           <p className="mt-1 max-w-2xl text-[13px] leading-relaxed text-[var(--cp-muted)]">
-            Only the owner can approve or deactivate employees. Each technician receives an individual passwordless account and sees assigned crew jobs only.
+            Create the crews that appear on the schedule, then approve each employee and assign them to one crew.
           </p>
         </div>
-        <button
-          type="button"
-          className="cp-btn min-h-11 cursor-pointer"
-          onClick={() => setShowAdd((open) => !open)}
-        >
-          <Plus aria-hidden size={16} />
-          Add technician
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            className="cp-btn min-h-11 cursor-pointer"
+            onClick={() => {
+              setResult(null);
+              setShowAddTechnician(false);
+              setShowAddCrew((open) => !open);
+            }}
+          >
+            <UsersRound aria-hidden size={16} />
+            Add crew
+          </button>
+          <button
+            type="button"
+            className="cp-btn min-h-11 cursor-pointer"
+            onClick={() => {
+              setResult(null);
+              setShowAddCrew(false);
+              setShowAddTechnician((open) => !open);
+            }}
+          >
+            <Plus aria-hidden size={16} />
+            Add technician
+          </button>
+        </div>
       </div>
+
+      <div className="mt-4 flex flex-wrap gap-2" aria-label="Active crews">
+        {crews.map((crew) => (
+          <span
+            key={crew.id}
+            className="inline-flex items-center gap-2 rounded-full border border-[var(--cp-line)] px-2.5 py-1.5 text-[12px] font-semibold"
+          >
+            <span
+              className="h-2.5 w-2.5 rounded-full"
+              style={{ background: crew.color }}
+              aria-hidden
+            />
+            {crew.name}
+          </span>
+        ))}
+      </div>
+
+      {showAddCrew && (
+        <form
+          className="mt-5 grid gap-3 border-t border-[var(--cp-line)] pt-5 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-end"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const form = new FormData(event.currentTarget);
+            setResult(null);
+            startTransition(async () => {
+              const next = await addCrew({
+                name: String(form.get("name") ?? ""),
+                color: String(form.get("color") ?? "#0b6aa2"),
+              });
+              setResult(next);
+              if (next.ok) setShowAddCrew(false);
+            });
+          }}
+        >
+          <div>
+            <label className="cp-label" htmlFor="new-crew-name">Crew name</label>
+            <input
+              id="new-crew-name"
+              className="cp-input min-h-11"
+              name="name"
+              placeholder="Crew 2"
+              required
+            />
+          </div>
+          <div>
+            <label className="cp-label" htmlFor="new-crew-color">Calendar color</label>
+            <input
+              id="new-crew-color"
+              className="h-11 w-full min-w-20 cursor-pointer rounded-md border border-[var(--cp-line)] bg-[var(--cp-surface)] p-1 sm:w-20"
+              name="color"
+              type="color"
+              defaultValue="#0b6aa2"
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={pending}
+            className="cp-btn cp-btn-primary min-h-11 cursor-pointer"
+          >
+            {pending ? "Adding…" : "Add crew"}
+          </button>
+        </form>
+      )}
 
       <div className="mt-5 grid gap-3">
         {rows.map((row) => (
@@ -94,7 +177,7 @@ export function CrewAccountManager({
         ))}
       </div>
 
-      {showAdd && (
+      {showAddTechnician && (
         <form
           className="mt-5 grid gap-3 border-t border-[var(--cp-line)] pt-5 sm:grid-cols-2"
           onSubmit={(event) => {
@@ -109,7 +192,7 @@ export function CrewAccountManager({
                 crewId: String(form.get("crewId") ?? ""),
               });
               setResult(next);
-              if (next.ok) setShowAdd(false);
+              if (next.ok) setShowAddTechnician(false);
             });
           }}
         >

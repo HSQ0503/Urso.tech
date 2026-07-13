@@ -94,6 +94,12 @@ function timeWindow(job: JobWithItems): string {
   return `${start}–${end}`;
 }
 
+const ACTIVE_JOB_STATUSES = ["scheduled", "confirmed", "in_progress"];
+
+function isFinishedJob(job: JobWithItems): boolean {
+  return ["completed", "invoiced", "paid"].includes(job.status);
+}
+
 // ── Grouping ─────────────────────────────────────────────────────────────────
 
 type DayBuckets = {
@@ -131,7 +137,13 @@ function bucketByDay(
 // the server's findConflictNotice so the warn outline matches the action's notice.
 function conflictSet(jobs: JobWithItems[]): Set<string> {
   const bad = new Set<string>();
-  const placed = jobs.filter((j) => j.scheduled_at && j.ends_at && j.crew_id);
+  const placed = jobs.filter(
+    (job) =>
+      job.scheduled_at &&
+      job.ends_at &&
+      job.crew_id &&
+      ACTIVE_JOB_STATUSES.includes(job.status),
+  );
   for (let i = 0; i < placed.length; i++) {
     for (let k = i + 1; k < placed.length; k++) {
       const a = placed[i];
@@ -400,30 +412,36 @@ function TimeGridColumn({
         const style = blockStyle(p, win.start);
         if (p.item.kind === "job") {
           const job = p.item.job;
+          const finished = isFinishedJob(job);
           return (
             <button
               key={`job-${job.id}`}
               type="button"
               className={`cp-timegrid-block ${conflicts.has(job.id) ? "cp-conflict" : ""}`}
               data-unassigned={!job.crew}
+              data-finished={finished}
               style={{
                 ...style,
                 ...(job.crew ? ({ ["--cp-crew"]: job.crew.color } as React.CSSProperties) : {}),
               }}
-              draggable
-              onDragStart={(ev) =>
+              draggable={!finished}
+              onDragStart={(ev) => {
+                if (finished) return;
                 writeDrag(ev, {
                   type: "job",
                   id: job.id,
                   timeOfDay: job.scheduled_at ? etHm(job.scheduled_at) : null,
                   durationMinutes: job.duration_minutes,
                   crewId: job.crew_id,
-                })
-              }
+                });
+              }}
               onClick={() => onOpenJob(job)}
             >
               <span className="cp-timegrid-block-time tabular-nums">{timeWindow(job)}</span>
-              <span className="truncate">{job.customer_name ?? "Customer"}</span>
+              <span className="truncate">
+                {job.customer_name ?? "Customer"}
+                {finished ? " · Complete" : ""}
+              </span>
               <span className="cp-timegrid-block-crew truncate">
                 <span
                   className="cp-crew-dot"
@@ -653,9 +671,10 @@ function MonthGrid({
                     background:
                       "color-mix(in srgb, var(--cp-crew, var(--cp-muted)) 8%, var(--cp-surface))",
                     outline: conflicts.has(job.id) ? "1.5px solid var(--cp-warn)" : undefined,
+                    opacity: isFinishedJob(job) ? 0.66 : 1,
                   }}
                 >
-                  {job.customer_name ?? "Job"}
+                  {job.customer_name ?? "Job"}{isFinishedJob(job) ? " · Done" : ""}
                 </span>
               ))}
               {more > 0 && (

@@ -29,10 +29,10 @@ import type {
 // enqueue helpers self-guard on canesConfigured() and are insert-only through
 // the tasks table's unique dedupe_key.
 
-// Terminal job statuses — mirrors actions.ts TERMINAL_JOB_STATUSES. A terminal
-// job can retain a scheduled_at, so the board must exclude these or a canceled/
-// completed job would still paint an active block on the calendar.
-const TERMINAL_JOB_STATUSES: JobStatus[] = ["completed", "invoiced", "paid", "canceled"];
+// Canceled work leaves the active calendar. Completed/invoiced/paid jobs retain
+// their original placement so the schedule remains a reliable history of what
+// the crews completed that day.
+const HIDDEN_SCHEDULE_JOB_STATUSES: JobStatus[] = ["canceled"];
 
 export async function listEstimates(filter?: {
   leadId?: string;
@@ -169,8 +169,8 @@ async function joinJobs(jobs: Job[]): Promise<JobWithItems[]> {
   }));
 }
 
-// Scheduled/confirmed/active jobs whose scheduled_at falls in [rangeStart,
-// rangeStart + days). The calendar board's data source.
+// Placed jobs whose scheduled_at falls in [rangeStart, rangeStart + days).
+// Finished work stays visible; only canceled work is hidden.
 export async function getScheduleBoard(rangeStartIso: string, days = 7): Promise<JobWithItems[]> {
   const start = new Date(rangeStartIso);
   if (Number.isNaN(start.getTime())) return [];
@@ -182,7 +182,7 @@ export async function getScheduleBoard(rangeStartIso: string, days = 7): Promise
         j.scheduled_at &&
         j.scheduled_at >= start.toISOString() &&
         j.scheduled_at < endIso &&
-        !TERMINAL_JOB_STATUSES.includes(j.status),
+        !HIDDEN_SCHEDULE_JOB_STATUSES.includes(j.status),
     ).sort((a, b) => (a.scheduled_at as string).localeCompare(b.scheduled_at as string));
   } else {
     const { data, error } = await canesDb()
@@ -191,7 +191,7 @@ export async function getScheduleBoard(rangeStartIso: string, days = 7): Promise
       .not("scheduled_at", "is", null)
       .gte("scheduled_at", start.toISOString())
       .lt("scheduled_at", endIso)
-      .not("status", "in", `(${TERMINAL_JOB_STATUSES.join(",")})`)
+      .not("status", "in", `(${HIDDEN_SCHEDULE_JOB_STATUSES.join(",")})`)
       .order("scheduled_at", { ascending: true })
       .limit(500);
     if (error) throw new Error(`getScheduleBoard: ${error.message}`);

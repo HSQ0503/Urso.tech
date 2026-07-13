@@ -18,6 +18,7 @@ import {
   etLocalToIso,
   fmtEt,
   fmtMoney,
+  JOB_STATUS_LABEL,
   type CalendarEvent,
   type Crew,
   type JobInvoiceSummary,
@@ -194,10 +195,8 @@ export function ScheduleWorkspace({
 
   // Sheets. Exactly one open at a time. The job sheet tracks an id and derives
   // the live record from (revalidated) props, so status and billing state
-  // refresh after actions. But "Complete & bill" makes the job terminal and
-  // refresh() drops it from the board mid-flow — so every board resolution is
-  // cached, and when the lookup fails the sheet renders from that snapshot,
-  // keeping the payment chooser mounted until the owner closes it.
+  // refresh after actions. Every board resolution is cached so the detail sheet
+  // remains stable across a revalidation or a view-window change.
   // ?job= deep link opens the sheet once, as initial state — never an effect,
   // so closing it doesn't fight the URL. An id outside the window finds no job
   // (and has no snapshot) and simply renders nothing.
@@ -746,11 +745,17 @@ function MobileJobRow({
   dow: string | null;
   onOpen: () => void;
 }) {
+  const finished = ["completed", "invoiced", "paid"].includes(job.status);
   const time = job.scheduled_at
     ? fmtEt(job.scheduled_at, { hour: "numeric", minute: "2-digit" })
     : "—";
   return (
-    <button type="button" className="cp-list-row" onClick={onOpen}>
+    <button
+      type="button"
+      className="cp-list-row"
+      style={{ opacity: finished ? 0.7 : 1 }}
+      onClick={onOpen}
+    >
       <span
         className="cp-crew-dot"
         style={job.crew ? ({ ["--cp-crew"]: job.crew.color } as React.CSSProperties) : undefined}
@@ -772,7 +777,7 @@ function MobileJobRow({
         </span>
       </span>
       <span className="shrink-0 text-[13px] font-semibold tabular-nums">
-        {fmtMoney(job.total_cents)}
+        {finished ? JOB_STATUS_LABEL[job.status] : fmtMoney(job.total_cents)}
       </span>
       <ChevronRight className="cp-list-chev" size={18} strokeWidth={2} />
     </button>

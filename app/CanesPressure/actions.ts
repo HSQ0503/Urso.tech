@@ -1515,7 +1515,9 @@ export async function createInvoiceFromJob(
   }
   const invoiceId = data.id as string;
 
-  const jobItems = await listJobItems(jobId);
+  // Procedural crew steps live beside the sold work snapshot but must never be
+  // copied onto the customer's invoice.
+  const jobItems = (await listJobItems(jobId)).filter((item) => !item.checklist_only);
   if (jobItems.length > 0) {
     const rows = jobItems.map((it, i) => ({
       invoice_id: invoiceId,

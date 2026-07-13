@@ -735,6 +735,11 @@
   border-left-style: dashed;
   background: var(--cp-surface);
 }
+.cp-timegrid-block[data-finished="true"] {
+  opacity: 0.68;
+  background: color-mix(in srgb, var(--cp-good) 8%, var(--cp-surface));
+  cursor: default;
+}
 .cp-timegrid-block-time { font-weight: 600; }
 .cp-timegrid-block-crew {
   display: flex;
