@@ -6,6 +6,16 @@ import {
   requireTechnicianActor,
   requireTechnicianJob,
 } from "@/lib/canes/crew-auth";
+import {
+  CREW_UPLOAD_CATEGORIES,
+  createMediaUploadGrant,
+  finalizeMediaUpload,
+  listJobMedia,
+  validateMediaUpload,
+  type MediaFinalizeInput,
+  type MediaUploadGrant,
+} from "@/lib/canes/media";
+import type { JobMediaCategory, JobMediaItem } from "@/lib/canes/types";
 import { completeJob } from "@/app/CanesPressure/actions";
 
 export type CrewActionResult = { ok: boolean; notice?: string };
@@ -233,4 +243,67 @@ export async function completeTechnicianJob(jobId: string): Promise<CrewActionRe
     ok: true,
     notice: completion.ok ? "Job marked complete." : "Job complete. Owner follow-up is required.",
   };
+}
+
+// ── Job photos (Crew Phase C) ─────────────────────────────────────────────────
+// Uploads never pass through these actions: the browser asks for a signed
+// upload grant, PUTs straight to the private Storage bucket, then finalizes.
+// Category and job access are re-verified on every call.
+
+export async function requestJobPhotoUpload(
+  jobId: string,
+  input: { mimeType: string; sizeBytes: number; category: JobMediaCategory },
+): Promise<CrewActionResult & { grant?: MediaUploadGrant }> {
+  const actor = await requireTechnicianActor();
+  await requireTechnicianJob(actor, jobId);
+  if (!CREW_UPLOAD_CATEGORIES.includes(input.category)) {
+    return { ok: false, notice: "Choose Before, After, or Issue." };
+  }
+  const invalid = validateMediaUpload(input);
+  if (invalid) return { ok: false, notice: invalid };
+  const { data: job } = await canesDb().from("jobs").select("status").eq("id", jobId).single();
+  if (!job || job.status === "canceled") {
+    return { ok: false, notice: "Photos cannot be added to a canceled job." };
+  }
+  try {
+    return { ok: true, grant: await createMediaUploadGrant(jobId, input) };
+  } catch (error) {
+    return {
+      ok: false,
+      notice: error instanceof Error ? error.message : "Upload authorization failed.",
+    };
+  }
+}
+
+export async function finalizeJobPhotoUpload(
+  input: MediaFinalizeInput,
+): Promise<CrewActionResult> {
+  const actor = await requireTechnicianActor();
+  await requireTechnicianJob(actor, input.jobId);
+  if (!CREW_UPLOAD_CATEGORIES.includes(input.category)) {
+    return { ok: false, notice: "Choose Before, After, or Issue." };
+  }
+  const { row, notice } = await finalizeMediaUpload(input, actor.accountId);
+  if (!row) return { ok: false, notice: notice ?? "The upload could not be saved." };
+  await logActivity(input.jobId, actor.accountId, "media_uploaded", {
+    mediaId: row.id,
+    category: row.category,
+  });
+  refresh(input.jobId);
+  return { ok: true, notice: "Photo added." };
+}
+
+export async function listJobPhotos(
+  jobId: string,
+): Promise<CrewActionResult & { items?: JobMediaItem[] }> {
+  const actor = await requireTechnicianActor();
+  await requireTechnicianJob(actor, jobId);
+  try {
+    return { ok: true, items: await listJobMedia(jobId, "technician") };
+  } catch (error) {
+    return {
+      ok: false,
+      notice: error instanceof Error ? error.message : "Photos failed to load.",
+    };
+  }
 }

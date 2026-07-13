@@ -461,6 +461,39 @@ export type CalendarEvent = {
 // crew color, and the run-sheet checklist from one object.
 export type JobWithItems = Job & { items: JobItem[]; crew: Crew | null };
 
+// ── Crew Phase C: private per-job photos (0011_job_media.sql) ─────────────────
+
+export type JobMediaCategory = "before" | "after" | "walkthrough" | "reference" | "issue";
+export type JobMediaVisibility = "internal" | "assigned_crew" | "customer";
+
+// One photo attached to a job, mapped for the gallery UIs. The URLs are
+// short-lived signed links minted after a job-access check — render them
+// immediately, never store them.
+export type JobMediaItem = {
+  id: string;
+  jobId: string;
+  mediaType: "photo" | "video";
+  category: JobMediaCategory;
+  visibility: JobMediaVisibility;
+  caption: string | null;
+  capturedAt: string | null;
+  createdAt: string;
+  width: number | null;
+  height: number | null;
+  uploadedBy: string | null; // technician name; null = office upload
+  approvedAt: string | null;
+  thumbnailUrl: string | null;
+  fullUrl: string | null;
+};
+
+export const MEDIA_CATEGORY_LABEL: Record<JobMediaCategory, string> = {
+  before: "Before",
+  after: "After",
+  walkthrough: "Walkthrough",
+  reference: "Reference",
+  issue: "Issue",
+};
+
 export type EstimateWithItems = Estimate & { items: EstimateItem[] };
 
 export const JOB_STATUS_LABEL: Record<JobStatus, string> = {

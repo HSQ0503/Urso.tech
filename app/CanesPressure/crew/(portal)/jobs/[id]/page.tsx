@@ -13,7 +13,9 @@ import {
 } from "lucide-react";
 import { requireTechnicianActor } from "@/lib/canes/crew-auth";
 import { getTechnicianJob } from "@/lib/canes/crew-data";
+import { listJobMedia } from "@/lib/canes/media";
 import { fmtPhone, JOB_STATUS_LABEL, type JobStatus } from "@/lib/canes/types";
+import { JobMediaSection } from "@/app/CanesPressure/components/media/job-media-section";
 import { TechnicianJobControls } from "./job-controls";
 
 export const dynamic = "force-dynamic";
@@ -53,6 +55,7 @@ export default async function TechnicianJobPage({
   const { id } = await params;
   const job = await getTechnicianJob(actor, id);
   if (!job) notFound();
+  const media = await listJobMedia(job.id, "technician");
   const directions = job.jobAddress
     ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(job.jobAddress)}`
     : null;
@@ -155,6 +158,21 @@ export default async function TechnicianJobPage({
               </p>
             </div>
           </div>
+        </div>
+      </section>
+
+      <section>
+        <div className="mb-3 px-1">
+          <p className="cp-mono">Job photos</p>
+          <h2 className="mt-1 text-[18px] font-semibold">Document the work</h2>
+        </div>
+        <div className="cp-card rounded-xl p-4">
+          <JobMediaSection
+            jobId={job.id}
+            variant="crew"
+            canUpload={job.status !== "canceled"}
+            initialItems={media}
+          />
         </div>
       </section>
 

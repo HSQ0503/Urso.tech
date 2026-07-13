@@ -42,6 +42,7 @@ import {
   type JobWithItems,
 } from "@/lib/canes/types";
 import { isCompleteWhen, SchedulePicker } from "../leads/schedule-picker";
+import { JobMediaSection } from "../media/job-media-section";
 import { JobBilling } from "./job-billing";
 import { SheetShell } from "./sheet-shell";
 
@@ -518,6 +519,15 @@ export function JobDetailSheet({
             </div>
           </form>
         )}
+      </section>
+
+      {/* Job photos — field documentation now, customer gallery later. */}
+      <section className="cp-card mt-4 p-4 md:p-5">
+        <JobMediaSection
+          jobId={job.id}
+          variant="owner"
+          canUpload={job.status !== "canceled"}
+        />
       </section>
 
       {/* Links into the paper trail */}

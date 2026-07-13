@@ -2,8 +2,19 @@
 
 import { revalidatePath } from "next/cache";
 import { getAdminSession } from "@/lib/urso-auth";
-import { canesDb } from "@/lib/canes/supabase";
-import { toE164 } from "@/lib/canes/types";
+import { canesConfigured, canesDb } from "@/lib/canes/supabase";
+import {
+  OWNER_UPLOAD_CATEGORIES,
+  createMediaUploadGrant,
+  finalizeMediaUpload,
+  getJobMediaRow,
+  listJobMedia,
+  recordJobMediaActivity,
+  validateMediaUpload,
+  type MediaFinalizeInput,
+  type MediaUploadGrant,
+} from "@/lib/canes/media";
+import { toE164, type JobMediaCategory, type JobMediaItem } from "@/lib/canes/types";
 
 export type CrewOwnerActionResult = { ok: boolean; notice?: string };
 
@@ -190,4 +201,147 @@ export async function removeJobChecklistItem(
   if (error) return { ok: false, notice: error.message };
   refreshJobChecklist(item.job_id);
   return { ok: true };
+}
+
+// ── Job photos, owner side (Crew Phase C) ─────────────────────────────────────
+// The owner uploads through the same grant → direct-to-Storage → finalize flow
+// as technicians, and additionally reviews: recategorize, caption, approve for
+// the future customer gallery, and soft-delete. Owner uploads/approvals carry a
+// null account id; the activity detail records that the office acted.
+
+const MEDIA_DEMO_NOTICE = "Photos are disabled in the demo.";
+
+function refreshJobMedia(jobId: string): void {
+  revalidatePath("/CanesPressure/schedule");
+  revalidatePath("/CanesPressure/crew");
+  revalidatePath(`/CanesPressure/crew/jobs/${jobId}`);
+}
+
+export async function ownerListJobMedia(
+  jobId: string,
+): Promise<CrewOwnerActionResult & { items?: JobMediaItem[] }> {
+  if (!(await requireOwner())) return { ok: false, notice: "Owner sign-in required." };
+  if (!canesConfigured()) return { ok: true, items: [] };
+  try {
+    return { ok: true, items: await listJobMedia(jobId, "owner") };
+  } catch (error) {
+    return {
+      ok: false,
+      notice: error instanceof Error ? error.message : "Photos failed to load.",
+    };
+  }
+}
+
+export async function ownerRequestJobPhotoUpload(
+  jobId: string,
+  input: { mimeType: string; sizeBytes: number; category: JobMediaCategory },
+): Promise<CrewOwnerActionResult & { grant?: MediaUploadGrant }> {
+  if (!(await requireOwner())) return { ok: false, notice: "Owner sign-in required." };
+  if (!canesConfigured()) return { ok: false, notice: MEDIA_DEMO_NOTICE };
+  if (!OWNER_UPLOAD_CATEGORIES.includes(input.category)) {
+    return { ok: false, notice: "Choose a photo category." };
+  }
+  const invalid = validateMediaUpload(input);
+  if (invalid) return { ok: false, notice: invalid };
+  const { data: job } = await canesDb().from("jobs").select("status").eq("id", jobId).maybeSingle();
+  if (!job) return { ok: false, notice: "Job not found." };
+  if (job.status === "canceled") {
+    return { ok: false, notice: "Photos cannot be added to a canceled job." };
+  }
+  try {
+    return { ok: true, grant: await createMediaUploadGrant(jobId, input) };
+  } catch (error) {
+    return {
+      ok: false,
+      notice: error instanceof Error ? error.message : "Upload authorization failed.",
+    };
+  }
+}
+
+export async function ownerFinalizeJobPhotoUpload(
+  input: MediaFinalizeInput,
+): Promise<CrewOwnerActionResult> {
+  if (!(await requireOwner())) return { ok: false, notice: "Owner sign-in required." };
+  if (!canesConfigured()) return { ok: false, notice: MEDIA_DEMO_NOTICE };
+  if (!OWNER_UPLOAD_CATEGORIES.includes(input.category)) {
+    return { ok: false, notice: "Choose a photo category." };
+  }
+  const { row, notice } = await finalizeMediaUpload(input, null);
+  if (!row) return { ok: false, notice: notice ?? "The upload could not be saved." };
+  await recordJobMediaActivity(input.jobId, null, "media_uploaded", {
+    mediaId: row.id,
+    category: row.category,
+    by: "owner",
+  });
+  refreshJobMedia(input.jobId);
+  return { ok: true, notice: "Photo added." };
+}
+
+export async function updateJobMediaDetails(
+  mediaId: string,
+  input: { category: JobMediaCategory; caption: string },
+): Promise<CrewOwnerActionResult> {
+  if (!(await requireOwner())) return { ok: false, notice: "Owner sign-in required." };
+  if (!canesConfigured()) return { ok: false, notice: MEDIA_DEMO_NOTICE };
+  if (!OWNER_UPLOAD_CATEGORIES.includes(input.category)) {
+    return { ok: false, notice: "Choose a photo category." };
+  }
+  const row = await getJobMediaRow(mediaId);
+  if (!row || row.deleted_at) return { ok: false, notice: "Photo not found." };
+  const { error } = await canesDb()
+    .from("job_media")
+    .update({
+      category: input.category,
+      caption: input.caption.trim().slice(0, 500) || null,
+    })
+    .eq("id", mediaId);
+  if (error) return { ok: false, notice: error.message };
+  await recordJobMediaActivity(row.job_id, null, "media_updated", {
+    mediaId,
+    category: input.category,
+    by: "owner",
+  });
+  refreshJobMedia(row.job_id);
+  return { ok: true, notice: "Photo updated." };
+}
+
+export async function setJobMediaCustomerVisible(
+  mediaId: string,
+  visible: boolean,
+): Promise<CrewOwnerActionResult> {
+  if (!(await requireOwner())) return { ok: false, notice: "Owner sign-in required." };
+  if (!canesConfigured()) return { ok: false, notice: MEDIA_DEMO_NOTICE };
+  const row = await getJobMediaRow(mediaId);
+  if (!row || row.deleted_at) return { ok: false, notice: "Photo not found." };
+  const { error } = await canesDb()
+    .from("job_media")
+    .update(
+      visible
+        ? { visibility: "customer", approved_at: new Date().toISOString() }
+        : { visibility: "assigned_crew", approved_at: null, approved_by_account_id: null },
+    )
+    .eq("id", mediaId);
+  if (error) return { ok: false, notice: error.message };
+  await recordJobMediaActivity(row.job_id, null, visible ? "media_approved" : "media_unapproved", {
+    mediaId,
+    by: "owner",
+  });
+  refreshJobMedia(row.job_id);
+  return { ok: true, notice: visible ? "Approved for the customer." : "Hidden from the customer." };
+}
+
+export async function deleteJobMedia(mediaId: string): Promise<CrewOwnerActionResult> {
+  if (!(await requireOwner())) return { ok: false, notice: "Owner sign-in required." };
+  if (!canesConfigured()) return { ok: false, notice: MEDIA_DEMO_NOTICE };
+  const row = await getJobMediaRow(mediaId);
+  if (!row || row.deleted_at) return { ok: false, notice: "Photo not found." };
+  const { error } = await canesDb()
+    .from("job_media")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", mediaId)
+    .is("deleted_at", null);
+  if (error) return { ok: false, notice: error.message };
+  await recordJobMediaActivity(row.job_id, null, "media_deleted", { mediaId, by: "owner" });
+  refreshJobMedia(row.job_id);
+  return { ok: true, notice: "Photo removed." };
 }
