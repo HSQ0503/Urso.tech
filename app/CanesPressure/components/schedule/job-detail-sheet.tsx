@@ -144,57 +144,69 @@ export function JobDetailSheet({
   const hasLinks = Boolean(job.estimate_id || invoice || job.contact_id);
 
   return (
-    <SheetShell title="Job" onClose={onClose}>
-      {/* Header: who + status + money */}
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-[16px] font-semibold leading-tight">
-            {job.customer_name ?? "Unnamed job"}
-          </p>
-          {job.job_name && (
-            <p className="mt-0.5 text-[12.5px] text-[var(--cp-muted)]">{job.job_name}</p>
+    <SheetShell
+      title="Job editor"
+      size="wide"
+      bodyClassName="cp-job-editor"
+      onClose={onClose}
+    >
+      {/* A compact summary surface keeps identity, value, status, and the three
+          common field actions together before the denser editing sections. */}
+      <section className="rounded-lg border border-[var(--cp-line)] bg-[var(--cp-bg)] p-4 md:p-5">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <p className="cp-display truncate text-[20px] leading-tight md:text-[22px]">
+              {job.customer_name ?? "Unnamed job"}
+            </p>
+            {job.job_name && (
+              <p className="mt-1 text-[13.5px] text-[var(--cp-muted)]">{job.job_name}</p>
+            )}
+          </div>
+          <span className="shrink-0 text-[18px] font-semibold tabular-nums md:text-[20px]">
+            {fmtMoney(job.total_cents)}
+          </span>
+        </div>
+        <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+          <span className="cp-chip bg-[var(--cp-surface)] text-[var(--cp-muted)]">
+            {JOB_STATUS_LABEL[job.status]}
+          </span>
+          {job.crew && (
+            <span className="cp-chip bg-[var(--cp-surface)] text-[var(--cp-muted)]">
+              <span
+                className="cp-crew-dot"
+                style={{ ["--cp-crew" as string]: job.crew.color }}
+              />
+              {job.crew.name}
+            </span>
+          )}
+          <span className="cp-chip bg-[var(--cp-surface)] text-[var(--cp-muted)]">
+            {scheduleSummary(job)}
+          </span>
+        </div>
+
+        {/* Quick actions */}
+        <div className="mt-4 grid grid-cols-3 gap-2">
+          <CallButton phone={job.customer_phone} className="cp-btn min-h-11" showFeedback={false} />
+          {textHref ? (
+            <Link href={textHref} className="cp-btn min-h-11">
+              <MessageSquare size={15} strokeWidth={2} /> Text
+            </Link>
+          ) : (
+            <span className="cp-btn min-h-11 pointer-events-none opacity-50">Text</span>
+          )}
+          {mapsHref ? (
+            <a href={mapsHref} target="_blank" rel="noreferrer" className="cp-btn min-h-11">
+              <MapPin size={15} strokeWidth={2} /> Directions
+            </a>
+          ) : (
+            <span className="cp-btn min-h-11 pointer-events-none opacity-50">Directions</span>
           )}
         </div>
-        <span className="shrink-0 text-[15px] font-semibold tabular-nums">
-          {fmtMoney(job.total_cents)}
-        </span>
-      </div>
-      <div className="mt-2 flex flex-wrap items-center gap-1.5">
-        <span className="cp-chip bg-[var(--cp-bg)] text-[var(--cp-muted)]">
-          {JOB_STATUS_LABEL[job.status]}
-        </span>
-        {job.crew && (
-          <span className="cp-chip bg-[var(--cp-bg)] text-[var(--cp-muted)]">
-            <span
-              className="cp-crew-dot"
-              style={{ ["--cp-crew" as string]: job.crew.color }}
-            />
-            {job.crew.name}
-          </span>
-        )}
-      </div>
+      </section>
 
-      {/* Quick actions */}
-      <div className="mt-4 grid grid-cols-3 gap-2">
-        <CallButton phone={job.customer_phone} className="cp-btn cp-btn-sm" showFeedback={false} />
-        {textHref ? (
-          <Link href={textHref} className="cp-btn cp-btn-sm">
-            <MessageSquare size={14} strokeWidth={2} /> Text
-          </Link>
-        ) : (
-          <span className="cp-btn cp-btn-sm pointer-events-none opacity-50">Text</span>
-        )}
-        {mapsHref ? (
-          <a href={mapsHref} target="_blank" rel="noreferrer" className="cp-btn cp-btn-sm">
-            <MapPin size={14} strokeWidth={2} /> Directions
-          </a>
-        ) : (
-          <span className="cp-btn cp-btn-sm pointer-events-none opacity-50">Directions</span>
-        )}
-      </div>
-
+      <div className="mt-4 grid items-start gap-4 xl:grid-cols-2">
       {/* Contact */}
-      <div className="cp-divider mt-4 pt-3">
+      <section className="cp-card p-4 md:p-5">
         <p className="cp-group-label">Contact</p>
         <Row label="Phone">
           {job.customer_phone ? (
@@ -229,10 +241,10 @@ export function JobDetailSheet({
             )}
           </div>
         )}
-      </div>
+      </section>
 
       {/* Job facts */}
-      <div className="cp-divider mt-3 pt-3">
+      <section className="cp-card p-4 md:p-5">
         <div className="flex items-center justify-between">
           <p className="cp-group-label">Job</p>
           {!detailsOpen && (
@@ -391,11 +403,12 @@ export function JobDetailSheet({
             </div>
           </div>
         )}
+      </section>
       </div>
 
       {/* Crew checklist: sold service items are the base steps; the owner can
           append procedural steps without putting them on the customer invoice. */}
-      <div className="cp-divider mt-3 pt-3">
+      <section className="cp-card mt-4 p-4 md:p-5">
         <div className="flex items-baseline justify-between gap-3">
           <p className="cp-group-label">Crew checklist</p>
           <span className="cp-mono">
@@ -505,13 +518,13 @@ export function JobDetailSheet({
             </div>
           </form>
         )}
-      </div>
+      </section>
 
       {/* Links into the paper trail */}
       {hasLinks && (
-        <div className="cp-divider mt-3 pt-3">
+        <section className="cp-card mt-4 p-4 md:p-5">
           <p className="cp-group-label">Links</p>
-          <div className="mt-2 flex flex-col gap-2">
+          <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
             {job.estimate_id && (
               <Link
                 href={`/CanesPressure/estimates/${job.estimate_id}`}
@@ -537,13 +550,13 @@ export function JobDetailSheet({
               </Link>
             )}
           </div>
-        </div>
+        </section>
       )}
 
       {/* ── Scheduling controls ─────────────────────────────────────── */}
 
       {!terminal && (
-        <div className="cp-divider mt-4 space-y-3 pt-3">
+        <section className="cp-card mt-4 space-y-4 p-4 md:p-5">
           <p className="cp-group-label">Manage</p>
 
           {/* Reschedule / schedule */}
@@ -734,7 +747,7 @@ export function JobDetailSheet({
               </div>
             </div>
           )}
-        </div>
+        </section>
       )}
 
       {/* Billing — completion → invoice → card/cash payment. Shown for every

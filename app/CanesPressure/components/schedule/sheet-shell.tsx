@@ -40,32 +40,44 @@ export function SheetShell({
   title,
   onClose,
   children,
+  size = "default",
+  bodyClassName = "",
 }: {
   title: string;
   onClose: () => void;
   children: React.ReactNode;
+  size?: "default" | "wide";
+  bodyClassName?: string;
 }) {
   useSheetBehavior(onClose);
 
   return (
     <>
       <div className="cp-sheet-backdrop" onClick={onClose} />
-      <div className="cp-sheet cp-scroll" role="dialog" aria-modal="true" aria-label={title}>
+      <div
+        className="cp-sheet cp-scroll"
+        data-size={size}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+      >
         {/* Grabber — bottom-sheet affordance on mobile only; the desktop
             right-panel has no drag handle. */}
         <div className="cp-grabber md:hidden" />
-        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-[var(--cp-line)] bg-[var(--cp-surface)] px-4 py-3">
+        <div className="sticky top-0 z-10 flex min-h-16 items-center justify-between border-b border-[var(--cp-line)] bg-[var(--cp-surface)]/95 px-4 backdrop-blur-sm md:px-6">
           <p className="cp-mono">{title}</p>
           <button
             type="button"
-            className="flex h-8 w-8 items-center justify-center rounded-md text-[var(--cp-muted)] hover:bg-[var(--cp-hover)]"
+            className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-md text-[var(--cp-muted)] transition-colors hover:bg-[var(--cp-hover)] hover:text-[var(--cp-ink)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--cp-brand)]"
             onClick={onClose}
             aria-label="Close"
           >
-            <X size={16} strokeWidth={2} />
+            <X size={18} strokeWidth={2} />
           </button>
         </div>
-        <div className="px-4 pb-6 pt-4">{children}</div>
+        <div className={`px-4 pb-6 pt-4 md:px-6 md:pb-8 md:pt-5 ${bodyClassName}`}>
+          {children}
+        </div>
       </div>
     </>
   );

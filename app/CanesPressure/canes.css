@@ -455,11 +455,26 @@
     border-radius: 0;
     border-width: 0 0 0 1px;
     padding-bottom: 0;
+    animation: cp-sheet-in 220ms cubic-bezier(0.2, 0.75, 0.25, 1);
+    box-shadow: -12px 0 36px rgba(12, 43, 63, 0.08);
   }
+  .cp-sheet[data-size="wide"] { width: min(720px, 64vw); }
+}
+.cp-job-editor .cp-btn,
+.cp-job-editor .cp-input,
+.cp-job-editor .cp-select {
+  min-height: 44px;
+}
+.cp-job-editor .cp-btn {
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
 }
 @keyframes cp-sheet-up {
   from { transform: translateY(14px); opacity: 0; }
   to { transform: translateY(0); opacity: 1; }
+}
+@keyframes cp-sheet-in {
+  from { transform: translateX(18px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
 }
 @media (prefers-reduced-motion: reduce) {
   .cp-sheet { animation: none; }
