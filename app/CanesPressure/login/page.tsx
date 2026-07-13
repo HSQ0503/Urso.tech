@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { grantAccess, hasAccess } from "@/lib/canes/gate";
+import Link from "next/link";
 
 export const metadata = { title: "Sign in" };
 
@@ -61,6 +62,12 @@ export default async function CanesLogin({
         <p className="cp-mono mt-5 text-center" style={{ color: "var(--cp-faint)" }}>
           Powered by Urso
         </p>
+        <Link
+          href="/CanesPressure/crew/login"
+          className="mt-3 block min-h-11 content-center text-center text-[13px] font-semibold text-[var(--cp-muted)] hover:text-[var(--cp-ink)]"
+        >
+          Technician sign in
+        </Link>
       </div>
     </div>
   );

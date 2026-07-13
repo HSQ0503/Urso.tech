@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getSession, homePathFor } from "@/lib/auth";
 import { signIn } from "./actions";
+import Link from "next/link";
 
 export const metadata: Metadata = {
   title: "Sign in | Urso",
@@ -101,6 +102,12 @@ export default async function LoginPage({
         <p className="mt-8 font-mono text-[10px] uppercase tracking-[0.14em] text-ink-dimmer">
           Accounts are provisioned by Urso · no self-signup
         </p>
+        <Link
+          href="/CanesPressure/crew/login"
+          className="mt-4 inline-flex min-h-11 items-center text-[12.5px] text-ink-dim underline decoration-edge-strong underline-offset-4 hover:text-ink"
+        >
+          Canes technician sign in
+        </Link>
       </div>
     </main>
   );

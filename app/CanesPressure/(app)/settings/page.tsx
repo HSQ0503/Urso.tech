@@ -2,6 +2,8 @@ import { getSettings, isDemo } from "@/lib/canes/data";
 import { twilioConfigured } from "@/lib/canes/supabase";
 import { SettingsForm } from "@/app/CanesPressure/components/settings/settings-form";
 import { TourReplayButton } from "@/app/CanesPressure/components/tour/replay-button";
+import { CrewAccountManager } from "@/app/CanesPressure/components/settings/crew-account-manager";
+import { listTechnicianAccountsForOwner } from "@/lib/canes/crew-admin";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Settings" };
@@ -17,7 +19,10 @@ function StatusDot({ ok }: { ok: boolean }) {
 }
 
 export default async function SettingsPage() {
-  const settings = await getSettings();
+  const [settings, technicianAccounts] = await Promise.all([
+    getSettings(),
+    listTechnicianAccountsForOwner(),
+  ]);
   const demo = isDemo();
   const twilio = twilioConfigured();
   const base = process.env.NEXT_PUBLIC_APP_URL ?? "https://urso.ws";
@@ -43,6 +48,8 @@ export default async function SettingsPage() {
       </header>
 
       <SettingsForm settings={settings} />
+
+      <CrewAccountManager {...technicianAccounts} />
 
       <section className="cp-card rounded-xl p-4 md:rounded-md md:p-5">
         <h2 className="text-[15px] font-semibold">Connection status</h2>
