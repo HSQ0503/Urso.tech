@@ -40,6 +40,7 @@ import {
   notifyInvoiceReceipt,
 } from "@/lib/canes/notify";
 import { cancelSquareInvoice, createDepositLink, createSquareInvoice } from "@/lib/canes/square";
+import { PRACTICE_PHONE } from "@/lib/canes/tour";
 import {
   fmtEt,
   fmtMoney,
@@ -896,11 +897,18 @@ export async function approveEstimate(
       .eq("id", estimate.id);
   }
 
-  await alertOwner(
-    `Estimate ${approved.number} approved by ${approved.customer_name ?? signature} — ` +
-      `${fmtMoney(approved.total_cents)}. A job was created; time to schedule.`,
-  );
-  await notifyEstimateApproved(approved);
+  // Notifications are best-effort: a Twilio/network throw here must never
+  // strand an approved estimate without its job (the approve claim already
+  // happened, so a retried approve would bail as "already approved").
+  try {
+    await alertOwner(
+      `Estimate ${approved.number} approved by ${approved.customer_name ?? signature} — ` +
+        `${fmtMoney(approved.total_cents)}. A job was created; time to schedule.`,
+    );
+    await notifyEstimateApproved(approved);
+  } catch (err) {
+    console.error(`[canes] approval notifications failed for ${approved.number}:`, err);
+  }
 
   const withItems = await getEstimateWithItems(estimate.id);
   if (withItems) await createJobFromEstimate(withItems);
@@ -948,10 +956,14 @@ export async function declineEstimate(token: string, reason: string): Promise<Ac
     await logEvent(estimate.lead_id, "estimate", `Estimate ${estimate.number} declined${trimmed ? ` — ${trimmed}` : ""}`);
     await touch(estimate.lead_id);
   }
-  await alertOwner(
-    `Estimate ${declined.number} declined by ${declined.customer_name ?? "customer"}${trimmed ? `: ${trimmed}` : "."}`,
-  );
-  await notifyEstimateDeclined(declined);
+  try {
+    await alertOwner(
+      `Estimate ${declined.number} declined by ${declined.customer_name ?? "customer"}${trimmed ? `: ${trimmed}` : "."}`,
+    );
+    await notifyEstimateDeclined(declined);
+  } catch (err) {
+    console.error(`[canes] decline notifications failed for ${declined.number}:`, err);
+  }
   refresh();
   return { ok: true };
 }
@@ -1644,9 +1656,11 @@ export async function sendInvoice(
   const fresh = (await getInvoice(invoiceId)) ?? invoice;
 
   // Create + publish the Square invoice if Square is connected. Best-effort:
-  // a Square failure never blocks sending our own branded link.
+  // a Square failure never blocks sending our own branded link. The tour's
+  // practice sandbox never reaches Square — a published Square invoice for a
+  // fictional customer would outlive the sandbox cleanup.
   let hostedUrl = fresh.hosted_payment_url;
-  if (!hostedUrl) {
+  if (!hostedUrl && fresh.customer_phone !== PRACTICE_PHONE) {
     const sq = await createSquareInvoice(fresh);
     if (sq.error) {
       await alertOwner(`Couldn't create the Square invoice for ${fresh.number}: ${sq.error}. Sent our link instead.`);

@@ -6,6 +6,8 @@ import { getInvoice, invoicePublicUrl } from "@/lib/canes/invoices";
 import { alertOwner, fillTemplate, nextAllowedSendTime, sendCanesSms } from "@/lib/canes/twilio";
 import { notifyColdEscalation, notifyUnconfirmed, renderDigestHtml, sendDigestEmail } from "@/lib/canes/notify";
 import { logLeadEvent, upsertConfirmationTask } from "@/lib/canes/inbound";
+import { PRACTICE_PHONE } from "@/lib/canes/tour";
+import { sweepStalePractice } from "@/app/CanesPressure/components/tour/practice";
 import { ET, fmtEt, fmtPhone, minutesSince } from "@/lib/canes/types";
 import type { AutomationTask, Estimate, Lead } from "@/lib/canes/types";
 
@@ -41,6 +43,12 @@ export async function GET(req: NextRequest) {
     }
   };
 
+  // Purge an abandoned tour practice sandbox first, so no later section (or
+  // the digest) ever reports on stale fake data. Cheap no-op when none exists.
+  await section("practice_sweep", async () => {
+    await sweepStalePractice();
+    return { checked: true };
+  });
   await section("tasks", drainDueTasks);
   await section("expire_estimates", expireEstimates);
   await section("safety_net", confirmationSafetyNet);
@@ -362,12 +370,16 @@ async function drainDueTasks() {
           .update({ status: "sent", sent_at: new Date().toISOString() })
           .eq("id", task.id);
         await logLeadEvent(lead.id, "automation", "Final confirmation text sent");
-        const when = fmtEt(lead.appointment_at);
-        await notifyUnconfirmed(lead, when);
-        await alertOwner(
-          `Final notice sent to ${lead.name ?? fmtPhone(lead.phone)} for the ${when} estimate ` +
-            `(still no YES). Open: ${APP_URL}/CanesPressure/leads/${lead.id}`,
-        );
+        // Owner alerts skip the tour's practice sandbox — its appointment-keyed
+        // dedupe keys can't be pre-muzzled at seed time, so guard by phone.
+        if (lead.phone !== PRACTICE_PHONE) {
+          const when = fmtEt(lead.appointment_at);
+          await notifyUnconfirmed(lead, when);
+          await alertOwner(
+            `Final notice sent to ${lead.name ?? fmtPhone(lead.phone)} for the ${when} estimate ` +
+              `(still no YES). Open: ${APP_URL}/CanesPressure/leads/${lead.id}`,
+          );
+        }
         sent++;
       } else if (res.skipped === "quiet_hours") {
         const at = nextAllowedSendTime(settings) ?? new Date(Date.now() + 3_600_000);
@@ -504,12 +516,22 @@ async function noReplyEscalations() {
       canceled++;
       continue;
     }
-    const when = fmtEt(lead.appointment_at);
-    await notifyUnconfirmed(lead, when);
-    await alertOwner(
-      `No YES yet from ${lead.name ?? fmtPhone(lead.phone)} for the ${when} estimate. ` +
-        `Open: ${APP_URL}/CanesPressure/leads/${lead.id}`,
-    );
+    // Owner alerts skip the tour's practice sandbox (phone guard — the
+    // appointment-keyed dedupe key can't be pre-muzzled at seed time). The
+    // SMS alert is also contained so a Twilio throw can't leave the task
+    // pending and re-send the email every run.
+    if (lead.phone !== PRACTICE_PHONE) {
+      const when = fmtEt(lead.appointment_at);
+      await notifyUnconfirmed(lead, when);
+      try {
+        await alertOwner(
+          `No YES yet from ${lead.name ?? fmtPhone(lead.phone)} for the ${when} estimate. ` +
+            `Open: ${APP_URL}/CanesPressure/leads/${lead.id}`,
+        );
+      } catch (err) {
+        console.error(`[canes] no-reply owner alert failed for lead ${lead.id}:`, err);
+      }
+    }
     await db.from("tasks").update({ status: "sent", sent_at: new Date().toISOString() }).eq("id", task.id);
     await logLeadEvent(lead.id, "automation", "Escalated: appointment still unconfirmed");
     alerted++;

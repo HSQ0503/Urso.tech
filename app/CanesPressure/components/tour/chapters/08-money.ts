@@ -1,24 +1,23 @@
 import type { TourChapter } from "./types";
 
-// Tour content — condensed from the fact-checked long-form pass; every claim
-// traces to code-verified copy.
+// The practice teardown chapter: entering it deletes every trace of Jamie.
 export const MONEY: TourChapter = {
   "id": "money",
-  "title": "Expenses & payouts",
-  "blurb": "Costs, profit and who gets what",
+  "title": "Practice complete",
+  "blurb": "Jamie disappears; the automations stay",
   "steps": [
     {
-      "id": "money-costs",
-      "title": "Two kinds of costs",
-      "body": "Money going out comes in two kinds, kept apart on purpose. **Job costs** — gas, materials, dump fees — are logged on the job itself: pick a category, type the amount, hit **Add expense**. **Overhead** — insurance, software, the truck — is added here as one-time, monthly, or yearly, and the page normalizes it all to one true monthly number.\n\nKeep both honest and every profit number downstream — crew margins, payouts — is honest too.",
-      "route": "/CanesPressure/expenses",
-      "selector": "a[href=\"/CanesPressure/expenses\"]",
-      "tip": "Log job costs the day they happen — margins only count what you record."
+      "id": "money-cleanup",
+      "title": "And now Jamie disappears",
+      "body": "That was the whole loop — lead, call, booked visit, estimate, approval, job, expense, invoice, payment — and you just ran every step of it yourself.\n\nJamie is practice data, so we've just deleted all of it: the lead, the conversation, the estimate, the job, the $30 gas, the invoice, and the $450. Check any page — your real numbers are exactly as they were. From here on, everything you touch is the real business.",
+      "route": "/CanesPressure",
+      "onEnter": "practice-cleanup",
+      "tip": "Glance at Invoices or Payouts — Jamie's $450 is gone."
     },
     {
-      "id": "money-payouts",
-      "title": "Who takes home what",
-      "body": "The waterfall runs top to bottom: **Collected**, minus job costs, minus overhead, minus hourly labor, leaves **Gross profit**. The ops-manager share comes off that, and what's left splits between the owners — 60/40 in your favor to start, changeable anytime in **Set the split**. The **Day** / **Week** / **Month** / **Year** tabs re-run everything for that period.\n\nThe **Team** card is the roster — profit split, profit share, or hourly with a crew. An hourly worker's hours come from the durations of their crew's finished jobs — no timesheets to chase, so keep job durations accurate."
+      "id": "money-runs-itself",
+      "title": "What keeps running without you",
+      "body": "Everything Jamie walked through by hand runs itself on real leads:\n\n- Instant hold texts to new quote requests; missed calls text themselves back\n- Visit confirmations, the final reminder, and escalations to you when nobody answers\n- Cold-lead nudges at 1, 3, and 7 days; estimate reminders at day 2 and 5; invoice reminders at day 3 and 7\n- The 7 AM Eastern digest email with the day ahead\n\nQuiet hours hold customer texts overnight, STOP is honored forever, and every automatic send is tagged **Auto** in the thread."
     }
   ]
 };

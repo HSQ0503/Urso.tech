@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { usePathname, useRouter } from "next/navigation";
 import { Check, ChevronLeft, ChevronRight, List, Minus, X } from "lucide-react";
 import type { TourChapter } from "./chapters/types";
-import { completeTour } from "./actions";
+import { beginPractice, completeTour, endPractice } from "./actions";
 import s from "./tour.module.css";
 
 // The tour engine. Self-contained: mounts once in the gated layout, floats
@@ -71,8 +71,11 @@ export function TourShell({ autoOpen, chapters }: { autoOpen: boolean; chapters:
   const [confirmEnd, setConfirmEnd] = useState(false);
   const [box, setBox] = useState<Box | null>(null);
   const [booted, setBooted] = useState(false);
+  const [lifecycleNotice, setLifecycleNotice] = useState<string | null>(null);
   const targetRef = useRef<{ el: Element; key: string } | null>(null);
   const autoMinRef = useRef(false);
+  const lifecycleRanRef = useRef<string | null>(null);
+  const lifecycleRef = useRef<Promise<unknown> | null>(null);
 
   // First-login auto-open, adjusted during render once hydration lands (the
   // sanctioned "adjust state during render" pattern — no effect cascade).
@@ -124,6 +127,33 @@ export function TourShell({ autoOpen, chapters }: { autoOpen: boolean; chapters:
     if (view !== "open" || !step?.route) return;
     if (window.location.pathname !== step.route) router.push(step.route);
   }, [step, view, router]);
+
+  // ── practice lifecycle: seed/cleanup fire ONCE per step entry (keyed by
+  //    epoch, never by object identity — router.refresh() re-renders the RSC
+  //    payload and hands this component fresh step references, so an identity
+  //    dep would loop refresh → new object → re-fire forever). Failures are
+  //    surfaced in the card instead of silently narrating a missing Jamie. ────
+  const stepId = step?.id;
+  const stepOnEnter = step?.onEnter;
+  useEffect(() => {
+    if (view !== "open" || !stepId || !stepOnEnter) return;
+    const key = `${epoch}:${stepId}`;
+    if (lifecycleRanRef.current === key) return;
+    lifecycleRanRef.current = key;
+    const act = stepOnEnter === "practice-seed" ? beginPractice : endPractice;
+    lifecycleRef.current = act()
+      .then((res) => {
+        if (res.ok) {
+          setLifecycleNotice(null);
+          router.refresh();
+        } else {
+          setLifecycleNotice(res.notice ?? "This practice step couldn't run.");
+        }
+      })
+      .catch(() => {
+        setLifecycleNotice("This practice step couldn't run — hit Back, then Next to retry.");
+      });
+  }, [view, epoch, stepId, stepOnEnter, router]);
 
   // ── auto-minimize while a detail sheet is open: the card would sit exactly
   //    over the sheet's footer CTAs that step tips point at. Restores itself
@@ -215,6 +245,7 @@ export function TourShell({ autoOpen, chapters }: { autoOpen: boolean; chapters:
     (next: Pos) => {
       setMenuOpen(false);
       setConfirmEnd(false);
+      setLifecycleNotice(null);
       setEpoch((e) => e + 1);
       setPos(clampPos(live, next));
     },
@@ -234,6 +265,14 @@ export function TourShell({ autoOpen, chapters }: { autoOpen: boolean; chapters:
 
   const finish = () => {
     setView("closed");
+    // Ending the tour always tears down the practice sandbox, whether he
+    // finished or bailed mid-practice — SERIALIZED behind any in-flight
+    // seed, so End-tour on the seed step can't lose the race and leave an
+    // orphaned Jamie for the sweeper. Idempotent no-op when nothing seeded.
+    void (lifecycleRef.current ?? Promise.resolve())
+      .catch(() => {})
+      .then(() => endPractice())
+      .catch(() => {});
     completeTour()
       .then(() => {
         try {
@@ -327,6 +366,12 @@ export function TourShell({ autoOpen, chapters }: { autoOpen: boolean; chapters:
               <div className={s.body}>
                 <RichText text={bodyText} />
               </div>
+              {lifecycleNotice && (
+                <p className={s.notice}>
+                  <span className={s.noticeLabel}>Heads up</span>
+                  {lifecycleNotice}
+                </p>
+              )}
               {step.tip && (
                 <p className={s.tip}>
                   <span className={s.tipLabel}>Try it</span>

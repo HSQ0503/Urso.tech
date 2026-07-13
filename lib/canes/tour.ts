@@ -11,6 +11,12 @@ import { canesConfigured, canesDb } from "@/lib/canes/supabase";
 
 const COOKIE = "canes_tour_done";
 
+// The tour's practice sandbox phone number — the reserved fictional range, so
+// no automation can ever text a real person and no real customer can own it.
+// Lives here (not in the tour module) so the app spine and the cron can guard
+// against practice data without importing wizard code.
+export const PRACTICE_PHONE = "+15615550188";
+
 const keyFor = (email: string) => `tour_done:${email.trim().toLowerCase()}`;
 
 export const getTourDone = cache(async (email: string | null): Promise<boolean> => {

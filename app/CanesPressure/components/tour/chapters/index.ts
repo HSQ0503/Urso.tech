@@ -9,16 +9,19 @@ import { INVOICES } from "./07-invoices";
 import { MONEY } from "./08-money";
 import { WRAP } from "./09-wrap";
 
-// Zero-to-hero order: the arc of the money path — a lead arrives, becomes an
-// estimate, a job, an invoice, a payment — then the numbers and the controls.
+// Zero-to-hero order: two explainer chapters, then the guided PRACTICE run —
+// a seeded fake lead he works through the real pipeline (lead → estimate →
+// job → invoice → payment) — then Customers while Jamie's record is still
+// live, the cleanup chapter, and the wrap. Practice seeding/cleanup ride the
+// steps' onEnter hooks.
 export const CHAPTERS: TourChapter[] = [
   WELCOME,
   INBOX,
   LEADS,
-  CUSTOMERS,
   ESTIMATES,
   SCHEDULE,
   INVOICES,
+  CUSTOMERS,
   MONEY,
   WRAP,
 ];

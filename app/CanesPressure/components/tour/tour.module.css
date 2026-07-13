@@ -138,6 +138,29 @@
   margin-bottom: 3px;
 }
 
+/* Practice lifecycle failure — same shape as the tip, danger accent. */
+.notice {
+  margin: 12px 0 4px;
+  padding: 9px 12px;
+  border: 1px solid var(--cp-chrome-line);
+  border-left: 2px solid var(--cp-danger);
+  border-radius: 5px;
+  background: var(--cp-chrome-raise);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: color-mix(in srgb, var(--cp-chrome-ink) 82%, transparent);
+}
+.noticeLabel {
+  display: block;
+  font-family: var(--cp-font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--cp-danger);
+  margin-bottom: 3px;
+}
+
 .menu {
   overflow-y: auto;
   padding: 8px;

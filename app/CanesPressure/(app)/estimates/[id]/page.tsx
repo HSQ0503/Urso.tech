@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, ChevronLeft } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ExternalLink } from "lucide-react";
 import { getLead, getSettings } from "@/lib/canes/data";
 import { getEstimate, getEstimateItems, listCatalog } from "@/lib/canes/estimates";
 import {
@@ -90,6 +90,22 @@ export default async function EstimatePage({ params }: { params: Promise<{ id: s
             optedOut={optedOut}
             sentAt={estimate.sent_at}
           />
+          {/* The exact page the customer sees — same affordance the invoice
+              detail page carries (draft links 404, so only show once sent). */}
+          {estimate.status !== "draft" && (
+            <div className="cp-card mt-4 p-3">
+              <p className="cp-label">Customer link</p>
+              <a
+                href={`${(process.env.NEXT_PUBLIC_APP_URL ?? "https://urso.ws").replace(/\/$/, "")}/CanesPressure/e/${estimate.public_token}`}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-1 inline-flex items-center gap-1.5 break-all text-[12.5px] font-medium text-[var(--cp-brand-deep)] hover:underline"
+              >
+                <ExternalLink size={13} strokeWidth={2} className="shrink-0" />
+                {`${(process.env.NEXT_PUBLIC_APP_URL ?? "https://urso.ws").replace(/\/$/, "")}/CanesPressure/e/${estimate.public_token}`}
+              </a>
+            </div>
+          )}
         </div>
         <div className="order-2 min-w-0 md:order-1">
           <EstimateBuilder

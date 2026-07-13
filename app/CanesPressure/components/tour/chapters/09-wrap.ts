@@ -25,7 +25,7 @@ export const WRAP: TourChapter = {
     {
       "id": "wrap-ready",
       "title": "You're ready",
-      "body": "While you sell and the crews wash, the app keeps working: hold texts, visit confirmations and the final reminder, missed-call replies, escalations to you, cold-lead follow-ups, estimate and invoice reminders, and the 7 AM Eastern digest email with the day ahead.\n\nStart each morning with the digest and **Today**, work new leads fast, and let the rest run itself. If something ever looks off — a number that can't be right, a text that didn't land — Han is a text away. Go get paid.",
+      "body": "You've now run the whole machine once with your own hands — and the parts you didn't touch run themselves.\n\nStart each morning with the digest email and **Today**, work new leads fast, and let the confirmations, reminders and follow-ups carry the rest. If something ever looks off — a number that can't be right, a text that didn't land — Han is a text away. Go get paid.",
       "route": "/CanesPressure",
       "tip": "Replay this tour anytime from the **Product tour** card in Settings."
     }

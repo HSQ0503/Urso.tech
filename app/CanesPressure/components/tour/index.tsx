@@ -1,5 +1,6 @@
 import { getAdminSession } from "@/lib/urso-auth";
 import { getTourDone } from "@/lib/canes/tour";
+import { sweepStalePractice } from "./practice";
 import { CHAPTERS } from "./chapters";
 import { TourShell } from "./tour-shell";
 
@@ -14,5 +15,8 @@ export async function CanesTour() {
   const session = await getAdminSession();
   const email = session?.email ?? null;
   const done = await getTourDone(email);
+  // Abandonment backstop for the practice sandbox: one cheap read per load,
+  // purge only when a practice run has sat stale for 24h.
+  await sweepStalePractice();
   return <TourShell autoOpen={Boolean(email) && !done} chapters={CHAPTERS} />;
 }

@@ -4,15 +4,22 @@ import { canesDb } from "@/lib/canes/supabase";
 
 export async function GET(request: NextRequest) {
   const code = request.nextUrl.searchParams.get("code");
+  const tokenHash = request.nextUrl.searchParams.get("token_hash");
+  const type = request.nextUrl.searchParams.get("type");
   const auth = await createCanesAuthClient();
-  if (!code) {
+  const verification =
+    tokenHash && type === "magiclink"
+      ? await auth.auth.verifyOtp({ token_hash: tokenHash, type: "magiclink" })
+      : code
+        ? await auth.auth.exchangeCodeForSession(code)
+        : null;
+  if (!verification) {
     return NextResponse.redirect(
       new URL("/CanesPressure/crew/login?error=invalid-link", request.url),
     );
   }
 
-  const { error } = await auth.auth.exchangeCodeForSession(code);
-  if (error) {
+  if (verification.error) {
     return NextResponse.redirect(
       new URL("/CanesPressure/crew/login?error=expired-link", request.url),
     );

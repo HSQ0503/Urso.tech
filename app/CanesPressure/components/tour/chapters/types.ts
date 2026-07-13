@@ -16,6 +16,8 @@ export type TourStep = {
   selectorMobile?: string;
   /** One-line "try it" nudge rendered as a callout. */
   tip?: string;
+  /** Lifecycle hook fired once when the step is entered (practice sandbox). */
+  onEnter?: "practice-seed" | "practice-cleanup";
 };
 
 export type TourChapter = {

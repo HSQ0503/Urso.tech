@@ -10,7 +10,7 @@ export const WELCOME: TourChapter = {
     {
       "id": "welcome-start",
       "title": "Welcome to your new home base",
-      "body": "This is where Canes Pressure Washing runs now — every call and text, every lead, every estimate, the schedule, the invoices, and the money, all in one place.\n\nA quick word on this tour: move with **Next** and **Back**, jump chapters with the list icon up top, or minimize it to try things — it picks up where you left off. The tour never changes your data, and you can replay it anytime from **Settings**.",
+      "body": "This is where Canes Pressure Washing runs now — every call and text, every lead, every estimate, the schedule, the invoices, and the money, all in one place.\n\nThis tour isn't a slideshow: in a few minutes you'll work a practice lead through the whole pipeline yourself — call, quote, schedule, get paid — and the practice data cleans itself up at the end. Move with **Next** and **Back**, jump chapters with the list icon, minimize to look around. Replay anytime from **Settings**.",
       "route": "/CanesPressure"
     },
     {
