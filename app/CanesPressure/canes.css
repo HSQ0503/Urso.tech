@@ -15,15 +15,16 @@
 @layer components {
 
 .canes {
-  /* palette */
-  --cp-bg: #eceef1;
+  /* palette — a warm "bone" ground in the Urso paper family (was a cool blue
+     gray); cards stay crisp white so the hairline structure still reads. */
+  --cp-bg: #ecebe6;
   --cp-surface: #ffffff;
   --cp-ink: #14171c;
   --cp-muted: #5a5f66;
   --cp-faint: #84888f;
-  --cp-line: #e4e6e8;
-  --cp-line-strong: #cfd2d6;
-  --cp-hover: #f1f2f4;
+  --cp-line: #e6e3dc;
+  --cp-line-strong: #d3cfc4;
+  --cp-hover: #f2f0ea;
   --cp-brand: #fe5100;
   --cp-brand-fill: #e84900;
   --cp-brand-deep: #c23e00;
@@ -39,13 +40,20 @@
   --cp-danger: #b42318;
   --cp-danger-bg: #fdecea;
 
-  /* dark chrome — the sidebar and login field carry Urso's near-black */
-  --cp-chrome: #0d1013;
+  /* dark chrome — the sidebar carries Urso's true black field (was #0d1013),
+     lit by the brand's signature orange bloom at the top-left corner. */
+  --cp-chrome: #070707;
+  --cp-sidebar-bg:
+    radial-gradient(120% 28% at 15% 0%, rgba(254, 81, 0, 0.11) 0%, transparent 58%),
+    linear-gradient(180deg, #0a0908 0%, #070707 60%, #050505 100%);
   --cp-chrome-raise: rgba(255, 255, 255, 0.06);
   --cp-chrome-line: rgba(255, 255, 255, 0.08);
   --cp-chrome-ink: #f4f5f6;
   --cp-chrome-muted: rgba(244, 245, 246, 0.6);
   --cp-chrome-faint: rgba(244, 245, 246, 0.38);
+
+  /* motion — the one Urso easing curve (the marketing site's --ease-out). */
+  --cp-ease: cubic-bezier(0.16, 1, 0.3, 1);
 
   /* type — inherited from the root layout's next/font variables */
   --cp-font-body: var(--font-ibm-plex-sans), system-ui, -apple-system, sans-serif;
@@ -67,7 +75,14 @@
 .cp-display {
   font-family: var(--cp-font-display);
   font-weight: 600;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.028em;
+}
+/* the Urso signature — an italic Fraunces lead word, paired with the orange
+   terminal period in JSX: "<em>Good</em> afternoon, Sebastian." */
+.cp-display em,
+.cp-ios-title em {
+  font-style: italic;
+  font-weight: 500;
 }
 
 /* mono micro-label — THE Urso signature. Section labels, stat labels, form
@@ -89,7 +104,7 @@
   border: 1px solid var(--cp-line);
   border-radius: 6px;
 }
-.cp-card-hover { transition: border-color 150ms ease, box-shadow 150ms ease; }
+.cp-card-hover { transition: border-color 150ms var(--cp-ease), box-shadow 150ms var(--cp-ease); }
 .cp-card-hover:hover {
   border-color: var(--cp-line-strong);
   box-shadow: 0 1px 3px rgba(12, 43, 63, 0.06);
@@ -137,7 +152,7 @@
   background: var(--cp-surface);
   color: var(--cp-ink);
   cursor: pointer;
-  transition: background 150ms ease, border-color 150ms ease;
+  transition: background 150ms var(--cp-ease), border-color 150ms var(--cp-ease);
 }
 .cp-btn:hover { background: var(--cp-hover); }
 .cp-btn-primary {
@@ -163,7 +178,7 @@
   color: var(--cp-ink);
   font-size: 14px;
   outline: none;
-  transition: border-color 150ms ease, box-shadow 150ms ease;
+  transition: border-color 150ms var(--cp-ease), box-shadow 150ms var(--cp-ease);
 }
 .cp-textarea { padding-top: 10px; resize: vertical; }
 .cp-input:focus, .cp-select:focus, .cp-textarea:focus {
@@ -208,7 +223,7 @@
   font-size: 12.5px;
   font-weight: 600;
   cursor: pointer;
-  transition: background 150ms ease, color 150ms ease;
+  transition: background 150ms var(--cp-ease), color 150ms var(--cp-ease);
 }
 .cp-seg-btn:hover { color: var(--cp-ink); }
 .cp-seg-btn[data-active="true"] {
@@ -275,7 +290,7 @@
   color: var(--cp-ink);
   cursor: pointer;
   white-space: nowrap;
-  transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
+  transition: background 150ms var(--cp-ease), border-color 150ms var(--cp-ease), color 150ms var(--cp-ease);
 }
 .cp-slot:hover:not(:disabled) { background: var(--cp-hover); }
 .cp-slot[data-selected="true"] {
@@ -294,6 +309,9 @@
 /* The shell centers at 1440px, so on wider screens a canvas-colored gutter sits
    to the left of the dark sidebar. Bleed the chrome out to the viewport's left
    edge to fill exactly that gutter (0 at ≤1440px, no horizontal overflow). */
+.cp-sidebar-rail {
+  background: var(--cp-sidebar-bg);
+}
 .cp-sidebar-rail::before {
   content: "";
   position: absolute;
@@ -315,7 +333,7 @@
   font-size: 13.5px;
   font-weight: 500;
   color: var(--cp-chrome-muted);
-  transition: background 150ms ease, color 150ms ease;
+  transition: background 150ms var(--cp-ease), color 150ms var(--cp-ease);
 }
 .cp-nav-link:hover { background: rgba(255, 255, 255, 0.045); color: var(--cp-chrome-ink); }
 .cp-nav-link[data-active="true"] {
@@ -427,7 +445,7 @@
   position: fixed;
   inset: 0;
   z-index: 50;
-  background: rgba(13, 16, 19, 0.4);
+  background: rgba(7, 7, 7, 0.45);
 }
 .cp-sheet {
   position: fixed;
@@ -466,7 +484,7 @@
   min-height: 44px;
 }
 .cp-job-editor .cp-btn {
-  transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
+  transition: background 150ms var(--cp-ease), border-color 150ms var(--cp-ease), color 150ms var(--cp-ease);
 }
 @keyframes cp-sheet-up {
   from { transform: translateY(14px); opacity: 0; }
@@ -563,7 +581,7 @@
   line-height: 1.25;
   font-feature-settings: "tnum" 1;
   cursor: pointer;
-  transition: background 150ms ease, color 150ms ease;
+  transition: background 150ms var(--cp-ease), color 150ms var(--cp-ease);
 }
 .cp-visit-chip:hover { background: var(--cp-hover); color: var(--cp-ink); }
 
@@ -609,7 +627,7 @@
   border-radius: 5px;
   background: var(--cp-surface);
   font-feature-settings: "tnum" 1;
-  transition: border-color 150ms ease, box-shadow 150ms ease;
+  transition: border-color 150ms var(--cp-ease), box-shadow 150ms var(--cp-ease);
 }
 .cp-tray-card:hover {
   border-color: var(--cp-line-strong);
@@ -837,7 +855,7 @@
 .cp-ios-title {
   font-family: var(--cp-font-display);
   font-weight: 600;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.03em;
   font-size: 28px;
   line-height: 1.08;
 }

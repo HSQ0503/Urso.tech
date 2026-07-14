@@ -180,7 +180,8 @@ export default async function TodayPage() {
       <header>
         <p className="cp-mono">{dateLine}</p>
         <h1 className="cp-display mt-1 text-[30px]">
-          {greeting}, Sebastian<span className="text-[var(--cp-brand)]">.</span>
+          <em>{greeting.split(" ")[0]}</em> {greeting.split(" ")[1]}, Sebastian
+          <span className="text-[var(--cp-brand)]">.</span>
         </h1>
       </header>
 

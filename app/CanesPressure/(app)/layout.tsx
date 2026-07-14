@@ -34,7 +34,7 @@ export default async function CanesAppLayout({ children }: { children: React.Rea
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-[1440px]">
       {/* Sidebar (desktop) — near-black chrome, the Urso brand field */}
-      <aside className="cp-sidebar-rail sticky top-0 hidden h-screen w-60 shrink-0 flex-col gap-1 bg-[var(--cp-chrome)] px-3 py-5 text-[var(--cp-chrome-ink)] md:flex">
+      <aside className="cp-sidebar-rail sticky top-0 hidden h-screen w-60 shrink-0 flex-col gap-1 px-3 py-5 text-[var(--cp-chrome-ink)] md:flex">
         {/* Wordmark, not an icon-in-a-box — real trade software leads with the name */}
         <Link href="/CanesPressure" className="mb-6 block px-2.5 pt-1">
           <span className="cp-display block text-[19px] leading-tight">
