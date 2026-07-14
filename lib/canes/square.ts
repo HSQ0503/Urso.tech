@@ -416,10 +416,14 @@ export async function handleSquarePaymentEvent(
 }
 
 // Cancel a published Square invoice so its hosted pay link can no longer take a
-// (duplicate) card payment after we've collected cash. Best-effort, gated. The
-// hook is wired now; the live cancel runs once Square is connected.
-export async function cancelSquareInvoice(squareInvoiceId: string): Promise<void> {
-  if (!squareConfigured()) return;
+// (duplicate) card payment after we've collected cash. Best-effort, gated.
+// Returns true ONLY when Square confirmed the invoice is canceled (or already
+// was) — callers that want to sever their link to this id (clearing
+// square_invoice_id would break webhook matching for any in-flight payment)
+// must require a true here. A false means the link may still be live: keep the
+// ids so a late payment still matches and raises the double-payment alert.
+export async function cancelSquareInvoice(squareInvoiceId: string): Promise<boolean> {
+  if (!squareConfigured()) return false;
   const accessToken = process.env.CANES_SQUARE_ACCESS_TOKEN as string;
   const headers = {
     Authorization: `Bearer ${accessToken}`,
@@ -429,15 +433,26 @@ export async function cancelSquareInvoice(squareInvoiceId: string): Promise<void
   try {
     const getRes = await fetch(`${SQUARE_API_BASE}/v2/invoices/${squareInvoiceId}`, { headers });
     const getJson = (await getRes.json()) as Record<string, unknown>;
-    const version = ((getJson.invoice ?? {}) as Record<string, unknown>).version;
-    if (!getRes.ok || typeof version !== "number") return;
-    await fetch(`${SQUARE_API_BASE}/v2/invoices/${squareInvoiceId}/cancel`, {
+    const sqInvoice = (getJson.invoice ?? {}) as Record<string, unknown>;
+    if (!getRes.ok) return false;
+    if (sqInvoice.status === "CANCELED") return true; // already dead — safe
+    const version = sqInvoice.version;
+    if (typeof version !== "number") return false;
+    const cancelRes = await fetch(`${SQUARE_API_BASE}/v2/invoices/${squareInvoiceId}/cancel`, {
       method: "POST",
       headers,
       body: JSON.stringify({ version }),
     });
+    if (!cancelRes.ok) {
+      console.error(
+        `[canes] square invoice cancel rejected for ${squareInvoiceId}: ${cancelRes.status} ${await cancelRes.text().catch(() => "")}`,
+      );
+      return false;
+    }
+    return true;
   } catch (err) {
     console.error(`[canes] square invoice cancel failed for ${squareInvoiceId}:`, err);
+    return false;
   }
 }
 
@@ -468,6 +483,17 @@ export async function recomputeInvoicePaid(invoiceId: string): Promise<void> {
   const now = new Date().toISOString();
   const patch: Record<string, unknown> = { amount_paid_cents: paid, updated_at: now };
   const fullyPaid = paid >= invoice.total_cents && invoice.total_cents > 0;
+
+  // Overpayment flag: the ledger holds more than the bill (e.g. a card payment
+  // made from a stale link after a review-reward discount lowered the total).
+  // The money IS recorded — this is the human signal that a refund is owed.
+  // Dynamic import mirrors handleSquarePaymentEvent (avoids a static cycle).
+  if (paid > invoice.total_cents && invoice.total_cents > 0) {
+    const { alertOwner } = await import("@/lib/canes/twilio");
+    await alertOwner(
+      `⚠️ Overpaid: ${fmtMoney(paid)} collected on an invoice billed at ${fmtMoney(invoice.total_cents)}. A refund of ${fmtMoney(paid - invoice.total_cents)} may be owed.`,
+    );
+  }
 
   if (fullyPaid && invoice.status !== "paid" && invoice.status !== "void") {
     // Claim the settle: only a non-paid, non-void invoice flips to paid.

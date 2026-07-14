@@ -2,7 +2,7 @@
 
 import { randomBytes } from "crypto";
 import { revalidatePath } from "next/cache";
-import { canesConfigured, canesDb } from "@/lib/canes/supabase";
+import { canesConfigured, canesDb, squareConfigured } from "@/lib/canes/supabase";
 import { getSettings, getLead } from "@/lib/canes/data";
 import { sendCanesSms, fillTemplate, canesTwilioCreds, alertOwner } from "@/lib/canes/twilio";
 import {
@@ -31,6 +31,7 @@ import {
 import { listJobExpenses, addJobExpenseRow, deleteJobExpenseRow } from "@/lib/canes/expenses";
 import { addBusinessExpenseRow, deleteBusinessExpenseRow } from "@/lib/canes/overhead";
 import { ensureContact, getCustomer } from "@/lib/canes/customers";
+import { listInvoiceRewards, rewardConfigFrom, getRewardConfig, type RewardConfig } from "@/lib/canes/rewards";
 import {
   notifyEstimateSent,
   notifyEstimateApproved,
@@ -38,6 +39,7 @@ import {
   notifyInvoiceSent,
   notifyInvoicePaid,
   notifyInvoiceReceipt,
+  notifyRewardClaimed,
 } from "@/lib/canes/notify";
 import { cancelSquareInvoice, createDepositLink, createSquareInvoice } from "@/lib/canes/square";
 import { PRACTICE_PHONE } from "@/lib/canes/tour";
@@ -53,8 +55,11 @@ import {
   type EstimateType,
   type EstimateWithItems,
   type Invoice,
+  type InvoiceReward,
+  type InvoiceRewardKind,
   type Job,
   type JobExpense,
+  type JobInvoiceSummary,
   type JobStatus,
   type LeadStatus,
   type LeadSource,
@@ -296,6 +301,14 @@ export async function saveSettings(patch: {
   deposit_presets?: number[];
   estimate_expiry_days?: number;
   estimate_tax_rate_bps?: number;
+  review_rewards?: {
+    google_cents: number;
+    facebook_cents: number;
+    follow_cents: number;
+    google_url: string;
+    facebook_url: string;
+    instagram_url: string;
+  };
 }): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
   const db = canesDb();
@@ -1407,21 +1420,38 @@ async function logInvoiceEvent(leadId: string | null, detail: string): Promise<v
 }
 
 // Invoices are non-taxable by default (FL residential); tax is a flat rate on
-// the subtotal, snapshotted per invoice. No options/discounts — every line
-// counts. Recompute server-side after any change.
-async function recomputeInvoiceTotals(invoiceId: string): Promise<void> {
+// the subtotal, snapshotted per invoice. Approved review rewards (0012) enter
+// the total HERE and only here — the single formula every consumer (balance,
+// cash settle, Square amount-match, displays) inherits. Recompute server-side
+// after any change. A PAID or VOID invoice's totals are FROZEN — the update is
+// status-guarded so no code path (e.g. a reward approval racing a settle) can
+// rewrite the amount of a closed bill. Returns whether the write landed.
+async function recomputeInvoiceTotals(invoiceId: string): Promise<boolean> {
   const invoice = await getInvoice(invoiceId);
-  if (!invoice) return;
-  const items = await getInvoiceItems(invoiceId);
+  if (!invoice) return false;
+  const [items, rewards] = await Promise.all([
+    getInvoiceItems(invoiceId),
+    listInvoiceRewards(invoiceId),
+  ]);
   const subtotal = items.reduce((sum, it) => sum + it.line_total_cents, 0);
   const tax = Math.round((subtotal * invoice.tax_rate_bps) / 10000);
+  const rewardCents = rewards
+    .filter((r) => r.status === "approved")
+    .reduce((sum, r) => sum + r.amount_cents, 0);
   // Floor at zero — a discount larger than the subtotal must never produce a
   // negative bill (which would let a "payment" of $0 or a mismatch settle it).
-  const total = Math.max(0, subtotal + invoice.adjustment_cents + tax);
-  await canesDb()
+  const total = Math.max(0, subtotal + invoice.adjustment_cents + tax - rewardCents);
+  const { data: updated, error } = await canesDb()
     .from("invoices")
     .update({ subtotal_cents: subtotal, tax_cents: tax, total_cents: total, updated_at: new Date().toISOString() })
-    .eq("id", invoiceId);
+    .eq("id", invoiceId)
+    .in("status", ["draft", "sent", "viewed"])
+    .select("id");
+  if (error) {
+    console.error(`[canes] recomputeInvoiceTotals failed for ${invoiceId}: ${error.message}`);
+    return false;
+  }
+  return (updated ?? []).length > 0;
 }
 
 // Mark a job in progress (the "Start job" tap). Guarded against terminal jobs.
@@ -1541,6 +1571,27 @@ export async function createInvoiceFromJob(
       unit_price_cents: job.total_cents,
       line_total_cents: job.total_cents,
     });
+  }
+
+  // Seed review-reward offers for every configured kind (0012). Seeding at
+  // creation means the quick "text invoice" path in the job sheet carries the
+  // offers automatically; Sebastian unchecks per invoice for a shaky client.
+  // The tour's practice sandbox never seeds — its invoice is fictional.
+  if (job.customer_phone !== PRACTICE_PHONE) {
+    const config = rewardConfigFrom(settings);
+    const offerRows = (Object.keys(config) as InvoiceRewardKind[])
+      .filter((kind) => config[kind].configured)
+      .map((kind) => ({
+        invoice_id: invoiceId,
+        kind,
+        label: config[kind].label,
+        amount_cents: config[kind].cents,
+        status: "offered",
+      }));
+    if (offerRows.length > 0) {
+      const { error: rewardErr } = await db.from("invoice_rewards").insert(offerRows);
+      if (rewardErr) console.error(`[canes] reward seed failed for ${invoiceId}: ${rewardErr.message}`);
+    }
   }
 
   await recomputeInvoiceTotals(invoiceId);
@@ -1748,9 +1799,11 @@ export async function recordCashPayment(invoiceId: string, amountCents: number):
   // underpayment is recorded but leaves the balance open (never closes it).
   const fullyPaid = newPaid >= invoice.total_cents;
 
-  // Optimistic lock on amount_paid_cents (its own version): the claim only wins
-  // if the paid figure is still what we read, so two concurrent taps can't both
-  // insert a ledger row. Settle to paid in the SAME update only when covered.
+  // Optimistic lock on amount_paid_cents (its own version) AND total_cents:
+  // the claim only wins if both figures are still what we read, so two
+  // concurrent taps can't double-insert a ledger row, and a review-reward
+  // approval landing in the read→claim window can't make this settle (or stay
+  // open) against a stale total. Settle in the SAME update only when covered.
   const { data: claimed, error: claimErr } = await db
     .from("invoices")
     .update({
@@ -1761,6 +1814,7 @@ export async function recordCashPayment(invoiceId: string, amountCents: number):
     .eq("id", invoiceId)
     .in("status", ["draft", "sent", "viewed"])
     .eq("amount_paid_cents", priorPaid)
+    .eq("total_cents", invoice.total_cents)
     .select("id");
   if (claimErr) return { ok: false, notice: claimErr.message };
   if (!claimed || claimed.length === 0) {
@@ -1874,6 +1928,345 @@ export async function markInvoiceViewed(token: string): Promise<ActionResult> {
   if (invoice.lead_id) await logInvoiceEvent(invoice.lead_id, `Invoice ${invoice.number} viewed by customer`);
   refresh();
   return { ok: true };
+}
+
+// ── Review rewards (0012) ─────────────────────────────────────────────────────
+//
+// Money-off offers on an invoice: OFFERED rows are toggled by the owner before
+// (or after) sending; the customer CLAIMS on the public token page; the owner
+// verifies the review/follow actually exists and APPROVES — approval is the
+// mutation that changes the bill (via recomputeInvoiceTotals). Statuses only
+// move forward through CAS updates so double-taps and races can't double-apply.
+
+// Demo-safe read for the self-contained client panels (job sheet + invoice rail).
+export async function listInvoiceRewardsAction(invoiceId: string): Promise<InvoiceReward[]> {
+  return listInvoiceRewards(invoiceId);
+}
+
+// Demo-safe config read: which kinds are configured, their labels/amounts/links.
+export async function getRewardConfigAction(): Promise<RewardConfig> {
+  return getRewardConfig();
+}
+
+// Demo-safe, token-free invoice summary so client panels (the job sheet's
+// billing step) can refresh amounts after a reward approval changes the total.
+export async function getInvoiceSummaryAction(invoiceId: string): Promise<JobInvoiceSummary | null> {
+  const inv = await getInvoice(invoiceId);
+  if (!inv) return null;
+  return {
+    id: inv.id,
+    number: inv.number,
+    status: inv.status,
+    total_cents: inv.total_cents,
+    amount_paid_cents: inv.amount_paid_cents,
+  };
+}
+
+// Owner: attach or remove an offer on an invoice. Only OFFERED rows can be
+// removed and only non-terminal invoices can change — a claimed or approved
+// reward is the customer's earned state and never silently disappears.
+export async function setInvoiceRewardOffer(
+  invoiceId: string,
+  kind: InvoiceRewardKind,
+  enabled: boolean,
+): Promise<ActionResult> {
+  if (!canesConfigured()) return DEMO;
+  const invoice = await getInvoice(invoiceId);
+  if (!invoice) return { ok: false, notice: "Invoice not found." };
+  if (invoice.status === "paid" || invoice.status === "void") {
+    return { ok: false, notice: `This invoice is ${invoice.status} — offers can't change.` };
+  }
+  const db = canesDb();
+
+  if (!enabled) {
+    const { error } = await db
+      .from("invoice_rewards")
+      .delete()
+      .eq("invoice_id", invoiceId)
+      .eq("kind", kind)
+      .eq("status", "offered");
+    if (error) return { ok: false, notice: error.message };
+    refresh();
+    return { ok: true };
+  }
+
+  const config = (await getRewardConfig())[kind];
+  if (!config.configured) {
+    return { ok: false, notice: "Add the destination link in Settings → Review rewards first." };
+  }
+  const now = new Date().toISOString();
+  const { error } = await db.from("invoice_rewards").insert({
+    invoice_id: invoiceId,
+    kind,
+    label: config.label,
+    amount_cents: config.cents,
+    status: "offered",
+  });
+  if (error) {
+    // Unique (invoice_id, kind): a row already exists. Revive it only from
+    // DECLINED (an owner change of mind) — claimed/approved rows are immutable
+    // here, and an existing offered row means we're already done.
+    if (error.code === "23505") {
+      await db
+        .from("invoice_rewards")
+        .update({ status: "offered", claimed_at: null, resolved_at: null, resolved_by: null, updated_at: now })
+        .eq("invoice_id", invoiceId)
+        .eq("kind", kind)
+        .eq("status", "declined");
+      refresh();
+      return { ok: true };
+    }
+    return { ok: false, notice: error.message };
+  }
+  refresh();
+  return { ok: true };
+}
+
+// PUBLIC, token-scoped: the customer taps "I did this" on the invoice page.
+// CAS offered → claimed; idempotent (a repeat tap is a friendly no-op). The
+// claim never touches money — it only queues the owner's verification.
+export async function claimInvoiceReward(
+  token: string,
+  kind: InvoiceRewardKind,
+): Promise<ActionResult> {
+  if (!canesConfigured()) return DEMO;
+  const invoice = await getInvoiceByToken(token);
+  if (!invoice) return { ok: false, notice: "Invoice not found." };
+  if (invoice.status !== "sent" && invoice.status !== "viewed") {
+    return { ok: false, notice: "This invoice is no longer open for reward claims." };
+  }
+  const now = new Date().toISOString();
+  const { data: won, error } = await canesDb()
+    .from("invoice_rewards")
+    .update({ status: "claimed", claimed_at: now, updated_at: now })
+    .eq("invoice_id", invoice.id)
+    .eq("kind", kind)
+    .eq("status", "offered")
+    .select("id, label, amount_cents");
+  if (error) return { ok: false, notice: "Something went wrong — please try again." };
+  if (!won || won.length === 0) {
+    // Double tap on an already-claimed/approved offer stays friendly; a kind
+    // that was never offered (or was retracted/declined) must NOT promise a
+    // verification that will never happen.
+    const { data: existing } = await canesDb()
+      .from("invoice_rewards")
+      .select("status")
+      .eq("invoice_id", invoice.id)
+      .eq("kind", kind)
+      .maybeSingle();
+    const st = (existing as { status: string } | null)?.status;
+    if (st === "claimed" || st === "approved") {
+      return { ok: true, notice: "Thanks — this one is already being verified." };
+    }
+    return { ok: false, notice: "This offer is no longer available on this invoice." };
+  }
+  const reward = won[0] as Pick<InvoiceReward, "id" | "label" | "amount_cents">;
+  await logInvoiceEvent(
+    invoice.lead_id,
+    `Reward claimed on ${invoice.number} — ${reward.label} (−${fmtMoney(reward.amount_cents)}) awaiting verification`,
+  );
+  await notifyRewardClaimed(invoice, reward.label, reward.amount_cents);
+  refresh();
+  return { ok: true, notice: "Claim received — we'll verify and apply your discount." };
+}
+
+// Owner: verify + resolve a claim. Approving is THE money mutation: the reward
+// enters recomputeInvoiceTotals and the bill drops. Hardened against the races
+// the adversarial review surfaced:
+//  - the reward CAS wins first, then the invoice is RE-READ and every money
+//    guard re-checked; any violation (settled meanwhile, overshoot from a
+//    concurrent approval) REVERTS the reward and re-derives totals — the
+//    reward row can never stay "approved" without its discount applied;
+//  - a paid/void invoice's totals are frozen inside recomputeInvoiceTotals;
+//  - when the discount exactly covers what's already paid, the invoice SETTLES
+//    (job → paid, reminders canceled) instead of stranding a $0 balance;
+//  - Square ids are cleared ONLY when Square confirmed the cancel — otherwise
+//    they're kept so a late payment on the old link still matches the invoice
+//    and raises the double-payment/overpaid alert instead of vanishing.
+export async function setRewardApproval(
+  rewardId: string,
+  approve: boolean,
+): Promise<ActionResult> {
+  if (!canesConfigured()) return DEMO;
+  const db = canesDb();
+  const { data: rewardRow } = await db
+    .from("invoice_rewards")
+    .select("*")
+    .eq("id", rewardId)
+    .maybeSingle();
+  const reward = rewardRow as InvoiceReward | null;
+  if (!reward) return { ok: false, notice: "Reward not found." };
+  const invoice = await getInvoice(reward.invoice_id);
+  if (!invoice) return { ok: false, notice: "Invoice not found." };
+  if (invoice.status === "void") return { ok: false, notice: "This invoice was voided." };
+  if (invoice.status === "paid") {
+    return { ok: false, notice: "This invoice is already paid — settle any reward offline." };
+  }
+
+  // Money guards (re-checked on fresh data after the CAS below; this early
+  // pass just gives a clean notice without touching the reward row).
+  // total_cents already reflects previously approved rewards, so the projected
+  // new total is a simple subtraction.
+  const guardNotice = (inv: Invoice): string | null => {
+    if (!approve) return null;
+    const projected = Math.max(0, inv.total_cents - reward.amount_cents);
+    if (projected === 0 && inv.amount_paid_cents === 0) {
+      return "This discount would zero out the bill. Use the invoice's adjustment amount instead.";
+    }
+    if (projected < inv.amount_paid_cents) {
+      return `${fmtMoney(inv.amount_paid_cents)} is already paid — this discount would overshoot the balance. Handle it offline.`;
+    }
+    return null;
+  };
+  const early = guardNotice(invoice);
+  if (early) return { ok: false, notice: early };
+
+  const now = new Date().toISOString();
+  const next = approve ? "approved" : "declined";
+  const prevStatus = reward.status; // offered | claimed (only these can win)
+  // CAS from offered|claimed only — approving twice, or resolving a row the
+  // other device just resolved, is a no-op with a clear notice.
+  const { data: won, error } = await db
+    .from("invoice_rewards")
+    .update({ status: next, resolved_at: now, resolved_by: "owner", updated_at: now })
+    .eq("id", rewardId)
+    .in("status", ["offered", "claimed"])
+    .select("id");
+  if (error) return { ok: false, notice: error.message };
+  if (!won || won.length === 0) {
+    return { ok: true, notice: "This reward was already resolved — refresh to see the latest." };
+  }
+
+  if (!approve) {
+    await logInvoiceEvent(invoice.lead_id, `Reward declined on ${invoice.number} — ${reward.label}`);
+    if (invoice.lead_id) await touch(invoice.lead_id);
+    refresh();
+    return { ok: true, notice: "Declined — no discount applied." };
+  }
+
+  // ── Approve path ────────────────────────────────────────────────────────────
+  // Undo the CAS and re-derive totals from rows, so a failed/blocked approval
+  // never leaves an "approved" reward whose discount isn't in the bill.
+  const revert = async (): Promise<void> => {
+    await db
+      .from("invoice_rewards")
+      .update({
+        status: prevStatus,
+        claimed_at: reward.claimed_at,
+        resolved_at: null,
+        resolved_by: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", rewardId)
+      .eq("status", "approved");
+    await recomputeInvoiceTotals(reward.invoice_id);
+  };
+
+  // Re-read AFTER winning the CAS — a cash settle or webhook may have landed
+  // between the guard read and here.
+  const freshPre = await getInvoice(reward.invoice_id);
+  const freshGuard = freshPre
+    ? freshPre.status === "paid" || freshPre.status === "void"
+      ? "This invoice was just settled — handle the reward offline."
+      : guardNotice(freshPre)
+    : "Invoice not found.";
+  if (freshGuard) {
+    await revert();
+    refresh();
+    return { ok: false, notice: freshGuard };
+  }
+
+  const applied = await recomputeInvoiceTotals(reward.invoice_id);
+  if (!applied) {
+    // Frozen (settled in the window) or the write failed — never report
+    // success for a discount that isn't in the total.
+    await revert();
+    refresh();
+    return { ok: false, notice: "Couldn't apply the discount — the invoice may have just been paid. Refresh and try again." };
+  }
+
+  // Post-write verification: recompute derives from rows, so a concurrent
+  // approval of ANOTHER reward can only push the combined discount past the
+  // paid amount here. Repair deterministically by reverting this one.
+  const after = await getInvoice(reward.invoice_id);
+  if (after && after.amount_paid_cents > 0 && after.total_cents < after.amount_paid_cents) {
+    await revert();
+    refresh();
+    return { ok: false, notice: "Another update landed at the same moment — refresh and try again." };
+  }
+
+  // Settle-on-cover: the discount brought the total down to exactly what's
+  // already been paid — the bill is done. Flip it (CAS on paid figure), close
+  // the job, stop reminders. No payment happened, so no receipt email — the
+  // ledger stays truthful and the public page shows Paid in full.
+  let settledByReward = false;
+  if (
+    after &&
+    after.amount_paid_cents > 0 &&
+    after.total_cents === after.amount_paid_cents &&
+    ["draft", "sent", "viewed"].includes(after.status)
+  ) {
+    const settleNow = new Date().toISOString();
+    const { data: settled } = await db
+      .from("invoices")
+      .update({ status: "paid", paid_at: settleNow, updated_at: settleNow })
+      .eq("id", after.id)
+      .in("status", ["draft", "sent", "viewed"])
+      .eq("amount_paid_cents", after.amount_paid_cents)
+      .select("id");
+    if (settled && settled.length > 0) {
+      settledByReward = true;
+      if (after.job_id) {
+        await db.from("jobs").update({ status: "paid" }).eq("id", after.job_id).neq("status", "canceled");
+      }
+      await cancelInvoiceTasks(after.id);
+      // Kill the hosted link (nothing left to pay) but KEEP the Square ids so
+      // a late card payment still matches and raises the double-payment alert.
+      if (after.square_invoice_id) await cancelSquareInvoice(after.square_invoice_id);
+      await logInvoiceEvent(
+        invoice.lead_id,
+        `Invoice ${invoice.number} settled — reward covered the remaining balance`,
+      );
+    }
+  }
+
+  // Square link refresh. Sever our ids ONLY on a CONFIRMED cancel — clearing
+  // them while the hosted link might still take money would orphan that
+  // payment's webhook (no match → never recorded). On failure the ids stay, so
+  // the webhook matches and the amount-mismatch/overpaid alerts do their job.
+  let squareNote = "";
+  if (!settledByReward && invoice.square_invoice_id) {
+    const canceled = await cancelSquareInvoice(invoice.square_invoice_id);
+    if (canceled) {
+      await db
+        .from("invoices")
+        .update({
+          square_invoice_id: null,
+          square_order_id: null,
+          hosted_payment_url: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", invoice.id)
+        .eq("square_invoice_id", invoice.square_invoice_id);
+      squareNote = " The old card link was canceled — resend the invoice for an updated card link.";
+    } else if (squareConfigured()) {
+      squareNote =
+        " Heads-up: the existing card link could not be canceled and still shows the OLD amount — check Square before the customer pays it.";
+    }
+  }
+
+  await logInvoiceEvent(
+    invoice.lead_id,
+    `Reward approved on ${invoice.number} — ${reward.label} (−${fmtMoney(reward.amount_cents)} applied)`,
+  );
+  if (invoice.lead_id) await touch(invoice.lead_id);
+  refresh();
+  return {
+    ok: true,
+    notice: settledByReward
+      ? `Applied −${fmtMoney(reward.amount_cents)} — the balance is covered and the invoice is now paid.`
+      : `Applied −${fmtMoney(reward.amount_cents)}.${squareNote}`,
+  };
 }
 
 // ── Job expenses (Feature B) ──────────────────────────────────────────────────

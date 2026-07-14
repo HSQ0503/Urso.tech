@@ -3,7 +3,9 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, ChevronLeft, ExternalLink } from "lucide-react";
 import { getLead } from "@/lib/canes/data";
 import { getInvoiceWithItems } from "@/lib/canes/invoices";
+import { listInvoiceRewards } from "@/lib/canes/rewards";
 import {
+  approvedRewardCents,
   fmtEt,
   fmtMoney,
   invoiceBalanceCents,
@@ -12,6 +14,7 @@ import {
   PAYMENT_METHOD_LABEL,
 } from "@/lib/canes/types";
 import { InvoiceActions } from "@/app/CanesPressure/components/invoices/invoice-actions";
+import { RewardManager } from "@/app/CanesPressure/components/invoices/reward-controls";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Invoice" };
@@ -26,6 +29,9 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
   const lead = invoice.lead_id ? await getLead(invoice.lead_id) : null;
   const optedOut = Boolean(lead?.opted_out);
   const balance = invoiceBalanceCents(invoice);
+  // Applied review rewards are inside total_cents — the totals block explains
+  // them; the manage/verify panel lives in the rail (RewardManager).
+  const appliedRewardCents = approvedRewardCents(await listInvoiceRewards(invoice.id));
   const payLink = `${APP_URL}/CanesPressure/i/${invoice.public_token}`;
   const isPublic = invoice.status !== "draft" && invoice.status !== "void";
 
@@ -85,6 +91,9 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
             hasSquareUrl={Boolean(invoice.hosted_payment_url)}
             sentAt={invoice.sent_at}
           />
+          <div className="mt-3">
+            <RewardManager invoiceId={invoice.id} invoiceStatus={invoice.status} />
+          </div>
           {isPublic && (
             <div className="cp-card mt-4 p-3">
               <p className="cp-label">Customer link</p>
@@ -147,6 +156,12 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
                 <div className="flex items-center justify-between text-[13px] text-[var(--cp-muted)]">
                   <span>Tax</span>
                   <span className="tabular-nums">{fmtMoney(invoice.tax_cents)}</span>
+                </div>
+              )}
+              {appliedRewardCents > 0 && (
+                <div className="flex items-center justify-between text-[13px] text-[var(--cp-good)]">
+                  <span>Review rewards</span>
+                  <span className="tabular-nums">−{fmtMoney(appliedRewardCents)}</span>
                 </div>
               )}
               <div className="flex items-center justify-between">

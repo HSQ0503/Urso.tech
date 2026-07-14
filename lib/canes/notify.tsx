@@ -8,6 +8,8 @@ import { ColdLeadEmail, EscalationEmail, UnconfirmedEmail } from "@/emails/canes
 import { EstimateApprovedEmail, EstimateDeclinedEmail } from "@/emails/canes/estimate-outcome-emails";
 import { InvoiceEmail } from "@/emails/canes/invoice-email";
 import { InvoiceReceiptEmail, InvoicePaidOwnerEmail } from "@/emails/canes/invoice-outcome-emails";
+import { RewardClaimedEmail } from "@/emails/canes/reward-claimed-email";
+import { listInvoiceRewards } from "@/lib/canes/rewards";
 import { DigestEmail } from "@/emails/canes/digest-email";
 
 // Email alerts for the Canes funnel (cold leads must never sit silently).
@@ -216,6 +218,16 @@ export async function notifyEstimateDeclined(estimate: Estimate): Promise<void> 
 export async function notifyInvoiceSent(invoice: Invoice): Promise<void> {
   if (!invoice.customer_email) return;
   const balance = invoiceBalanceCents(invoice);
+  // Reward offers still open on this bill (0012) — surfaced in the email so
+  // the customer opens the page. Best-effort: never block the send.
+  let rewardLines: string[] = [];
+  try {
+    rewardLines = (await listInvoiceRewards(invoice.id))
+      .filter((r) => r.status === "offered" || r.status === "claimed")
+      .map((r) => `${fmtMoney(r.amount_cents)} off — ${r.label}`);
+  } catch (err) {
+    console.error("[canes/notify] reward lines failed:", err);
+  }
   const html = await render(
     <InvoiceEmail
       number={invoice.number}
@@ -227,6 +239,7 @@ export async function notifyInvoiceSent(invoice: Invoice): Promise<void> {
       balance={balance > 0 ? fmtMoney(balance) : null}
       message={invoice.message_to_customer}
       payUrl={invoicePayUrl(invoice)}
+      rewardLines={rewardLines}
     />,
   );
   const key = process.env.RESEND_API;
@@ -293,6 +306,29 @@ export async function notifyInvoicePaid(invoice: Invoice, method: PaymentMethod)
   );
   await send(
     `💵 Paid (${method}) — ${invoice.customer_name ?? invoice.number} (${fmtMoney(invoice.total_cents)})`,
+    html,
+  );
+}
+
+// Owner alert when a customer claims a review reward (0012) — the "go verify
+// the review exists, then approve or decline" prompt. Nothing is discounted
+// until the owner approves on the invoice page.
+export async function notifyRewardClaimed(
+  invoice: Invoice,
+  rewardLabel: string,
+  amountCents: number,
+): Promise<void> {
+  const html = await render(
+    <RewardClaimedEmail
+      customerName={invoice.customer_name}
+      invoiceNumber={invoice.number}
+      rewardLabel={rewardLabel}
+      amount={fmtMoney(amountCents)}
+      openUrl={invoiceUrl(invoice)}
+    />,
+  );
+  await send(
+    `⭐ Verify review — ${invoice.customer_name ?? invoice.number} claims ${rewardLabel} (−${fmtMoney(amountCents)})`,
     html,
   );
 }

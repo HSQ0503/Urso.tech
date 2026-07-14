@@ -134,6 +134,16 @@ export type CanesSettings = {
   call_whisper_enabled: boolean;
   call_ivr_enabled: boolean; // optional "press 1 / press 2" menu, off by default
   expense_categories: string[];
+  // ── 0012 review rewards: default amounts + destination links. An empty URL
+  //    means that offer is unconfigured and never seeds onto an invoice.
+  review_rewards: {
+    google_cents: number;
+    facebook_cents: number;
+    follow_cents: number;
+    google_url: string;
+    facebook_url: string;
+    instagram_url: string;
+  };
 };
 
 // vendor = the lead guy's raw feed (configured number ONLY — never a heuristic,
@@ -579,3 +589,41 @@ export const INVOICE_STATUS_CLASS: Record<InvoiceStatus, string> = {
 export const PAYMENT_METHOD_LABEL: Record<PaymentMethod, string> = {
   cash: "Cash", card: "Card", other: "Other",
 };
+
+// ── 0012: review rewards (mirrors supabase/canes/0012_invoice_rewards.sql) ────
+//
+// Money-off offers riding on an invoice: the customer claims on the public
+// page, the owner verifies the review/follow actually exists and approves, and
+// the approval subtracts the reward inside recomputeInvoiceTotals. A reward is
+// a reduction of what's BILLED (total_cents), never a payments-ledger row —
+// collected-revenue analytics stay truthful.
+
+export type InvoiceRewardKind = "google_review" | "facebook_review" | "social_follow";
+export type InvoiceRewardStatus = "offered" | "claimed" | "approved" | "declined";
+
+export type InvoiceReward = {
+  id: string; created_at: string; updated_at: string;
+  invoice_id: string;
+  kind: InvoiceRewardKind;
+  label: string;          // snapshot at offer time
+  amount_cents: number;   // snapshot at offer time
+  status: InvoiceRewardStatus;
+  claimed_at: string | null;
+  resolved_at: string | null;
+  resolved_by: string | null;
+};
+
+export const REWARD_KIND_LABEL: Record<InvoiceRewardKind, string> = {
+  google_review: "Google review",
+  facebook_review: "Facebook review",
+  social_follow: "Instagram + Facebook follow",
+};
+
+// Sum of rewards actually applied to the bill (approved only).
+export function approvedRewardCents(
+  rewards: Pick<InvoiceReward, "status" | "amount_cents">[],
+): number {
+  return rewards
+    .filter((r) => r.status === "approved")
+    .reduce((sum, r) => sum + r.amount_cents, 0);
+}

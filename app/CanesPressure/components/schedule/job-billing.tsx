@@ -7,6 +7,7 @@ import {
   addJobExpense,
   completeJob,
   deleteJobExpense,
+  getInvoiceSummaryAction,
   listJobExpensesAction,
   recordCashPayment,
   sendInvoice,
@@ -14,6 +15,7 @@ import {
   type ActionResult,
 } from "@/app/CanesPressure/actions";
 import { fmtMoney, type JobExpense, type JobInvoiceSummary, type JobWithItems } from "@/lib/canes/types";
+import { RewardManager } from "../invoices/reward-controls";
 
 // Categories seeded into the add-expense picker. These MIRROR the
 // settings.expense_categories defaults (lib/canes/data.ts) so the panel stays
@@ -72,14 +74,26 @@ export function JobBilling({
   const [mode, setMode] = useState<"idle" | "choose" | "cash">(
     job.status === "completed" && invoice?.id ? "choose" : "idle",
   );
-  const billedCents = invoice?.total_cents ?? job.total_cents;
+  // Live invoice summary: a reward approval inside this sheet changes the
+  // total, so the billed figure and the cash prefill must track the server —
+  // a stale pre-discount prefill invites verifying more cash than is owed.
+  const [summary, setSummary] = useState<JobInvoiceSummary | null>(invoice);
+  const billedCents = summary?.total_cents ?? job.total_cents;
   const [cashAmount, setCashAmount] = useState<string>((billedCents / 100).toFixed(2));
+  const refreshSummary = (id: string | null = invoiceId) => {
+    if (!id) return;
+    getInvoiceSummaryAction(id).then((s) => {
+      if (!s) return;
+      setSummary(s);
+      setCashAmount((Math.max(0, s.total_cents - s.amount_paid_cents) / 100).toFixed(2));
+    });
+  };
 
   const status = job.status;
 
   // ── Paid: the terminal happy state ──────────────────────────────────────────
   if (status === "paid") {
-    const paid = invoice?.amount_paid_cents ?? billedCents;
+    const paid = summary?.amount_paid_cents ?? billedCents;
     return (
       <div className="cp-divider mt-4 pt-3">
         <div className="flex items-center gap-2">
@@ -108,7 +122,7 @@ export function JobBilling({
         <div className="flex items-center gap-2">
           <Send size={15} strokeWidth={2} className="shrink-0 text-[var(--cp-muted)]" />
           <p className="text-[13px] font-medium">
-            Invoice {invoice?.number ?? ""} sent — awaiting card payment ({fmtMoney(billedCents)}).
+            Invoice {summary?.number ?? ""} sent — awaiting card payment ({fmtMoney(billedCents)}).
           </p>
         </div>
         {mode !== "cash" ? (
@@ -140,6 +154,14 @@ export function JobBilling({
           />
         )}
         <Notice value={feedback} />
+        {/* Claims arrive here too — approve/decline without leaving the sheet. */}
+        {invoiceId && (
+          <RewardManager
+            invoiceId={invoiceId}
+            invoiceStatus={summary?.status ?? "sent"}
+            onChanged={refreshSummary}
+          />
+        )}
         <ExpensesPanel jobId={job.id} revenueCents={billedCents} />
       </div>
     );
@@ -174,6 +196,7 @@ export function JobBilling({
                 if (res.ok && res.invoiceId) {
                   setInvoiceId(res.invoiceId);
                   setMode("choose");
+                  refreshSummary(res.invoiceId);
                 }
                 return res;
               })
@@ -221,6 +244,15 @@ export function JobBilling({
             >
               More options — email, edit amount, resend →
             </Link>
+          )}
+          {/* Review rewards riding on this bill — uncheck for a shaky client
+              BEFORE texting the invoice (0012). */}
+          {invoiceId && (
+            <RewardManager
+              invoiceId={invoiceId}
+              invoiceStatus={summary?.status ?? "draft"}
+              onChanged={refreshSummary}
+            />
           )}
         </div>
       )}

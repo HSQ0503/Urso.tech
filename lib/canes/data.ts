@@ -74,6 +74,18 @@ const DEFAULT_SETTINGS: CanesSettings = {
   call_whisper_enabled: true,
   call_ivr_enabled: false,
   expense_categories: ["Materials", "Gas / travel", "Dump fee", "Subcontractor", "Equipment", "Other"],
+  review_rewards: {
+    google_cents: 1500,
+    facebook_cents: 1500,
+    follow_cents: 1000,
+    // Example links so the DEMO shows the full customer flow. Live-safe: the
+    // 0012 migration seeds the settings row with EMPTY urls, and the DB row
+    // overrides these defaults — live offers stay dormant until Sebastian
+    // saves his real links in Settings.
+    google_url: "https://g.page/r/canes-pressure-washing/review",
+    facebook_url: "https://www.facebook.com/canespressurewashing",
+    instagram_url: "https://www.instagram.com/canespressurewashing",
+  },
 };
 
 export async function getSettings(): Promise<CanesSettings> {
@@ -110,6 +122,7 @@ export async function getSettings(): Promise<CanesSettings> {
     call_whisper_enabled: Boolean(map.call_whisper_enabled ?? DEFAULT_SETTINGS.call_whisper_enabled),
     call_ivr_enabled: Boolean(map.call_ivr_enabled ?? DEFAULT_SETTINGS.call_ivr_enabled),
     expense_categories: map.expense_categories ?? DEFAULT_SETTINGS.expense_categories,
+    review_rewards: { ...DEFAULT_SETTINGS.review_rewards, ...(map.review_rewards ?? {}) },
   };
 }
 

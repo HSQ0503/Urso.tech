@@ -11,6 +11,7 @@ import type {
   EstimateItem,
   Invoice,
   InvoiceItem,
+  InvoiceReward,
   Job,
   JobExpense,
   JobItem,
@@ -1102,5 +1103,27 @@ export const DEMO_PAYMENTS: Payment[] = [
     amount_cents: 62000, currency: "USD", method: "card", source: "square_webhook",
     status: "completed", square_payment_id: "demo-sq-pay-12", external_event_id: null,
     recorded_by: "square", note: null,
+  },
+];
+
+// ── 0012 fixtures: review rewards on inv1 (the SENT invoice) ──────────────────
+// One of each customer-visible state without an `approved` row — inv1's stored
+// total_cents must keep matching its recompute (approved rewards subtract from
+// the total, and fixtures are hand-maintained).
+export const DEMO_INVOICE_REWARDS: InvoiceReward[] = [
+  {
+    id: "rw1", created_at: min(1395), updated_at: min(1395), invoice_id: "inv1",
+    kind: "google_review", label: "Google review", amount_cents: 1500,
+    status: "offered", claimed_at: null, resolved_at: null, resolved_by: null,
+  },
+  {
+    id: "rw2", created_at: min(1395), updated_at: min(240), invoice_id: "inv1",
+    kind: "facebook_review", label: "Facebook review", amount_cents: 1500,
+    status: "claimed", claimed_at: min(240), resolved_at: null, resolved_by: null,
+  },
+  {
+    id: "rw3", created_at: min(1395), updated_at: min(1395), invoice_id: "inv1",
+    kind: "social_follow", label: "Instagram + Facebook follow", amount_cents: 1000,
+    status: "offered", claimed_at: null, resolved_at: null, resolved_by: null,
   },
 ];

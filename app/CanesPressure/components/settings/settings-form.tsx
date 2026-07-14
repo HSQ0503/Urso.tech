@@ -130,6 +130,20 @@ export function SettingsForm({ settings }: { settings: CanesSettings }) {
   const [estimateNotice, setEstimateNotice] = useState<Notice>(null);
   const [estimatePending, startEstimate] = useTransition();
 
+  // Review rewards (0012) — dollar amounts edited as dollars, saved as cents.
+  // Whole dollars display bare ("15"); fractional cents keep their decimals so
+  // a saved $15.50 never silently becomes $16 on the next save.
+  const centsToDollars = (cents: number) =>
+    cents % 100 === 0 ? String(cents / 100) : (cents / 100).toFixed(2);
+  const [rwGoogleAmt, setRwGoogleAmt] = useState(centsToDollars(settings.review_rewards.google_cents));
+  const [rwFacebookAmt, setRwFacebookAmt] = useState(centsToDollars(settings.review_rewards.facebook_cents));
+  const [rwFollowAmt, setRwFollowAmt] = useState(centsToDollars(settings.review_rewards.follow_cents));
+  const [rwGoogleUrl, setRwGoogleUrl] = useState(settings.review_rewards.google_url);
+  const [rwFacebookUrl, setRwFacebookUrl] = useState(settings.review_rewards.facebook_url);
+  const [rwInstagramUrl, setRwInstagramUrl] = useState(settings.review_rewards.instagram_url);
+  const [rewardsNotice, setRewardsNotice] = useState<Notice>(null);
+  const [rewardsPending, startRewards] = useTransition();
+
   const saveTemplates = () =>
     startTemplates(async () => {
       setTemplatesNotice(noticeFrom(await saveSettings({ templates })));
@@ -198,6 +212,35 @@ export function SettingsForm({ settings }: { settings: CanesSettings }) {
             deposit_presets: presets,
             estimate_expiry_days: days,
             estimate_tax_rate_bps: Math.round(taxPct * 100),
+          }),
+        ),
+      );
+    });
+  };
+
+  const saveRewards = () => {
+    const amounts = [Number(rwGoogleAmt), Number(rwFacebookAmt), Number(rwFollowAmt)];
+    if (amounts.some((n) => !Number.isFinite(n) || n <= 0 || n > 500)) {
+      setRewardsNotice({ ok: false, text: "Reward amounts must be between $1 and $500." });
+      return;
+    }
+    const urls = [rwGoogleUrl, rwFacebookUrl, rwInstagramUrl].map((u) => u.trim());
+    if (urls.some((u) => u && !/^https?:\/\//i.test(u))) {
+      setRewardsNotice({ ok: false, text: "Links must start with https:// (copy them from your browser)." });
+      return;
+    }
+    startRewards(async () => {
+      setRewardsNotice(
+        noticeFrom(
+          await saveSettings({
+            review_rewards: {
+              google_cents: Math.round(amounts[0] * 100),
+              facebook_cents: Math.round(amounts[1] * 100),
+              follow_cents: Math.round(amounts[2] * 100),
+              google_url: urls[0],
+              facebook_url: urls[1],
+              instagram_url: urls[2],
+            },
           }),
         ),
       );
@@ -420,6 +463,106 @@ export function SettingsForm({ settings }: { settings: CanesSettings }) {
               className="cp-input"
               value={taxRatePct}
               onChange={(e) => setTaxRatePct(e.target.value)}
+            />
+          </div>
+        </div>
+      </SectionCard>
+
+      <SectionCard
+        title="Review rewards"
+        description="Money-off offers that ride on invoices: the customer claims after leaving a review or follow, you verify it exists, and approving takes the amount off their bill. An offer without its link stays off. You choose which offers go on each invoice before sending it."
+        onSave={saveRewards}
+        pending={rewardsPending}
+        notice={rewardsNotice}
+      >
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div>
+            <label className="cp-label" htmlFor="rw-google-amt">
+              Google review ($ off)
+            </label>
+            <input
+              id="rw-google-amt"
+              type="number"
+              min={1}
+              max={500}
+              step="0.01"
+              className="cp-input tabular-nums"
+              value={rwGoogleAmt}
+              onChange={(e) => setRwGoogleAmt(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="cp-label" htmlFor="rw-facebook-amt">
+              Facebook review ($ off)
+            </label>
+            <input
+              id="rw-facebook-amt"
+              type="number"
+              min={1}
+              max={500}
+              step="0.01"
+              className="cp-input tabular-nums"
+              value={rwFacebookAmt}
+              onChange={(e) => setRwFacebookAmt(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="cp-label" htmlFor="rw-follow-amt">
+              Insta + FB follow ($ off)
+            </label>
+            <input
+              id="rw-follow-amt"
+              type="number"
+              min={1}
+              max={500}
+              step="0.01"
+              className="cp-input tabular-nums"
+              value={rwFollowAmt}
+              onChange={(e) => setRwFollowAmt(e.target.value)}
+            />
+          </div>
+        </div>
+        <div>
+          <label className="cp-label" htmlFor="rw-google-url">
+            Google review link
+          </label>
+          <input
+            id="rw-google-url"
+            type="url"
+            className="cp-input"
+            placeholder="https://g.page/r/…/review"
+            value={rwGoogleUrl}
+            onChange={(e) => setRwGoogleUrl(e.target.value)}
+          />
+          <p className="mt-1 text-[12px] text-[var(--cp-faint)]">
+            From your Google Business Profile: &ldquo;Ask for reviews&rdquo; gives you this link.
+          </p>
+        </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div>
+            <label className="cp-label" htmlFor="rw-facebook-url">
+              Facebook page link
+            </label>
+            <input
+              id="rw-facebook-url"
+              type="url"
+              className="cp-input"
+              placeholder="https://facebook.com/canespressurewashing"
+              value={rwFacebookUrl}
+              onChange={(e) => setRwFacebookUrl(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="cp-label" htmlFor="rw-instagram-url">
+              Instagram profile link
+            </label>
+            <input
+              id="rw-instagram-url"
+              type="url"
+              className="cp-input"
+              placeholder="https://instagram.com/canespressurewashing"
+              value={rwInstagramUrl}
+              onChange={(e) => setRwInstagramUrl(e.target.value)}
             />
           </div>
         </div>

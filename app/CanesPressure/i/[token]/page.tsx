@@ -1,8 +1,13 @@
 import { notFound } from "next/navigation";
 import { ChevronDown, CreditCard, ShieldCheck } from "lucide-react";
 import { getInvoiceByToken, getInvoiceItems, getInvoicePayments } from "@/lib/canes/invoices";
+import { listInvoiceRewards, getRewardConfig } from "@/lib/canes/rewards";
 import { markInvoiceViewed } from "@/app/CanesPressure/actions";
-import { fmtMoney, invoiceBalanceCents } from "@/lib/canes/types";
+import { approvedRewardCents, fmtMoney, invoiceBalanceCents } from "@/lib/canes/types";
+import {
+  RewardOffers,
+  type PublicRewardOffer,
+} from "@/app/CanesPressure/components/invoices/reward-offers-public";
 
 // PUBLIC hosted invoice page. Sits directly under /CanesPressure (a sibling of
 // login/, e/ and text-us/), OUTSIDE the (app) gate, so a customer with just the
@@ -38,9 +43,11 @@ export default async function PublicInvoicePage({
   // Unknown token, or a draft/void invoice, is a 404 — those are not public.
   if (!invoice || invoice.status === "draft" || invoice.status === "void") notFound();
 
-  const [items, payments] = await Promise.all([
+  const [items, payments, rewards, rewardConfig] = await Promise.all([
     getInvoiceItems(invoice.id),
     getInvoicePayments(invoice.id),
+    listInvoiceRewards(invoice.id),
+    getRewardConfig(),
   ]);
 
   // First open of a sent invoice flips it to viewed. Fire-and-forget so the page
@@ -49,6 +56,23 @@ export default async function PublicInvoicePage({
 
   const balance = invoiceBalanceCents(invoice);
   const isPaid = invoice.status === "paid" || balance <= 0;
+
+  // Review rewards (0012): approved money is already inside total_cents — the
+  // totals card explains it with an info line. Open/claimed offers render as
+  // the claim island; declined rows never reach the customer, a paid invoice
+  // drops unclaimed offers (too late to discount), and an OFFERED reward whose
+  // destination links were since removed from Settings is hidden too — a claim
+  // button with nowhere to send the customer is a dead end.
+  const appliedRewardCents = approvedRewardCents(rewards);
+  const rewardLinks = {
+    google_review: rewardConfig.google_review.urls,
+    facebook_review: rewardConfig.facebook_review.urls,
+    social_follow: rewardConfig.social_follow.urls,
+  };
+  const rewardOffers: PublicRewardOffer[] = rewards
+    .filter((r) => r.status === "approved" || (!isPaid && (r.status === "offered" || r.status === "claimed")))
+    .filter((r) => r.status !== "offered" || rewardLinks[r.kind].length > 0)
+    .map(({ id, kind, label, amount_cents, status }) => ({ id, kind, label, amount_cents, status }));
 
   return (
     <Shell>
@@ -125,6 +149,12 @@ export default async function PublicInvoicePage({
               <span className="tabular-nums">{fmtMoney(invoice.tax_cents)}</span>
             </div>
           )}
+          {appliedRewardCents > 0 && (
+            <div className="flex items-center justify-between text-[13.5px] text-[var(--cp-good)]">
+              <span>Review rewards</span>
+              <span className="tabular-nums">−{fmtMoney(appliedRewardCents)}</span>
+            </div>
+          )}
           <div className="flex items-center justify-between">
             <span className="text-[15px] font-semibold">Total</span>
             <span className="cp-display text-[22px] tabular-nums">{fmtMoney(invoice.total_cents)}</span>
@@ -143,6 +173,10 @@ export default async function PublicInvoicePage({
           )}
         </div>
       </div>
+
+      {/* Review rewards — claim money off BEFORE paying (0012), so the copy's
+          "claim before you pay" matches the reading order. */}
+      <RewardOffers token={token} offers={rewardOffers} links={rewardLinks} />
 
       {/* Pay / paid state */}
       <div className="mt-4">

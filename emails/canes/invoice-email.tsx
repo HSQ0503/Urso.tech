@@ -17,6 +17,9 @@ export type InvoiceEmailProps = {
   balance?: string | null; // pre-formatted money still owed, or null if paid in full
   message?: string | null;
   payUrl: string; // /CanesPressure/i/<token>
+  // 0012 review rewards riding on this invoice, pre-formatted one per line
+  // ("$15.00 off — Google review"). The claim buttons live on the invoice page.
+  rewardLines?: string[];
 };
 
 export function InvoiceEmail({
@@ -29,6 +32,7 @@ export function InvoiceEmail({
   balance,
   message,
   payUrl,
+  rewardLines,
 }: InvoiceEmailProps) {
   const rows: DetailRow[] = [
     { label: "Invoice", value: number, strong: true },
@@ -56,6 +60,23 @@ export function InvoiceEmail({
       <Divider />
 
       <DetailTable rows={rows} />
+
+      {rewardLines && rewardLines.length > 0 && (
+        <Section className="px-7 pt-4">
+          <Text className="m-0 text-[13px] font-semibold leading-[1.5] text-[#131B23]">
+            Money off available on this invoice:
+          </Text>
+          {rewardLines.map((line) => (
+            <Text key={line} className="m-0 pt-1 text-[13px] leading-[1.5] text-[#131B23]">
+              &bull; {line}
+            </Text>
+          ))}
+          <Text className="m-0 pt-1 text-[12px] leading-[1.5] text-[#5B6673]">
+            Open the invoice to claim — discounts are verified by our team and applied to your
+            balance before you pay.
+          </Text>
+        </Section>
+      )}
 
       <CtaButton href={payUrl} label="View & pay" tone="brand" />
 
