@@ -370,35 +370,40 @@ export async function handleSquarePaymentEvent(
 
   const alreadyPaid = invoice.status === "paid";
 
-  // Idempotent ledger insert (partial-unique on square_payment_id). Key on the
-  // real Square payment id when present, else the unique event id — so two
-  // DISTINCT payments never collapse and a redelivery never duplicates.
+  // Idempotent ledger insert. Key on the real Square payment id when present,
+  // else the unique event id — two DISTINCT payments never collapse and a
+  // redelivery never duplicates. NOTE: this must be check-then-insert, NOT an
+  // upsert — the unique index on square_payment_id is PARTIAL (where not null)
+  // and Postgres refuses a bare-column ON CONFLICT against a partial index
+  // (42P10; found via the first live settle, 2026-07-18). The event-level
+  // dedupe above already serializes deliveries; the index stays as the hard
+  // backstop — a raced duplicate fails the insert and lands in insErr.
   const paymentId = event.squarePaymentId ?? `evt:${event.eventId}`;
-  const { data: inserted, error: insErr } = await db
+  const { data: existingPayment } = await db
     .from("payments")
-    .upsert(
-      {
-        invoice_id: invoice.id,
-        job_id: invoice.job_id,
-        amount_cents: amount, // the REAL paid amount — never the fabricated total
-        currency: event.currency ?? "USD",
-        method: "card",
-        source: "square_webhook",
-        status: "completed",
-        square_payment_id: paymentId,
-        external_event_id: event.eventId,
-        recorded_by: "square",
-      },
-      { onConflict: "square_payment_id", ignoreDuplicates: true },
-    )
-    .select("id");
-  if (insErr) {
-    console.error(`[canes] square payment insert failed for invoice ${invoice.id}: ${insErr.message}`);
-    return { handled: "unmatched", invoiceId: invoice.id };
-  }
-  if (!inserted || inserted.length === 0) {
+    .select("id")
+    .eq("square_payment_id", paymentId)
+    .maybeSingle();
+  if (existingPayment) {
     await markEventProcessed(event.eventId);
     return { handled: "duplicate", invoiceId: invoice.id };
+  }
+  const { error: insErr } = await db.from("payments").insert({
+    invoice_id: invoice.id,
+    job_id: invoice.job_id,
+    amount_cents: amount, // the REAL paid amount — never the fabricated total
+    currency: event.currency ?? "USD",
+    method: "card",
+    source: "square_webhook",
+    status: "completed",
+    square_payment_id: paymentId,
+    external_event_id: event.eventId,
+    recorded_by: "square",
+  });
+  if (insErr) {
+    // Left unprocessed on purpose — the event stays retryable.
+    console.error(`[canes] square payment insert failed for invoice ${invoice.id}: ${insErr.message}`);
+    return { handled: "unmatched", invoiceId: invoice.id };
   }
 
   // recomputeInvoicePaid re-reads the ledger and settles ONLY when the summed
