@@ -196,8 +196,8 @@ export default function RequestForm() {
         />
         <span>
           I agree to receive text messages from Canes Pressure Washing about my request, including
-          replies to my inquiry, quote follow-ups, appointment confirmations and reminders, and
-          occasional offers. Consent is not a condition of purchase. Message frequency varies.
+          replies to my inquiry, quote follow-ups, and appointment confirmations and reminders.
+          Consent is not a condition of purchase. Message frequency varies.
           Message and data rates may apply. Reply HELP for help or STOP to opt out. See our{" "}
           <a
             className="font-semibold text-[var(--cp-brand-deep)] hover:underline"
