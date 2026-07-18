@@ -124,7 +124,12 @@ export function parseSquareEvent(payload: Record<string, unknown>): NormalizedPa
     let completed = 0;
     let currency: string | null = null;
     for (const r of requests) {
-      const m = (r.total_completed_money ?? {}) as Record<string, unknown>;
+      // Square's live webhooks deliver `total_completed_amount_money` (verified
+      // against a real invoice.payment_made payload 2026-07-18); some docs show
+      // `total_completed_money`. Read both — first present name wins.
+      const m = (r.total_completed_amount_money ??
+        r.total_completed_money ??
+        {}) as Record<string, unknown>;
       if (typeof m.amount === "number") completed += m.amount;
       if (typeof m.currency === "string") currency = m.currency;
     }
@@ -316,16 +321,19 @@ export type ReconcileOutcome = {
 
 export async function handleSquarePaymentEvent(
   event: NormalizedPaymentEvent,
+  rawPayload?: Record<string, unknown>,
 ): Promise<ReconcileOutcome> {
   if (!canesConfigured()) return { handled: "unconfigured" };
   const db = canesDb();
   const { alertOwner } = await import("@/lib/canes/twilio");
 
-  // Dedupe the whole event first (Square delivers at-least-once).
+  // Dedupe the whole event first (Square delivers at-least-once). Store the
+  // REAL payload — an empty {} here made the 2026-07-18 field-name bug
+  // undebuggable from the database.
   const { data: seen } = await db
     .from("square_webhook_events")
     .upsert(
-      { event_id: event.eventId, event_type: event.eventType, processed: false, payload: {} },
+      { event_id: event.eventId, event_type: event.eventType, processed: false, payload: rawPayload ?? {} },
       { onConflict: "event_id", ignoreDuplicates: true },
     )
     .select("event_id");

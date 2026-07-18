@@ -39,7 +39,7 @@ export async function POST(req: Request): Promise<Response> {
     const event = parseSquareEvent(payload);
     if (!event) return NextResponse.json({ ok: true, skipped: "unparseable" });
 
-    const outcome = await handleSquarePaymentEvent(event);
+    const outcome = await handleSquarePaymentEvent(event, payload);
 
     // On a first confirmed, amount-matched card payment, fire the notifications
     // (best-effort). Duplicates/mismatches/ignored events don't notify.
