@@ -8,6 +8,7 @@ import { signOutAdmin } from "@/app/login/actions";
 import { CanesNav } from "../components/nav";
 import { CanesTour } from "../components/tour";
 import { getTechnicianActor } from "@/lib/canes/crew-auth";
+import { ThemeToggle } from "@/components/dashboard/theme-toggle";
 
 // The gated application shell: dark Urso chrome sidebar on desktop, five
 // bottom tabs + a More sheet on mobile.
@@ -32,9 +33,14 @@ export default async function CanesAppLayout({ children }: { children: React.Rea
   }
 
   return (
+    // theme-scope: the app follows the site-wide dark/light toggle exactly like
+    // /dashboard — canes.css re-maps every cp token onto the --color-* tokens
+    // inside this scope. The wrapper paints the field full-width so the >1440px
+    // gutters follow the theme too.
+    <div className="theme-scope min-h-screen bg-[var(--cp-bg)] text-[var(--cp-ink)]">
     <div className="mx-auto flex min-h-screen w-full max-w-[1440px]">
-      {/* Sidebar (desktop) — near-black chrome, the Urso brand field */}
-      <aside className="cp-sidebar-rail sticky top-0 hidden h-screen w-60 shrink-0 flex-col gap-1 px-3 py-5 text-[var(--cp-chrome-ink)] md:flex">
+      {/* Sidebar (desktop) — the dashboard's theme-aware sidebar material */}
+      <aside className="cp-sidebar-rail sticky top-0 hidden h-screen w-60 shrink-0 flex-col gap-1 overflow-y-auto px-3 py-5 text-[var(--cp-chrome-ink)] md:flex">
         {/* Wordmark, not an icon-in-a-box — real trade software leads with the name */}
         <Link href="/CanesPressure" className="mb-6 block px-2.5 pt-1">
           <span className="cp-display block text-[19px] leading-tight">
@@ -68,6 +74,9 @@ export default async function CanesAppLayout({ children }: { children: React.Rea
               </form>
             </div>
           )}
+          <div className="mt-3">
+            <ThemeToggle />
+          </div>
           <p className="cp-mono mt-3 px-1" style={{ color: "var(--cp-chrome-faint)" }}>
             Powered by Urso
           </p>
@@ -89,6 +98,7 @@ export default async function CanesAppLayout({ children }: { children: React.Rea
       <Suspense fallback={null}>
         <CanesTour />
       </Suspense>
+    </div>
     </div>
   );
 }

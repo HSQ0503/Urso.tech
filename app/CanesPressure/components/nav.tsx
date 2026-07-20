@@ -4,6 +4,7 @@ import { useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { ThemeToggle } from "@/components/dashboard/theme-toggle";
 import {
   LayoutDashboard,
   MessageSquare,
@@ -93,11 +94,12 @@ export function CanesNav({ mobile = false }: { mobile?: boolean }) {
 
         {/* Portal: the tab bar's backdrop-blur creates a containing block, so
             fixed-position children would anchor to the bar instead of the
-            viewport (no dim, dead tap-outside). The .canes wrapper keeps the
-            cp-* custom properties alive outside the app tree. */}
+            viewport (no dim, dead tap-outside). The .canes theme-scope wrapper
+            keeps the cp-* custom properties — on the app's live theme — alive
+            outside the app tree. */}
         {moreOpen &&
           createPortal(
-            <div className="canes">
+            <div className="canes theme-scope">
               <button
                 type="button"
                 aria-label="Close menu"
@@ -118,6 +120,11 @@ export function CanesNav({ mobile = false }: { mobile?: boolean }) {
                   </button>
                 </div>
                 <div className="px-3 pb-3">
+                  {/* Mobile home for the dashboard-style theme switch — the
+                      desktop sidebar carries it below the account block. */}
+                  <div className="mb-3">
+                    <ThemeToggle />
+                  </div>
                   <div className="cp-list">
                     {MOBILE_MORE.map(({ href, label, icon: Icon, exact }) => {
                       const active = isActive(href, exact);

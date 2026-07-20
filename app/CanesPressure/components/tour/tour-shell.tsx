@@ -293,7 +293,9 @@ export function TourShell({ autoOpen, chapters }: { autoOpen: boolean; chapters:
   const showRing = view === "open" && !confirmEnd && box !== null && box.key === stepKey;
 
   return createPortal(
-    <div className="canes">
+    // theme-scope keeps the portal on the app's live theme (it renders outside
+    // the shell's scope; canes.css matches .canes.theme-scope on one node).
+    <div className="canes theme-scope">
       {showRing && box && (
         <div
           className={s.ring}

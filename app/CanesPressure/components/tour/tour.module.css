@@ -262,8 +262,8 @@
   color: #fff;
 }
 .btnPrimary:hover {
-  background: var(--cp-brand-deep);
-  border-color: var(--cp-brand-deep);
+  background: var(--cp-brand-down);
+  border-color: var(--cp-brand-down);
 }
 
 .progress {

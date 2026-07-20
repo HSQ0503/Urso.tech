@@ -1,11 +1,19 @@
-/* Canes Pressure Washing — operations design system, v3.
+/* Canes Pressure Washing — operations design system, v4.
    Layout grounded in working field-service software (Jobber-class web apps,
    OpenPhone's inbox); the voice is Urso's brand system: Fraunces serif for
    display type, IBM Plex Mono for micro-labels and status chips, IBM Plex Sans
-   for everything else, near-black chrome, and Urso orange #fe5100 as the one
-   accent. Raw orange is for accents (toplines, dots, focus, timers); solid
-   fills use the deepened steps so white button text keeps contrast.
+   for everything else, and Urso orange #fe5100 as the one accent. Raw orange is
+   for accents and text moments (as /dashboard renders it); solid fills use the
+   deepened steps so white button text keeps contrast.
    No gradients, no washes, nothing blinks.
+
+   v4 aligns the palette with the Woof Gang dashboard (globals.css): the base
+   .canes values below ARE that dashboard's light tokens, so public pages
+   (request, e/, i/, login) sit on the same Urso field, fixed light. The gated
+   app adds .theme-scope, which re-maps every cp token onto the live --color-*
+   tokens — dark by default, flipped by the site-wide data-theme toggle. Blues,
+   teals and slates are gone: status color is carried by the orange family,
+   the green "good" token, one functional danger red, and neutral ink washes.
    Everything scopes under .canes so the rest of urso.tech is untouched.
 
    Everything lives in @layer components so Tailwind v4 utilities (which live
@@ -15,30 +23,35 @@
 @layer components {
 
 .canes {
-  /* palette — a warm "bone" ground in the Urso paper family (was a cool blue
-     gray); cards stay crisp white so the hairline structure still reads. */
-  --cp-bg: #ecebe6;
+  /* palette — the Woof Gang dashboard's light tokens (globals.css). Cards stay
+     crisp white so the hairline structure still reads. */
+  --cp-bg: #eceef1;
   --cp-surface: #ffffff;
   --cp-ink: #14171c;
-  --cp-muted: #5a5f66;
-  --cp-faint: #84888f;
-  --cp-line: #e6e3dc;
-  --cp-line-strong: #d3cfc4;
-  --cp-hover: #f2f0ea;
+  --cp-muted: rgba(20, 23, 28, 0.62);
+  --cp-faint: rgba(20, 23, 28, 0.42);
+  --cp-line: rgba(15, 18, 22, 0.1);
+  --cp-line-strong: rgba(15, 18, 22, 0.17);
+  --cp-hover: rgba(15, 18, 22, 0.045);
   --cp-brand: #fe5100;
   --cp-brand-fill: #e84900;
+  /* darken step for solid-fill hover/press only — never text */
+  --cp-brand-down: #c23e00;
+  /* orange as text/icon color; the app scope re-maps it to raw brand orange */
   --cp-brand-deep: #c23e00;
-  --cp-brand-soft: #ffefe7;
-  --cp-hot: #c23e00;
-  --cp-hot-bg: #ffefe7;
-  --cp-cold: #0b6aa2;
-  --cp-cold-bg: #e7f2fa;
-  --cp-good: #0f7b48;
-  --cp-good-bg: #e5f5ec;
-  --cp-warn: #c23e00;
-  --cp-warn-bg: #ffefe7;
+  --cp-brand-soft: rgba(254, 81, 0, 0.1);
+  --cp-hot: var(--cp-brand);
+  --cp-hot-bg: rgba(254, 81, 0, 0.1);
+  --cp-cold: var(--cp-muted);
+  --cp-cold-bg: color-mix(in srgb, var(--cp-ink) 6%, transparent);
+  --cp-good: #11935a;
+  --cp-good-bg: color-mix(in srgb, var(--cp-good) 12%, transparent);
+  --cp-warn: var(--cp-brand);
+  --cp-warn-bg: rgba(254, 81, 0, 0.1);
   --cp-danger: #b42318;
-  --cp-danger-bg: #fdecea;
+  --cp-danger-bg: color-mix(in srgb, var(--cp-danger) 10%, transparent);
+  /* neutral shadow tint — deepens under the dark app scope */
+  --cp-shadow: rgba(15, 18, 22, 0.08);
 
   /* dark chrome — the sidebar carries Urso's true black field (was #0d1013),
      lit by the brand's signature orange bloom at the top-left corner. */
@@ -65,6 +78,75 @@
   font-family: var(--cp-font-body);
   font-feature-settings: "tnum" 1;
   -webkit-font-smoothing: antialiased;
+  color-scheme: light;
+}
+
+/* ── Woof Gang alignment: the gated app is theme-aware ───────────────────────
+   The (app) shell carries .theme-scope, re-mapping every cp token onto the
+   dashboard's semantic --color-* tokens from globals.css — dark by default,
+   flipped as one by :root[data-theme="light"], exactly like /dashboard.
+   Portals that escape the shell (More sheet, tour) put both classes on one
+   node, hence the :is() covering descendant and self. The crew portal keeps
+   the fixed dark chrome tokens above. */
+:is(.canes .theme-scope, .canes.theme-scope) {
+  color-scheme: dark;
+  --cp-bg: var(--color-bg);
+  --cp-surface: var(--color-surface);
+  --cp-ink: var(--color-ink);
+  --cp-muted: var(--color-ink-dim);
+  --cp-faint: var(--color-ink-dimmer);
+  --cp-line: var(--color-edge);
+  --cp-line-strong: var(--color-edge-strong);
+  --cp-hover: var(--color-raise);
+  --cp-brand-deep: var(--color-orange);
+  --cp-brand-soft: var(--color-orange-soft);
+  --cp-good: var(--color-good);
+  --cp-danger: #f26555;
+  --cp-shadow: rgba(0, 0, 0, 0.55);
+  /* Derived tokens must be re-declared here: a var() inside a custom property
+     resolves where the property is DECLARED, so the base .canes versions bake
+     in the light values and would inherit down unchanged. Declared on this
+     element they re-resolve against the re-mapped tokens above — and against
+     the light/print overrides below, since those hit this same element. */
+  --cp-hot: var(--cp-brand);
+  --cp-cold: var(--cp-muted);
+  --cp-cold-bg: color-mix(in srgb, var(--cp-ink) 8%, transparent);
+  --cp-good-bg: color-mix(in srgb, var(--cp-good) 13%, transparent);
+  --cp-danger-bg: color-mix(in srgb, var(--cp-danger) 12%, transparent);
+  /* sidebar + chrome follow the dashboard's theme-aware materials */
+  --cp-chrome: var(--color-sidebar);
+  --cp-sidebar-bg: var(--sidebar-bg);
+  --cp-chrome-raise: var(--color-raise);
+  --cp-chrome-line: var(--color-edge);
+  --cp-chrome-ink: var(--color-ink);
+  --cp-chrome-muted: var(--color-ink-dim);
+  --cp-chrome-faint: var(--color-ink-dimmer);
+}
+:root[data-theme="light"] :is(.canes .theme-scope, .canes.theme-scope) {
+  color-scheme: light;
+  --cp-danger: #b42318;
+  --cp-shadow: rgba(15, 18, 22, 0.08);
+}
+
+/* Run sheets and invoices print from inside the themed app — force the light
+   literals on paper regardless of the toggle. */
+@media print {
+  :is(.canes .theme-scope, .canes.theme-scope) {
+    color-scheme: light;
+    --cp-bg: #ffffff;
+    --cp-surface: #ffffff;
+    --cp-ink: #14171c;
+    --cp-muted: rgba(20, 23, 28, 0.62);
+    --cp-faint: rgba(20, 23, 28, 0.42);
+    --cp-line: rgba(15, 18, 22, 0.1);
+    --cp-line-strong: rgba(15, 18, 22, 0.17);
+    --cp-hover: rgba(15, 18, 22, 0.045);
+    --cp-brand-deep: #c23e00;
+    --cp-brand-soft: rgba(254, 81, 0, 0.1);
+    --cp-good: #11935a;
+    --cp-danger: #b42318;
+    --cp-shadow: rgba(15, 18, 22, 0.08);
+  }
 }
 
 .canes ::selection { background: var(--cp-brand-soft); }
@@ -107,15 +189,15 @@
 .cp-card-hover { transition: border-color 150ms var(--cp-ease), box-shadow 150ms var(--cp-ease); }
 .cp-card-hover:hover {
   border-color: var(--cp-line-strong);
-  box-shadow: 0 1px 3px rgba(12, 43, 63, 0.06);
+  box-shadow: 0 1px 3px var(--cp-shadow);
 }
 
 /* per-stage accent on the workflow strip only (Jobber's home pattern) —
    a solid 3px top border. Not for decoration anywhere else. */
 .cp-topline { display: block; height: 3px; }
-.cp-topline-slate { background: #3e4a56; }
+.cp-topline-slate { background: color-mix(in srgb, var(--cp-ink) 55%, transparent); }
 .cp-topline-brand { background: var(--cp-brand); }
-.cp-topline-cold { background: var(--cp-cold); }
+.cp-topline-cold { background: color-mix(in srgb, var(--cp-ink) 28%, transparent); }
 .cp-topline-good { background: var(--cp-good); }
 
 /* legacy rails — kept for compatibility; new work signals urgency with a red
@@ -160,7 +242,7 @@
   border-color: var(--cp-brand-fill);
   color: #fff;
 }
-.cp-btn-primary:hover { background: var(--cp-brand-deep); border-color: var(--cp-brand-deep); }
+.cp-btn-primary:hover { background: var(--cp-brand-down); border-color: var(--cp-brand-down); }
 .cp-btn-danger { color: var(--cp-danger); }
 .cp-btn-ghost { border-color: transparent; background: transparent; }
 .cp-btn-ghost:hover { background: var(--cp-hover); }
@@ -228,7 +310,7 @@
 .cp-seg-btn:hover { color: var(--cp-ink); }
 .cp-seg-btn[data-active="true"] {
   background: var(--cp-ink);
-  color: #fff;
+  color: var(--cp-bg);
 }
 
 /* chips + badges — Plex Mono uppercase, square-ish (Jobber), never pills */
@@ -249,13 +331,13 @@
 .cp-badge-hot { background: var(--cp-hot-bg); color: var(--cp-hot); }
 .cp-badge-cold { background: var(--cp-cold-bg); color: var(--cp-cold); }
 
-.cp-status-new { background: #eceff2; color: var(--cp-muted); }
-.cp-status-contacted { background: #e7f0fb; color: #1758b8; }
+.cp-status-new { background: color-mix(in srgb, var(--cp-ink) 7%, transparent); color: var(--cp-muted); }
+.cp-status-contacted { background: color-mix(in srgb, var(--cp-ink) 14%, transparent); color: var(--cp-ink); }
 .cp-status-appt { background: var(--cp-warn-bg); color: var(--cp-warn); }
 .cp-status-confirmed { background: var(--cp-good-bg); color: var(--cp-good); }
-.cp-status-estimated { background: #e3f2f6; color: #0b6478; }
-.cp-status-won { background: var(--cp-good); color: #fff; }
-.cp-status-lost { background: #eceff2; color: var(--cp-faint); text-decoration: line-through; }
+.cp-status-estimated { background: color-mix(in srgb, var(--cp-brand) 6%, transparent); color: var(--cp-brand); }
+.cp-status-won { background: var(--cp-good); color: var(--cp-bg); }
+.cp-status-lost { background: color-mix(in srgb, var(--cp-ink) 7%, transparent); color: var(--cp-faint); text-decoration: line-through; }
 
 /* avatars — initials on neutral gray; the one allowed circle */
 .cp-avatar {
@@ -265,7 +347,7 @@
   width: 34px;
   height: 34px;
   border-radius: 9999px;
-  background: #e8ebee;
+  background: color-mix(in srgb, var(--cp-ink) 9%, transparent);
   color: var(--cp-muted);
   font-size: 12.5px;
   font-weight: 600;
@@ -312,6 +394,11 @@
 .cp-sidebar-rail {
   background: var(--cp-sidebar-bg);
 }
+/* Inside the themed app the sidebar is a light/dark material like /dashboard's,
+   so it needs the same hairline separating it from the content field. */
+.canes .theme-scope .cp-sidebar-rail {
+  border-right: 1px solid var(--cp-line);
+}
 .cp-sidebar-rail::before {
   content: "";
   position: absolute;
@@ -335,12 +422,14 @@
   color: var(--cp-chrome-muted);
   transition: background 150ms var(--cp-ease), color 150ms var(--cp-ease);
 }
-.cp-nav-link:hover { background: rgba(255, 255, 255, 0.045); color: var(--cp-chrome-ink); }
+.cp-nav-link:hover { background: var(--cp-chrome-raise); color: var(--cp-chrome-ink); }
 .cp-nav-link[data-active="true"] {
-  background: rgba(255, 255, 255, 0.085);
+  background: var(--cp-brand-soft);
   color: var(--cp-chrome-ink);
   font-weight: 600;
 }
+/* the icon takes the accent on the active row — /dashboard's nav pattern */
+.cp-nav-link[data-active="true"] > svg { color: var(--cp-brand); }
 
 /* quiet mono section headers in the dark sidebar */
 .cp-nav-section {
@@ -355,11 +444,10 @@
 .cp-nav-link[data-active="true"]::before {
   content: "";
   position: absolute;
-  left: -10px;
+  left: 0;
   top: 7px;
   bottom: 7px;
-  width: 2px;
-  border-radius: 2px;
+  width: 3px;
   background: var(--cp-brand);
 }
 
@@ -397,7 +485,7 @@
   box-shadow: 0 6px 16px rgba(20, 23, 28, 0.22);
   cursor: pointer;
 }
-.cp-fab:hover { background: var(--cp-brand-deep); }
+.cp-fab:hover { background: var(--cp-brand-down); }
 
 /* call + voicemail events in the conversation stream (OpenPhone-style) */
 .cp-call-card {
@@ -415,7 +503,7 @@
 
 /* message bubbles — inbound flat gray, outbound brand, automated darker */
 .cp-bubble-in {
-  background: #f1f3f6;
+  background: color-mix(in srgb, var(--cp-ink) 8%, transparent);
   color: var(--cp-ink);
   border-radius: 14px 14px 14px 4px;
 }
@@ -424,7 +512,7 @@
   color: #fff;
   border-radius: 14px 14px 4px 14px;
 }
-.cp-bubble-out.cp-bubble-auto { background: var(--cp-brand-deep); }
+.cp-bubble-out.cp-bubble-auto { background: var(--cp-brand-down); }
 
 /* misc */
 .cp-divider { border-top: 1px solid var(--cp-line); }
@@ -474,7 +562,7 @@
     border-width: 0 0 0 1px;
     padding-bottom: 0;
     animation: cp-sheet-in 220ms cubic-bezier(0.2, 0.75, 0.25, 1);
-    box-shadow: -12px 0 36px rgba(12, 43, 63, 0.08);
+    box-shadow: -12px 0 36px var(--cp-shadow);
   }
   .cp-sheet[data-size="wide"] { width: min(720px, 64vw); }
 }
@@ -599,8 +687,8 @@
     135deg,
     transparent 0,
     transparent 5px,
-    rgba(90, 95, 102, 0.09) 5px,
-    rgba(90, 95, 102, 0.09) 6px
+    color-mix(in srgb, var(--cp-muted) 14%, transparent) 5px,
+    color-mix(in srgb, var(--cp-muted) 14%, transparent) 6px
   );
 }
 
@@ -631,7 +719,7 @@
 }
 .cp-tray-card:hover {
   border-color: var(--cp-line-strong);
-  box-shadow: 0 1px 3px rgba(12, 43, 63, 0.06);
+  box-shadow: 0 1px 3px var(--cp-shadow);
 }
 @media (min-width: 768px) {
   .cp-tray-card { cursor: grab; }
@@ -816,8 +904,8 @@
     135deg,
     transparent 0,
     transparent 5px,
-    rgba(90, 95, 102, 0.09) 5px,
-    rgba(90, 95, 102, 0.09) 6px
+    color-mix(in srgb, var(--cp-muted) 14%, transparent) 5px,
+    color-mix(in srgb, var(--cp-muted) 14%, transparent) 6px
   );
 }
 
@@ -970,7 +1058,7 @@ button.cp-list-row:active { background: var(--cp-hover); }
   border-color: var(--cp-brand-fill);
   color: #fff;
 }
-.cp-icon-btn-primary:active { background: var(--cp-brand-deep); }
+.cp-icon-btn-primary:active { background: var(--cp-brand-down); }
 
 /* full-width iOS primary/secondary buttons (form CTAs, sheet actions) */
 .cp-btn-block {
