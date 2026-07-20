@@ -5,7 +5,8 @@ import { useState } from "react";
 // Public request-a-quote form. Posts to /api/canes/lead/intake, which creates a
 // website lead and fires the speed-to-lead automation. The consent checkbox
 // mirrors the compliant opt-in language on /CanesPressure/terms and /privacy
-// and is genuinely required (A2P 10DLC), and a hidden honeypot filters bots.
+// and is deliberately OPTIONAL (A2P forbids making SMS consent a condition of
+// submitting), and a hidden honeypot filters bots.
 
 const SERVICES = [
   "Driveway",
@@ -36,7 +37,6 @@ export default function RequestForm() {
     const next: Errors = {};
     if (!name.trim()) next.name = "Please enter your name.";
     if (!phone.trim()) next.phone = "Please enter your phone number.";
-    if (!consent) next.consent = "Please agree to be contacted so we can reach you.";
     setErrors(next);
     if (Object.keys(next).length > 0) return;
 

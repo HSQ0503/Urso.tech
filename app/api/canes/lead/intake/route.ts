@@ -63,17 +63,21 @@ export async function POST(req: NextRequest) {
   const phone = toE164(clip(raw.phone, MAX.phone));
   const consent = truthy(raw.consent);
 
+  // Consent is deliberately optional (A2P compliance: opting in to SMS may
+  // not be a condition of submitting the form). Its state is recorded either
+  // way so the owner knows whether this contact may be texted.
   const errors: Record<string, string> = {};
   if (!name) errors.name = "Please enter your name.";
   if (!phone) errors.phone = "Please enter a valid US phone number.";
-  if (!consent) errors.consent = "Please agree to be contacted so we can reach you.";
   if (Object.keys(errors).length > 0 || !phone) return json({ ok: false, errors }, 400);
 
   // Off the demo fixtures nothing should be written; the UI still shows success.
   if (!canesConfigured()) return json({ ok: true, demo: true });
 
   try {
-    const consentLine = `SMS consent given via website request on ${fmtEt(new Date().toISOString())} ET.`;
+    const consentLine = consent
+      ? `SMS consent given via website request on ${fmtEt(new Date().toISOString())} ET.`
+      : `No SMS consent given with the website request on ${fmtEt(new Date().toISOString())} ET (checkbox left unchecked) — do not text unless they text first.`;
     const note = [
       "Website quote request.",
       service ? `Service: ${service}.` : "",
@@ -129,7 +133,7 @@ export async function POST(req: NextRequest) {
           notes: note,
         })
         .eq("id", lead.id);
-      await logLeadEvent(lead.id, "consent", consentLine);
+      await logLeadEvent(lead.id, consent ? "consent" : "website_request", consentLine);
     }
 
     return json({ ok: true });
