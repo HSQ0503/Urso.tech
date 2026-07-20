@@ -1,0 +1,14 @@
+{
+  "vaultRoot": "C:\\Users\\HSQ05\\OneDrive\\Desktop\\Obby Vault\\Projects\\Urso",
+  "roots": [
+    { "dir": ".", "recursive": false, "department": "exec" },
+    { "dir": "01 - Urso", "type": "core" },
+    { "dir": "02 - Woof Gang", "project": "woof-gang" },
+    { "dir": "03 - Woof Gang — Product & Build", "project": "woof-gang" },
+    { "dir": "04 - 1500 Blueprint Drills", "project": "1500-blueprint" },
+    { "dir": "05 - Health Monitor One", "project": "health-monitor-one" },
+    { "dir": "06 - Canes Pressure Washing", "project": "canes" },
+    { "dir": "07 - Urso Brain", "project": "urso-brain", "exclude": ["Demo Vault"] },
+    { "dir": "07 - Urso Brain/Demo Vault/departments" }
+  ]
+}

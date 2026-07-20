@@ -16,8 +16,12 @@ function canesAuthEnv(): { url: string; key: string } {
 }
 
 export async function createCanesAuthClient() {
-  const { url, key } = canesAuthEnv();
+  // cookies() first: during build-time prerender it signals Next to treat the
+  // route as dynamic and skip it. With the env check first, a machine without
+  // CANES_* vars (e.g. local dev on another client's work) fails the whole
+  // build on /CanesPressure/crew/login instead.
   const cookieStore = await cookies();
+  const { url, key } = canesAuthEnv();
   return createServerClient(url, key, {
     cookieOptions: {
       name: CANES_CREW_AUTH_COOKIE,

@@ -11,6 +11,8 @@
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.84",
     "@ai-sdk/google": "^3.0.82",
+    "@ai-sdk/openai": "^3.0.86",
+    "@ai-sdk/openai-compatible": "^2.0.62",
     "@ai-sdk/react": "^3.0.206",
     "@react-email/components": "^1.0.12",
     "@supabase/ssr": "^0.10.3",
