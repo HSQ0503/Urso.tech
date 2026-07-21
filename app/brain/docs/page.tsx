@@ -1,35 +1,34 @@
-// Vault browser — the synced docs, grouped the way the company is organized.
-// Read-only in v1 (authoring stays in Obsidian/markdown; the sync script loads it).
+// Vault browser — the synced docs grouped the way the company is organized.
+// The sidebar tree is the folder view; this is the semantic view (core, rules,
+// departments, projects), which the folder structure alone can't express.
 
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { FileText, Plus } from "lucide-react";
 import { getBrainUser } from "@/lib/brain/access";
 import { ursoDbSafe } from "@/lib/brain/supabase";
 import { getDepartments, getDocManifest, getProjects } from "@/lib/brain/db";
 import type { BrainDocMeta } from "@/lib/brain/types";
 
-const TYPE_BADGE: Record<string, string> = { core: "core", rule: "rule" };
-
 function DocRow({ doc }: { doc: BrainDocMeta }) {
-  const badge = TYPE_BADGE[doc.doc_type];
   return (
-    <Link
-      href={`/brain/docs/view?path=${encodeURIComponent(doc.path)}`}
-      className="group flex items-baseline justify-between gap-3 rounded-none border border-edge bg-raise px-4 py-3 transition-colors hover:border-[rgba(254,81,0,0.4)]"
-    >
-      <div className="min-w-0">
-        <div className="flex items-center gap-2">
-          <span className="truncate text-[13.5px] font-medium text-ink group-hover:text-orange">{doc.title}</span>
-          {badge && (
-            <span className="rounded-full border border-[rgba(254,81,0,0.35)] px-1.5 py-[1px] font-mono text-[9px] uppercase tracking-[0.12em] text-orange">
-              {badge}
-            </span>
-          )}
-        </div>
-        {doc.description && <p className="mt-0.5 truncate text-[12px] text-ink-dim">{doc.description}</p>}
-      </div>
-      <span className="shrink-0 font-mono text-[10px] text-ink-dimmer">→</span>
+    <Link href={`/brain/docs/view?path=${encodeURIComponent(doc.path)}`} className="ob-row group !py-[7px]">
+      <FileText size={14} className="shrink-0 text-[var(--ob-faint)]" />
+      <span className="ob-row-label !text-[13.5px]">{doc.title}</span>
+      {doc.description && (
+        <span className="ml-2 min-w-0 flex-1 truncate text-[12.5px] text-[var(--ob-faint)]">{doc.description}</span>
+      )}
     </Link>
+  );
+}
+
+function Section({ title, docs }: { title: string; docs: BrainDocMeta[] }) {
+  if (!docs.length) return null;
+  return (
+    <section className="mb-7">
+      <h2 className="mb-1.5 px-1.5 text-[12.5px] font-semibold text-[var(--ob-muted)]">{title}</h2>
+      <div>{docs.map((d) => <DocRow key={d.path} doc={d} />)}</div>
+    </section>
   );
 }
 
@@ -56,80 +55,47 @@ export default async function BrainDocsPage() {
   const projIds = new Set(projects.map((p) => p.id));
   const depIds = new Set(departments.map((d) => d.id));
   const unfiled = rest.filter(
-    (d) =>
-      !(d.project_id ? projIds.has(d.project_id) : d.department_id ? depIds.has(d.department_id) : true),
+    (d) => !(d.project_id ? projIds.has(d.project_id) : d.department_id ? depIds.has(d.department_id) : true),
   );
 
   return (
-    <div className="mx-auto w-full max-w-[860px] space-y-9 py-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-orange">Urso Brain · Vault</div>
-          <h1 className="mt-2 text-[22px] font-bold tracking-[-0.02em] text-ink">The vault</h1>
-          <p className="mt-1.5 text-[13.5px] text-ink-dim">
-            {manifest.length === 0
-              ? "Nothing synced yet — run node scripts/brain-sync.mjs."
-              : `${manifest.length} docs. This is everything the brain can read.`}
-          </p>
+    <>
+      <div className="ob-content">
+        <div className="ob-wide !max-w-[820px]">
+          <div className="mb-7 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h1 className="ob-title !text-[1.7em]">The vault</h1>
+              <p className="mt-1 text-[14px] text-[var(--ob-muted)]">
+                {manifest.length === 0
+                  ? "Nothing synced yet — run node scripts/brain-sync.mjs."
+                  : `${manifest.length} docs. This is everything the brain can read.`}
+              </p>
+            </div>
+            <Link href="/brain/docs/new" className="ob-btn ob-btn-cta">
+              <Plus size={14} />
+              New doc
+            </Link>
+          </div>
+
+          <Section title="Company core — always in context" docs={core} />
+          <Section title="Standing rules" docs={rules} />
+          {departments.map((dep) => (
+            <Section
+              key={dep.id}
+              title={dep.name}
+              docs={rest.filter((d) => d.department_id === dep.id && !d.project_id)}
+            />
+          ))}
+          {projects.map((p) => (
+            <Section key={p.id} title={p.name} docs={rest.filter((d) => d.project_id === p.id)} />
+          ))}
+          <Section title="Company-wide" docs={unassigned} />
+          <Section title="Archived / unfiled projects" docs={unfiled} />
         </div>
-        <Link
-          href="/brain/docs/new"
-          className="dash-press inline-flex cursor-pointer items-center gap-2 rounded-none border border-[rgba(254,81,0,0.4)] bg-orange-soft px-4 py-2 text-[13px] font-medium text-orange transition-colors hover:bg-[rgba(254,81,0,0.18)]"
-        >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" aria-hidden><path d="M12 5v14M5 12h14" /></svg>
-          New doc
-        </Link>
       </div>
-
-      {core.length > 0 && (
-        <section>
-          <h2 className="mb-3 font-mono text-[10.5px] uppercase tracking-[0.16em] text-ink-dimmer">Company core — always in context</h2>
-          <div className="grid gap-2">{core.map((d) => <DocRow key={d.path} doc={d} />)}</div>
-        </section>
-      )}
-
-      {rules.length > 0 && (
-        <section>
-          <h2 className="mb-3 font-mono text-[10.5px] uppercase tracking-[0.16em] text-ink-dimmer">Standing rules</h2>
-          <div className="grid gap-2">{rules.map((d) => <DocRow key={d.path} doc={d} />)}</div>
-        </section>
-      )}
-
-      {departments.map((dep) => {
-        const docs = rest.filter((d) => d.department_id === dep.id && !d.project_id);
-        if (!docs.length) return null;
-        return (
-          <section key={dep.id}>
-            <h2 className="mb-3 font-mono text-[10.5px] uppercase tracking-[0.16em] text-ink-dimmer">{dep.name}</h2>
-            <div className="grid gap-2">{docs.map((d) => <DocRow key={d.path} doc={d} />)}</div>
-          </section>
-        );
-      })}
-
-      {projects.map((p) => {
-        const docs = rest.filter((d) => d.project_id === p.id);
-        if (!docs.length) return null;
-        return (
-          <section key={p.id}>
-            <h2 className="mb-3 font-mono text-[10.5px] uppercase tracking-[0.16em] text-ink-dimmer">Project · {p.name}</h2>
-            <div className="grid gap-2">{docs.map((d) => <DocRow key={d.path} doc={d} />)}</div>
-          </section>
-        );
-      })}
-
-      {unassigned.length > 0 && (
-        <section>
-          <h2 className="mb-3 font-mono text-[10.5px] uppercase tracking-[0.16em] text-ink-dimmer">Company-wide</h2>
-          <div className="grid gap-2">{unassigned.map((d) => <DocRow key={d.path} doc={d} />)}</div>
-        </section>
-      )}
-
-      {unfiled.length > 0 && (
-        <section>
-          <h2 className="mb-3 font-mono text-[10.5px] uppercase tracking-[0.16em] text-ink-dimmer">Archived / unfiled projects</h2>
-          <div className="grid gap-2">{unfiled.map((d) => <DocRow key={d.path} doc={d} />)}</div>
-        </section>
-      )}
-    </div>
+      <div className="ob-status">
+        <span>{manifest.length} docs</span>
+      </div>
+    </>
   );
 }

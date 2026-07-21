@@ -8,10 +8,12 @@
 // stuck busy.
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { ursoBrowserClient } from "@/lib/brain/supabase-client";
 
-export function SignOutButton() {
+// `className`/`children` let the Obsidian shell render this as a ribbon icon
+// without forking the sign-out logic, which has real failure handling to keep.
+export function SignOutButton({ className, children }: { className?: string; children?: ReactNode } = {}) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -36,11 +38,15 @@ export function SignOutButton() {
           setBusy(false);
         }
       }}
-      className="ml-1 cursor-pointer rounded-lg border border-edge px-3 py-1.5 text-[12.5px] text-ink-dim transition-colors hover:border-edge-strong hover:text-ink disabled:opacity-50"
+      className={
+        className ??
+        "ml-1 cursor-pointer rounded-lg border border-edge px-3 py-1.5 text-[12.5px] text-ink-dim transition-colors hover:border-edge-strong hover:text-ink disabled:opacity-50"
+      }
       disabled={busy}
-      title={failed ? "Sign-out failed — check your connection and try again" : undefined}
+      title={failed ? "Sign-out failed — check your connection and try again" : children ? "Sign out" : undefined}
+      style={busy ? { opacity: 0.5 } : undefined}
     >
-      {busy ? "…" : failed ? "Retry sign out" : "Sign out"}
+      {children ?? (busy ? "…" : failed ? "Retry sign out" : "Sign out")}
     </button>
   );
 }

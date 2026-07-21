@@ -10,7 +10,7 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
-import { Check, Copy, Maximize2, Menu, Minimize2, PenLine, Send, Square, Trash2 } from "lucide-react";
+import { Check, ChevronDown, Copy, Maximize2, Menu, Minimize2, PenLine, Send, Square, Trash2 } from "lucide-react";
 import { RichText } from "@/components/dashboard/rich-text";
 import { BRAIN_PROVIDERS } from "@/lib/brain/catalog";
 import type { BrainProvider } from "@/lib/brain/types";
@@ -321,7 +321,7 @@ function ThreadRail({
 }
 
 const selectCls =
-  "min-h-11 max-w-[180px] cursor-pointer rounded-full border-0 bg-[var(--brain-soft)] px-3 text-[12px] font-medium text-[var(--brain-muted-strong)] outline-none transition-colors hover:bg-[var(--brain-soft-hover)] focus:ring-2 focus:ring-orange/40";
+  "h-11 cursor-pointer appearance-none rounded-full border-0 bg-[var(--brain-soft)] py-0 pl-4 pr-11 text-left text-[12px] font-medium leading-none text-[var(--brain-muted-strong)] transition-colors hover:bg-[var(--brain-soft-hover)] focus:ring-2 focus:ring-orange/35";
 
 export function BrainConsole({
   userName,
@@ -569,32 +569,43 @@ export function BrainConsole({
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            <select aria-label="Project" value={projectId} onChange={(e) => setProjectId(e.target.value)} className={selectCls}>
-              <option value="">Company-wide</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
-            <select
-              aria-label="Model"
-              value={provider && modelId ? `${provider}:${modelId}` : ""}
-              onChange={(e) => {
-                const [p, m] = e.target.value.split(":");
-                setProvider(p as BrainProvider);
-                setModelId(m);
-              }}
-              className={`${selectCls} hidden lg:block`}
-              disabled={noKeys}
-            >
-              {noKeys && <option value="">No models — add keys</option>}
-              {availableProviders.map((p) => (
-                <optgroup key={p} label={BRAIN_PROVIDERS[p].name}>
-                  {BRAIN_PROVIDERS[p].models.map((m) => (
-                    <option key={m.id} value={`${p}:${m.id}`}>{m.label}</option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
+            <div className="relative">
+              <select
+                aria-label="Project"
+                value={projectId}
+                onChange={(e) => setProjectId(e.target.value)}
+                className={`${selectCls} w-[154px] sm:w-[180px]`}
+              >
+                <option value="">Company-wide</option>
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+              <ChevronDown aria-hidden className="pointer-events-none absolute right-4 top-1/2 size-4 -translate-y-1/2 text-[var(--brain-muted-strong)]" />
+            </div>
+            <div className="relative hidden lg:block">
+              <select
+                aria-label="Model"
+                value={provider && modelId ? `${provider}:${modelId}` : ""}
+                onChange={(e) => {
+                  const [p, m] = e.target.value.split(":");
+                  setProvider(p as BrainProvider);
+                  setModelId(m);
+                }}
+                className={`${selectCls} w-[180px]`}
+                disabled={noKeys}
+              >
+                {noKeys && <option value="">No models — add keys</option>}
+                {availableProviders.map((p) => (
+                  <optgroup key={p} label={BRAIN_PROVIDERS[p].name}>
+                    {BRAIN_PROVIDERS[p].models.map((m) => (
+                      <option key={m.id} value={`${p}:${m.id}`}>{m.label}</option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+              <ChevronDown aria-hidden className="pointer-events-none absolute right-4 top-1/2 size-4 -translate-y-1/2 text-[var(--brain-muted-strong)]" />
+            </div>
             <button
               onClick={() => setExpanded((e) => !e)}
               aria-label={expanded ? "Exit full screen" : "Full screen"}
@@ -655,7 +666,7 @@ export function BrainConsole({
           <div className="mx-auto w-full max-w-[860px]">
             <form
               onSubmit={(e) => { e.preventDefault(); void send(input); }}
-              className="flex min-h-[64px] items-end gap-2 rounded-[28px] border border-[var(--brain-border)] bg-[var(--brain-composer)] px-3 py-2.5 shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition-[border-color,box-shadow] focus-within:border-[var(--brain-border-strong)] focus-within:shadow-[0_2px_8px_rgba(0,0,0,0.06)] sm:px-4"
+              className="flex min-h-[64px] items-end gap-2 rounded-[28px] border border-[var(--brain-border)] bg-[var(--brain-composer)] px-3 py-2.5 shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition-[border-color,box-shadow] focus-within:border-orange/50 focus-within:ring-2 focus-within:ring-orange/20 sm:px-4"
             >
               <textarea
                 ref={taRef}

@@ -1,33 +1,15 @@
-// A single vault doc, rendered read-only, with its graph edges: outgoing
-// [[wikilinks]] and backlinks — the Obsidian panes, in the brain. The path
-// travels as a query param (vault paths contain spaces and slashes).
+// A single vault doc in Obsidian's reading view: inline title, the note bounded
+// to the reading measure, a backlinks pane underneath, and a status bar with the
+// counts. The path travels as a query param (vault paths contain spaces and
+// slashes).
 
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { Pencil } from "lucide-react";
 import { getBrainUser } from "@/lib/brain/access";
 import { ursoDbSafe } from "@/lib/brain/supabase";
-import { getBacklinks, getDocByPath, getDocTitles } from "@/lib/brain/db";
-import { RichText } from "@/components/dashboard/rich-text";
-
-function LinkChips({ label, docs }: { label: string; docs: { path: string; title: string }[] }) {
-  if (!docs.length) return null;
-  return (
-    <div>
-      <div className="font-mono text-[9.5px] uppercase tracking-[0.14em] text-ink-dimmer">{label}</div>
-      <div className="mt-1.5 flex flex-wrap gap-1.5">
-        {docs.map((d) => (
-          <Link
-            key={d.path}
-            href={`/brain/docs/view?path=${encodeURIComponent(d.path)}`}
-            className="rounded-full border border-edge bg-raise px-2.5 py-1 text-[12px] text-ink-dim transition-colors duration-200 hover:border-[rgba(254,81,0,0.4)] hover:text-orange"
-          >
-            {d.title}
-          </Link>
-        ))}
-      </div>
-    </div>
-  );
-}
+import { getBacklinks, getDocByPath, listLinkTargets } from "@/lib/brain/db";
+import { VaultMarkdown, countWords } from "@/components/brain/markdown";
 
 export default async function BrainDocViewPage({ searchParams }: { searchParams: Promise<{ path?: string }> }) {
   const user = await getBrainUser();
@@ -39,50 +21,69 @@ export default async function BrainDocViewPage({ searchParams }: { searchParams:
 
   if (!doc || !admin) {
     return (
-      <div className="mx-auto w-full max-w-[760px] py-10">
-        <p className="text-[14px] text-ink-dim">That doc isn&rsquo;t in the vault.</p>
-        <Link href="/brain/docs" className="mt-3 inline-block text-[13px] text-orange underline underline-offset-2">← Back to the vault</Link>
+      <div className="ob-content">
+        <div className="ob-note">
+          <p className="text-[15px] text-[var(--ob-muted)]">That doc isn&rsquo;t in the vault.</p>
+          <Link href="/brain/docs" className="mt-3 inline-block text-[14px] text-[var(--ob-accent)] hover:underline">
+            ← Back to the vault
+          </Link>
+        </div>
       </div>
     );
   }
 
-  const [outgoing, backlinks] = await Promise.all([
-    getDocTitles(admin, doc.links).catch(() => []),
+  // Every live doc is a wikilink target, so [[links]] inside the body resolve
+  // the same way they do in Obsidian — including to docs this one doesn't
+  // already list in its `links` column.
+  const [targets, backlinks] = await Promise.all([
+    listLinkTargets(admin).catch(() => []),
     getBacklinks(admin, doc.path).catch(() => []),
   ]);
 
+  const words = countWords(doc.content);
+
   return (
-    <div className="mx-auto w-full max-w-[760px] py-6">
-      <Link href="/brain/docs" className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-ink-dimmer transition-colors hover:text-orange">← Vault</Link>
-      <div className="mt-4 rounded-none border border-edge bg-panel p-6 md:p-8">
-        <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0 truncate font-mono text-[10px] uppercase tracking-[0.14em] text-ink-dimmer">{doc.path}</div>
-          <div className="flex shrink-0 items-center gap-2">
-            {doc.origin === "brain" && (
-              <span className="rounded-full border border-[rgba(254,81,0,0.35)] px-2 py-[2px] font-mono text-[9px] uppercase tracking-[0.12em] text-orange" title="Written by the brain — flows back to Obsidian on the next export">
-                brain-written
-              </span>
-            )}
+    <>
+      <div className="ob-content">
+        <div className="ob-note">
+          <div className="mb-4 flex items-start justify-between gap-4">
+            <h1 className="ob-title">{doc.title}</h1>
             <Link
               href={`/brain/docs/edit?path=${encodeURIComponent(doc.path)}`}
-              className="rounded-none border border-edge px-2.5 py-1 text-[11.5px] text-ink-dim transition-colors hover:border-edge-strong hover:text-ink"
+              className="ob-icon-btn mt-2 shrink-0"
+              title="Edit"
             >
-              Edit
+              <Pencil size={15} />
             </Link>
           </div>
+          {doc.description && (
+            <p className="mb-5 text-[15px] leading-[1.55] text-[var(--ob-muted)]">{doc.description}</p>
+          )}
+
+          <VaultMarkdown content={doc.content} targets={targets} />
+
+          {backlinks.length > 0 && (
+            <div className="ob-pane">
+              <div className="ob-pane-head">
+                {backlinks.length} linked mention{backlinks.length === 1 ? "" : "s"}
+              </div>
+              {backlinks.map((b) => (
+                <Link key={b.path} href={`/brain/docs/view?path=${encodeURIComponent(b.path)}`} className="ob-pane-link">
+                  {b.title}
+                </Link>
+              ))}
+            </div>
+          )}
         </div>
-        <h1 className="mt-2 text-[22px] font-bold tracking-[-0.02em] text-ink">{doc.title}</h1>
-        {doc.description && <p className="mt-1.5 text-[13.5px] leading-[1.6] text-ink-dim">{doc.description}</p>}
-        <div className="mt-6 border-t border-edge pt-6">
-          <RichText text={doc.content} className="text-[14px] leading-[1.7] text-ink" />
-        </div>
-        {(outgoing.length > 0 || backlinks.length > 0) && (
-          <div className="mt-8 space-y-4 border-t border-edge pt-5">
-            <LinkChips label="Links to" docs={outgoing} />
-            <LinkChips label="Linked from" docs={backlinks} />
-          </div>
-        )}
       </div>
-    </div>
+      <div className="ob-status">
+        {doc.origin === "brain" && <span title="Written by the brain — flows back to Obsidian on the next export">brain-written</span>}
+        <span>
+          {backlinks.length} backlink{backlinks.length === 1 ? "" : "s"}
+        </span>
+        <span>{words.toLocaleString("en-US")} words</span>
+        <span>{doc.content.length.toLocaleString("en-US")} characters</span>
+      </div>
+    </>
   );
 }

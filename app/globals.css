@@ -358,6 +358,12 @@
   --brain-muted-strong: #d0d3d7;
 }
 
+/* The rounded container owns the visible focus treatment. Suppress the global
+   rectangular outline on the native controls inside it. */
+.brain-chat :is(textarea, select):focus-visible {
+  outline: none;
+}
+
 :root[data-theme="light"] .brain-chat {
   --brain-canvas: #ffffff;
   --brain-rail: #f1f4f8;
@@ -676,6 +682,472 @@ body {
   --card-shadow: 0 1px 2px 0 rgba(15, 18, 22, 0.06), 0 18px 40px -24px rgba(15, 18, 22, 0.22);
   background: var(--color-bg);
   color: var(--color-ink);
+}
+
+/* ============================================================================
+   URSO BRAIN — Obsidian shell
+   The brain is a knowledge vault, so it wears Obsidian's clothes rather than
+   the dashboard's. This is a SELF-CONTAINED token set (--ob-*) scoped to
+   .ob-app: the dashboard's orange/square/mono language is deliberately absent,
+   because that language is what made the vault read as a generic admin panel.
+   Both themes are defined — Obsidian ships both and the toggle is global.
+   ========================================================================== */
+
+.ob-app {
+  --ob-bg: #1e1e1e;
+  --ob-bg-alt: #1a1a1a;
+  --ob-bg-sec: #161616;
+  --ob-bg-sec-alt: #111111;
+  --ob-border: #2c2c2c;
+  --ob-border-soft: #242424;
+  --ob-hover: rgba(255, 255, 255, 0.055);
+  --ob-active: rgba(255, 255, 255, 0.09);
+  --ob-text: #dadada;
+  --ob-muted: #9a9a9a;
+  --ob-faint: #6b6b6b;
+  --ob-accent: #a882ff;
+  --ob-accent-hover: #bda6ff;
+  --ob-accent-soft: rgba(168, 130, 255, 0.15);
+  --ob-code-bg: rgba(255, 255, 255, 0.06);
+  --ob-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  /* Obsidian's reading measure. Everything in a note is bounded by this. */
+  --ob-line-width: 700px;
+
+  /* The vault graph renders inside this shell, so it takes the shell's surface
+     and accent instead of the dashboard's near-black and orange. Project hues
+     stay — they carry meaning Obsidian's monochrome graph has no way to show. */
+  --graph-bg: #1e1e1e;
+  --graph-node: rgba(255, 255, 255, 0.62);
+  --graph-node-soft: rgba(255, 255, 255, 0.32);
+  --graph-core: rgba(255, 255, 255, 0.92);
+  --graph-edge: rgba(255, 255, 255, 0.16);
+  --graph-label: rgba(255, 255, 255, 0.7);
+  --graph-label-strong: #ffffff;
+  --graph-focus: #a882ff;
+  --graph-sat: 58%;
+  --graph-light: 64%;
+
+  font-family: var(--font-inter), ui-sans-serif, system-ui, -apple-system, sans-serif;
+  color: var(--ob-text);
+  background: var(--ob-bg);
+  font-size: 15px;
+  -webkit-font-smoothing: antialiased;
+}
+
+:root[data-theme="light"] .ob-app {
+  --ob-bg: #ffffff;
+  --ob-bg-alt: #f4f5f7;
+  --ob-bg-sec: #f6f7f9;
+  --ob-bg-sec-alt: #eceef1;
+  --ob-border: #e2e4e8;
+  --ob-border-soft: #ebedf0;
+  --ob-hover: rgba(15, 18, 22, 0.055);
+  --ob-active: rgba(15, 18, 22, 0.09);
+  --ob-text: #222528;
+  --ob-muted: #5f6368;
+  --ob-faint: #8b9096;
+  --ob-accent: #7048d4;
+  --ob-accent-hover: #5c36bd;
+  --ob-accent-soft: rgba(112, 72, 212, 0.12);
+  --ob-code-bg: rgba(15, 18, 22, 0.06);
+  --ob-shadow: 0 4px 16px rgba(15, 18, 22, 0.12);
+
+  --graph-bg: #ffffff;
+  --graph-node: rgba(20, 23, 28, 0.5);
+  --graph-node-soft: rgba(20, 23, 28, 0.26);
+  --graph-core: rgba(20, 23, 28, 0.86);
+  --graph-edge: rgba(20, 23, 28, 0.2);
+  --graph-label: rgba(20, 23, 28, 0.72);
+  --graph-label-strong: #14171c;
+  --graph-focus: #7048d4;
+  --graph-sat: 56%;
+  --graph-light: 44%;
+}
+
+/* ---- frame ---- */
+.ob-app { display: flex; height: 100dvh; overflow: hidden; }
+.ob-body { display: flex; min-width: 0; flex: 1; }
+
+/* ---- ribbon (far-left icon rail) ---- */
+.ob-ribbon {
+  display: flex;
+  width: 44px;
+  flex-shrink: 0;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  border-right: 1px solid var(--ob-border);
+  background: var(--ob-bg-sec);
+  padding: 8px 0;
+}
+.ob-rib-btn {
+  display: grid;
+  height: 30px;
+  width: 30px;
+  cursor: pointer;
+  place-items: center;
+  border-radius: 4px;
+  color: var(--ob-faint);
+  transition: color 120ms ease, background 120ms ease;
+}
+.ob-rib-btn:hover { background: var(--ob-hover); color: var(--ob-text); }
+.ob-rib-btn.is-active { color: var(--ob-accent); }
+
+/* ---- sidebar ---- */
+.ob-sidebar {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  border-right: 1px solid var(--ob-border);
+  background: var(--ob-bg-sec);
+}
+.ob-side-head {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  padding: 7px 8px 5px;
+}
+.ob-side-tab {
+  display: grid;
+  height: 28px;
+  width: 28px;
+  cursor: pointer;
+  place-items: center;
+  border-radius: 4px;
+  color: var(--ob-faint);
+  transition: color 120ms ease, background 120ms ease;
+}
+.ob-side-tab:hover { background: var(--ob-hover); color: var(--ob-muted); }
+.ob-side-tab.is-active { background: var(--ob-active); color: var(--ob-text); }
+.ob-nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  padding: 2px 8px 6px;
+}
+.ob-nav-btn {
+  display: grid;
+  height: 26px;
+  width: 26px;
+  cursor: pointer;
+  place-items: center;
+  border-radius: 4px;
+  color: var(--ob-faint);
+  transition: color 120ms ease, background 120ms ease;
+}
+.ob-nav-btn:hover { background: var(--ob-hover); color: var(--ob-text); }
+
+/* ---- file tree ---- */
+.ob-tree { flex: 1; overflow-y: auto; padding: 0 8px 12px; }
+.ob-row {
+  position: relative;
+  display: flex;
+  width: 100%;
+  cursor: pointer;
+  align-items: center;
+  gap: 2px;
+  border-radius: 4px;
+  padding: 4px 6px;
+  text-align: left;
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--ob-muted);
+  transition: color 100ms ease, background 100ms ease;
+}
+.ob-row:hover { background: var(--ob-hover); color: var(--ob-text); }
+.ob-row.is-active { background: var(--ob-active); color: var(--ob-text); }
+.ob-row-folder { font-weight: 500; }
+.ob-row-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ob-chev {
+  display: grid;
+  height: 14px;
+  width: 14px;
+  flex-shrink: 0;
+  place-items: center;
+  color: var(--ob-faint);
+  transition: transform 120ms ease;
+}
+.ob-chev.is-open { transform: rotate(90deg); }
+/* Obsidian's indent guide — the hairline that makes deep nesting legible. */
+.ob-children {
+  margin-left: 13px;
+  border-left: 1px solid var(--ob-border);
+  padding-left: 2px;
+}
+.ob-ext {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ob-faint);
+}
+
+/* ---- vault footer ---- */
+.ob-vault {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-top: 1px solid var(--ob-border);
+  padding: 8px 10px;
+}
+.ob-vault-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ob-muted);
+}
+
+/* ---- drag handle between sidebar and main ---- */
+.ob-resizer {
+  width: 4px;
+  cursor: col-resize;
+  flex-shrink: 0;
+  background: transparent;
+  transition: background 140ms ease;
+}
+.ob-resizer:hover, .ob-resizer.is-drag { background: var(--ob-accent-soft); }
+
+/* ---- main + tab bar ---- */
+.ob-main { display: flex; min-width: 0; flex: 1; flex-direction: column; background: var(--ob-bg); }
+.ob-tabbar {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  background: var(--ob-bg-alt);
+  padding: 6px 8px 0;
+}
+.ob-tab {
+  position: relative;
+  display: flex;
+  max-width: 240px;
+  min-width: 0;
+  cursor: pointer;
+  align-items: center;
+  gap: 7px;
+  border-radius: 6px 6px 0 0;
+  padding: 8px 10px 9px;
+  font-size: 13px;
+  color: var(--ob-faint);
+  transition: color 120ms ease, background 120ms ease;
+}
+.ob-tab:hover { color: var(--ob-muted); }
+/* The active tab is the ONE surface that matches the note body — that shared
+   fill is what reads as "this tab is the page". */
+.ob-tab.is-active { background: var(--ob-bg); color: var(--ob-text); }
+.ob-tab-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ob-tab-x {
+  display: grid;
+  height: 16px;
+  width: 16px;
+  flex-shrink: 0;
+  place-items: center;
+  border-radius: 3px;
+  opacity: 0;
+  transition: opacity 120ms ease, background 120ms ease;
+}
+.ob-tab:hover .ob-tab-x, .ob-tab.is-active .ob-tab-x { opacity: 1; }
+.ob-tab-x:hover { background: var(--ob-active); }
+.ob-tab-new {
+  display: grid;
+  height: 28px;
+  width: 28px;
+  cursor: pointer;
+  place-items: center;
+  align-self: center;
+  border-radius: 4px;
+  color: var(--ob-faint);
+  transition: color 120ms ease, background 120ms ease;
+}
+.ob-tab-new:hover { background: var(--ob-hover); color: var(--ob-text); }
+
+/* ---- view header (back/forward + breadcrumb) ---- */
+.ob-viewhead {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  background: var(--ob-bg);
+}
+.ob-icon-btn {
+  display: grid;
+  height: 26px;
+  width: 26px;
+  cursor: pointer;
+  place-items: center;
+  border-radius: 4px;
+  color: var(--ob-faint);
+  transition: color 120ms ease, background 120ms ease;
+}
+.ob-icon-btn:hover { background: var(--ob-hover); color: var(--ob-text); }
+.ob-icon-btn:disabled { cursor: default; opacity: 0.4; }
+.ob-icon-btn:disabled:hover { background: transparent; color: var(--ob-faint); }
+.ob-crumbs {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--ob-faint);
+}
+.ob-crumbs a { color: inherit; }
+.ob-crumbs a:hover { color: var(--ob-muted); text-decoration: underline; }
+.ob-crumb-sep { padding: 0 5px; opacity: 0.55; }
+.ob-crumb-cur { color: var(--ob-muted); }
+
+/* ---- scroll region + note measure ---- */
+.ob-content { flex: 1; overflow-y: auto; }
+.ob-note { margin: 0 auto; max-width: var(--ob-line-width); padding: 22px 24px 40vh; }
+.ob-wide { margin: 0 auto; max-width: 1100px; padding: 22px 24px 80px; }
+
+/* ---- reading view typography ---- */
+.ob-md { font-size: 16px; line-height: 1.6; color: var(--ob-text); }
+.ob-md > * + * { margin-top: 0.85em; }
+.ob-md h1, .ob-md h2, .ob-md h3, .ob-md h4, .ob-md h5, .ob-md h6 {
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: -0.015em;
+  color: var(--ob-text);
+}
+.ob-md > h1 + *, .ob-md > h2 + *, .ob-md > h3 + * { margin-top: 0.5em; }
+.ob-md h1 { margin-top: 1.4em; font-size: 1.7em; }
+.ob-md h2 { margin-top: 1.4em; font-size: 1.4em; }
+.ob-md h3 { margin-top: 1.3em; font-size: 1.18em; }
+.ob-md h4 { margin-top: 1.2em; font-size: 1.05em; }
+.ob-md h5, .ob-md h6 { margin-top: 1.2em; font-size: 0.95em; color: var(--ob-muted); }
+.ob-md strong { font-weight: 600; color: var(--ob-text); }
+.ob-md em { font-style: italic; }
+.ob-md a { color: var(--ob-accent); text-decoration: underline; text-underline-offset: 2px; }
+.ob-md a:hover { color: var(--ob-accent-hover); }
+.ob-md ul, .ob-md ol { padding-left: 1.6em; }
+.ob-md ul { list-style: disc; }
+.ob-md ol { list-style: decimal; }
+.ob-md li { margin-top: 0.25em; }
+.ob-md li::marker { color: var(--ob-faint); }
+.ob-md ul ul, .ob-md ol ol, .ob-md ul ol, .ob-md ol ul { margin-top: 0.25em; }
+.ob-md code {
+  border-radius: 4px;
+  background: var(--ob-code-bg);
+  padding: 0.15em 0.35em;
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  font-size: 0.87em;
+  color: var(--ob-text);
+}
+.ob-md pre {
+  overflow-x: auto;
+  border-radius: 6px;
+  background: var(--ob-bg-sec);
+  border: 1px solid var(--ob-border);
+  padding: 12px 14px;
+  font-size: 13px;
+  line-height: 1.55;
+}
+.ob-md pre code { background: none; padding: 0; font-size: inherit; }
+.ob-md blockquote {
+  border-left: 3px solid var(--ob-border);
+  padding-left: 14px;
+  color: var(--ob-muted);
+}
+.ob-md hr { border: none; border-top: 1px solid var(--ob-border); margin: 1.6em 0; }
+.ob-md table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.ob-md th, .ob-md td { border: 1px solid var(--ob-border); padding: 6px 10px; text-align: left; }
+.ob-md th { background: var(--ob-bg-sec); font-weight: 600; }
+/* An unresolved [[link]] — the doc it points at doesn't exist yet. Obsidian
+   greys these out, which is how you spot the gaps in a vault. */
+.ob-md .ob-unresolved { color: var(--ob-faint); text-decoration: none; cursor: default; opacity: 0.75; }
+
+.ob-title {
+  margin-bottom: 2px;
+  font-size: 2em;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 1.2;
+  color: var(--ob-text);
+}
+
+/* ---- backlinks pane ---- */
+.ob-pane {
+  margin-top: 34px;
+  border-top: 1px solid var(--ob-border);
+  padding-top: 14px;
+}
+.ob-pane-head {
+  margin-bottom: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ob-muted);
+}
+.ob-pane-link {
+  display: block;
+  border-radius: 4px;
+  padding: 4px 7px;
+  font-size: 13px;
+  color: var(--ob-accent);
+  transition: background 120ms ease;
+}
+.ob-pane-link:hover { background: var(--ob-hover); }
+
+/* ---- status bar ---- */
+.ob-status {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+  padding: 4px 14px 5px;
+  font-size: 11.5px;
+  color: var(--ob-faint);
+}
+
+/* ---- generic surfaces for the non-note views ---- */
+.ob-card {
+  border-radius: 8px;
+  border: 1px solid var(--ob-border);
+  background: var(--ob-bg-sec);
+  padding: 16px 18px;
+}
+.ob-btn {
+  display: inline-flex;
+  cursor: pointer;
+  align-items: center;
+  gap: 6px;
+  border-radius: 5px;
+  border: 1px solid var(--ob-border);
+  background: var(--ob-bg-sec);
+  padding: 6px 12px;
+  font-size: 13px;
+  color: var(--ob-text);
+  transition: background 120ms ease, border-color 120ms ease;
+}
+.ob-btn:hover { background: var(--ob-hover); border-color: var(--ob-faint); }
+.ob-btn-cta {
+  border-color: transparent;
+  background: var(--ob-accent);
+  color: #ffffff;
+}
+.ob-btn-cta:hover { background: var(--ob-accent-hover); border-color: transparent; }
+
+/* Obsidian's scrollbars: invisible until the pane is hovered. */
+.ob-app ::-webkit-scrollbar { width: 12px; height: 12px; }
+.ob-app ::-webkit-scrollbar-track { background: transparent; }
+.ob-app ::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 8px;
+  background-clip: padding-box;
+  background-color: transparent;
+}
+.ob-app :hover::-webkit-scrollbar-thumb { background-color: var(--ob-active); }
+.ob-app ::-webkit-scrollbar-thumb:hover { background-color: var(--ob-faint); }
+
+@media (max-width: 800px) {
+  .ob-sidebar, .ob-resizer { display: none; }
 }
 
 @media print {

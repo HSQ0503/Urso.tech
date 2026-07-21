@@ -27,47 +27,46 @@ export default async function BrainSettingsPage() {
   const core = manifest.filter((d) => d.doc_type === "core").length;
 
   return (
-    <div className="mx-auto w-full max-w-[720px] space-y-10 py-6">
-      <div>
-        <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-orange">Urso Brain · Settings</div>
-        <h1 className="mt-2 text-[22px] font-bold tracking-[-0.02em] text-ink">Settings</h1>
+    <div className="ob-content">
+      <div className="ob-wide !max-w-[720px]">
+        <h1 className="ob-title !text-[1.7em]">Settings</h1>
+
+        <section className="mt-8">
+          <h2 className="text-[15px] font-semibold text-[var(--ob-text)]">Your profile</h2>
+          <p className="mt-1 text-[13.5px] leading-[1.55] text-[var(--ob-muted)]">
+            The brain loads context for whichever department you&rsquo;re in — switch it to work (or demo) as a different role.
+          </p>
+          <div className="mt-4">
+            <OnboardingForm
+              departments={departments}
+              initialName={profile.name}
+              initialDepartmentId={profile.department_id}
+              initialTitle={profile.title}
+              submitLabel="Save profile"
+              redirectTo={null}
+            />
+          </div>
+        </section>
+
+        <section className="mt-8 border-t border-[var(--ob-border)] pt-8">
+          <h2 className="text-[15px] font-semibold text-[var(--ob-text)]">Org API keys</h2>
+          <p className="mt-1 text-[13.5px] leading-[1.55] text-[var(--ob-muted)]">
+            Bring-your-own keys: one per provider, org-wide. Everyone&rsquo;s chats route through these.
+          </p>
+          <div className="mt-4">
+            <KeysManager initialKeys={keys} />
+          </div>
+        </section>
+
+        <section className="mt-8 border-t border-[var(--ob-border)] pt-8">
+          <h2 className="text-[15px] font-semibold text-[var(--ob-text)]">Vault sync</h2>
+          <p className="mt-1 text-[13.5px] leading-[1.55] text-[var(--ob-muted)]">
+            {manifest.length === 0
+              ? "No docs synced yet — run node scripts/brain-sync.mjs after applying the migration."
+              : `${manifest.length} docs synced (${core} core · ${rules} standing rules). Re-run node scripts/brain-sync.mjs whenever the vault changes.`}
+          </p>
+        </section>
       </div>
-
-      <section>
-        <h2 className="text-[15px] font-semibold text-ink">Your profile</h2>
-        <p className="mt-1 text-[12.5px] leading-[1.5] text-ink-dim">
-          The brain loads context for whichever department you&rsquo;re in — switch it to work (or demo) as a different role.
-        </p>
-        <div className="mt-4">
-          <OnboardingForm
-            departments={departments}
-            initialName={profile.name}
-            initialDepartmentId={profile.department_id}
-            initialTitle={profile.title}
-            submitLabel="Save profile"
-            redirectTo={null}
-          />
-        </div>
-      </section>
-
-      <section className="border-t border-edge pt-8">
-        <h2 className="text-[15px] font-semibold text-ink">Org API keys</h2>
-        <p className="mt-1 text-[12.5px] leading-[1.5] text-ink-dim">
-          Bring-your-own keys: one per provider, org-wide. Everyone&rsquo;s chats route through these.
-        </p>
-        <div className="mt-4">
-          <KeysManager initialKeys={keys} />
-        </div>
-      </section>
-
-      <section className="border-t border-edge pt-8">
-        <h2 className="text-[15px] font-semibold text-ink">Vault sync</h2>
-        <p className="mt-1 text-[12.5px] leading-[1.5] text-ink-dim">
-          {manifest.length === 0
-            ? "No docs synced yet — run node scripts/brain-sync.mjs after applying the migration."
-            : `${manifest.length} docs synced (${core} core · ${rules} standing rules). Re-run node scripts/brain-sync.mjs whenever the vault changes.`}
-        </p>
-      </section>
     </div>
   );
 }

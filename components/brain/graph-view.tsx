@@ -118,7 +118,7 @@ export function GraphLegend({ projects }: { projects: { id: string; name: string
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
       {items.map((i) => (
-        <span key={i.label} className="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-ink-dim">
+        <span key={i.label} className="inline-flex items-center gap-1.5 text-[11px] text-[var(--ob-faint)]">
           <span
             className="size-2 rounded-full"
             style={
@@ -442,6 +442,10 @@ export function GraphView({ nodes, edges }: { nodes: GraphNode[]; edges: [number
     // zoom does. Coupling the two is what made a compact vault render as a knot
     // of pinheads.
     let fitScale = 1;
+    // Nodes drawn at their desktop size on a phone-sized canvas swamp the
+    // layout, so radii take a mild cut on small panels. Draw and hit-test only
+    // — the simulation's separation term keeps working in its own units.
+    let sizeK = 1;
     let panX = 0;
     let panY = 0;
     let panXTo = 0;
@@ -498,13 +502,16 @@ export function GraphView({ nodes, edges }: { nodes: GraphNode[]; edges: [number
       // good. Wait for a real width, and keep re-framing on resize until the
       // reader takes the camera over.
       if (width > 40) {
+        sizeK = Math.min(1.1, Math.max(0.5, Math.min(width, height) / 520));
         if (!fitted) {
           // The real aspect is only knowable here. A round blob in a 2.3:1
           // panel leaves most of the panel empty and forces the fit down until
           // the nodes are pinheads, so re-settle the layout against per-axis
           // gravity whose ratio is the panel's. Equilibrium spread goes as
-          // 1/sqrt(k), hence k split by a and not sqrt(a).
-          const a = Math.min(2.4, Math.max(1, width / height));
+          // 1/sqrt(k), hence k split by a and not sqrt(a). The range spans both
+          // sides of 1 — a phone in portrait needs a tall layout as much as a
+          // desktop panel needs a wide one.
+          const a = Math.min(2.4, Math.max(0.45, width / height));
           gx = GRAVITY / a;
           gy = GRAVITY * a;
           warm(170);
@@ -614,7 +621,7 @@ export function GraphView({ nodes, edges }: { nodes: GraphNode[]; edges: [number
       for (let i = 0; i < n; i++) {
         const x = sx[i];
         const y = sy[i];
-        const r = rad[i] * nodeScale;
+        const r = rad[i] * nodeScale * sizeK;
         if (x < -40 || x > width + 40 || y < -40 || y > height + 40) continue;
         ctx.globalAlpha = focus[i];
 
@@ -683,7 +690,7 @@ export function GraphView({ nodes, edges }: { nodes: GraphNode[]; edges: [number
         if (labelAlpha[i] < 0.04) continue;
 
         const x = sx[i];
-        const y = sy[i] + rad[i] * nodeScale + 5;
+        const y = sy[i] + rad[i] * nodeScale * sizeK + 5;
         if (x < -120 || x > width + 120 || y < -20 || y > height + 20) continue;
         const text = nodes[i].title.length > 34 ? `${nodes[i].title.slice(0, 33)}…` : nodes[i].title;
         const w = ctx.measureText(text).width;
@@ -701,7 +708,7 @@ export function GraphView({ nodes, edges }: { nodes: GraphNode[]; edges: [number
           }
           for (let j = 0; j < n && !blocked; j++) {
             if (j === i) continue;
-            const nr = rad[j] * nodeScale + 1.5;
+            const nr = rad[j] * nodeScale * sizeK + 1.5;
             if (sx[j] + nr > x0 && sx[j] - nr < x1 && sy[j] + nr > y && sy[j] - nr < y1) blocked = true;
           }
           if (blocked) continue;
@@ -781,7 +788,7 @@ export function GraphView({ nodes, edges }: { nodes: GraphNode[]; edges: [number
         // Hit area tracks the drawn size (plus a small forgiving margin) rather
         // than the old fixed 14px, which under-reached when zoomed in and
         // grabbed the wrong node when zoomed out.
-        const r = rad[i] * nodeScale + 5;
+        const r = rad[i] * nodeScale * sizeK + 5;
         const d = dx * dx + dy * dy;
         if (d < r * r && d < bestD) {
           bestD = d;
@@ -964,7 +971,7 @@ export function GraphView({ nodes, edges }: { nodes: GraphNode[]; edges: [number
   }, [nodes, edges, router]);
 
   return (
-    <div ref={wrapRef} className="h-[72vh] min-h-[460px] w-full overflow-hidden rounded-none border border-edge bg-panel">
+    <div ref={wrapRef} className="absolute inset-0 overflow-hidden">
       <canvas
         ref={canvasRef}
         className="block touch-none select-none"

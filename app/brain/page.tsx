@@ -31,10 +31,10 @@ export default async function BrainPage() {
 
   if (!admin || departments.length === 0) {
     return (
-      <div className="grid flex-1 place-items-center">
-        <div className="max-w-[460px] rounded-none border border-edge bg-panel p-6 text-center">
-          <h1 className="text-[17px] font-bold text-ink">The brain isn&rsquo;t wired up yet</h1>
-          <p className="mt-2 text-[13.5px] leading-[1.6] text-ink-dim">
+      <div className="grid min-h-0 flex-1 place-items-center">
+        <div className="ob-card max-w-[460px] text-center">
+          <h1 className="text-[17px] font-bold text-[var(--ob-text)]">The brain isn&rsquo;t wired up yet</h1>
+          <p className="mt-2 text-[13.5px] leading-[1.6] text-[var(--ob-muted)]">
             {!admin ? (
               <>
                 Set <code className="text-orange">URSO_SUPABASE_SECRET_KEY</code> (the Urso HQ project&rsquo;s secret
@@ -61,7 +61,7 @@ export default async function BrainPage() {
   const initialModel = initialProvider ? BRAIN_PROVIDERS[initialProvider].defaultModel : null;
 
   return (
-    <div className="-mx-4 -my-5 h-[calc(100%+2.5rem)] min-h-0 shrink-0 overflow-hidden md:-mx-6">
+    <div className="min-h-0 flex-1 overflow-hidden">
       <BrainConsole
         userName={profile.name}
         departmentId={profile.department_id}
