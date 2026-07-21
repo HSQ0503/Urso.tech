@@ -72,10 +72,14 @@ export function BrainShell({ files, children }: { files: VaultFile[]; children: 
   const [collapseSignal, setCollapseSignal] = useState(0);
   const dragging = useRef(false);
 
-  useEffect(() => {
-    if (BARE.includes(pathname)) return;
+  // Adjusting state during render (guarded on the route actually changing) is
+  // React's own answer here — an effect would render the new route with a stale
+  // tab strip first, then render again.
+  const [seenHref, setSeenHref] = useState<string | null>(null);
+  if (seenHref !== href && !BARE.includes(pathname)) {
+    setSeenHref(href);
     setTabs((prev) => (prev.some((t) => t.href === href) ? prev : [...prev, { href, label, kind }]));
-  }, [href, label, kind, pathname]);
+  }
 
   // Sidebar drag-resize.
   useEffect(() => {

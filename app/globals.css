@@ -764,6 +764,35 @@ body {
   --graph-light: 44%;
 }
 
+/* The dashboard token bridge. brain-console, doc-editor, keys-manager and the
+   auth forms are all written against the dashboard's tokens (bg/panel/ink/edge/
+   orange). Rather than fork every one of them, re-point those tokens to the
+   Obsidian palette for anything inside this shell — the codebase's own rule is
+   that components reference tokens, so moving the tokens moves the components.
+   Orange in particular has to go: it is the single loudest thing that made the
+   vault read as a dashboard. */
+.ob-app {
+  --color-bg: var(--ob-bg);
+  --color-panel: var(--ob-bg-sec);
+  --color-panel-strong: var(--ob-bg-sec);
+  --color-edge: var(--ob-border);
+  --color-edge-strong: var(--ob-faint);
+  --color-ink: var(--ob-text);
+  --color-ink-dim: var(--ob-muted);
+  --color-ink-dimmer: var(--ob-faint);
+  --color-orange: var(--ob-accent);
+  --color-orange-soft: var(--ob-accent-soft);
+  --color-orange-wash: var(--ob-hover);
+  --color-surface: var(--ob-bg-sec);
+  --color-sidebar: var(--ob-bg-sec);
+  --color-cell: var(--ob-bg);
+  --color-raise: var(--ob-hover);
+  --color-raise-strong: var(--ob-active);
+  --color-track: var(--ob-border);
+  --color-series: var(--ob-muted);
+  --color-series-soft: var(--ob-border);
+}
+
 /* ---- frame ---- */
 .ob-app { display: flex; height: 100dvh; overflow: hidden; }
 .ob-body { display: flex; min-width: 0; flex: 1; }
