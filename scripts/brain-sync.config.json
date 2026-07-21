@@ -9,6 +9,7 @@
     { "dir": "05 - Health Monitor One", "project": "health-monitor-one" },
     { "dir": "06 - Canes Pressure Washing", "project": "canes" },
     { "dir": "07 - Urso Brain", "project": "urso-brain", "exclude": ["Demo Vault"] },
-    { "dir": "07 - Urso Brain/Demo Vault/departments" }
+    { "dir": "07 - Urso Brain/Demo Vault/departments" },
+    { "dir": "_Brain" }
   ]
 }

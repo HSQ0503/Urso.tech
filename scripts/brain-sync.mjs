@@ -13,7 +13,7 @@
 //
 //   Run:  node scripts/brain-sync.mjs [--prune] [--export] [--dry]
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { createClient } from "@supabase/supabase-js";
 
@@ -144,6 +144,11 @@ function* mdFiles(dir, recursive) {
 const disk = new Map(); // path -> row (links resolved later)
 for (const root of config.roots) {
   const dir = join(VAULT, root.dir);
+  // A root may not exist yet — _Brain/ appears on the first --export.
+  if (!existsSync(dir)) {
+    console.log(`  ${root.dir} → not on disk yet (skipped)`);
+    continue;
+  }
   const excluded = (root.exclude ?? []).map((e) => join(dir, e));
   let count = 0;
   for (const file of mdFiles(dir, root.recursive !== false)) {
