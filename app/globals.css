@@ -109,6 +109,19 @@
   --color-orange-wash: rgba(254, 81, 0, 0.05);
 }
 
+/* Native <select> popups: Chromium paints the option list from the control's
+   color-scheme, and the UA/OS can disagree with the token palette (white list,
+   inherited pale text = unreadable). Pin the control's scheme and the option
+   colors to tokens so the list reads correctly in both themes. */
+.theme-scope select { color-scheme: dark; }
+:root[data-theme="light"] .theme-scope select { color-scheme: light; }
+.theme-scope select option {
+  /* Must be OPAQUE — the popup paints over a UA backdrop, not the page, so
+     the glassy alpha tokens (panel/raise) read as white-on-white there. */
+  background-color: var(--color-surface);
+  color: var(--color-ink);
+}
+
 /* ===== Dashboard chrome — premium materials (theme-aware) =====
    The dashboard lives inside .theme-scope and supports BOTH themes, so the
    homepage's dark-only glass/gradient devices are expressed as tokens that
