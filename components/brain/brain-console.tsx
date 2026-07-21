@@ -60,6 +60,17 @@ const toolLabel = (type: string) => {
   return TOOL_LABELS[name] ?? name.replace(/_/g, " ");
 };
 
+// Pre-stream failures reach useChat as the raw JSON body the route returned
+// ({"error":"…"}) — unwrap it so users see the message, not the envelope.
+// Mid-stream errors are already plain text and pass through unchanged.
+const errorText = (message: string): string => {
+  try {
+    const j = JSON.parse(message) as { error?: string };
+    if (typeof j.error === "string" && j.error) return j.error;
+  } catch { /* not JSON */ }
+  return message.trim() || "Something went wrong — try again.";
+};
+
 function Spark({ className = "" }: { className?: string }) {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" aria-hidden className={className}>
@@ -268,10 +279,20 @@ export function BrainConsole({
   const scrollRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
 
+  // Monotonic guard for thread hydration: only the LATEST fetch may write
+  // messages/projectId, so a slow response can't overwrite a newer thread.
+  const hydrateSeq = useRef(0);
+  // Threads deleted this session — refreshThreads races the DELETE request, so
+  // an unfiltered GET could resurrect a just-deleted thread in the rail.
+  const deletedIdsRef = useRef<Set<string>>(new Set());
+
   const refreshThreads = useCallback(async (): Promise<void> => {
     try {
       const r = await fetch("/api/brain/threads");
-      if (r.ok) setThreads((await r.json()).threads ?? []);
+      if (r.ok) {
+        const list: ThreadSummary[] = (await r.json()).threads ?? [];
+        setThreads(list.filter((t) => !deletedIdsRef.current.has(t.id)));
+      }
     } catch { /* keep current list */ }
   }, []);
 
@@ -294,13 +315,16 @@ export function BrainConsole({
       if (cancelled) return;
       setThreads(list);
       if (!list.length) { setHydrating(false); return; }
+      // The rail is clickable while this hydrate is in flight — take a seq so a
+      // user click on another thread invalidates this fetch's right to write.
+      const seq = ++hydrateSeq.current;
       setActiveThreadId(list[0].id);
       setProjectId(list[0].project_id ?? "");
       try {
         const r = await fetch(`/api/brain/threads/${list[0].id}`);
-        if (r.ok && !cancelled) setMessages((await r.json()).messages ?? []);
+        if (r.ok && !cancelled && seq === hydrateSeq.current) setMessages((await r.json()).messages ?? []);
       } catch { /* leave empty */ }
-      if (!cancelled) setHydrating(false);
+      if (!cancelled && seq === hydrateSeq.current) setHydrating(false);
     })();
     return () => { cancelled = true; };
   }, [setMessages]);
@@ -311,27 +335,36 @@ export function BrainConsole({
 
   const openThread = useCallback(async (id: string) => {
     if (busy) return;
+    const seq = ++hydrateSeq.current;
     setActiveThreadId(id);
     setRailOpen(false);
     setHydrating(true);
     try {
       const r = await fetch(`/api/brain/threads/${id}`);
+      if (seq !== hydrateSeq.current) return; // a newer open/new-thread won
       if (r.ok) {
         const data = await r.json();
+        if (seq !== hydrateSeq.current) return;
         setMessages(data.messages ?? []);
         setProjectId((data.projectId as string | null) ?? "");
       } else {
+        // Thread vanished (deleted in a race / another tab). Drop it entirely:
+        // leaving activeThreadId pointing at a dead row would make later sends
+        // stream fine but silently skip persistence.
+        setThreads((t) => t.filter((x) => x.id !== id));
+        setActiveThreadId(null);
         setMessages([]);
       }
     } catch {
-      setMessages([]);
+      if (seq === hydrateSeq.current) setMessages([]);
     } finally {
-      setHydrating(false);
+      if (seq === hydrateSeq.current) setHydrating(false);
     }
   }, [busy, setMessages]);
 
   const newThread = useCallback(() => {
     if (busy) return;
+    hydrateSeq.current++; // invalidate any in-flight hydrate
     setActiveThreadId(null);
     setMessages([]);
     setInput("");
@@ -341,6 +374,7 @@ export function BrainConsole({
 
   const deleteThread = useCallback(async (id: string) => {
     if (id === activeThreadId && busy) chat.stop();
+    deletedIdsRef.current.add(id); // refreshThreads must never resurrect it
     setThreads((t) => t.filter((x) => x.id !== id));
     setActiveThreadId((cur) => {
       if (cur === id) { setMessages([]); return null; }
@@ -396,7 +430,9 @@ export function BrainConsole({
   const noKeys = availableProviders.length === 0;
 
   return (
-    <div className="flex h-full overflow-hidden rounded-none border border-edge bg-panel shadow-[var(--pop-shadow)]">
+    // `relative` anchors the mobile thread-rail overlay (absolute inset-0) to
+    // THIS panel — without it the drawer positions against the viewport.
+    <div className="relative flex h-full overflow-hidden rounded-none border border-edge bg-panel shadow-[var(--pop-shadow)]">
       <ThreadRail
         className="hidden md:flex"
         threads={threads}
@@ -508,7 +544,7 @@ export function BrainConsole({
             )}
             {error && (
               <p className="mt-4 rounded-lg border border-[rgba(254,81,0,0.3)] bg-orange-soft px-3 py-2 text-[12.5px] leading-[1.5] text-ink-dim">
-                {error.message.trim() || "Something went wrong — try again."}
+                {errorText(error.message)}
               </p>
             )}
           </div>

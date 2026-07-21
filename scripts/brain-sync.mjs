@@ -19,10 +19,11 @@ for (const file of ["../.env", "../.env.local"]) {
   } catch {}
 }
 
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const key = process.env.SUPABASE_SECRET_KEY;
+// The DEDICATED Urso HQ project — never the Woof Gang or Canes keys.
+const url = process.env.NEXT_PUBLIC_URSO_SUPABASE_URL;
+const key = process.env.URSO_SUPABASE_SECRET_KEY;
 if (!url || !key) {
-  console.error("✖ Missing NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SECRET_KEY in .env");
+  console.error("✖ Missing NEXT_PUBLIC_URSO_SUPABASE_URL / URSO_SUPABASE_SECRET_KEY in .env");
   process.exit(1);
 }
 const supabase = createClient(url, key, { auth: { persistSession: false } });
@@ -134,7 +135,7 @@ for (const root of config.roots) {
 
 const { data: existing, error: readErr } = await supabase.from("brain_docs").select("path, content_hash");
 if (readErr) {
-  console.error(`✖ Could not read brain_docs: ${readErr.message}\n  (run supabase/migrations/0026_brain.sql first)`);
+  console.error(`✖ Could not read brain_docs: ${readErr.message}\n  (run supabase/urso/0001_brain.sql in the URSO HQ project's SQL editor first)`);
   process.exit(1);
 }
 const existingByPath = new Map((existing ?? []).map((r) => [r.path, r.content_hash]));

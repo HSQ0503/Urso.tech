@@ -4,17 +4,17 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getBrainUser } from "@/lib/brain/access";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { ursoDbSafe } from "@/lib/brain/supabase";
 import { getDocByPath } from "@/lib/brain/db";
 import { RichText } from "@/components/dashboard/rich-text";
 
 export default async function BrainDocViewPage({ searchParams }: { searchParams: Promise<{ path?: string }> }) {
   const user = await getBrainUser();
-  if (!user) redirect("/login");
+  if (!user) redirect("/brain/login");
 
   const { path } = await searchParams;
-  const admin = createAdminClient();
-  const doc = path ? await getDocByPath(admin, path).catch(() => null) : null;
+  const admin = ursoDbSafe();
+  const doc = path && admin ? await getDocByPath(admin, path).catch(() => null) : null;
 
   if (!doc) {
     return (

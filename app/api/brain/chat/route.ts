@@ -6,7 +6,7 @@
 
 import { streamText, convertToModelMessages, stepCountIs, generateId, type UIMessage } from "ai";
 import { getBrainUser } from "@/lib/brain/access";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { ursoDbSafe, URSO_DB_MISSING } from "@/lib/brain/supabase";
 import { getAlwaysOnDocs, getDepartments, getDocManifest, getOrgKey, getProfile, getProjects } from "@/lib/brain/db";
 import { buildBrainSystemPrompt } from "@/lib/brain/context";
 import { buildBrainTools } from "@/lib/brain/tools";
@@ -38,7 +38,8 @@ export async function POST(req: Request) {
   const modelId = body.model ?? BRAIN_PROVIDERS[provider].defaultModel;
   if (!isCatalogModel(provider, modelId)) return Response.json({ error: "model not in catalog" }, { status: 400 });
 
-  const admin = createAdminClient();
+  const admin = ursoDbSafe();
+  if (!admin) return Response.json({ error: URSO_DB_MISSING }, { status: 503 });
 
   const profile = await getProfile(admin, user.id);
   if (!profile) return Response.json({ error: "profile-required" }, { status: 403 });
@@ -47,8 +48,14 @@ export async function POST(req: Request) {
   try {
     apiKey = await getOrgKey(admin, provider);
   } catch (e) {
-    // BRAIN_KEYS_SECRET missing/wrong — surface the real cause to the admin.
-    return Response.json({ error: e instanceof Error ? e.message : String(e) }, { status: 503 });
+    // BRAIN_KEYS_SECRET missing or rotated — log the real cause, but never leak
+    // a raw crypto error ("Unsupported state…") to every employee's chat box.
+    const raw = e instanceof Error ? e.message : String(e);
+    console.error("[brain] org-key read failed:", raw);
+    const friendly = raw.includes("BRAIN_KEYS_SECRET")
+      ? raw
+      : "The org key store can't be read (BRAIN_KEYS_SECRET changed?) — an admin should re-save the keys in Brain settings.";
+    return Response.json({ error: friendly }, { status: 503 });
   }
   if (!apiKey) {
     return Response.json(

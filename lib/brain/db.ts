@@ -1,12 +1,13 @@
-// Data access for Urso Brain. Everything runs through the service-role admin
-// client (brain_* tables are RLS-on / no-policies); the calling route has already
-// authenticated the user, and ownership is enforced in code. Server-only.
+// Data access for Urso Brain. Everything runs through the URSO HQ project's
+// secret-key client (lib/brain/supabase.ts ursoDb — brain_* tables are RLS-on /
+// no-policies); the calling route has already authenticated the user, and
+// ownership is enforced in code. Server-only. NEVER the Woof Gang client.
 
-import { createAdminClient } from "@/lib/supabase/admin";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { decryptApiKey } from "./crypto";
 import type { BrainDepartment, BrainDoc, BrainDocMeta, BrainProfile, BrainProject, BrainProvider } from "./types";
 
-type Admin = ReturnType<typeof createAdminClient>;
+type Admin = SupabaseClient;
 
 const DOC_META_COLS = "path, title, description, department_id, project_id, doc_type, audience";
 

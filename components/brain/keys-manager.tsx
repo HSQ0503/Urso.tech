@@ -70,6 +70,10 @@ export function KeysManager({ initialKeys }: { initialKeys: KeyStatus[] }) {
       } else {
         setErr(provider, "Remove failed.");
       }
+    } catch {
+      // Network rejection: without this the promise escapes unhandled and the
+      // row silently keeps showing the key as configured.
+      setErr(provider, "Remove failed — try again.");
     } finally {
       setBusy(null);
     }

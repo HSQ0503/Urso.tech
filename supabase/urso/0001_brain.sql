@@ -1,11 +1,14 @@
--- Migration 0026 — Urso Brain: the identity-aware company-brain chat (/brain).
--- Vault docs are synced in by scripts/brain-sync.mjs; chat context is assembled
--- per request from the user's department + active project + standing rules.
+-- Urso HQ migration 0001 — Urso Brain: the identity-aware company-brain chat
+-- (/brain). Runs in the DEDICATED Urso Supabase project (cibwzxzqomddhjbxoxeg),
+-- NOT the Woof Gang project and NOT Canes. Brain users are provisioned in this
+-- project's Auth dashboard. Vault docs are synced in by scripts/brain-sync.mjs;
+-- chat context is assembled per request from the user's department + active
+-- project + standing rules.
 -- See vault: "07 - Urso Brain/Urso Brain — Product & v1 Spec".
 --
--- RLS on with NO policies on every table: server-only via the service-role key,
--- ownership enforced in code — same pattern as the analyst tables (0023).
--- Tighten with auth.uid() policies at multi-tenant hardening.
+-- RLS on with NO policies on every table: server-only via the secret key,
+-- ownership enforced in code. Tighten with auth.uid() policies when access
+-- widens beyond Urso's own people.
 
 create table if not exists brain_departments (
   id     text primary key,              -- slug, e.g. 'marketing'

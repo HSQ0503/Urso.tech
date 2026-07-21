@@ -2,9 +2,10 @@
 // without the distilled-memory layer. Ownership is enforced here in code; the
 // brain_* tables are RLS-on / no-policies / service-role-only.
 
-import { createAdminClient } from "@/lib/supabase/admin";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { ursoDb } from "@/lib/brain/supabase";
 
-type Admin = ReturnType<typeof createAdminClient>;
+type Admin = SupabaseClient;
 type UIPart = { type: string; text?: string };
 export type StoredBrainMessage = { id: string; role: "user" | "assistant"; parts: UIPart[] };
 
@@ -36,7 +37,7 @@ export async function persistBrainTurn(opts: {
   userMessage: StoredBrainMessage | null;
   assistantMessage: StoredBrainMessage;
 }): Promise<void> {
-  const admin = createAdminClient();
+  const admin = ursoDb();
   const { threadId, model, userMessage, assistantMessage } = opts;
 
   // Distinct created_at stamps keep intra-turn order deterministic on hydration

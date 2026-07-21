@@ -2,13 +2,14 @@
 // service-role client (ownership enforced in code).
 
 import { getBrainUser } from "@/lib/brain/access";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { ursoDbSafe, URSO_DB_MISSING } from "@/lib/brain/supabase";
 
 export async function GET() {
   const user = await getBrainUser();
   if (!user) return Response.json({ error: "unauthorized" }, { status: 401 });
 
-  const admin = createAdminClient();
+  const admin = ursoDbSafe();
+  if (!admin) return Response.json({ error: URSO_DB_MISSING }, { status: 503 });
   const { data, error } = await admin
     .from("brain_threads")
     .select("id, title, project_id, model, updated_at")
@@ -25,7 +26,8 @@ export async function POST(req: Request) {
   if (!user) return Response.json({ error: "unauthorized" }, { status: 401 });
 
   const body = (await req.json().catch(() => ({}))) as { projectId?: string };
-  const admin = createAdminClient();
+  const admin = ursoDbSafe();
+  if (!admin) return Response.json({ error: URSO_DB_MISSING }, { status: 503 });
   const { data, error } = await admin
     .from("brain_threads")
     .insert({ user_id: user.id, project_id: body.projectId ?? null })

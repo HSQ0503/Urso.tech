@@ -3,16 +3,17 @@
 
 import { redirect } from "next/navigation";
 import { getBrainUser } from "@/lib/brain/access";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { ursoDbSafe } from "@/lib/brain/supabase";
 import { getDepartments, getDocManifest, getOrgKeyStatus, getProfile } from "@/lib/brain/db";
 import { OnboardingForm } from "@/components/brain/onboarding-form";
 import { KeysManager } from "@/components/brain/keys-manager";
 
 export default async function BrainSettingsPage() {
   const user = await getBrainUser();
-  if (!user) redirect("/login");
+  if (!user) redirect("/brain/login");
 
-  const admin = createAdminClient();
+  const admin = ursoDbSafe();
+  if (!admin) redirect("/brain"); // setup notice lives there
   const [profile, departments, keys, manifest] = await Promise.all([
     getProfile(admin, user.id).catch(() => null),
     getDepartments(admin).catch(() => []),

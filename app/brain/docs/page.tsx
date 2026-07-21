@@ -4,7 +4,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getBrainUser } from "@/lib/brain/access";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { ursoDbSafe } from "@/lib/brain/supabase";
 import { getDepartments, getDocManifest, getProjects } from "@/lib/brain/db";
 import type { BrainDocMeta } from "@/lib/brain/types";
 
@@ -35,19 +35,30 @@ function DocRow({ doc }: { doc: BrainDocMeta }) {
 
 export default async function BrainDocsPage() {
   const user = await getBrainUser();
-  if (!user) redirect("/login");
+  if (!user) redirect("/brain/login");
 
-  const admin = createAdminClient();
-  const [manifest, projects, departments] = await Promise.all([
-    getDocManifest(admin).catch(() => []),
-    getProjects(admin).catch(() => []),
-    getDepartments(admin).catch(() => []),
-  ]);
+  const admin = ursoDbSafe();
+  const [manifest, projects, departments] = admin
+    ? await Promise.all([
+        getDocManifest(admin).catch(() => []),
+        getProjects(admin).catch(() => []),
+        getDepartments(admin).catch(() => []),
+      ])
+    : ([[], [], []] as const);
 
   const core = manifest.filter((d) => d.doc_type === "core");
   const rules = manifest.filter((d) => d.doc_type === "rule");
   const rest = manifest.filter((d) => d.doc_type === "doc");
   const unassigned = rest.filter((d) => !d.project_id && !d.department_id);
+  // Docs pointing at an archived project or an unknown department would match
+  // no section below and silently vanish while still being counted (and still
+  // readable by the chat tools) — catch them in a leftover bucket instead.
+  const projIds = new Set(projects.map((p) => p.id));
+  const depIds = new Set(departments.map((d) => d.id));
+  const unfiled = rest.filter(
+    (d) =>
+      !(d.project_id ? projIds.has(d.project_id) : d.department_id ? depIds.has(d.department_id) : true),
+  );
 
   return (
     <div className="mx-auto w-full max-w-[860px] space-y-9 py-6">
@@ -101,6 +112,13 @@ export default async function BrainDocsPage() {
         <section>
           <h2 className="mb-3 font-mono text-[10.5px] uppercase tracking-[0.16em] text-ink-dimmer">Company-wide</h2>
           <div className="grid gap-2">{unassigned.map((d) => <DocRow key={d.path} doc={d} />)}</div>
+        </section>
+      )}
+
+      {unfiled.length > 0 && (
+        <section>
+          <h2 className="mb-3 font-mono text-[10.5px] uppercase tracking-[0.16em] text-ink-dimmer">Archived / unfiled projects</h2>
+          <div className="grid gap-2">{unfiled.map((d) => <DocRow key={d.path} doc={d} />)}</div>
         </section>
       )}
     </div>

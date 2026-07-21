@@ -2,7 +2,7 @@
 // handler verifies the thread belongs to the signed-in user first.
 
 import { getBrainUser } from "@/lib/brain/access";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { ursoDbSafe, URSO_DB_MISSING } from "@/lib/brain/supabase";
 import { getOwnedBrainThread } from "@/lib/brain/threads";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -12,7 +12,8 @@ export async function GET(_req: Request, { params }: Ctx) {
   if (!user) return Response.json({ error: "unauthorized" }, { status: 401 });
 
   const { id } = await params;
-  const admin = createAdminClient();
+  const admin = ursoDbSafe();
+  if (!admin) return Response.json({ error: URSO_DB_MISSING }, { status: 503 });
   const owned = await getOwnedBrainThread(admin, user.id, id);
   if (!owned) return Response.json({ error: "not found" }, { status: 404 });
 
@@ -31,7 +32,8 @@ export async function PATCH(req: Request, { params }: Ctx) {
   if (!user) return Response.json({ error: "unauthorized" }, { status: 401 });
 
   const { id } = await params;
-  const admin = createAdminClient();
+  const admin = ursoDbSafe();
+  if (!admin) return Response.json({ error: URSO_DB_MISSING }, { status: 503 });
   const owned = await getOwnedBrainThread(admin, user.id, id);
   if (!owned) return Response.json({ error: "not found" }, { status: 404 });
 
@@ -50,7 +52,8 @@ export async function DELETE(_req: Request, { params }: Ctx) {
   if (!user) return Response.json({ error: "unauthorized" }, { status: 401 });
 
   const { id } = await params;
-  const admin = createAdminClient();
+  const admin = ursoDbSafe();
+  if (!admin) return Response.json({ error: URSO_DB_MISSING }, { status: 503 });
   const owned = await getOwnedBrainThread(admin, user.id, id);
   if (!owned) return Response.json({ error: "not found" }, { status: 404 });
 

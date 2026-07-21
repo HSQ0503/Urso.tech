@@ -52,7 +52,9 @@ export const BRAIN_PROVIDERS: Record<
 export const BRAIN_PROVIDER_IDS = Object.keys(BRAIN_PROVIDERS) as BrainProvider[];
 
 export function isBrainProvider(v: string): v is BrainProvider {
-  return v in BRAIN_PROVIDERS;
+  // Object.hasOwn, not `in`: `in` walks the prototype chain, so "toString" or
+  // "constructor" would pass the guard and crash downstream lookups.
+  return Object.hasOwn(BRAIN_PROVIDERS, v);
 }
 
 // True only for (provider, model) pairs the catalog lists.
