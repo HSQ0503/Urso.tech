@@ -61,7 +61,7 @@ export default async function BrainPage() {
   const initialModel = initialProvider ? BRAIN_PROVIDERS[initialProvider].defaultModel : null;
 
   return (
-    <div className="-mx-4 -my-5 h-[calc(100dvh-53px)] min-h-[560px] flex-1 md:-mx-6">
+    <div className="-mx-4 -my-5 h-[calc(100%+2.5rem)] min-h-0 shrink-0 overflow-hidden md:-mx-6">
       <BrainConsole
         userName={profile.name}
         departmentId={profile.department_id}

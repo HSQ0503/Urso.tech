@@ -522,7 +522,7 @@ export function BrainConsole({
   const body = (
     // `relative` anchors the mobile thread-rail overlay (absolute inset-0) to
     // THIS panel — without it the drawer positions against the viewport.
-    <div className="brain-chat relative flex h-full overflow-hidden bg-[var(--brain-canvas)] text-[var(--brain-text)]">
+    <div className="brain-chat relative flex h-full min-h-0 overflow-hidden bg-[var(--brain-canvas)] text-[var(--brain-text)]">
       <ThreadRail
         className="hidden md:flex"
         threads={threads}
@@ -551,8 +551,8 @@ export function BrainConsole({
         </div>
       )}
 
-      <div className="relative flex min-w-0 flex-1 flex-col">
-        <header className="flex min-h-[72px] items-center justify-between gap-3 px-3 sm:px-5">
+      <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+        <header className="flex min-h-[72px] shrink-0 items-center justify-between gap-3 px-3 sm:px-5">
           <div className="flex min-w-0 items-center gap-2.5">
             <button
               onClick={() => setRailOpen(true)}
@@ -651,7 +651,7 @@ export function BrainConsole({
         </div>
 
         {/* Composer */}
-        <div className="px-3 pb-3 pt-2 sm:px-6 sm:pb-4">
+        <div className="shrink-0 px-3 pb-3 pt-2 sm:px-6 sm:pb-4">
           <div className="mx-auto w-full max-w-[860px]">
             <form
               onSubmit={(e) => { e.preventDefault(); void send(input); }}

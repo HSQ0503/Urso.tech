@@ -172,6 +172,10 @@ export function GraphView({ nodes, edges }: { nodes: GraphNode[]; edges: [number
 
     let pal = readPalette(wrap);
     let colors = nodes.map((d) => nodeColor(d, pal));
+    // Gravity is split per axis so the settled blob can be stretched to the
+    // panel's aspect — see resize(). Equal until the real width is known.
+    let gx = GRAVITY;
+    let gy = GRAVITY;
 
     // ---- topology -------------------------------------------------------
     const degree = new Int32Array(n);
@@ -404,8 +408,8 @@ export function GraphView({ nodes, edges }: { nodes: GraphNode[]; edges: [number
       let cx = 0;
       let cy = 0;
       for (let i = 0; i < n; i++) {
-        vx[i] -= px[i] * GRAVITY * alpha;
-        vy[i] -= py[i] * GRAVITY * alpha;
+        vx[i] -= px[i] * gx * alpha;
+        vy[i] -= py[i] * gy * alpha;
         if (i === dragNode) {
           vx[i] = 0;
           vy[i] = 0;
@@ -445,6 +449,8 @@ export function GraphView({ nodes, edges }: { nodes: GraphNode[]; edges: [number
     let alpha = 1;
     let hover: number | null = null;
     let dragNode: number | null = null;
+    let fitted = false;
+    let userMoved = false; // once true the camera is the reader's, not ours
     let raf = 0;
     let disposed = false;
 
@@ -466,7 +472,6 @@ export function GraphView({ nodes, edges }: { nodes: GraphNode[]; edges: [number
       }
       const pad = 58;
       const k = Math.min((width - pad * 2) / Math.max(maxX - minX, 1), (height - pad * 2) / Math.max(maxY - minY, 1));
-      canvas.dataset.dbg = JSON.stringify({ ex: Math.round(maxX - minX), ey: Math.round(maxY - minY), k: +k.toFixed(2), w: Math.round(width), h: Math.round(height) });
       scaleTo = Math.min(6, Math.max(0.2, k));
       fitScale = scaleTo;
       panXTo = -((minX + maxX) / 2) * scaleTo;
@@ -480,7 +485,6 @@ export function GraphView({ nodes, edges }: { nodes: GraphNode[]; edges: [number
 
     const resize = () => {
       const rect = wrap.getBoundingClientRect();
-      const prevW = width;
       width = rect.width;
       height = Math.max(420, rect.height);
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -489,32 +493,61 @@ export function GraphView({ nodes, edges }: { nodes: GraphNode[]; edges: [number
       canvas.style.width = `${width}px`;
       canvas.style.height = `${height}px`;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      if (prevW === 0) fit(!reduced);
+      // The first measurement can land before layout has settled (the wrapper
+      // reports its 2px of border), which would bake a nonsense scale in for
+      // good. Wait for a real width, and keep re-framing on resize until the
+      // reader takes the camera over.
+      if (width > 40) {
+        if (!fitted) {
+          // The real aspect is only knowable here. A round blob in a 2.3:1
+          // panel leaves most of the panel empty and forces the fit down until
+          // the nodes are pinheads, so re-settle the layout against per-axis
+          // gravity whose ratio is the panel's. Equilibrium spread goes as
+          // 1/sqrt(k), hence k split by a and not sqrt(a).
+          const a = Math.min(2.4, Math.max(1, width / height));
+          gx = GRAVITY / a;
+          gy = GRAVITY * a;
+          warm(170);
+          fit(!reduced);
+          fitted = true;
+        } else if (!userMoved) {
+          fit(false);
+        }
+      }
       kick();
     };
 
     // ---- pre-warm --------------------------------------------------------
     // Run the schedule to convergence before the first paint. A few ms of
-    // synchronous work buys an opening frame that is already the right shape.
-    {
+    // synchronous work buys an opening frame that is already the right shape,
+    // instead of the reader watching a spiral untangle itself.
+    const warm = (ticks: number) => {
       let a = 1;
-      for (let i = 0; i < PREWARM_TICKS; i++) {
+      for (let i = 0; i < ticks; i++) {
         a += (0 - a) * ALPHA_DECAY;
         tick(a);
       }
-      // Leave a little heat so it breathes into place instead of arriving dead.
-      alpha = reduced ? 0 : 0.12;
-    }
+    };
+    warm(PREWARM_TICKS);
+    // Leave a little heat so it breathes into place instead of arriving dead.
+    alpha = reduced ? 0 : 0.12;
 
     // ---- draw ------------------------------------------------------------
     const labelBoxes: number[] = []; // flat x0,y0,x1,y1 — greedy overlap culling
     const order = Array.from({ length: n }, (_, i) => i).sort((a, b) => degree[b] - degree[a]);
+    // Screen positions, resolved once per frame and reused by every pass.
+    const sx = new Float64Array(n);
+    const sy = new Float64Array(n);
 
     const draw = () => {
       ctx.clearRect(0, 0, width, height);
       const hov = hover;
       const rel = scale / fitScale; // 1 = fitted; >1 = the user zoomed in
       const nodeScale = Math.min(2.2, Math.max(0.6, Math.pow(rel, 0.72)));
+      for (let i = 0; i < n; i++) {
+        sx[i] = toScreenX(px[i]);
+        sy[i] = toScreenY(py[i]);
+      }
 
       // Focus falloff, eased rather than switched — the transition is most of
       // what makes hovering feel expensive.
@@ -539,8 +572,8 @@ export function GraphView({ nodes, edges }: { nodes: GraphNode[]; edges: [number
         ctx.beginPath();
         for (let i = 0; i < eCount; i++) {
           const [s, t] = edges[i];
-          ctx.moveTo(toScreenX(px[s]), toScreenY(py[s]));
-          ctx.lineTo(toScreenX(px[t]), toScreenY(py[t]));
+          ctx.moveTo(sx[s], sy[s]);
+          ctx.lineTo(sx[t], sy[t]);
         }
         ctx.stroke();
       } else {
@@ -554,8 +587,8 @@ export function GraphView({ nodes, edges }: { nodes: GraphNode[]; edges: [number
           if (a < 0.02) continue;
           ctx.globalAlpha = a;
           ctx.beginPath();
-          ctx.moveTo(toScreenX(px[s]), toScreenY(py[s]));
-          ctx.lineTo(toScreenX(px[t]), toScreenY(py[t]));
+          ctx.moveTo(sx[s], sy[s]);
+          ctx.lineTo(sx[t], sy[t]);
           ctx.stroke();
         }
         ctx.globalAlpha = 1;
@@ -568,8 +601,8 @@ export function GraphView({ nodes, edges }: { nodes: GraphNode[]; edges: [number
           for (let i = 0; i < eCount; i++) {
             const [s, t] = edges[i];
             if (s !== hov && t !== hov) continue;
-            ctx.moveTo(toScreenX(px[s]), toScreenY(py[s]));
-            ctx.lineTo(toScreenX(px[t]), toScreenY(py[t]));
+            ctx.moveTo(sx[s], sy[s]);
+            ctx.lineTo(sx[t], sy[t]);
           }
           ctx.stroke();
           ctx.globalAlpha = 1;
@@ -579,8 +612,8 @@ export function GraphView({ nodes, edges }: { nodes: GraphNode[]; edges: [number
 
       // Nodes.
       for (let i = 0; i < n; i++) {
-        const x = toScreenX(px[i]);
-        const y = toScreenY(py[i]);
+        const x = sx[i];
+        const y = sy[i];
         const r = rad[i] * nodeScale;
         if (x < -40 || x > width + 40 || y < -40 || y > height + 40) continue;
         ctx.globalAlpha = focus[i];
@@ -631,9 +664,14 @@ export function GraphView({ nodes, edges }: { nodes: GraphNode[]; edges: [number
       labelBoxes.length = 0;
       let drawn = 0;
 
+      // Two passes so the focused neighbourhood claims its slots first, but is
+      // still subject to the cull — exempting it just stacked 20 labels on the
+      // hub. Within each pass the order stays highest-degree-first.
+      for (let pass = 0; pass < 2; pass++)
       for (const i of order) {
         if (drawn > 110) break;
         const lit = i === hov || (hov !== null && neighbors[hov].has(i));
+        if (pass === 0 ? !lit : lit) continue;
         const target = lit ? 1 : Math.min(1, Math.max(0, degree[i] - cutoff + 1)) * zoomFade * focus[i];
         const d = target - labelAlpha[i];
         if (Math.abs(d) > 0.002) {
@@ -644,8 +682,8 @@ export function GraphView({ nodes, edges }: { nodes: GraphNode[]; edges: [number
         }
         if (labelAlpha[i] < 0.04) continue;
 
-        const x = toScreenX(px[i]);
-        const y = toScreenY(py[i]) + rad[i] * nodeScale + 5;
+        const x = sx[i];
+        const y = sy[i] + rad[i] * nodeScale + 5;
         if (x < -120 || x > width + 120 || y < -20 || y > height + 20) continue;
         const text = nodes[i].title.length > 34 ? `${nodes[i].title.slice(0, 33)}…` : nodes[i].title;
         const w = ctx.measureText(text).width;
@@ -653,15 +691,18 @@ export function GraphView({ nodes, edges }: { nodes: GraphNode[]; edges: [number
         const x1 = x + w / 2 + 3;
         const y1 = y + fontPx + 2;
 
-        // Greedy overlap cull, highest-degree first. Obsidian lets labels
-        // collide; dropping the loser is strictly more readable.
-        if (!lit) {
+        // Greedy overlap cull, highest-degree first — against other labels AND
+        // against the nodes themselves. Obsidian lets both collide; dropping
+        // the loser is strictly more readable than stacking text on a dot.
+        if (i !== hov) {
           let blocked = false;
-          for (let b = 0; b < labelBoxes.length; b += 4) {
-            if (x0 < labelBoxes[b + 2] && x1 > labelBoxes[b] && y < labelBoxes[b + 3] && y1 > labelBoxes[b + 1]) {
-              blocked = true;
-              break;
-            }
+          for (let b = 0; b < labelBoxes.length && !blocked; b += 4) {
+            if (x0 < labelBoxes[b + 2] && x1 > labelBoxes[b] && y < labelBoxes[b + 3] && y1 > labelBoxes[b + 1]) blocked = true;
+          }
+          for (let j = 0; j < n && !blocked; j++) {
+            if (j === i) continue;
+            const nr = rad[j] * nodeScale + 1.5;
+            if (sx[j] + nr > x0 && sx[j] - nr < x1 && sy[j] + nr > y && sy[j] - nr < y1) blocked = true;
           }
           if (blocked) continue;
         }
@@ -769,6 +810,7 @@ export function GraphView({ nodes, edges }: { nodes: GraphNode[]; edges: [number
       panXTo = mx - width / 2 - sx * next;
       panYTo = my - height / 2 - sy * next;
       scaleTo = next;
+      userMoved = true;
       kick();
     };
 
@@ -839,6 +881,7 @@ export function GraphView({ nodes, edges }: { nodes: GraphNode[]; edges: [number
         panYTo += dy;
         lastX = e.clientX;
         lastY = e.clientY;
+        userMoved = true;
         kick();
         return;
       }
@@ -885,6 +928,7 @@ export function GraphView({ nodes, edges }: { nodes: GraphNode[]; edges: [number
       e.preventDefault();
       fit(false);
       scale = scaleTo * 0.97;
+      userMoved = false; // hands the camera back — resizes re-frame again
       kick();
     };
 

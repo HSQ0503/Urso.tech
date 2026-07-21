@@ -18,8 +18,8 @@ export default async function BrainLayout({ children }: { children: React.ReactN
   const user = await getBrainUser();
 
   return (
-    <div className="theme-scope flex min-h-screen flex-col bg-bg">
-      <header className="relative z-30 border-b border-edge bg-panel">
+    <div className="theme-scope flex h-dvh flex-col overflow-hidden bg-bg">
+      <header className="relative z-30 shrink-0 border-b border-edge bg-panel">
         <div className="flex w-full items-center justify-between px-4 py-3 md:px-6">
           <Link href="/brain" className="flex items-center gap-2.5">
             <span className="grid size-7 place-items-center rounded-none border border-[rgba(254,81,0,0.35)] bg-orange-soft text-orange">
@@ -45,7 +45,7 @@ export default async function BrainLayout({ children }: { children: React.ReactN
           )}
         </div>
       </header>
-      <main className="flex w-full flex-1 flex-col px-4 py-5 md:px-6">{children}</main>
+      <main className="flex min-h-0 w-full flex-1 flex-col overflow-y-auto px-4 py-5 md:px-6">{children}</main>
     </div>
   );
 }
