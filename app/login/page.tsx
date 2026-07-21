@@ -66,7 +66,7 @@ export default async function LoginPage({
                 name="email"
                 required
                 autoComplete="email"
-                placeholder="you@woofgangbakery.com"
+                placeholder="you@yourbusiness.com"
                 className="w-full rounded-xl border border-edge bg-panel px-4 py-3 text-[13.5px] text-ink placeholder:text-ink-dimmer transition-colors focus:border-edge-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-orange/60"
               />
             </label>
