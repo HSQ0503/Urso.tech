@@ -42,7 +42,7 @@ const DEFAULT_SETTINGS: CanesSettings = {
     hold_text:
       "Hi{name}! This is Canes Pressure Washing. You are now opted in to text updates about your request - we got it, and Sebastian will call you in just a few minutes. Msg & data rates may apply, msg frequency varies. Reply HELP for help or STOP to opt out.",
     confirmation:
-      "Hi{name}, this is Canes Pressure Washing confirming your free estimate visit {when} at {address}. Reply YES to confirm. Reply STOP to opt out.",
+      "Hi{name}, this is Canes Pressure Washing confirming your free estimate visit {when} at {address}. Reply YES to confirm your appointment time, or reply here to reschedule. Reply STOP to opt out.",
     confirmation_ack:
       "You are confirmed for {when}. See you then! - Canes Pressure Washing. Reply STOP to opt out.",
     missed_call:
