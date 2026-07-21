@@ -14,6 +14,7 @@ import {
   getSeries,
   getTopAction,
   getKpiDeltas,
+  getOwnerRevenue,
   storeComparison,
 } from "@/components/dashboard/data.server";
 import {
@@ -45,7 +46,7 @@ export async function OwnerHome({ searchParams, userName, streak }: { searchPara
   const monthScoped = month !== "all";
   const periodLabel = monthScoped ? monthLabel(month) : "Last 12 months";
 
-  const [m, cs, ws, series, action, cards, deltas] = await Promise.all([
+  const [m, cs, ws, series, action, cards, deltas, rev] = await Promise.all([
     getMetrics(scope, month),
     getCallStats(scope, month),
     getWebStats(scope, month),
@@ -53,8 +54,12 @@ export async function OwnerHome({ searchParams, userName, streak }: { searchPara
     getTopAction(scope, month),
     storeComparison(month),
     getKpiDeltas(scope, month),
+    getOwnerRevenue(scope, month),
   ]);
   const labels = series.labels;
+  // Books-basis delta when the whole window is closed books; register
+  // like-for-like otherwise — never a books number against a register one.
+  const revDelta = rev.source === "books" ? rev.delta : deltas.revenue;
 
   // The single metric with the strongest positive move — surfaced in orange as a
   // "win". Real data only: when nothing actually improved, nothing is shown.
@@ -100,11 +105,14 @@ export async function OwnerHome({ searchParams, userName, streak }: { searchPara
         </div>
       )}
 
-      {/* KPI row — all six are live FranPOS metrics with real period-over-period
-          deltas (chips hide when no honest prior period exists). Calls answered
-          and no-show join the row when Twilio / the booking feed go live. */}
+      {/* KPI row — revenue counts the owner's way (QuickBooks Total Income:
+          register sales + tips + commission) once a month's books exist, and
+          falls back to register sales for the still-open month. The other five
+          are live FranPOS metrics with real period-over-period deltas (chips
+          hide when no honest prior period exists). Calls answered and no-show
+          join the row when Twilio / the booking feed go live. */}
       <section className="dash-raise dash-rise mt-3 grid grid-cols-2 gap-px overflow-hidden rounded-none border border-edge bg-edge md:grid-cols-3 xl:grid-cols-6" style={{ "--i": 2 } as CSSProperties}>
-        <Kpi label={t("Revenue")} raw={m.revenue} format="money" delta={deltas.revenue} accent={winner?.key === "revenue"} />
+        <Kpi label={t("Revenue")} raw={rev.total} format="money" delta={revDelta} accent={winner?.key === "revenue"} />
         <Kpi label={t("Bookings")} raw={m.bookings} format="int" delta={deltas.bookings} accent={winner?.key === "bookings"} />
         <Kpi label={t("Avg visit")} raw={m.avgTicket} format="money" delta={deltas.avgTicket} accent={winner?.key === "avgTicket"} />
         <Kpi label={t("Return rate")} raw={m.rebook} format="pct" delta={deltas.rebook} accent={winner?.key === "rebook"} />
@@ -140,8 +148,8 @@ export async function OwnerHome({ searchParams, userName, streak }: { searchPara
                 <ChartInfo id="revenueTrend" />
               </div>
               <div className="mt-1.5 flex items-baseline gap-2.5">
-                <span className="text-[22px] font-bold tracking-[-0.01em] tabular-nums"><CountUp value={m.revenue} format="money" /></span>
-                {deltas.revenue != null && <Delta value={deltas.revenue} />}
+                <span className="text-[22px] font-bold tracking-[-0.01em] tabular-nums"><CountUp value={rev.total} format="money" /></span>
+                {revDelta != null && <Delta value={revDelta} />}
                 <span className="text-[12px] text-ink-dim">{t(periodLabel)}</span>
               </div>
             </div>

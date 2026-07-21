@@ -8,6 +8,7 @@ import {
 import {
   getMetrics,
   getCrossSell,
+  getOwnerRevenue,
   getRevenueByLocation,
   getRevenueByService,
   getRevenueByGroomer,
@@ -37,6 +38,7 @@ export default async function RevenueMapPage({ searchParams }: { searchParams: P
   const period = month === "all" ? "Last 12 months" : monthLabel(month);
 
   const m = await getMetrics(scope, month);
+  const rev = await getOwnerRevenue(scope, month);
   // Rankings arrive sorted desc — crown the leader when no store is scoped so
   // each ranking carries exactly one orange win.
   const byLocation = (await getRevenueByLocation(month)).map((r, i) => ({ name: r.name.replace("Village", "").trim(), value: r.value, highlight: scope === "all" ? i === 0 : scope === r.id }));
@@ -57,11 +59,26 @@ export default async function RevenueMapPage({ searchParams }: { searchParams: P
 
       {/* Headline strip */}
       <section className="dash-rise grid grid-cols-2 gap-px overflow-hidden rounded-none border border-edge bg-edge md:grid-cols-4" style={{ "--i": 1 } as CSSProperties}>
-        <Kpi label={t("Total revenue")} raw={m.revenue} format="money" />
+        <Kpi label={t("Total revenue")} raw={rev.total} format="money" />
         <Kpi label={t("Avg ticket")} raw={m.avgTicket} format="money" />
         <Kpi label={t("Buy both")} raw={xs.both} format="pct" />
         <Kpi label={t("Repeat revenue")} raw={repeatShare} format="pct" />
       </section>
+
+      {/* How the owner's number adds up — QuickBooks Total Income. Hidden while
+          the window has no closed books yet (register-only fallback). */}
+      {rev.source !== "register" && (
+        <section className="dash-rise flex flex-wrap items-baseline gap-x-5 gap-y-1.5 rounded-none border border-edge bg-panel px-4 py-3" style={{ "--i": 1.5 } as CSSProperties}>
+          <Micro>{t("How the total adds up")}</Micro>
+          <span className="text-[13px] text-ink-dim">{t("Sales")} <span className="font-semibold text-ink tabular-nums">{fmtMoney(rev.sales)}</span></span>
+          <span className="text-[13px] text-ink-dim">{t("Tips (paid out to groomers)")} <span className="font-semibold text-ink tabular-nums">{fmtMoney(rev.tips)}</span></span>
+          <span className="text-[13px] text-ink-dim">{t("Other income")} <span className="font-semibold text-ink tabular-nums">{fmtMoney(rev.otherIncome)}</span></span>
+          {rev.openRegister > 0 && (
+            <span className="text-[13px] text-ink-dim">{t("This month so far (register)")} <span className="font-semibold text-ink tabular-nums">{fmtMoney(rev.openRegister)}</span></span>
+          )}
+          <span className="text-[12px] text-ink-dimmer">{t("Counted the way the books count it — QuickBooks Total Income. Register sales for the same period:")} {fmtMoney(rev.registerSales)}</span>
+        </section>
+      )}
 
       {/* Location + line */}
       <section className="dash-rise grid grid-cols-1 gap-3 lg:grid-cols-2" style={{ "--i": 2 } as CSSProperties}>

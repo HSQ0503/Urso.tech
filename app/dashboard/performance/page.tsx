@@ -11,6 +11,7 @@ import {
   getWebStats,
   getFunnel,
   getCrossSell,
+  getOwnerRevenue,
   getSeries,
   getCallsHourly,
 } from "@/components/dashboard/data.server";
@@ -54,6 +55,7 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
   const scope = parseScope(sp.store);
   const month = parseMonth(sp.month);
   const m = await getMetrics(scope, month);
+  const rev = await getOwnerRevenue(scope, month);
   const cs = await getCallStats(scope, month);
   const ws = await getWebStats(scope, month);
   const series = await getSeries(scope, month);
@@ -258,7 +260,7 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
       {/* Money */}
       <section className="dash-rise" style={{ "--i": 3 } as CSSProperties}>
         <SubHead
-          eyebrow={`${t("Money")} · FranPOS`}
+          eyebrow={`${t("Money")} · ${rev.source === "register" ? "FranPOS" : "QuickBooks + FranPOS"}`}
           title={t("Revenue and mix")}
           right={<Tag tone="good">{t("Measurable now")}</Tag>}
         />
@@ -279,7 +281,7 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
                   />
                   <ChartInfo id="revenueTrend" />
                 </div>
-                <div className="mt-1.5 text-[22px] font-bold tracking-[-0.01em] tabular-nums"><CountUp value={m.revenue} format="money" /></div>
+                <div className="mt-1.5 text-[22px] font-bold tracking-[-0.01em] tabular-nums"><CountUp value={rev.total} format="money" /></div>
               </div>
               <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-dimmer">{period}</span>
             </div>

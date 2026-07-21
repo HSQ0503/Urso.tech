@@ -1807,6 +1807,100 @@ export async function getCostBreakdown(scope: Scope, month: MonthValue): Promise
   return lines.filter((l) => l.amount > 0).sort((a, b) => b.amount - a.amount);
 }
 
+// ── public: owner-defined revenue (headline KPIs) ───────────────────────────
+// The owner counts revenue the way his books do: QuickBooks Total Income =
+// register sales + tips passed to groomers via payroll + commission income.
+// The register can't see the last two, so months with closed books read
+// QuickBooks exactly (the number the owner recognizes from his P&L) and the
+// still-open month contributes register sales until its books exist.
+export type OwnerRevenue = {
+  total: number;
+  source: "books" | "register" | "mixed"; // mixed = closed books + open-month register
+  sales: number; // books sales portion = Total Income − tips − other
+  tips: number;
+  otherIncome: number; // e.g. "Service Comission"
+  registerSales: number; // POS net sales over the same window, for context
+  openRegister: number; // register portion inside `total` (open month only)
+  delta: number | null; // books-basis vs prior period; null when not comparable
+};
+
+async function loadIncomeMix(ids: string[], start: string, end: string): Promise<{ total: number; tips: number; other: number; monthsCovered: number }> {
+  const cEnd = end > curMonthFirst() ? curMonthFirst() : end;
+  if (start >= cEnd) return { total: 0, tips: 0, other: 0, monthsCovered: 0 };
+  const [totals, leaves] = await Promise.all([
+    loadPnlTotals(ids, { start, end: cEnd }, [PNL_LABEL.revenue]),
+    loadPnlLeaves(ids, { start, end: cEnd }),
+  ]);
+  let total = 0;
+  const months = new Set<string>();
+  for (const r of totals) {
+    total += Number(r.amount);
+    months.add(r.month.slice(0, 7));
+  }
+  // Tips + commission sit inside Total Income on every company's books, under
+  // account names that differ per store; below-the-line sections ("Other
+  // Income" / "7000 Other Revenue") are outside Total Income and are skipped.
+  let tips = 0;
+  let other = 0;
+  for (const r of leaves) {
+    const s = r.section.toLowerCase();
+    if (!/sales|income|revenue/.test(s) || /other (income|revenue)/.test(s) || /cost of goods/.test(s)) continue;
+    if (/tip/i.test(r.account)) tips += Number(r.amount);
+    else if (/comm?ission/i.test(r.account)) other += Number(r.amount);
+  }
+  return { total, tips, other, monthsCovered: months.size };
+}
+
+export async function getOwnerRevenue(scope: Scope, month: MonthValue): Promise<OwnerRevenue> {
+  const range = monthRange(month);
+  const ids = qboTotalIds(scope);
+  const [mix, byStore] = await Promise.all([
+    range ? loadIncomeMix(ids, range.start, range.end) : Promise.resolve({ total: 0, tips: 0, other: 0, monthsCovered: 0 }),
+    loadDaily(month),
+  ]);
+  const registerSales = sumScope(byStore, scopeIds(scope)).rev;
+  if (!range || mix.monthsCovered === 0) {
+    return { total: registerSales, source: "register", sales: 0, tips: 0, otherIncome: 0, registerSales, openRegister: registerSales, delta: null };
+  }
+
+  const openFirst = curMonthFirst();
+  const includesOpen = range.end > openFirst;
+  let openRegister = 0;
+  if (includesOpen) {
+    openRegister = sumScope(await loadDailyRange(openFirst, addDays(nyToday(), 1)), scopeIds(scope)).rev;
+  }
+
+  // Books-basis delta, only when this window and its prior are both fully
+  // closed books — a books number never compares against a register number.
+  let delta: number | null = null;
+  if (!includesOpen && month !== "all") {
+    const pad = (n: number) => String(n).padStart(2, "0");
+    let prev: { start: string; end: string };
+    if (isYear(month)) {
+      const y = Number(month);
+      prev = { start: `${y - 1}-01-01`, end: `${y}-01-01` };
+    } else {
+      const [y, m] = month.split("-").map(Number);
+      prev = m === 1 ? { start: `${y - 1}-12-01`, end: `${y}-01-01` } : { start: `${y}-${pad(m - 1)}-01`, end: `${y}-${pad(m)}-01` };
+    }
+    if (prev.start >= MONEY_START) {
+      const pm = await loadIncomeMix(ids, prev.start, prev.end);
+      if (pm.monthsCovered > 0 && pm.total > 0) delta = (mix.total - pm.total) / pm.total;
+    }
+  }
+
+  return {
+    total: mix.total + openRegister,
+    source: includesOpen ? "mixed" : "books",
+    sales: mix.total - mix.tips - mix.other,
+    tips: mix.tips,
+    otherIncome: mix.other,
+    registerSales,
+    openRegister,
+    delta,
+  };
+}
+
 // ── public: margin trend over all closed months ─────────────────────────────
 export async function getMarginTrend(scope: Scope): Promise<MarginTrend> {
   const rows = await loadPnlTotals(qboTotalIds(scope), { start: MONEY_START, end: curMonthFirst() }, [PNL_LABEL.revenue, PNL_LABEL.grossProfit, PNL_LABEL.netIncome]);

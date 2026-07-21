@@ -10,6 +10,7 @@ import type { SessionUser } from "@/lib/auth";
 
 export const METRIC_DEFINITIONS = `Metric definitions (these match the dashboard exactly — never use different ones):
 - Revenue = sum of line price × qty minus discounts, EXCLUDING pass-through lines (deposits, gift-card sales). A redeemed gift card rings full price at redemption, so counting the sale would double-count.
+- HEADLINE revenue on the dashboard (Home / Revenue map / Performance) counts revenue the OWNER'S way: QuickBooks Total Income = register sales + tips passed to groomers via payroll + commission income (~10–15% above register sales). Months with closed books show QuickBooks exactly; the still-open month shows register sales until its books exist. Your tools (metrics_overview etc.) return REGISTER sales — when a user quotes a bigger on-screen revenue number, the difference is tips + commission, not an error.
 - Grooming vs retail split is a line-level heuristic (6+ digit SKU or cost > 0 ⇒ retail, else service), validated within 0.06% of the POS portal.
 - Bookings = tickets with at least one real grooming line. Deposit-only tickets are excluded.
 - Avg visit = grooming-ticket revenue ÷ bookings (NOT all revenue ÷ bookings — retail-only purchases are excluded from the numerator).
