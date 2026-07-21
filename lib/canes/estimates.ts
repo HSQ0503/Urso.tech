@@ -243,6 +243,19 @@ export async function getJob(id: string): Promise<Job | null> {
   return (data as Job | null) ?? null;
 }
 
+// The job an approved estimate minted (one per estimate — createJobFromEstimate
+// dedupes on estimate_id). The public estimate page uses this to re-surface the
+// deposit link / paid state on a return visit.
+export async function getJobByEstimateId(estimateId: string): Promise<Job | null> {
+  if (isDemo()) return DEMO_JOBS.find((j) => j.estimate_id === estimateId) ?? null;
+  const { data } = await canesDb()
+    .from("jobs")
+    .select("*")
+    .eq("estimate_id", estimateId)
+    .maybeSingle();
+  return (data as Job | null) ?? null;
+}
+
 export async function listJobItems(jobId: string): Promise<JobItem[]> {
   if (isDemo()) {
     return DEMO_JOB_ITEMS.filter((i) => i.job_id === jobId).sort((a, b) => a.position - b.position);

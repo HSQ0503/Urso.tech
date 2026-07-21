@@ -5,7 +5,7 @@ import type { Estimate, Invoice, Lead, PaymentMethod } from "@/lib/canes/types";
 import type { Overview } from "@/lib/canes/data";
 import { EstimateEmail } from "@/emails/canes/estimate-email";
 import { ColdLeadEmail, EscalationEmail, UnconfirmedEmail } from "@/emails/canes/lead-emails";
-import { EstimateApprovedEmail, EstimateDeclinedEmail } from "@/emails/canes/estimate-outcome-emails";
+import { DepositPaidOwnerEmail, EstimateApprovedEmail, EstimateDeclinedEmail } from "@/emails/canes/estimate-outcome-emails";
 import { InvoiceEmail } from "@/emails/canes/invoice-email";
 import { InvoiceReceiptEmail, InvoicePaidOwnerEmail } from "@/emails/canes/invoice-outcome-emails";
 import { RewardClaimedEmail } from "@/emails/canes/reward-claimed-email";
@@ -192,6 +192,25 @@ export async function notifyEstimateApproved(estimate: Estimate): Promise<void> 
     />,
   );
   await send(`✅ Approved — ${estimate.customer_name ?? estimate.number} (${fmtMoney(estimate.total_cents)})`, html);
+}
+
+// Owner-facing: the booking deposit landed (0013). Fired by the Square webhook
+// when a deposit Payment Link payment reconciles; `amountCents` is the amount
+// actually paid, which the email shows as the deposit figure.
+export async function notifyDepositPaid(estimate: Estimate, amountCents: number): Promise<void> {
+  const html = await render(
+    <DepositPaidOwnerEmail
+      number={estimate.number}
+      customerName={estimate.customer_name}
+      customerPhone={estimate.customer_phone ? fmtPhone(estimate.customer_phone) : null}
+      jobAddress={estimate.job_address}
+      jobName={estimate.job_name}
+      total={fmtMoney(estimate.total_cents)}
+      deposit={fmtMoney(amountCents)}
+      openUrl={estimateUrl(estimate)}
+    />,
+  );
+  await send(`💰 Deposit paid — ${estimate.customer_name ?? estimate.number} (${fmtMoney(amountCents)})`, html);
 }
 
 // Owner-facing: a customer declined; no job is created.

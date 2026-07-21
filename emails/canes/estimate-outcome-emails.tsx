@@ -73,6 +73,41 @@ EstimateApprovedEmail.PreviewProps = {
   signatureName: "Marcus Bell",
 } satisfies EstimateOutcomeProps & { signatureName?: string | null };
 
+// A booking deposit was paid (0013) — money in before the visit is scheduled.
+// Green accent, same detail table; `deposit` here is the amount actually paid.
+export function DepositPaidOwnerEmail(props: EstimateOutcomeProps) {
+  const who = props.customerName ?? "A customer";
+  return (
+    <CanesEmail
+      preview={`Deposit paid — ${who}${props.deposit ? ` (${props.deposit})` : ""}`}
+      accent="good"
+      eyebrow="Deposit received"
+      heading={`${who} paid the deposit${props.deposit ? ` (${props.deposit})` : ""}`}
+    >
+      <Divider />
+      <DetailTable rows={outcomeRows(props)} />
+      <Section className="px-7 pt-3">
+        <Text className="m-0 text-[12px] leading-[1.5] text-[#5B6673]">
+          The booking deposit is in and will credit the final invoice automatically. Open the job to
+          schedule the visit.
+        </Text>
+      </Section>
+      <CtaButton href={props.openUrl} label="Open in Canes" tone="good" />
+    </CanesEmail>
+  );
+}
+
+DepositPaidOwnerEmail.PreviewProps = {
+  number: "EST-1042",
+  customerName: "Marcus Bell",
+  customerPhone: "(407) 555-0134",
+  jobAddress: "812 Lake Ridge Dr, Windermere, FL 34786",
+  jobName: "House wash + driveway",
+  total: "$1,240.00",
+  deposit: "$300.00",
+  openUrl: "https://urso.ws/CanesPressure/estimates/est_abc123",
+} satisfies EstimateOutcomeProps;
+
 // A customer declined — no job created. Red accent, decline reason surfaced.
 export function EstimateDeclinedEmail(props: EstimateOutcomeProps & { declineReason?: string | null }) {
   const { declineReason, ...est } = props;

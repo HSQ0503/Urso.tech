@@ -6,7 +6,8 @@ import {
   verifySquareSignature,
 } from "@/lib/canes/square";
 import { getInvoice } from "@/lib/canes/invoices";
-import { notifyInvoicePaid, notifyInvoiceReceipt } from "@/lib/canes/notify";
+import { getEstimate, getJob } from "@/lib/canes/estimates";
+import { notifyDepositPaid, notifyInvoicePaid, notifyInvoiceReceipt } from "@/lib/canes/notify";
 
 // Square webhook — the authoritative "an invoice got paid" signal. Verify-first,
 // always-200 (so Square stops retrying a handled event), idempotent. Card data
@@ -49,6 +50,14 @@ export async function POST(req: Request): Promise<Response> {
         await notifyInvoicePaid(invoice, "card");
         await notifyInvoiceReceipt(invoice, "card");
       }
+    }
+    // A reconciled booking deposit (0013) emails the owner — SMS via alertOwner
+    // already fired inside the reconciler, but email is the reliable channel
+    // until A2P clears. Square sends the customer's card receipt itself.
+    if (outcome.handled === "recorded" && outcome.depositJobId && outcome.amountCents) {
+      const job = await getJob(outcome.depositJobId);
+      const estimate = job?.estimate_id ? await getEstimate(job.estimate_id) : null;
+      if (estimate) await notifyDepositPaid(estimate, outcome.amountCents);
     }
     console.log(`[canes] square webhook ${event.eventType}: ${outcome.handled}`);
   } catch (err) {

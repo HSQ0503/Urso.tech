@@ -371,6 +371,11 @@ export type Job = {
   canceled_reason: string | null;
   // ── customers additions (0006_customers.sql) ──
   customer_email: string | null;
+  // ── deposit-link additions (0013_deposits.sql); optional so fixtures compile ──
+  deposit_order_id?: string | null;
+  deposit_link_id?: string | null;
+  deposit_link_url?: string | null;
+  deposit_paid_at?: string | null;
 };
 
 export type Crew = {
@@ -533,6 +538,8 @@ export function fmtMoney(cents: number | null | undefined): string {
 export type InvoiceStatus = "draft" | "sent" | "viewed" | "paid" | "void";
 export type PaymentMethod = "cash" | "card" | "other";
 export type PaymentSource = "manual" | "square_webhook";
+// A booking deposit collected at estimate approval vs the final balance (0013).
+export type PaymentKind = "deposit" | "balance";
 
 export type Invoice = {
   id: string; created_at: string; updated_at: string;
@@ -560,6 +567,8 @@ export type Payment = {
   amount_cents: number; currency: string; method: PaymentMethod; source: PaymentSource;
   status: "completed" | "refunded"; square_payment_id: string | null;
   external_event_id: string | null; recorded_by: string | null; note: string | null;
+  // ── 0013 deposits; optional so fixtures compile ──
+  kind?: PaymentKind; square_order_id?: string | null;
 };
 
 export type InvoiceWithItems = Invoice & { items: InvoiceItem[]; payments: Payment[] };

@@ -1,20 +1,8 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { squareConfigured, canesConfigured, canesDb } from "@/lib/canes/supabase";
-import { getInvoiceBySquareId, getInvoiceItems } from "@/lib/canes/invoices";
-import { fmtMoney } from "@/lib/canes/types";
+import { getInvoiceByJob, getInvoiceBySquareId, getInvoiceItems, getInvoicePayments } from "@/lib/canes/invoices";
+import { fmtMoney, invoiceBalanceCents } from "@/lib/canes/types";
 import type { Estimate, Invoice, InvoiceItem } from "@/lib/canes/types";
-
-// Square deposit links — stubbed until Square is connected. approveEstimate
-// calls this to offer a deposit checkout; while Square is not configured it
-// returns { url: null, skipped } and the UI just omits the button. Deposits at
-// approval time are a later phase than the completion-invoice pipeline below.
-export async function createDepositLink(
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  estimate: Estimate,
-): Promise<{ url: string | null; skipped?: string }> {
-  if (!squareConfigured()) return { url: null, skipped: "Square not connected yet" };
-  return { url: null, skipped: "Square deposit links not implemented yet" };
-}
 
 // Square payments — the card side of the money pipeline. Built as a real-but-
 // flagged stub: squareConfigured() gates the live API so the whole invoice +
@@ -42,6 +30,122 @@ const APP_URL = (process.env.NEXT_PUBLIC_APP_URL ?? "https://urso.ws").replace(/
 
 export function squareEnvLabel(): string {
   return SQUARE_ENV;
+}
+
+// ── Deposit Payment Links — the booking deposit at estimate approval ──────────
+// A one-off Checkout **Payment Link** (quick-pay: fixed amount, Square-hosted
+// PCI page, NO Invoices Plus subscription needed) for the job the approval just
+// minted. The link + its order id + its link id land on the job row BEFORE the
+// URL is handed out — the webhook reconciles the payment by
+// payment.order_id → jobs.deposit_order_id, so an unstored link could take
+// money we can't match. Idempotent twice over: Square dedupes on
+// `deposit:<jobId>` and we re-serve a stored link instead of minting another.
+
+export type DepositLinkResult = { url: string | null; skipped?: string; error?: string };
+
+export async function createDepositLink(
+  estimate: Estimate,
+  jobId: string | null,
+): Promise<DepositLinkResult> {
+  if (!squareConfigured() || !canesConfigured()) {
+    return { url: null, skipped: "Square not connected yet" };
+  }
+  if (!jobId) return { url: null, skipped: "No job to take a deposit for" };
+
+  const db = canesDb();
+  const { data: jobRow } = await db
+    .from("jobs")
+    .select("id, job_name, deposit_cents, deposit_order_id, deposit_link_url, deposit_paid_at")
+    .eq("id", jobId)
+    .maybeSingle();
+  const job = jobRow as {
+    id: string;
+    job_name: string | null;
+    deposit_cents: number;
+    deposit_order_id: string | null;
+    deposit_link_url: string | null;
+    deposit_paid_at: string | null;
+  } | null;
+  if (!job) return { url: null, skipped: "Job not found" };
+  if (job.deposit_paid_at) return { url: null, skipped: "Deposit already paid" };
+  if (job.deposit_link_url) return { url: job.deposit_link_url };
+  const amount = Math.round(job.deposit_cents);
+  if (amount <= 0) return { url: null, skipped: "No deposit on this estimate" };
+
+  const headers = {
+    Authorization: `Bearer ${process.env.CANES_SQUARE_ACCESS_TOKEN as string}`,
+    "Content-Type": "application/json",
+    "Square-Version": SQUARE_VERSION,
+  };
+  try {
+    const res = await fetch(`${SQUARE_API_BASE}/v2/online-checkout/payment-links`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        idempotency_key: `deposit:${job.id}`,
+        quick_pay: {
+          name: `Deposit — ${(job.job_name ?? estimate.job_name ?? "Pressure washing").slice(0, 200)}`,
+          price_money: { amount, currency: "USD" },
+          location_id: process.env.CANES_SQUARE_LOCATION_ID as string,
+        },
+        checkout_options: {
+          // Back to the approved estimate page, which reads ?deposit=paid as
+          // the optimistic thank-you (the webhook stamp lands seconds later).
+          redirect_url: `${APP_URL}/CanesPressure/e/${estimate.public_token}?deposit=paid`,
+          ask_for_shipping_address: false,
+        },
+        // Prefill the hosted page so the customer just enters a card.
+        pre_populated_data: {
+          ...(estimate.customer_email ? { buyer_email: estimate.customer_email } : {}),
+          ...(estimate.customer_phone ? { buyer_phone_number: estimate.customer_phone } : {}),
+        },
+        payment_note: `Deposit for ${estimate.number}`,
+      }),
+    });
+    const json = (await res.json()) as Record<string, unknown>;
+    if (!res.ok) return { url: null, error: squareErr(json, res.status) };
+    const link = (json.payment_link ?? {}) as Record<string, unknown>;
+    const url = typeof link.url === "string" ? link.url : null;
+    const orderId = typeof link.order_id === "string" ? link.order_id : null;
+    const linkId = typeof link.id === "string" ? link.id : null;
+    if (!url || !orderId) return { url: null, error: "Square payment link missing url/order id" };
+
+    // Store before handing out; the null-guard keeps a racing approve from
+    // overwriting (Square's idempotency returns the same link to both anyway).
+    const { error: saveErr } = await db
+      .from("jobs")
+      .update({ deposit_order_id: orderId, deposit_link_id: linkId, deposit_link_url: url })
+      .eq("id", job.id)
+      .is("deposit_order_id", null);
+    if (saveErr) {
+      console.error(`[canes] deposit link save failed for job ${job.id}: ${saveErr.message}`);
+      return { url: null, error: saveErr.message };
+    }
+    return { url };
+  } catch (err) {
+    return { url: null, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+// Delete a paid quick-pay link so the same URL can never charge twice (Square
+// keeps payment links chargeable after a payment). Best-effort — a failure
+// only means the double-payment alert is the backstop.
+async function deleteDepositLink(linkId: string): Promise<void> {
+  if (!squareConfigured()) return;
+  try {
+    const res = await fetch(`${SQUARE_API_BASE}/v2/online-checkout/payment-links/${linkId}`, {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${process.env.CANES_SQUARE_ACCESS_TOKEN as string}`,
+        "Square-Version": SQUARE_VERSION,
+      },
+    });
+    if (!res.ok) {
+      console.error(`[canes] deposit link delete rejected for ${linkId}: ${res.status}`);
+    }
+  } catch (err) {
+    console.error(`[canes] deposit link delete failed for ${linkId}:`, err);
+  }
 }
 
 // ── Webhook signature verification ───────────────────────────────────────────
@@ -82,6 +186,7 @@ export type NormalizedPaymentEvent = {
   eventType: string;
   squareInvoiceId: string | null;
   squarePaymentId: string | null;
+  squareOrderId: string | null; // deposit reconciliation key (Payment Links carry no invoice id)
   amountCents: number | null; // amount actually paid, in cents
   currency: string | null;
   paid: boolean; // true when this event represents a completed payment
@@ -108,6 +213,7 @@ export function parseSquareEvent(payload: Record<string, unknown>): NormalizedPa
       eventType,
       squareInvoiceId: typeof payment.invoice_id === "string" ? payment.invoice_id : null,
       squarePaymentId: typeof payment.id === "string" ? payment.id : null,
+      squareOrderId: typeof payment.order_id === "string" ? payment.order_id : null,
       amountCents: typeof money.amount === "number" ? money.amount : null,
       currency: typeof money.currency === "string" ? money.currency : null,
       paid: status === "COMPLETED" || status === "CAPTURED",
@@ -138,6 +244,7 @@ export function parseSquareEvent(payload: Record<string, unknown>): NormalizedPa
       eventType,
       squareInvoiceId: typeof invoice.id === "string" ? invoice.id : null,
       squarePaymentId: null,
+      squareOrderId: null,
       amountCents: completed || null,
       currency,
       // Require real completed money — a bare status:"PAID" with no
@@ -147,7 +254,7 @@ export function parseSquareEvent(payload: Record<string, unknown>): NormalizedPa
     };
   }
 
-  return { eventId, eventType, squareInvoiceId: null, squarePaymentId: null, amountCents: null, currency: null, paid: false };
+  return { eventId, eventType, squareInvoiceId: null, squarePaymentId: null, squareOrderId: null, amountCents: null, currency: null, paid: false };
 }
 
 // ── Create + publish a Square invoice ────────────────────────────────────────
@@ -204,6 +311,28 @@ export async function createSquareInvoice(
     const customerId = ((custJson.customer ?? {}) as Record<string, unknown>).id as string | undefined;
 
     // 1. Order with the billed line items. Square Money = amount in cents.
+    // The order must collect EXACTLY the balance due — total_cents already
+    // carries adjustments and approved review rewards, and amount_paid_cents
+    // carries the booking deposit (0013). Line items alone know none of that,
+    // so the difference becomes an order-scope discount (a shortfall — shows
+    // as "Deposit received" on the hosted page) or an extra "Adjustment" line
+    // (an excess). The hosted invoice can never re-charge the deposit or bill
+    // around a reward.
+    const targetCents = invoiceBalanceCents(invoice);
+    const squareLineSum =
+      lineItems.length > 0
+        ? lineItems.reduce(
+            (sum, it) => sum + Math.round(Math.round(it.unit_price_cents) * (it.quantity || 1)),
+            0,
+          )
+        : targetCents;
+    const creditCents = Math.max(0, squareLineSum - targetCents);
+    const surchargeCents = Math.max(0, targetCents - squareLineSum);
+    let creditLabel = "Payments & credits";
+    if (creditCents > 0) {
+      const completed = (await getInvoicePayments(invoice.id)).filter((p) => p.status === "completed");
+      if (completed.some((p) => p.kind === "deposit")) creditLabel = "Deposit received";
+    }
     const orderRes = await fetch(`${SQUARE_API_BASE}/v2/orders`, {
       method: "POST",
       headers,
@@ -214,8 +343,8 @@ export async function createSquareInvoice(
           customer_id: customerId,
           reference_id: invoice.number.slice(0, 40), // reconciliation echo (max 40 chars)
           metadata: { db_invoice_id: invoice.id },
-          line_items:
-            lineItems.length > 0
+          line_items: [
+            ...(lineItems.length > 0
               ? lineItems.map((it) => ({
                   name: it.name,
                   quantity: String(it.quantity || 1),
@@ -228,9 +357,31 @@ export async function createSquareInvoice(
                   {
                     name: invoice.job_name ?? "Pressure washing service",
                     quantity: "1",
-                    base_price_money: { amount: Math.round(invoice.total_cents), currency: "USD" },
+                    base_price_money: { amount: targetCents, currency: "USD" },
+                  },
+                ]),
+            ...(surchargeCents > 0
+              ? [
+                  {
+                    name: "Adjustment",
+                    quantity: "1",
+                    base_price_money: { amount: surchargeCents, currency: "USD" },
+                  },
+                ]
+              : []),
+          ],
+          ...(creditCents > 0
+            ? {
+                discounts: [
+                  {
+                    uid: "balance-credit",
+                    name: creditLabel,
+                    amount_money: { amount: creditCents, currency: "USD" },
+                    scope: "ORDER",
                   },
                 ],
+              }
+            : {}),
         },
       }),
     });
@@ -317,6 +468,9 @@ function squareErr(json: Record<string, unknown>, status: number): string {
 export type ReconcileOutcome = {
   handled: "duplicate" | "unmatched" | "amount_mismatch" | "recorded" | "ignored" | "unconfigured";
   invoiceId?: string;
+  // Set when the event settled a booking DEPOSIT (0013) instead of an invoice.
+  depositJobId?: string;
+  amountCents?: number;
 };
 
 export async function handleSquarePaymentEvent(
@@ -338,6 +492,18 @@ export async function handleSquarePaymentEvent(
     )
     .select("event_id");
   if (!seen || seen.length === 0) return { handled: "duplicate" };
+
+  // Deposit path (0013): a Payment Link (quick-pay) payment NEVER fires
+  // invoice.* events — its only signal is payment.created/updated carrying the
+  // link's order id. Runs before the invoice gate below. Matching is strict:
+  // payment.order_id → jobs.deposit_order_id (stored when the link was
+  // minted). An invoice-page card payment can't land here because its
+  // payment.* echo carries an invoice_id; a POS sale matches no job and falls
+  // through to "ignored" like before.
+  if (event.squarePaymentId && event.squareOrderId && !event.squareInvoiceId && event.paid) {
+    const deposit = await recordDepositPayment(event);
+    if (deposit) return deposit;
+  }
 
   // ONLY the authoritative invoice event settles money. A single hosted-invoice
   // card payment fires BOTH payment.updated AND invoice.payment_made; if we
@@ -396,6 +562,7 @@ export async function handleSquarePaymentEvent(
     method: "card",
     source: "square_webhook",
     status: "completed",
+    kind: "balance",
     square_payment_id: paymentId,
     external_event_id: event.eventId,
     recorded_by: "square",
@@ -418,14 +585,128 @@ export async function handleSquarePaymentEvent(
     );
     return { handled: "amount_mismatch", invoiceId: invoice.id };
   }
-  if (amount < invoice.total_cents) {
+  // Compare against the balance that was DUE, not the face total — a
+  // deposit-credited invoice (0013) legitimately collects total minus deposit,
+  // and flagging that as partial would false-alarm every deposit job.
+  if (amount < invoiceBalanceCents(invoice)) {
     // Recorded as a partial; recompute left it unsettled.
     await alertOwner(
-      `Partial card payment ${fmtMoney(amount)} on ${invoice.number} (total ${fmtMoney(invoice.total_cents)}).`,
+      `Partial card payment ${fmtMoney(amount)} on ${invoice.number} (balance was ${fmtMoney(invoiceBalanceCents(invoice))}, total ${fmtMoney(invoice.total_cents)}).`,
     );
     return { handled: "amount_mismatch", invoiceId: invoice.id };
   }
   return { handled: "recorded", invoiceId: invoice.id };
+}
+
+// ── Deposit reconciliation — record the booking deposit, mark the job ─────────
+// Mirrors the invoice path's invariants: idempotent on the Square payment id,
+// records the REAL paid amount, verifies currency, alerts on any anomaly
+// instead of guessing. Returns null when the order matches no job — the caller
+// falls through and the event is ignored (e.g. a POS sale).
+async function recordDepositPayment(event: NormalizedPaymentEvent): Promise<ReconcileOutcome | null> {
+  const db = canesDb();
+  const { data: jobRow } = await db
+    .from("jobs")
+    .select("id, lead_id, job_name, customer_name, deposit_cents, deposit_link_id, deposit_paid_at")
+    .eq("deposit_order_id", event.squareOrderId as string)
+    .maybeSingle();
+  if (!jobRow) return null;
+  const job = jobRow as {
+    id: string;
+    lead_id: string | null;
+    job_name: string | null;
+    customer_name: string | null;
+    deposit_cents: number;
+    deposit_link_id: string | null;
+    deposit_paid_at: string | null;
+  };
+  const { alertOwner } = await import("@/lib/canes/twilio");
+  const label = job.customer_name ?? job.job_name ?? "a job";
+
+  // Amount + currency verification BEFORE any money is recorded — same rule as
+  // invoices: a non-positive amount or non-USD currency never touches the
+  // ledger.
+  const amount = event.amountCents ?? 0;
+  const currencyOk = !event.currency || event.currency === "USD";
+  if (amount <= 0 || !currencyOk) {
+    await markEventProcessed(event.eventId);
+    await alertOwner(
+      `⚠️ Deposit payment event for ${label} had ${amount <= 0 ? "no amount" : `currency ${event.currency}`}. Review in Square before treating it as paid.`,
+    );
+    return { handled: "amount_mismatch", depositJobId: job.id };
+  }
+
+  // Idempotent ledger insert — same check-then-insert as the invoice path (the
+  // partial unique index on square_payment_id refuses ON CONFLICT inference).
+  const paymentId = event.squarePaymentId as string;
+  const { data: existingPayment } = await db
+    .from("payments")
+    .select("id")
+    .eq("square_payment_id", paymentId)
+    .maybeSingle();
+  if (existingPayment) {
+    await markEventProcessed(event.eventId);
+    return { handled: "duplicate", depositJobId: job.id };
+  }
+
+  // Attach to the job's live invoice when one already exists (a deposit paid
+  // after completion) so the bill's paid cache credits it immediately.
+  const invoice = await getInvoiceByJob(job.id);
+  const { error: insErr } = await db.from("payments").insert({
+    invoice_id: invoice?.id ?? null,
+    job_id: job.id,
+    amount_cents: amount,
+    currency: event.currency ?? "USD",
+    method: "card",
+    source: "square_webhook",
+    status: "completed",
+    kind: "deposit",
+    square_payment_id: paymentId,
+    square_order_id: event.squareOrderId,
+    external_event_id: event.eventId,
+    recorded_by: "square",
+  });
+  if (insErr) {
+    // Left unprocessed on purpose — the event stays retryable.
+    console.error(`[canes] deposit payment insert failed for job ${job.id}: ${insErr.message}`);
+    return { handled: "unmatched", depositJobId: job.id };
+  }
+
+  const secondPayment = Boolean(job.deposit_paid_at);
+  if (!secondPayment) {
+    await db
+      .from("jobs")
+      .update({ deposit_paid_at: new Date().toISOString() })
+      .eq("id", job.id)
+      .is("deposit_paid_at", null);
+  }
+  if (invoice) await recomputeInvoicePaid(invoice.id);
+  await markEventProcessed(event.eventId);
+
+  // A paid quick-pay link stays chargeable — delete it so the same URL can't
+  // take a second payment. Best-effort; the second-payment alert below is the
+  // backstop.
+  if (job.deposit_link_id) await deleteDepositLink(job.deposit_link_id);
+
+  if (secondPayment) {
+    await alertOwner(
+      `⚠️ A second deposit payment of ${fmtMoney(amount)} arrived for ${label}. Likely a double charge — refund it from Square.`,
+    );
+    return { handled: "amount_mismatch", depositJobId: job.id, amountCents: amount };
+  }
+  if (amount !== Math.round(job.deposit_cents)) {
+    await alertOwner(
+      `⚠️ Deposit of ${fmtMoney(amount)} for ${label} doesn't match the ${fmtMoney(job.deposit_cents)} requested. Review in Square.`,
+    );
+    return { handled: "amount_mismatch", depositJobId: job.id, amountCents: amount };
+  }
+  await alertOwner(`💰 Deposit ${fmtMoney(amount)} received from ${label}. The job is ready to schedule.`);
+  if (job.lead_id) {
+    await db
+      .from("events")
+      .insert({ lead_id: job.lead_id, kind: "invoice", detail: `Deposit ${fmtMoney(amount)} paid (card)` });
+  }
+  return { handled: "recorded", depositJobId: job.id, amountCents: amount };
 }
 
 // Cancel a published Square invoice so its hosted pay link can no longer take a

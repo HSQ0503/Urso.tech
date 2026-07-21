@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
-import { CheckCircle2, ChevronDown } from "lucide-react";
-import { getEstimateByToken, getEstimateItems } from "@/lib/canes/estimates";
+import { CheckCircle2, ChevronDown, CreditCard } from "lucide-react";
+import { getEstimateByToken, getEstimateItems, getJobByEstimateId } from "@/lib/canes/estimates";
 import { markViewed } from "@/app/CanesPressure/actions";
 import { ESTIMATE_TYPE_LABEL, fmtMoney, type EstimateItem } from "@/lib/canes/types";
 import { PublicApproval } from "@/app/CanesPressure/components/estimates/public-approval";
@@ -42,8 +42,10 @@ function lineShows(item: EstimateItem): boolean {
 
 export default async function PublicEstimatePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ token: string }>;
+  searchParams: Promise<{ deposit?: string }>;
 }) {
   const { token } = await params;
   const estimate = await getEstimateByToken(token);
@@ -52,6 +54,16 @@ export default async function PublicEstimatePage({
   if (!estimate || estimate.status === "draft") notFound();
 
   const items = await getEstimateItems(estimate.id);
+
+  // Deposit state for an approved estimate (0013): the job row carries the
+  // Payment Link + paid flag. `?deposit=paid` is Square's post-payment redirect
+  // — trust it optimistically for the thank-you (the webhook stamp lands
+  // seconds later); the ledger stays the record.
+  const { deposit: depositParam } = await searchParams;
+  const job = estimate.status === "approved" ? await getJobByEstimateId(estimate.id) : null;
+  const depositPaid = Boolean(job?.deposit_paid_at) || depositParam === "paid";
+  const depositUrl =
+    !depositPaid && (job?.deposit_cents ?? 0) > 0 ? (job?.deposit_link_url ?? null) : null;
 
   // First open of a sent estimate flips it to viewed. Fire-and-forget so the
   // page never waits on the write, and swallow errors — a failed view-mark
@@ -169,16 +181,42 @@ export default async function PublicEstimatePage({
           <div className="cp-card">
             <div className="p-5">
               {estimate.status === "approved" ? (
-                <div className="flex items-start gap-2.5">
-                  <CheckCircle2 size={20} strokeWidth={2} className="mt-0.5 shrink-0 text-[var(--cp-good)]" />
-                  <div>
-                    <p className="text-[15px] font-semibold text-[var(--cp-good)]">
-                      Approved{estimate.signature_name ? ` by ${estimate.signature_name}` : ""}.
-                    </p>
-                    <p className="mt-0.5 text-[13.5px] text-[var(--cp-muted)]">
-                      Thanks! We&rsquo;ll be in touch to get you on the schedule.
-                    </p>
+                <div className="space-y-3">
+                  <div className="flex items-start gap-2.5">
+                    <CheckCircle2 size={20} strokeWidth={2} className="mt-0.5 shrink-0 text-[var(--cp-good)]" />
+                    <div>
+                      <p className="text-[15px] font-semibold text-[var(--cp-good)]">
+                        Approved{estimate.signature_name ? ` by ${estimate.signature_name}` : ""}.
+                      </p>
+                      <p className="mt-0.5 text-[13.5px] text-[var(--cp-muted)]">
+                        Thanks! We&rsquo;ll be in touch to get you on the schedule.
+                      </p>
+                    </div>
                   </div>
+                  {depositPaid ? (
+                    <div className="cp-divider pt-3">
+                      <p className="text-[13px] text-[var(--cp-muted)]">
+                        <span className="font-semibold text-[var(--cp-good)]">Deposit received</span> —
+                        your spot is booked.
+                      </p>
+                    </div>
+                  ) : depositUrl ? (
+                    <div className="cp-divider pt-3">
+                      <p className="text-[13px] text-[var(--cp-muted)]">
+                        A deposit of{" "}
+                        <span className="font-semibold tabular-nums text-[var(--cp-ink)]">
+                          {fmtMoney(job?.deposit_cents)}
+                        </span>{" "}
+                        holds your spot.
+                      </p>
+                      <a
+                        href={depositUrl}
+                        className="cp-btn cp-btn-primary cp-btn-block mt-2.5 sm:min-h-9 sm:rounded-[5px] sm:text-[13px]"
+                      >
+                        <CreditCard size={16} strokeWidth={2} /> Pay deposit
+                      </a>
+                    </div>
+                  ) : null}
                 </div>
               ) : (
                 <>

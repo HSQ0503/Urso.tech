@@ -41,7 +41,7 @@ import {
   notifyInvoiceReceipt,
   notifyRewardClaimed,
 } from "@/lib/canes/notify";
-import { cancelSquareInvoice, createDepositLink, createSquareInvoice } from "@/lib/canes/square";
+import { cancelSquareInvoice, createDepositLink, createSquareInvoice, recomputeInvoicePaid } from "@/lib/canes/square";
 import { PRACTICE_PHONE } from "@/lib/canes/tour";
 import {
   fmtEt,
@@ -924,9 +924,9 @@ export async function approveEstimate(
   }
 
   const withItems = await getEstimateWithItems(estimate.id);
-  if (withItems) await createJobFromEstimate(withItems);
+  const jobId = withItems ? await createJobFromEstimate(withItems) : null;
 
-  const deposit = await createDepositLink(approved);
+  const deposit = await createDepositLink(approved, jobId);
   refresh();
   return { ok: true, depositUrl: deposit.url };
 }
@@ -1594,7 +1594,30 @@ export async function createInvoiceFromJob(
     }
   }
 
+  // Pull the job's booking deposit onto this bill (0013): ledger rows minted
+  // by the deposit webhook before the invoice existed (or stranded on a voided
+  // bill) re-point here, so the invoice opens already credited and the
+  // customer is only ever asked for the balance.
+  const { data: voidRows } = await db
+    .from("invoices")
+    .select("id")
+    .eq("job_id", jobId)
+    .eq("status", "void");
+  const voidIds = ((voidRows ?? []) as { id: string }[]).map((r) => r.id);
+  let claimDeposits = db
+    .from("payments")
+    .update({ invoice_id: invoiceId })
+    .eq("job_id", jobId)
+    .eq("kind", "deposit");
+  claimDeposits =
+    voidIds.length > 0
+      ? claimDeposits.or(`invoice_id.is.null,invoice_id.in.(${voidIds.join(",")})`)
+      : claimDeposits.is("invoice_id", null);
+  const { error: claimErr } = await claimDeposits;
+  if (claimErr) console.error(`[canes] deposit re-point failed for ${invoiceId}: ${claimErr.message}`);
+
   await recomputeInvoiceTotals(invoiceId);
+  await recomputeInvoicePaid(invoiceId); // fold the deposit into the paid cache
   await logInvoiceEvent(job.lead_id, `Invoice ${number} created`);
   refresh();
   return { ok: true, invoiceId };
