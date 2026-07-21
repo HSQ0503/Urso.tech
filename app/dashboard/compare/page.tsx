@@ -58,8 +58,16 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
   const extras = bs.slice(1); // older context periods ("each year" / extra custom ranges)
   const revenue = (data ?? overview)!.revenue;
   const dayInfo = (data ?? overview)!.days;
-  const revB = revenue.bs[0] ?? 0;
-  const revDelta = revB > 0 ? (revenue.a - revB) / revB : null;
+  // The headline strip follows the selected measure. "All metrics" has no single
+  // measure to follow, so it keeps revenue — and its label then reads correctly.
+  const headline = data?.headline ?? { label: "Revenue", format: "money" as CompareFormat, additive: true, a: revenue.a, bs: revenue.bs as (number | null)[] };
+  const headA = headline.a;
+  const headB = headline.bs[0] ?? null;
+  // Rate measures move in percentage POINTS; everything else in relative %.
+  const headPoints = headline.format === "pct";
+  const headDelta =
+    headA != null && headB != null && headB !== 0 ? (headPoints ? headA - headB : (headA - headB) / headB) : null;
+  const fmtHead = fmtBy(headline.format);
   const scopeNote = mode !== "stores" && scope !== "all" ? ` · ${scopeLabel(scope)}` : "";
   const fmt = data ? fmtBy(data.format) : (n: number) => String(n);
 
@@ -77,18 +85,31 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
   const movers = (data?.movers ?? []).map((m) => ({ name: m.name, delta: m.delta * scale }));
   const maxDelta = Math.max(0, ...movers.map((d) => Math.abs(d.delta)));
   const deltaFormat = data?.format === "pct" ? ("pct" as const) : data?.format === "money" ? (maxDelta >= 10_000 ? ("moneyK" as const) : ("money" as const)) : ("number" as const);
-  const EXTRA_LEGEND_COLORS = ["var(--color-series-soft)", "var(--color-track)"];
-  const extraLabels = extras.map((r) => rangeLabel(r, true));
+  // The "each year" preset compares the same calendar window across years, so
+  // the short month/day label is identical for every period and the year is the
+  // only thing telling them apart — carry it whenever the windows straddle years.
+  const spansYears = new Set([a, ...bs].map((r) => r.start.slice(0, 4))).size > 1;
+  const periodLabel = (r: CompareRange) => (spansYears ? `${rangeLabel(r, true)}, ${r.start.slice(0, 4)}` : rangeLabel(r, true));
+
+  // Baselines step along one grey ramp, faintest = furthest back (see
+  // PERIOD_COLORS in charts.tsx — same ramp, same order).
+  const PERIOD_LEGEND_COLORS = ["var(--color-period-1)", "var(--color-period-2)", "var(--color-period-3)"];
+  const extraLabels = extras.map(periodLabel);
+  // Built in the same index order CompareBars colours them (so the formula is
+  // identical), then reversed — the legend reads oldest → newest, matching the
+  // left-to-right order of the bars.
   const legend = [
-    { label: `${t("Now")} · ${rangeLabel(a, true)}`, color: "#fe5100" },
-    { label: `${t("Before")} · ${rangeLabel(b, true)}`, color: "var(--color-series)" },
-    ...extras.map((r, i) => ({ label: rangeLabel(r, true), color: EXTRA_LEGEND_COLORS[i % EXTRA_LEGEND_COLORS.length] })),
+    ...extras
+      .map((r, i) => ({ label: periodLabel(r), color: PERIOD_LEGEND_COLORS[(i + 1) % PERIOD_LEGEND_COLORS.length] }))
+      .reverse(),
+    { label: `${t("Before")} · ${periodLabel(b)}`, color: PERIOD_LEGEND_COLORS[0] },
+    { label: `${t("Now")} · ${periodLabel(a)}`, color: "#fe5100" },
   ];
   const entityLabel = mode === "stores" ? "Store" : mode === "groomers" ? "Groomer" : "Item";
   // Resolved compare periods, handed to the in-page AskAi so chat knows exactly
   // what's being compared (the global month filter doesn't apply on this page).
   const cmp = data
-    ? { aLabel: rangeLabel(a, true), aStart: a.start, aEnd: a.end, bLabel: rangeLabel(b, true), bStart: b.start, bEnd: b.end, metric: data.metricLabel }
+    ? { aLabel: periodLabel(a), aStart: a.start, aEnd: a.end, bLabel: periodLabel(b), bStart: b.start, bEnd: b.end, metric: data.metricLabel }
     : undefined;
   const headlineCols = ["md:grid-cols-3", "md:grid-cols-4", "md:grid-cols-5"][extras.length] ?? "md:grid-cols-3";
 
@@ -112,32 +133,38 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
         </p>
       ))}
 
-      {/* Headline: revenue across every period, oldest first */}
+      {/* Headline: the selected measure across every period, oldest first */}
       <section className={`dash-rise grid grid-cols-2 gap-px overflow-hidden rounded-none border border-edge bg-edge ${headlineCols}`} style={{ "--i": 2 } as React.CSSProperties}>
         {[...extras].reverse().map((r, i) => (
-          <Period key={`x${i}`} label={r.start.slice(0, 4)} range={r} value={revenue.bs[extras.length - i]} days={dayInfo.bs[extras.length - i]} t={t} />
+          <Period key={`x${i}`} label={r.start.slice(0, 4)} range={r} value={headline.bs[extras.length - i] ?? null} format={headline.format} days={dayInfo.bs[extras.length - i]} t={t} />
         ))}
-        <Period label={t("Compared against")} range={b} value={revB} days={dayInfo.bs[0]} t={t} />
-        <Period label={t("This period")} range={a} value={revenue.a} days={dayInfo.a} accent win={revDelta != null && revDelta >= 0} t={t} />
+        <Period label={t("Compared against")} range={b} value={headB} format={headline.format} days={dayInfo.bs[0]} t={t} />
+        <Period label={t("This period")} range={a} value={headA} format={headline.format} days={dayInfo.a} accent win={headDelta != null && headDelta >= 0} t={t} />
         <div className="col-span-2 bg-cell p-4 md:col-span-1">
-          <Micro>{t("Revenue change")}{extras.length > 0 ? ` · ${t("vs previous")}` : ""}</Micro>
+          <Micro>{t("Change")} · {t(headline.label)}{extras.length > 0 ? ` · ${t("vs previous")}` : ""}</Micro>
           <div className="mt-2.5 flex items-baseline gap-2.5">
             <span
               className="text-[26px] font-bold leading-none tracking-[-0.02em] tabular-nums"
-              style={revDelta == null ? undefined : { color: revDelta >= 0 ? "var(--color-good)" : "#fe5100" }}
+              style={headDelta == null ? undefined : { color: headDelta >= 0 ? "var(--color-good)" : "#fe5100" }}
             >
-              {revDelta == null ? "—" : (
+              {headDelta == null ? "—" : (
                 <>
-                  {revDelta >= 0 ? "+" : "−"}
-                  <CountUp value={Math.abs(revDelta)} format="pct" />
+                  {headDelta >= 0 ? "+" : "−"}
+                  {headPoints ? (
+                    <>{Math.abs(headDelta * 100).toLocaleString("en-US", { maximumFractionDigits: 1 })} {t("pts")}</>
+                  ) : (
+                    <CountUp value={Math.abs(headDelta)} format="pct" />
+                  )}
                 </>
               )}
             </span>
-            {dayInfo.a !== dayInfo.bs[0] && <span className="text-[11.5px] text-ink-dim">{t("totals · lengths differ")}</span>}
+            {headline.additive && dayInfo.a !== dayInfo.bs[0] && (
+              <span className="text-[11.5px] text-ink-dim">{t("totals · lengths differ")}</span>
+            )}
           </div>
-          {dayInfo.a !== dayInfo.bs[0] && revB > 0 && (
+          {headline.additive && dayInfo.a !== dayInfo.bs[0] && headA != null && headB != null && headB > 0 && (
             <div className="mt-2 text-[12px] text-ink-dim">
-              {t("Per day")}: {fmtMoney(revenue.a / dayInfo.a)} {t("vs")} {fmtMoney(revB / dayInfo.bs[0])}
+              {t("Per day")}: {fmtHead(headA / dayInfo.a)} {t("vs")} {fmtHead(headB / dayInfo.bs[0])}
             </div>
           )}
         </div>
@@ -192,7 +219,7 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
               <ChartInfo id="compareTable" />
             </div>
             <h2 className="mb-4 text-[17px] font-medium tracking-[-0.01em]">{t("Side by side")}</h2>
-            <CompareBars data={scaled} labelA={`${t("Now")} · ${rangeLabel(a, true)}`} labelB={`${t("Before")} · ${rangeLabel(b, true)}`} moreLabels={extraLabels} format={chartFormat} />
+            <CompareBars data={scaled} labelA={`${t("Now")} · ${periodLabel(a)}`} labelB={`${t("Before")} · ${periodLabel(b)}`} moreLabels={extraLabels} format={chartFormat} />
             <div className="mt-3"><Legend items={legend} /></div>
           </Card>
           {data.pace && (
@@ -208,7 +235,7 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
                 <ChartInfo id="comparePace" />
               </div>
               <h2 className="mb-4 text-[17px] font-medium tracking-[-0.01em]">{t("Is this period ahead or behind?")}</h2>
-              <ComparePace a={data.pace.a} b={data.pace.bs[0]} more={data.pace.bs.slice(1)} labelA={`${t("Now")} · ${rangeLabel(a, true)}`} labelB={`${t("Before")} · ${rangeLabel(b, true)}`} moreLabels={extraLabels} />
+              <ComparePace a={data.pace.a} b={data.pace.bs[0]} more={data.pace.bs.slice(1)} labelA={`${t("Now")} · ${periodLabel(a)}`} labelB={`${t("Before")} · ${periodLabel(b)}`} moreLabels={extraLabels} />
               <p className="mt-3 text-[12.5px] leading-[1.5] text-ink-dim">
                 {t("Each line adds up revenue day by day. When the orange line sits above the dashed one, this period is ahead of the comparison at the same point.")}
               </p>
@@ -231,7 +258,7 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
             <ChartInfo id="compareTable" />
           </div>
           <h2 className="mb-4 text-[17px] font-medium tracking-[-0.01em]">{t("Now vs before, ranked")}</h2>
-          <CompareBars layout="rows" data={scaled} labelA={`${t("Now")} · ${rangeLabel(a, true)}`} labelB={`${t("Before")} · ${rangeLabel(b, true)}`} moreLabels={extraLabels} format={chartFormat} />
+          <CompareBars layout="rows" data={scaled} labelA={`${t("Now")} · ${periodLabel(a)}`} labelB={`${t("Before")} · ${periodLabel(b)}`} moreLabels={extraLabels} format={chartFormat} />
           <div className="mt-3"><Legend items={legend} /></div>
         </Card>
         </div>
@@ -283,10 +310,10 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
               <tr className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-dimmer">
                 <th className="px-5 py-3 text-left font-normal">{t(entityLabel)}</th>
                 {[...extras].reverse().map((r, i) => (
-                  <th key={`xh${i}`} className="px-5 py-3 text-right font-normal">{rangeLabel(r, true)} · {r.start.slice(0, 4)}</th>
+                  <th key={`xh${i}`} className="px-5 py-3 text-right font-normal">{periodLabel(r)}</th>
                 ))}
-                <th className="px-5 py-3 text-right font-normal">{t("Before")} · {rangeLabel(b, true)}</th>
-                <th className="px-5 py-3 text-right font-normal">{t("Now")} · {rangeLabel(a, true)}</th>
+                <th className="px-5 py-3 text-right font-normal">{t("Before")} · {periodLabel(b)}</th>
+                <th className="px-5 py-3 text-right font-normal">{t("Now")} · {periodLabel(a)}</th>
                 <th className="px-5 py-3 text-right font-normal">{t("Change")}{extras.length > 0 ? ` · ${t("vs previous")}` : ""}</th>
               </tr>
             </thead>
@@ -423,12 +450,17 @@ function MetricPanel({ label, format, values, periods, t }: { label: string; for
 
 // `win` draws the single orange hairline — one per page, only under "This
 // period" when the delta is positive.
-function Period({ label, range, value, days, accent, win, t }: { label: string; range: CompareRange; value: number; days: number; accent?: boolean; win?: boolean; t: (s: string) => string }) {
+// CompareFormat is the server-side token; CountUp speaks its own. A period with
+// no value for the selected measure (no retail sales, no appointments) reads as
+// an em dash — never a zero, which would claim something the data doesn't say.
+const countFormat = (f: CompareFormat) => (f === "money" ? "money" : f === "pct" ? "pct" : "int");
+
+function Period({ label, range, value, format, days, accent, win, t }: { label: string; range: CompareRange; value: number | null; format: CompareFormat; days: number; accent?: boolean; win?: boolean; t: (s: string) => string }) {
   return (
     <div className="bg-cell p-4">
       <Micro className={accent ? "!text-orange" : undefined}>{label}</Micro>
       <div className="relative mt-2.5 text-[26px] font-bold leading-none tracking-[-0.02em] tabular-nums">
-        <CountUp value={value} format="money" />
+        {value == null ? <span className="text-ink-dimmer">—</span> : <CountUp value={value} format={countFormat(format)} />}
         {/* absolute so the win underline never shifts the cell's baseline grid */}
         {win && <div aria-hidden className="dash-draw absolute -bottom-[5px] left-0 h-px w-full bg-orange" />}
       </div>

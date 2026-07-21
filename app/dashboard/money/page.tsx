@@ -3,6 +3,7 @@ import {
   parseMonth,
   scopeLabel,
   monthLabel,
+  isDayValue,
 } from "@/components/dashboard/data";
 import {
   getMoneyOverview,
@@ -84,7 +85,13 @@ export default async function MoneyPage({ searchParams }: { searchParams: Promis
           <EmptyState
             label={`${t("Money")} · ${period}`}
             title={t("No QuickBooks data for this period.")}
-            body={month !== "all" ? t("Books for this month may not be closed yet — the 12-month view covers every closed month.") : undefined}
+            body={
+              isDayValue(month)
+                ? t("The books close monthly, so profit and margin can't be split down to one day — pick a month to see them.")
+                : month !== "all"
+                  ? t("Books for this month may not be closed yet — the 12-month view covers every closed month.")
+                  : undefined
+            }
             action={
               month !== "all" ? (
                 <Link

@@ -251,7 +251,9 @@ export const actions: ActionItem[] = [
 // Math.random / Date.now, so server and client render identically.
 
 export type Scope = "all" | StoreId;
-export type MonthValue = "all" | string; // "all", "YYYY" (full year), or "YYYY-MM"
+// "all" (trailing 12 months) · "YYYY" (full year) · "YYYY-MM" (one month) ·
+// "YYYY-MM-DD" (one specific day, picked from the filter bar's calendar).
+export type MonthValue = "all" | string;
 export type Granularity = "daily" | "weekly" | "monthly";
 
 // Real-world events the AI cites to explain WHY a metric moved (the "why"
@@ -305,17 +307,42 @@ export const MONTH_OPTIONS: { value: MonthValue; label: string }[] = [
   ...YEAR_KEYS.map((y) => ({ value: y as MonthValue, label: `${y} · full year` })),
 ];
 
+const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+const ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+// A single calendar day, chosen from the filter bar's date picker rather than
+// the fixed dropdown. Rejects impossible dates (2026-02-31) so the range this
+// turns into downstream is always real. Deterministic on purpose — no "today"
+// here, or the server and the client could disagree across midnight; whether a
+// day actually has rows is the data layer's answer, not this function's.
+export function isDayValue(v: string): boolean {
+  if (!DAY_RE.test(v)) return false;
+  const d = new Date(`${v}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v;
+}
+
+// "2026-06-14" → "Jun 14, 2026". Built from a fixed table, not
+// toLocaleDateString, so the server and client strings can never diverge.
+export function dayLabel(v: string): string {
+  const [y, m, d] = v.split("-");
+  return `${ABBR[Number(m) - 1]} ${Number(d)}, ${y}`;
+}
+
 export function parseScope(v?: string | null): Scope {
   return STORE_OPTIONS.some((o) => o.value === v) ? (v as Scope) : "all";
 }
 export function parseMonth(v?: string | null): MonthValue {
-  return v && (MONTH_KEYS.includes(v) || YEAR_KEYS.includes(v)) ? v : "all";
+  if (!v) return "all";
+  if (MONTH_KEYS.includes(v) || YEAR_KEYS.includes(v)) return v;
+  return isDayValue(v) ? v : "all";
 }
 export function scopeLabel(s: Scope) {
   return STORE_OPTIONS.find((o) => o.value === s)!.short;
 }
 export function monthLabel(m: MonthValue) {
-  return MONTH_OPTIONS.find((o) => o.value === m)?.label ?? "Last 12 months";
+  const known = MONTH_OPTIONS.find((o) => o.value === m);
+  if (known) return known.label;
+  return isDayValue(m) ? dayLabel(m) : "Last 12 months";
 }
 function monthIndex(m: MonthValue) {
   return m === "all" ? -1 : MONTH_KEYS.indexOf(m);

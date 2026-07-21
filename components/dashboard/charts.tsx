@@ -153,7 +153,9 @@ export function AreaChart({
         <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} interval={tickEvery(labels.length)} />
         <YAxis tickLine={false} axisLine={false} width={42} tickFormatter={axis} />
         <ChartTooltip cursor={{ strokeDasharray: "3 3" }} content={<ChartTooltipContent valueFormatter={(v) => fmt(v)} />} />
-        <Area dataKey="value" type="linear" stroke="var(--color-value)" strokeWidth={2} fill={`url(#${gid})`} dot={false} activeDot={ACTIVE_DOT} {...sweep()} />
+        {/* A one-bucket series (a single day is selected) has no line to draw,
+            so show the point itself — otherwise the chart renders empty. */}
+        <Area dataKey="value" type="linear" stroke="var(--color-value)" strokeWidth={2} fill={`url(#${gid})`} dot={chartData.length === 1} activeDot={ACTIVE_DOT} {...sweep()} />
       </RAreaChart>
     </ChartContainer>
   );
@@ -595,8 +597,27 @@ export function RatingBars({ stars, counts }: { stars: number[]; counts: number[
 // Grouped now-vs-before bars. layout="columns" (few entities, e.g. stores)
 // renders vertical columns; layout="rows" (many named entities, e.g. groomers)
 // renders horizontal paired bars with the names on the left.
-// Extra baselines (multi-year compares) render as progressively softer series.
-const EXTRA_COLORS = ["var(--color-series-soft)", "var(--color-track)"];
+//
+// Periods are an ORDINAL dimension, so both the order and the colour carry the
+// time axis: bars always read oldest → newest (the focus period last, in
+// orange), and the baselines step along one grey ramp, faintest = furthest
+// back. PERIOD_COLORS[0] is the most recent baseline; the ramp is defined in
+// globals.css, where the steps are spaced far enough apart to actually tell
+// two baselines apart.
+const PERIOD_COLORS = ["var(--color-period-1)", "var(--color-period-2)", "var(--color-period-3)"];
+
+// The chart's series keys, oldest → newest. `m*` are the older baselines
+// (newest-first as they arrive), `b` the most recent baseline, `a` the focus
+// period. Render order IS time order, so there is no second list to keep in
+// sync — and the value label rides `a`, which is now always the last bar.
+//
+// Recharts orders grouped bars by the order each <Bar> REGISTERS itself
+// (state.cartesianItems.push on mount), not by JSX order. Adding a period
+// in-place therefore mounts that bar last and parks it on the right, which is
+// how "now" ended up in the middle of a three-period compare. Keying the chart
+// on the series list remounts every bar together whenever the set changes, so
+// registration order matches JSX order again.
+const periodSeries = (extras: number) => [...Array.from({ length: extras }, (_, i) => `m${i}`).reverse(), "b", "a"];
 
 export function CompareBars({
   data,
@@ -626,45 +647,42 @@ export function CompareBars({
   const fmtLabel = (v: unknown) => (v == null ? "" : fmt(Number(v)));
   const config = {
     a: { label: labelA, color: ORANGE },
-    b: { label: labelB, color: MUTED },
-    ...Object.fromEntries(moreLabels.map((l, i) => [`m${i}`, { label: l, color: EXTRA_COLORS[i % EXTRA_COLORS.length] }])),
+    b: { label: labelB, color: PERIOD_COLORS[0] },
+    ...Object.fromEntries(moreLabels.map((l, i) => [`m${i}`, { label: l, color: PERIOD_COLORS[(i + 1) % PERIOD_COLORS.length] }])),
   } satisfies ChartConfig;
-  // Bars render oldest → newest left-to-right within each group.
-  const orderedKeys = [...moreLabels.map((_, i) => `m${i}`).reverse(), "b"];
+  const series = periodSeries(moreLabels.length);
 
   if (layout === "rows") {
     const h = height ?? Math.max(150, data.length * (52 + moreLabels.length * 12));
     return (
-      <ChartContainer config={config} style={{ height: h }}>
+      <ChartContainer key={series.join()} config={config} style={{ height: h }}>
         <BarChart data={chartData} layout="vertical" margin={{ left: 4, right: 56, top: 2, bottom: 2 }} barCategoryGap={12} barGap={2}>
           <CartesianGrid horizontal={false} />
           <XAxis type="number" hide />
           <YAxis type="category" dataKey="name" width={118} tickLine={false} axisLine={false} interval={0} tick={{ fontSize: 11 }} tickFormatter={(v) => truncName(String(v), 16)} />
           <ChartTooltip cursor={{ fill: "var(--color-raise)" }} content={<ChartTooltipContent valueFormatter={(v) => fmt(v)} />} />
-          {orderedKeys.map((k, i) => (
-            <Bar key={k} dataKey={k} fill={`var(--color-${k})`} radius={0} barSize={8} {...sweep(i * 80)} />
+          {series.map((k, i) => (
+            <Bar key={k} dataKey={k} fill={`var(--color-${k})`} radius={0} barSize={8} {...sweep(i * 80)}>
+              {k === "a" ? <LabelList dataKey="a" position="right" fill="var(--color-ink-dim)" fontSize={10.5} formatter={fmtLabel} /> : null}
+            </Bar>
           ))}
-          <Bar dataKey="a" fill="var(--color-a)" radius={0} barSize={8} {...sweep(orderedKeys.length * 80)}>
-            <LabelList dataKey="a" position="right" fill="var(--color-ink-dim)" fontSize={10.5} formatter={fmtLabel} />
-          </Bar>
         </BarChart>
       </ChartContainer>
     );
   }
 
   return (
-    <ChartContainer config={config} style={{ height: height ?? 250 }}>
+    <ChartContainer key={series.join()} config={config} style={{ height: height ?? 250 }}>
       <BarChart data={chartData} margin={{ left: 4, right: 8, top: 20, bottom: 0 }} barCategoryGap="26%" barGap={5}>
         <CartesianGrid vertical={false} />
         <XAxis dataKey="name" tickLine={false} axisLine={false} interval={0} height={40} tick={<WrapTick />} />
         <YAxis tickLine={false} axisLine={false} width={46} tickFormatter={axis} />
         <ChartTooltip cursor={{ fill: "var(--color-raise)" }} content={<ChartTooltipContent valueFormatter={(v) => fmt(v)} />} />
-        {orderedKeys.map((k, i) => (
-          <Bar key={k} dataKey={k} fill={`var(--color-${k})`} radius={0} {...sweep(i * 80)} />
+        {series.map((k, i) => (
+          <Bar key={k} dataKey={k} fill={`var(--color-${k})`} radius={0} {...sweep(i * 80)}>
+            {k === "a" ? <LabelList dataKey="a" position="top" fill="var(--color-ink-dim)" fontSize={10.5} formatter={fmtLabel} /> : null}
+          </Bar>
         ))}
-        <Bar dataKey="a" fill="var(--color-a)" radius={0} {...sweep(orderedKeys.length * 80)}>
-          <LabelList dataKey="a" position="top" fill="var(--color-ink-dim)" fontSize={10.5} formatter={fmtLabel} />
-        </Bar>
       </BarChart>
     </ChartContainer>
   );
@@ -744,13 +762,17 @@ export function ComparePace({
     label: String(i + 1),
     ...Object.fromEntries(keys.map((k, s) => [k, i < all[s].length ? cum[s][i] : null])),
   }));
+  // Same ramp as CompareBars — the two charts sit side by side, so a given grey
+  // has to mean the same period in both.
   const config = {
     a: { label: labelA, color: ORANGE },
-    b: { label: labelB, color: MUTED },
-    ...Object.fromEntries(moreLabels.map((l, i) => [`m${i}`, { label: l, color: EXTRA_COLORS[i % EXTRA_COLORS.length] }])),
+    b: { label: labelB, color: PERIOD_COLORS[0] },
+    ...Object.fromEntries(moreLabels.map((l, i) => [`m${i}`, { label: l, color: PERIOD_COLORS[(i + 1) % PERIOD_COLORS.length] }])),
   } satisfies ChartConfig;
   return (
-    <ChartContainer config={config} style={{ height }}>
+    // Keyed for the same reason as CompareBars: registration order decides which
+    // line draws on top, and the focus period has to stay there.
+    <ChartContainer key={keys.join()} config={config} style={{ height }}>
       <LineChart data={chartData} margin={{ left: 4, right: 12, top: 8, bottom: 0 }}>
         <CartesianGrid vertical={false} />
         <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} interval={tickEvery(len)} />

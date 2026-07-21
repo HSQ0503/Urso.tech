@@ -10,6 +10,8 @@ import {
   parseScope,
   parseMonth,
   scopeLabel,
+  monthLabel,
+  isDayValue,
   type StoreId,
 } from "@/components/dashboard/data";
 import type { Role } from "@/lib/auth";
@@ -103,6 +105,8 @@ function isActive(pathname: string, href: string) {
   return href === "/dashboard" ? pathname === "/dashboard" : pathname.startsWith(href);
 }
 
+type DayBounds = { min: string; max: string };
+
 type ShellProps = {
   role: Role;
   storeId: StoreId | null;
@@ -112,6 +116,7 @@ type ShellProps = {
   streak: number;
   memberSince: string;
   locale: Locale;
+  dayBounds: DayBounds;
   children: ReactNode;
 };
 type ChromeProps = Omit<ShellProps, "locale">;
@@ -131,7 +136,7 @@ function ShellLive({ children, ...rest }: ChromeProps) {
   return <ShellChrome qs={qs} {...rest}>{children}</ShellChrome>;
 }
 
-function ShellChrome({ qs, role, storeId, clientName, userName, email, streak, memberSince, children }: ChromeProps & { qs: string }) {
+function ShellChrome({ qs, role, storeId, clientName, userName, email, streak, memberSince, dayBounds, children }: ChromeProps & { qs: string }) {
   const pathname = usePathname();
   const t = useT();
   const [accountOpen, setAccountOpen] = useState(false);
@@ -245,7 +250,7 @@ function ShellChrome({ qs, role, storeId, clientName, userName, email, streak, m
             <span className="truncate text-ink-dim">{t(current)}</span>
           </div>
           <div className="flex items-center gap-2">
-            <FilterBar qs={qs} pathname={pathname} lockedStore={lockedStore} />
+            <FilterBar qs={qs} pathname={pathname} lockedStore={lockedStore} dayBounds={dayBounds} />
             <LangToggle />
           </div>
         </header>
@@ -335,7 +340,7 @@ function StreakDays({ streak }: { streak: number }) {
 // ---- Global filter (Store + Month), URL-driven -----------------------------
 // Managers have their store pinned (shown as a static label); everyone else
 // gets the store dropdown.
-function FilterBar({ qs, pathname, lockedStore }: { qs: string; pathname: string; lockedStore: StoreId | null }) {
+function FilterBar({ qs, pathname, lockedStore, dayBounds }: { qs: string; pathname: string; lockedStore: StoreId | null; dayBounds: DayBounds }) {
   const router = useRouter();
   const t = useT();
   const params = new URLSearchParams(qs);
@@ -381,8 +386,17 @@ function FilterBar({ qs, pathname, lockedStore }: { qs: string; pathname: string
         <FilterSelect
           glyph="calendar"
           value={month}
+          // A picked day isn't in MONTH_OPTIONS, so the pill needs the label
+          // spelled out or it would fall back to "Last 12 months".
+          currentLabel={monthLabel(month)}
           options={MONTH_OPTIONS}
           onChange={(v) => setParam("month", v, "all")}
+          day={{
+            label: t("Specific date"),
+            value: isDayValue(month) ? month : "",
+            min: dayBounds.min,
+            max: dayBounds.max,
+          }}
         />
       )}
     </div>
@@ -394,14 +408,21 @@ function FilterSelect<T extends string>({
   value,
   options,
   onChange,
+  currentLabel,
+  day,
 }: {
   glyph: "store" | "calendar";
   value: T;
   options: { value: T; label: string }[];
   onChange: (v: T) => void;
+  currentLabel?: string;
+  // Optional single-day escape hatch below the fixed list — the dropdown only
+  // offers whole months and years, so this is how the owner reaches one date.
+  day?: { label: string; value: string; min: string; max: string };
 }) {
   const [open, setOpen] = useState(false);
-  const current = options.find((o) => o.value === value) ?? options[0];
+  const label = currentLabel ?? (options.find((o) => o.value === value) ?? options[0]).label;
+  const dayActive = !!day?.value;
 
   return (
     <div className="relative" onKeyDown={(e) => { if (e.key === "Escape") setOpen(false); }}>
@@ -419,7 +440,7 @@ function FilterSelect<T extends string>({
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="3.5" y="5" width="17" height="15" rx="2" /><path d="M3.5 9.5h17M8 3.5v3M16 3.5v3" /></svg>
           )}
         </span>
-        <span className="max-w-[120px] truncate font-medium text-ink">{current.label}</span>
+        <span className="max-w-[120px] truncate font-medium text-ink">{label}</span>
         <svg
           width="11"
           height="11"
@@ -464,6 +485,34 @@ function FilterSelect<T extends string>({
                 </button>
               );
             })}
+
+            {day && (
+              <div className="mt-1 border-t border-edge px-3 pb-1 pt-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <span className={`font-mono text-[9.5px] uppercase tracking-[0.14em] ${dayActive ? "text-orange" : "text-ink-dimmer"}`}>
+                    {day.label}
+                  </span>
+                  {dayActive && <span className="text-[11px] text-orange">•</span>}
+                </div>
+                <input
+                  type="date"
+                  value={day.value}
+                  min={day.min}
+                  max={day.max}
+                  // Native picker: no calendar library, and mobile gets the OS
+                  // date wheel for free.
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (!v) return;
+                    onChange(v as T);
+                    setOpen(false);
+                  }}
+                  className={`mt-1.5 w-full cursor-pointer rounded-none border bg-panel px-2.5 py-1.5 text-[12.5px] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-orange/50 ${
+                    dayActive ? "border-orange/40 text-ink" : "border-edge text-ink-dim hover:border-edge-strong hover:text-ink"
+                  }`}
+                />
+              </div>
+            )}
           </div>
         </>
       )}

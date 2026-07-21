@@ -19,8 +19,8 @@ export default async function BrainLayout({ children }: { children: React.ReactN
 
   return (
     <div className="theme-scope flex min-h-screen flex-col bg-bg">
-      <header className="border-b border-edge">
-        <div className="mx-auto flex w-full max-w-[1180px] items-center justify-between px-4 py-3 md:px-6">
+      <header className="relative z-30 border-b border-edge bg-panel">
+        <div className="flex w-full items-center justify-between px-4 py-3 md:px-6">
           <Link href="/brain" className="flex items-center gap-2.5">
             <span className="grid size-7 place-items-center rounded-none border border-[rgba(254,81,0,0.35)] bg-orange-soft text-orange">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" aria-hidden>
@@ -34,10 +34,10 @@ export default async function BrainLayout({ children }: { children: React.ReactN
           {user ? (
             <nav className="flex items-center gap-1 text-[13px]">
               <Link href="/brain" className="rounded-lg px-3 py-1.5 text-ink-dim transition-colors hover:bg-raise hover:text-ink">Chat</Link>
-              <Link href="/brain/graph" className="rounded-lg px-3 py-1.5 text-ink-dim transition-colors hover:bg-raise hover:text-ink">Graph</Link>
+              <Link href="/brain/graph" className="hidden rounded-lg px-3 py-1.5 text-ink-dim transition-colors hover:bg-raise hover:text-ink sm:inline-flex">Graph</Link>
               <Link href="/brain/docs" className="rounded-lg px-3 py-1.5 text-ink-dim transition-colors hover:bg-raise hover:text-ink">Vault</Link>
-              <Link href="/brain/docs/new" className="rounded-lg px-3 py-1.5 text-ink-dim transition-colors hover:bg-raise hover:text-ink">New doc</Link>
-              <Link href="/brain/settings" className="rounded-lg px-3 py-1.5 text-ink-dim transition-colors hover:bg-raise hover:text-ink">Settings</Link>
+              <Link href="/brain/docs/new" className="hidden rounded-lg px-3 py-1.5 text-ink-dim transition-colors hover:bg-raise hover:text-ink md:inline-flex">New doc</Link>
+              <Link href="/brain/settings" className="hidden rounded-lg px-3 py-1.5 text-ink-dim transition-colors hover:bg-raise hover:text-ink md:inline-flex">Settings</Link>
               <SignOutButton />
             </nav>
           ) : (
@@ -45,7 +45,7 @@ export default async function BrainLayout({ children }: { children: React.ReactN
           )}
         </div>
       </header>
-      <main className="mx-auto flex w-full max-w-[1180px] flex-1 flex-col px-4 py-5 md:px-6">{children}</main>
+      <main className="flex w-full flex-1 flex-col px-4 py-5 md:px-6">{children}</main>
     </div>
   );
 }

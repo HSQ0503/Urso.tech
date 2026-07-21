@@ -10,6 +10,7 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
+import { Check, Copy, Maximize2, Menu, Minimize2, PenLine, Send, Square, Trash2 } from "lucide-react";
 import { RichText } from "@/components/dashboard/rich-text";
 import { BRAIN_PROVIDERS } from "@/lib/brain/catalog";
 import type { BrainProvider } from "@/lib/brain/types";
@@ -113,35 +114,49 @@ function Spark({ className = "" }: { className?: string }) {
 
 function ThinkingLabel({ label }: { label: string }) {
   return (
-    <span className="inline-flex items-center gap-1.5 text-[13px] text-ink-dimmer">
-      <span className="size-1.5 animate-pulse rounded-full bg-orange" />
+    <span className="inline-flex items-center gap-2 text-[14px] text-[var(--brain-muted)]" role="status">
+      <span className="size-2 animate-pulse rounded-full bg-orange" />
       {label}…
     </span>
   );
 }
 
 function Message({ role, parts, live = false }: { role: string; parts: { type: string; text?: string }[]; live?: boolean }) {
+  const [expanded, setExpanded] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const text = parts.filter((p) => p.type === "text").map((p) => p.text ?? "").join("");
+
   if (role === "user") {
-    const text = parts.filter((p) => p.type === "text").map((p) => p.text ?? "").join("");
+    const isLong = text.length > 520;
     return (
       <div className="tip-in flex justify-end">
-        <div className="max-w-[85%] rounded-none border border-[rgba(254,81,0,0.28)] bg-orange-wash px-3.5 py-2.5 text-[14px] leading-[1.55] text-ink">{text}</div>
+        <div className="max-w-[88%] rounded-[22px] bg-[var(--brain-user)] px-4 py-3 text-[15px] leading-[1.65] text-[var(--brain-text)] sm:max-w-[72%] sm:px-5">
+          <p className={`whitespace-pre-wrap ${isLong && !expanded ? "line-clamp-6" : ""}`}>{text}</p>
+          {isLong && (
+            <button
+              type="button"
+              onClick={() => setExpanded((value) => !value)}
+              className="mt-2 cursor-pointer text-[12px] font-medium text-[var(--brain-muted-strong)] underline decoration-transparent underline-offset-2 transition-colors hover:decoration-current"
+            >
+              {expanded ? "Show less" : "Show full prompt"}
+            </button>
+          )}
+        </div>
       </div>
     );
   }
   const chips = toolChips(parts as ToolPart[]);
-  const text = parts.filter((p) => p.type === "text").map((p) => p.text ?? "").join("");
   return (
-    <div className="tip-in flex gap-3">
-      <span className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-full border border-edge bg-raise text-orange"><Spark /></span>
-      <div className="min-w-0 flex-1 space-y-2">
+    <div className="tip-in flex gap-4">
+      <span className="mt-0.5 grid size-8 shrink-0 place-items-center text-orange"><Spark className="size-[18px]" /></span>
+      <div className="min-w-0 flex-1 space-y-3">
         {chips.length > 0 && (
-          <div className="flex flex-wrap items-center gap-1.5 font-mono text-[9.5px] uppercase tracking-[0.12em] text-ink-dimmer">
+          <div className="flex flex-wrap items-center gap-1.5 text-[11.5px] font-medium text-[var(--brain-muted)]">
             {chips.map((c) => (
               <span
                 key={c.label}
-                className={`chip-in rounded-full border px-2 py-[3px] ${
-                  c.write ? "border-[rgba(254,81,0,0.45)] bg-orange-wash text-orange" : "border-edge"
+                className={`chip-in rounded-full px-2.5 py-1 ${
+                  c.write ? "bg-orange-soft text-orange" : "bg-[var(--brain-soft)]"
                 }`}
               >
                 {c.label}
@@ -150,12 +165,29 @@ function Message({ role, parts, live = false }: { role: string; parts: { type: s
           </div>
         )}
         {text ? (
-          <RichText text={text} className="text-[14px] text-ink" />
+          <RichText text={text} className="max-w-[72ch] text-[15px] text-[var(--brain-text)] sm:text-[15.5px]" />
         ) : chips.length > 0 && live ? (
           <ThinkingLabel label="working in the vault" />
         ) : chips.length > 0 ? (
-          <span className="text-[12.5px] italic text-ink-dimmer">No written answer was saved for this turn.</span>
+          <span className="text-[13px] italic text-[var(--brain-muted)]">No written answer was saved for this turn.</span>
         ) : null}
+        {text && !live && (
+          <div className="flex items-center gap-1 pt-0.5">
+            <button
+              type="button"
+              onClick={async () => {
+                await navigator.clipboard.writeText(text);
+                setCopied(true);
+                window.setTimeout(() => setCopied(false), 1600);
+              }}
+              aria-label={copied ? "Copied response" : "Copy response"}
+              title={copied ? "Copied" : "Copy response"}
+              className="grid size-11 cursor-pointer place-items-center rounded-full text-[var(--brain-muted)] transition-colors hover:bg-[var(--brain-soft)] hover:text-[var(--brain-text)]"
+            >
+              {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -164,44 +196,33 @@ function Message({ role, parts, live = false }: { role: string; parts: { type: s
 function EmptyState({ firstName, departmentId, departmentName, onPick, busy }: { firstName: string; departmentId: string; departmentName: string; onPick: (t: string) => void; busy: boolean }) {
   const suggestions = SUGGESTIONS[departmentId] ?? SUGGESTIONS.default;
   return (
-    <div className="relative mx-auto max-w-[560px] py-6 text-center">
-      <div
-        aria-hidden
-        className="pointer-events-none absolute left-1/2 top-0 h-40 w-[360px] -translate-x-1/2 rounded-full opacity-50 blur-3xl"
-        style={{ background: "radial-gradient(circle, rgba(254,81,0,0.16), transparent 70%)" }}
-      />
-      <div className="relative">
-        <span className="mx-auto grid size-12 place-items-center rounded-none border border-[rgba(254,81,0,0.35)] bg-orange-soft text-orange">
-          <Spark className="size-5" />
-        </span>
-        <h2 className="mt-4 text-[20px] font-bold tracking-[-0.01em] text-ink">Good to see you, {firstName}.</h2>
-        <p className="mt-2 text-[14px] leading-[1.6] text-ink-dim">
-          I&rsquo;m the company brain. I already know you&rsquo;re in {departmentName}, which project you&rsquo;re on, and
-          everything in the vault — and I can write to it too: save notes, update docs, connect them. Just ask.
+    <div className="mx-auto flex h-full w-full max-w-[820px] flex-col justify-center py-8 sm:py-12">
+      <div className="mb-8 sm:mb-10">
+        <Spark className="mb-5 size-8 text-orange" />
+        <h2 className="text-[32px] font-medium leading-[1.12] tracking-[-0.035em] sm:text-[42px]">
+          <span className="text-orange">Good to see you, {firstName}.</span>
+          <span className="mt-1 block text-[var(--brain-muted)]">What should we work on?</span>
+        </h2>
+        <p className="mt-4 max-w-[620px] text-[14px] leading-6 text-[var(--brain-muted)] sm:text-[15px]">
+          Ask about {departmentName.toLowerCase()}, a project, contract, rule, or anything already saved in the company vault.
         </p>
-        <div className="mt-6 flex flex-col gap-2 text-left">
+      </div>
+      <div>
+        <div className="grid gap-2.5 sm:grid-cols-3">
           {suggestions.map((s) => (
             <button
               key={s}
               onClick={() => onPick(s)}
               disabled={busy}
-              className="group flex cursor-pointer items-center justify-between gap-3 rounded-none border border-edge bg-raise px-4 py-3 text-[13.5px] text-ink-dim transition-colors hover:border-[rgba(254,81,0,0.4)] hover:text-ink disabled:opacity-50"
+              className="group flex min-h-[88px] cursor-pointer flex-col items-start justify-between gap-4 rounded-[18px] bg-[var(--brain-soft)] p-4 text-left text-[13.5px] leading-5 text-[var(--brain-text)] transition-colors hover:bg-[var(--brain-soft-hover)] disabled:cursor-default disabled:opacity-50"
             >
               <span>{s}</span>
-              <span className="text-ink-dimmer transition-colors group-hover:text-orange"><Spark /></span>
+              <span className="self-end text-[var(--brain-muted)] transition-colors group-hover:text-orange"><Spark /></span>
             </button>
           ))}
         </div>
       </div>
     </div>
-  );
-}
-
-function TrashIcon() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6" />
-    </svg>
   );
 }
 
@@ -226,16 +247,16 @@ function ThreadRow({ thread, projectName, active, onOpen, onDelete, onRename }: 
           if (e.key === "Enter") e.currentTarget.blur();
           if (e.key === "Escape") { setVal(thread.title); setEditing(false); }
         }}
-        className="w-full rounded-lg border border-[rgba(254,81,0,0.4)] bg-raise px-2.5 py-2 text-[13px] text-ink outline-none"
+        className="min-h-11 w-full rounded-xl border border-orange/45 bg-[var(--brain-canvas)] px-3 py-2 text-[13px] text-[var(--brain-text)] outline-none"
       />
     );
   }
 
   return (
-    <div className={`group flex items-center gap-1 rounded-lg pl-2.5 pr-1.5 text-[13px] transition-colors duration-200 ${active ? "bg-raise text-ink" : "text-ink-dim hover:bg-raise/60 hover:text-ink"}`}>
-      <button onClick={onOpen} onDoubleClick={startEdit} className="min-w-0 flex-1 cursor-pointer py-2 text-left" title={`${thread.title}  (double-click to rename)`}>
+    <div className={`group flex min-h-12 items-center gap-1 rounded-full pl-3.5 pr-1 text-[13px] transition-colors duration-200 ${active ? "bg-[var(--brain-selected)] text-[var(--brain-text)]" : "text-[var(--brain-muted-strong)] hover:bg-[var(--brain-soft-hover)] hover:text-[var(--brain-text)]"}`}>
+      <button onClick={onOpen} onDoubleClick={startEdit} className="min-w-0 flex-1 cursor-pointer py-2 text-left" title={`${thread.title} (double-click to rename)`}>
         <span className="block truncate leading-tight">{thread.title}</span>
-        <span className="mt-0.5 block truncate font-mono text-[9px] uppercase tracking-[0.1em] text-ink-dimmer">
+        <span className="mt-1 block truncate text-[10px] text-[var(--brain-muted)]">
           {projectName ?? "company-wide"} · {timeAgo(thread.updated_at)}
         </span>
       </button>
@@ -243,9 +264,9 @@ function ThreadRow({ thread, projectName, active, onOpen, onDelete, onRename }: 
         onClick={onDelete}
         aria-label="Delete conversation"
         title="Delete conversation"
-        className="grid size-6 shrink-0 cursor-pointer place-items-center rounded text-ink-dimmer opacity-0 transition-opacity hover:text-orange focus:opacity-100 group-hover:opacity-100"
+        className="grid size-11 shrink-0 cursor-pointer place-items-center rounded-full text-[var(--brain-muted)] opacity-0 transition-[color,background-color,opacity] hover:bg-[var(--brain-soft)] hover:text-orange focus:opacity-100 group-hover:opacity-100"
       >
-        <TrashIcon />
+        <Trash2 className="size-4" />
       </button>
     </div>
   );
@@ -258,46 +279,49 @@ function ThreadRail({
   onDelete: (id: string) => void; onRename: (id: string, title: string) => void; busy: boolean; className?: string;
 }) {
   return (
-    <div className={`w-64 shrink-0 flex-col border-r border-edge bg-bg/40 ${className}`}>
-      <div className="p-3">
+    <aside className={`w-[272px] shrink-0 flex-col bg-[var(--brain-rail)] ${className}`}>
+      <div className="px-3 pb-3 pt-4">
         <button
           onClick={onNew}
           disabled={busy}
-          className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-none border border-[rgba(254,81,0,0.4)] bg-orange-soft px-3 py-2 text-[13px] font-medium text-orange transition-colors hover:bg-[rgba(254,81,0,0.18)] disabled:opacity-50"
+          className="flex min-h-11 w-full cursor-pointer items-center gap-3 rounded-full px-4 text-[13.5px] font-medium text-[var(--brain-text)] transition-colors hover:bg-[var(--brain-soft-hover)] disabled:cursor-default disabled:opacity-50"
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" aria-hidden><path d="M12 5v14M5 12h14" /></svg>
-          New conversation
+          <PenLine className="size-[18px]" />
+          New chat
         </button>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
+      <div className="min-h-0 flex-1 overflow-y-auto px-2.5 pb-4">
         {threads.length === 0 ? (
-          <div className="px-2 py-3">
-            <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-dimmer">Conversations</div>
-            <p className="mt-1.5 text-[12px] leading-[1.5] text-ink-dimmer">No conversations yet. Ask something to start one.</p>
+          <div className="px-3 py-4">
+            <div className="text-[12px] font-medium text-[var(--brain-muted)]">Recent</div>
+            <p className="mt-2 text-[12px] leading-[1.5] text-[var(--brain-muted)]">Your conversations will appear here.</p>
           </div>
         ) : (
-          <ul className="space-y-0.5">
-            {threads.map((t) => (
-              <li key={t.id}>
-                <ThreadRow
-                  thread={t}
-                  projectName={t.project_id ? projectNames[t.project_id] ?? t.project_id : null}
-                  active={t.id === activeThreadId}
-                  onOpen={() => onOpen(t.id)}
-                  onDelete={() => onDelete(t.id)}
-                  onRename={(title) => onRename(t.id, title)}
-                />
-              </li>
-            ))}
-          </ul>
+          <div>
+            <div className="px-3 pb-2 pt-1 text-[12px] font-medium text-[var(--brain-muted)]">Recent</div>
+            <ul className="space-y-1">
+              {threads.map((t) => (
+                <li key={t.id}>
+                  <ThreadRow
+                    thread={t}
+                    projectName={t.project_id ? projectNames[t.project_id] ?? t.project_id : null}
+                    active={t.id === activeThreadId}
+                    onOpen={() => onOpen(t.id)}
+                    onDelete={() => onDelete(t.id)}
+                    onRename={(title) => onRename(t.id, title)}
+                  />
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
       </div>
-    </div>
+    </aside>
   );
 }
 
 const selectCls =
-  "cursor-pointer rounded-none border border-edge bg-raise px-2 py-1.5 text-[12px] text-ink outline-none transition-colors hover:border-edge-strong focus:border-[rgba(254,81,0,0.45)]";
+  "min-h-11 max-w-[180px] cursor-pointer rounded-full border-0 bg-[var(--brain-soft)] px-3 text-[12px] font-medium text-[var(--brain-muted-strong)] outline-none transition-colors hover:bg-[var(--brain-soft-hover)] focus:ring-2 focus:ring-orange/40";
 
 export function BrainConsole({
   userName,
@@ -478,6 +502,7 @@ export function BrainConsole({
   const firstName = userName.split(" ")[0] || "there";
   const noKeys = availableProviders.length === 0;
   const projectNames = useMemo(() => Object.fromEntries(projects.map((p) => [p.id, p.name])), [projects]);
+  const activeThread = threads.find((thread) => thread.id === activeThreadId);
 
   // Full-screen mode: Esc exits, body scroll locks while open.
   useEffect(() => {
@@ -497,7 +522,7 @@ export function BrainConsole({
   const body = (
     // `relative` anchors the mobile thread-rail overlay (absolute inset-0) to
     // THIS panel — without it the drawer positions against the viewport.
-    <div className="relative flex h-full overflow-hidden rounded-none border border-edge bg-panel shadow-[var(--pop-shadow)]">
+    <div className="brain-chat relative flex h-full overflow-hidden bg-[var(--brain-canvas)] text-[var(--brain-text)]">
       <ThreadRail
         className="hidden md:flex"
         threads={threads}
@@ -512,7 +537,7 @@ export function BrainConsole({
       {railOpen && (
         <div className="absolute inset-0 z-20 flex md:hidden">
           <ThreadRail
-            className="flex max-w-[80%] bg-panel"
+            className="flex max-w-[86%] shadow-2xl"
             threads={threads}
             projectNames={projectNames}
             activeThreadId={activeThreadId}
@@ -522,30 +547,30 @@ export function BrainConsole({
             onRename={renameThread}
             busy={busy}
           />
-          <button aria-label="Close conversations" className="flex-1 cursor-pointer bg-black/40" onClick={() => setRailOpen(false)} />
+          <button aria-label="Close conversations" className="flex-1 cursor-pointer bg-black/35 backdrop-blur-[2px]" onClick={() => setRailOpen(false)} />
         </div>
       )}
 
       <div className="relative flex min-w-0 flex-1 flex-col">
-        {/* Header: identity + project + model */}
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-edge px-4 py-3 md:px-5">
-          <div className="flex items-center gap-2.5">
+        <header className="flex min-h-[72px] items-center justify-between gap-3 px-3 sm:px-5">
+          <div className="flex min-w-0 items-center gap-2.5">
             <button
               onClick={() => setRailOpen(true)}
               aria-label="Conversations"
-              className="grid size-8 shrink-0 cursor-pointer place-items-center rounded-lg border border-edge text-ink-dim transition-colors hover:border-edge-strong hover:text-ink md:hidden"
+              className="grid size-11 shrink-0 cursor-pointer place-items-center rounded-full text-[var(--brain-muted-strong)] transition-colors hover:bg-[var(--brain-soft)] hover:text-[var(--brain-text)] md:hidden"
             >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" aria-hidden><path d="M4 6h16M4 12h16M4 18h16" /></svg>
+              <Menu className="size-5" />
             </button>
-            <span className="grid size-8 place-items-center rounded-full border border-[rgba(254,81,0,0.35)] bg-orange-soft text-orange"><Spark /></span>
-            <div className="leading-tight">
-              <span className="text-[14px] font-medium tracking-[-0.01em] text-ink">Urso Brain</span>
-              <div className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-dimmer">{userName} · {departmentName}</div>
+            <div className="min-w-0 leading-tight">
+              <h1 className="truncate text-[16px] font-medium tracking-[-0.015em] text-[var(--brain-text)]">
+                {activeThread?.title ?? "New chat"}
+              </h1>
+              <p className="mt-1 truncate text-[11.5px] text-[var(--brain-muted)]">Urso Brain · {departmentName}</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2">
             <select aria-label="Project" value={projectId} onChange={(e) => setProjectId(e.target.value)} className={selectCls}>
-              <option value="">No project — company-wide</option>
+              <option value="">Company-wide</option>
               {projects.map((p) => (
                 <option key={p.id} value={p.id}>{p.name}</option>
               ))}
@@ -558,7 +583,7 @@ export function BrainConsole({
                 setProvider(p as BrainProvider);
                 setModelId(m);
               }}
-              className={selectCls}
+              className={`${selectCls} hidden lg:block`}
               disabled={noKeys}
             >
               {noKeys && <option value="">No models — add keys</option>}
@@ -574,55 +599,51 @@ export function BrainConsole({
               onClick={() => setExpanded((e) => !e)}
               aria-label={expanded ? "Exit full screen" : "Full screen"}
               title={expanded ? "Exit full screen (Esc)" : "Full screen"}
-              className="grid size-8 shrink-0 cursor-pointer place-items-center rounded-lg border border-edge text-ink-dim transition-colors duration-200 hover:border-edge-strong hover:text-ink"
+              className="grid size-11 shrink-0 cursor-pointer place-items-center rounded-full text-[var(--brain-muted-strong)] transition-colors duration-200 hover:bg-[var(--brain-soft)] hover:text-[var(--brain-text)]"
             >
-              {expanded ? (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M9 9 4 4M9 4H4v5M15 9l5-5M15 4h5v5M9 15l-5 5M4 15v5h5M15 15l5 5M20 15v5h-5" /></svg>
-              ) : (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg>
-              )}
+              {expanded ? <Minimize2 className="size-[18px]" /> : <Maximize2 className="size-[18px]" />}
             </button>
           </div>
-        </div>
+        </header>
 
         {noKeys && (
-          <div className="border-b border-edge bg-orange-wash px-4 py-2.5 text-[12.5px] text-ink-dim md:px-5">
+          <div className="mx-4 rounded-xl bg-orange-wash px-4 py-3 text-[12.5px] text-[var(--brain-muted-strong)] md:mx-6">
             No provider keys are configured yet — add your org&rsquo;s API keys in{" "}
             <Link href="/brain/settings" className="text-orange underline underline-offset-2">settings</Link> to start chatting.
           </div>
         )}
 
         {/* Messages */}
-        <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-5 md:px-6">
-          <div className="mx-auto w-full max-w-[760px]">
+        <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-7 pt-4 sm:px-8 sm:pt-7">
+          <div className="mx-auto h-full w-full max-w-[860px]">
             {hydrating ? (
-              <div aria-hidden className="space-y-6 py-1">
-                <div className="flex justify-end"><div className="skeleton-shimmer h-10 w-1/2 max-w-[320px] rounded-sm bg-raise" /></div>
-                <div className="flex gap-3">
-                  <div className="skeleton-shimmer size-7 shrink-0 rounded-full bg-raise" />
+              <div aria-hidden className="space-y-9 py-3">
+                <div className="flex justify-end"><div className="skeleton-shimmer h-12 w-1/2 max-w-[360px] rounded-[22px]" /></div>
+                <div className="flex gap-4">
+                  <div className="skeleton-shimmer size-8 shrink-0 rounded-full" />
                   <div className="min-w-0 flex-1 space-y-2 pt-1">
-                    <div className="skeleton-shimmer h-3.5 w-4/5 rounded-sm bg-raise" />
-                    <div className="skeleton-shimmer h-3.5 w-3/5 rounded-sm bg-raise" />
+                    <div className="skeleton-shimmer h-3.5 w-4/5 rounded-full" />
+                    <div className="skeleton-shimmer h-3.5 w-3/5 rounded-full" />
                   </div>
                 </div>
               </div>
             ) : messages.length === 0 ? (
               <EmptyState firstName={firstName} departmentId={departmentId} departmentName={departmentName} onPick={send} busy={busy || noKeys} />
             ) : (
-              <div className="space-y-6">
+              <div className="space-y-9 pb-4">
                 {messages.map((m, i) => (
                   <Message key={m.id} role={m.role} parts={m.parts as { type: string; text?: string }[]} live={status === "streaming" && i === messages.length - 1} />
                 ))}
                 {status === "submitted" && (
-                  <div className="tip-in flex gap-3">
-                    <span className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-full border border-edge bg-raise text-orange"><Spark /></span>
+                  <div className="tip-in flex gap-4">
+                    <span className="mt-0.5 grid size-8 shrink-0 place-items-center text-orange"><Spark className="size-[18px]" /></span>
                     <ThinkingLabel label="thinking" />
                   </div>
                 )}
               </div>
             )}
             {error && (
-              <p className="mt-4 rounded-lg border border-[rgba(254,81,0,0.3)] bg-orange-soft px-3 py-2 text-[12.5px] leading-[1.5] text-ink-dim">
+              <p role="alert" className="mt-4 rounded-xl bg-orange-soft px-4 py-3 text-[13px] leading-[1.5] text-[var(--brain-muted-strong)]">
                 {errorText(error.message)}
               </p>
             )}
@@ -630,11 +651,11 @@ export function BrainConsole({
         </div>
 
         {/* Composer */}
-        <div className="border-t border-edge px-4 py-3.5 md:px-6">
-          <div className="mx-auto w-full max-w-[760px]">
+        <div className="px-3 pb-3 pt-2 sm:px-6 sm:pb-4">
+          <div className="mx-auto w-full max-w-[860px]">
             <form
               onSubmit={(e) => { e.preventDefault(); void send(input); }}
-              className="flex items-end gap-2 rounded-none border border-edge bg-raise px-3 py-2 transition-colors focus-within:border-[rgba(254,81,0,0.45)]"
+              className="flex min-h-[64px] items-end gap-2 rounded-[28px] border border-[var(--brain-border)] bg-[var(--brain-composer)] px-3 py-2.5 shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition-[border-color,box-shadow] focus-within:border-[var(--brain-border-strong)] focus-within:shadow-[0_2px_8px_rgba(0,0,0,0.06)] sm:px-4"
             >
               <textarea
                 ref={taRef}
@@ -650,37 +671,32 @@ export function BrainConsole({
                 }}
                 rows={1}
                 disabled={noKeys}
-                placeholder={noKeys ? "Add an org API key in settings first…" : "Ask about any project, department, contract, or rule…"}
-                className="max-h-[160px] flex-1 resize-none bg-transparent py-1.5 text-[14px] leading-[1.5] text-ink outline-none placeholder:text-ink-dimmer disabled:opacity-50"
+                placeholder={noKeys ? "Add an org API key in settings first…" : "Ask Urso Brain"}
+                className="max-h-[160px] min-h-11 flex-1 resize-none bg-transparent px-1 py-2.5 text-[16px] leading-6 text-[var(--brain-text)] outline-none placeholder:text-[var(--brain-muted)] disabled:opacity-50"
               />
               {busy ? (
                 <button
                   type="button"
                   onClick={() => stop()}
                   aria-label="Stop"
-                  className="dash-press grid size-9 shrink-0 cursor-pointer place-items-center rounded-none border border-edge text-ink-dim transition-colors hover:border-edge-strong hover:text-ink"
+                  className="dash-press grid size-11 shrink-0 cursor-pointer place-items-center rounded-full bg-[var(--brain-soft)] text-[var(--brain-text)] transition-colors hover:bg-[var(--brain-soft-hover)]"
                 >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
+                  <Square className="size-4 fill-current" />
                 </button>
               ) : (
                 <button
                   type="submit"
                   disabled={!input.trim() || noKeys}
                   aria-label="Send"
-                  className="dash-press grid size-9 shrink-0 cursor-pointer place-items-center rounded-none border border-[rgba(254,81,0,0.4)] bg-orange-soft text-orange transition-colors hover:bg-[rgba(254,81,0,0.18)] disabled:cursor-default disabled:opacity-40"
+                  className="dash-press grid size-11 shrink-0 cursor-pointer place-items-center rounded-full bg-orange text-white transition-[background-color,opacity] hover:bg-[#e84900] disabled:cursor-default disabled:bg-[var(--brain-soft)] disabled:text-[var(--brain-muted)]"
                 >
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M12 19V5M6 11l6-6 6 6" /></svg>
+                  <Send className="size-[18px]" />
                 </button>
               )}
             </form>
-            <div className="mt-2 flex items-baseline justify-between gap-3 px-1">
-              <p className="text-[10.5px] leading-[1.4] text-ink-dimmer">
-                Urso Brain answers from — and can write to — the company vault. Verify anything that drives a real decision.
-              </p>
-              <p className="hidden shrink-0 font-mono text-[9px] uppercase tracking-[0.12em] text-ink-dimmer md:block">
-                ⏎ send · ⇧⏎ new line
-              </p>
-            </div>
+            <p className="mt-2.5 px-3 text-center text-[11px] leading-4 text-[var(--brain-muted)]">
+              Urso Brain can read and update the company vault. Verify anything that drives a real decision.
+            </p>
           </div>
         </div>
       </div>
@@ -689,7 +705,7 @@ export function BrainConsole({
 
   if (expanded && typeof document !== "undefined") {
     return createPortal(
-      <div className="theme-scope fixed inset-0 z-[60] bg-bg">
+      <div className="brain-chat theme-scope fixed inset-0 z-[60] bg-[var(--brain-canvas)]">
         <div className="mx-auto flex h-full max-w-[1280px] flex-col p-3 md:p-6">
           <div className="animate-stage-in flex h-full flex-col overflow-hidden">{body}</div>
         </div>

@@ -44,8 +44,8 @@ export default async function BrainGraphPage() {
           <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-orange">Urso Brain · Graph</div>
           <h1 className="mt-1.5 text-[22px] font-bold tracking-[-0.02em] text-ink">The vault graph</h1>
           <p className="mt-1 text-[13px] text-ink-dim">
-            {nodes.length} docs · {edges.length} connections. Hover to trace, click to open, scroll to zoom, drag to pan.
-            Orange rings are brain-written docs.
+            {nodes.length} docs · {edges.length} connections. Hover to trace, click to open, drag a node to pull it out,
+            scroll to zoom, double-click to refit.
           </p>
         </div>
       </div>

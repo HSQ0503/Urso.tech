@@ -23,6 +23,14 @@
   --color-track: rgba(255, 255, 255, 0.12);
   --color-series: rgba(255, 255, 255, 0.28);
   --color-series-soft: rgba(255, 255, 255, 0.14);
+  /* Compare-page baselines. Periods are ORDINAL, not categorical — one hue,
+     stepped so the reader sees "further back = fainter". Steps are spaced for
+     a visible lightness gap between neighbours (OKLab ΔL ≥ 0.06) and the
+     faintest still clears 2:1 on the panel; -1 is the most recent baseline.
+     The focus period is orange and is not part of the ramp. */
+  --color-period-1: rgba(255, 255, 255, 0.6);
+  --color-period-2: rgba(255, 255, 255, 0.42);
+  --color-period-3: rgba(255, 255, 255, 0.26);
   --color-axis: rgba(255, 255, 255, 0.4);
   --color-grid: rgba(255, 255, 255, 0.07);
   --color-good: #46d18a;
@@ -101,6 +109,10 @@
   --color-track: rgba(15, 18, 22, 0.1);
   --color-series: rgba(20, 23, 28, 0.34);
   --color-series-soft: rgba(20, 23, 28, 0.16);
+  /* Ordinal period ramp — see the dark block above for the rules it satisfies. */
+  --color-period-1: rgba(20, 23, 28, 0.64);
+  --color-period-2: rgba(20, 23, 28, 0.46);
+  --color-period-3: rgba(20, 23, 28, 0.32);
   --color-axis: rgba(20, 23, 28, 0.5);
   --color-grid: rgba(20, 23, 28, 0.08);
   --color-good: #11935a;
@@ -141,6 +153,22 @@
   --grain-opacity: 0.06;
   --card-highlight: inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
   --card-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
+
+  /* Vault graph (/brain/graph). It paints to <canvas>, which cannot resolve
+     var() — graph-view.tsx reads these off the wrapper's computed style and
+     re-reads them when data-theme flips, so the palette still lives only here.
+     Project colours are hues in TS (ids are dynamic); --graph-sat/-light are
+     the theme's share of them, which is what keeps a hue legible on white. */
+  --graph-bg: #0b0b0b;
+  --graph-node: rgba(255, 255, 255, 0.66);
+  --graph-node-soft: rgba(255, 255, 255, 0.34);
+  --graph-core: rgba(255, 255, 255, 0.95);
+  --graph-edge: rgba(255, 255, 255, 0.14);
+  --graph-label: rgba(255, 255, 255, 0.72);
+  --graph-label-strong: #ffffff;
+  --graph-focus: #fe5100;
+  --graph-sat: 62%;
+  --graph-light: 62%;
 }
 
 :root[data-theme="light"] .theme-scope {
@@ -156,6 +184,20 @@
   --grain-opacity: 0.035;
   --card-highlight: inset 0 1px 0 0 #ffffff;
   --card-shadow: 0 1px 2px 0 rgba(15, 18, 22, 0.06), 0 6px 20px -10px rgba(15, 18, 22, 0.1);
+
+  /* Graph on white — see the dark block above. Edges need MORE alpha here than
+     the dark side: dark ink on white loses perceived weight at the same value,
+     and the graph is unreadable if the edges drop out. */
+  --graph-bg: #ffffff;
+  --graph-node: rgba(20, 23, 28, 0.52);
+  --graph-node-soft: rgba(20, 23, 28, 0.28);
+  --graph-core: rgba(20, 23, 28, 0.88);
+  --graph-edge: rgba(20, 23, 28, 0.18);
+  --graph-label: rgba(20, 23, 28, 0.72);
+  --graph-label-strong: #14171c;
+  --graph-focus: #e34a00;
+  --graph-sat: 58%;
+  --graph-light: 44%;
 }
 
 /* Tactile glass pill — filter dropdowns, the account button, any chrome control.
@@ -296,6 +338,39 @@
   .dash-press:active {
     transform: none;
   }
+}
+
+/* Urso Brain chat: a quiet, AI-native workspace with one soft navigation plane,
+   an unboxed reading canvas, and a floating composer. These variables stay local
+   to the chatbot so the rest of the dashboard keeps its existing material system. */
+.brain-chat {
+  --brain-canvas: #0d0f12;
+  --brain-rail: #171a1f;
+  --brain-soft: #1d2127;
+  --brain-soft-hover: #252a32;
+  --brain-selected: #2d3037;
+  --brain-user: #242931;
+  --brain-composer: #15181d;
+  --brain-border: #343941;
+  --brain-border-strong: #555b64;
+  --brain-text: #f1f3f4;
+  --brain-muted: #a8adb4;
+  --brain-muted-strong: #d0d3d7;
+}
+
+:root[data-theme="light"] .brain-chat {
+  --brain-canvas: #ffffff;
+  --brain-rail: #f1f4f8;
+  --brain-soft: #f0f3f7;
+  --brain-soft-hover: #e5eaf0;
+  --brain-selected: #dfe6ef;
+  --brain-user: #edf1f6;
+  --brain-composer: #ffffff;
+  --brain-border: #cdd2d8;
+  --brain-border-strong: #9fa5ad;
+  --brain-text: #202124;
+  --brain-muted: #646a70;
+  --brain-muted-strong: #454a50;
 }
 
 .slide-sheen {

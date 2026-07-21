@@ -63,6 +63,7 @@ const fullName = (id: StoreId) => STORE_OPTIONS.find((o) => o.value === id)!.lab
 const scopeIds = (scope: Scope): StoreId[] => (scope === "all" ? stores.map((s) => s.id) : [scope]);
 
 const isYear = (month: MonthValue) => /^\d{4}$/.test(month);
+const isDay = (month: MonthValue) => /^\d{4}-\d{2}-\d{2}$/.test(month);
 
 function monthRange(month: MonthValue): { start: string; end: string } | null {
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -79,6 +80,10 @@ function monthRange(month: MonthValue): { start: string; end: string } | null {
     const y = Number(month);
     return { start: `${y}-01-01`, end: `${y + 1}-01-01` };
   }
+  // One specific day. Must be tested BEFORE the month branch below — that one
+  // reads only the year and month out of the string, so a date would silently
+  // widen into its whole month.
+  if (isDay(month)) return { start: month, end: addDays(month, 1) };
   const [y, m] = month.split("-").map(Number);
   const ny = m === 12 ? y + 1 : y;
   const nm = m === 12 ? 1 : m + 1;
@@ -310,7 +315,14 @@ export async function getKpiDeltas(scope: Scope, month: MonthValue): Promise<Kpi
   const pad = (n: number) => String(n).padStart(2, "0");
   const today = nyToday();
   let curStart: string, curEnd: string, prevStart: string, prevEnd: string;
-  if (month === "all" || isYear(month)) {
+  if (isDay(month)) {
+    // A single day compares against the SAME WEEKDAY a week earlier, not
+    // yesterday — grooming volume swings hard by weekday, and a Monday held up
+    // against a closed Sunday would read as an infinite gain.
+    curStart = month; curEnd = addDays(month, 1);
+    prevStart = addDays(month, -7); prevEnd = addDays(month, -6);
+    if (prevStart < FIRST_FULL_MONTH) return NULL_DELTAS;
+  } else if (month === "all" || isYear(month)) {
     // Year-shaped periods compare against the same window one year earlier.
     const range = monthRange(month)!;
     curStart = range.start; curEnd = range.end;
@@ -988,7 +1000,7 @@ const HOURLY = [4, 9, 14, 16, 15, 12, 13, 15, 14, 11, 9, 7, 5, 4];
 const MISSED_HOURLY = [1, 2, 3, 4, 3, 2, 3, 5, 5, 4, 4, 5, 4, 3];
 export async function getCallsHourly(scope: Scope, month: MonthValue) {
   const a = sumScope(await loadDaily(month), scopeIds(scope));
-  const days = month === "all" || isYear(month) ? 365 : 30;
+  const days = month === "all" || isYear(month) ? 365 : isDay(month) ? 1 : 30;
   const hSum = HOURLY.reduce((x, y) => x + y, 0);
   const mSum = MISSED_HOURLY.reduce((x, y) => x + y, 0);
   const hourly = HOURLY.map((h) => Math.round(((a.calls / days) * h) / hSum));
@@ -1236,11 +1248,20 @@ export function resolveCompareRanges(preset: ComparePreset, aRaw?: string, bRaw?
 // deltas/insights/movers read against it), `more` the values for any extra
 // baselines (bs[1..]), oldest last, used for context columns/series only.
 export type CompareRow = { key: string; name: string; tag?: string; a: number | null; b: number | null; more?: (number | null)[] };
+// The headline strip's numbers: the SELECTED measure aggregated over the whole
+// scope, one value per period. Not derivable from `rows` — an average or a rate
+// can't be summed, so each mode aggregates it from its own raw parts.
+// `additive` = the measure is a running total (revenue, bookings, units), so a
+// per-day rate is meaningful when the periods differ in length. Averages and
+// rates are already normalised — dividing them by days would be nonsense.
+export type CompareHeadline = { label: string; format: CompareFormat; additive: boolean; a: number | null; bs: (number | null)[] };
+const ADDITIVE_METRICS = new Set(["revenue", "bookings", "appts", "units"]);
 export type CompareData = {
   rows: CompareRow[];
   format: CompareFormat;
   metricLabel: string;
   pointDelta: boolean; // rate metrics: deltas read as percentage points, not relative %
+  headline: CompareHeadline;
   revenue: { a: number; bs: number[] };
   days: { a: number; bs: number[] };
   pace?: { a: number[]; bs: number[][] }; // daily revenue per period (stores mode) for the running-total overlay
@@ -1276,7 +1297,9 @@ function buildInsights(rows: CompareRow[], format: CompareFormat, metricLabel: s
     const series = [...revenue.bs].reverse().concat(revenue.a);
     const daysSeries = [...days.bs].reverse().concat(days.a);
     const arc = series.map((v, i) => money(sameLen ? v : v / Math.max(1, daysSeries[i]))).join(" → ");
-    out.push(`The arc across all ${series.length} periods, oldest first: ${arc}${sameLen ? "" : " per day"}.`);
+    // Named explicitly: these insights always describe revenue, even when the
+    // headline and table are showing a different measure.
+    out.push(`Revenue across all ${series.length} periods, oldest first: ${arc}${sameLen ? "" : " per day"}.`);
   }
   const floor = format === "money" ? 250 : format === "number" ? 10 : 0;
   const movers = rows
@@ -1379,11 +1402,16 @@ export async function getCompareData(mode: CompareMode, metricKey: string, a: Co
   let rows: CompareRow[] = [];
   let movers: { name: string; delta: number }[] | undefined;
 
-  // The headline revenue strip always reads metrics_daily (the canonical,
-  // validated total) — never sums of the capped/attributed RPC rows.
+  // Revenue context always reads metrics_daily (the canonical, validated total)
+  // — never sums of the capped/attributed RPC rows.
   const byPeriod = await Promise.all(periods.map((r) => loadDailyRange(r.start, exclusiveEnd(r))));
   const revIds = scopeIds(mode === "stores" ? "all" : scope);
   const revenue = { a: sumScope(byPeriod[0], revIds).rev, bs: byPeriod.slice(1).map((by) => sumScope(by, revIds).rev) };
+
+  // Scope-level value of the SELECTED measure, per period — what the headline
+  // strip shows. Filled in by each mode's branch below, because aggregating a
+  // rate or an average means going back to its numerator and denominator.
+  let headlineVals: (number | null)[] = [];
 
   // Stores mode also gets a day-by-day revenue overlay ("pace"). The series RPC
   // only returns days with rows, so gaps are densified to zero to keep day
@@ -1413,6 +1441,9 @@ export async function getCompareData(mode: CompareMode, metricKey: string, a: Co
   if (mode === "stores") {
     const val = (x: Agg) => storeMetricValue(metric.key, x);
     rows = stores.map((s) => ({ key: s.id, name: s.name, ...pack(byPeriod.map((by) => val(by[s.id]))) }));
+    // Group total: the metric computed on the summed aggregate, not an average
+    // of the four store values — same helper the per-store rows use.
+    headlineVals = byPeriod.map((by) => val(sumScope(by, revIds)));
     if (metric.key === "rebook" && periods.some((r) => r.start < RETURN_RATE_MATURE)) {
       notes.push("Return rate needs 90 days of history behind it — periods before Apr 2024 read low by construction.");
     }
@@ -1439,6 +1470,20 @@ export async function getCompareData(mode: CompareMode, metricKey: string, a: Co
       if (metric.key === "appts") return Number(r.appts);
       return Number(r.appts) ? Number(r.revenue) / Number(r.appts) : null;
     };
+    // Every groomer in scope, not just the twelve the table shows.
+    headlineVals = periods.map((_, i) => {
+      let rev = 0;
+      let appts = 0;
+      for (const e of merged.values()) {
+        const r = e.sides[i];
+        if (!r) continue;
+        rev += Number(r.revenue);
+        appts += Number(r.appts);
+      }
+      if (metric.key === "revenue") return rev;
+      if (metric.key === "appts") return appts;
+      return appts ? rev / appts : null;
+    });
     const ranked = [...merged.entries()]
       .map(([key, e]) => ({ key, e, vol: e.sides.reduce((s, r) => s + Number(r?.revenue ?? 0), 0) }))
       .sort((x, y) => y.vol - x.vol);
@@ -1482,6 +1527,28 @@ export async function getCompareData(mode: CompareMode, metricKey: string, a: Co
     if (results.some((res) => res.length >= 2500)) {
       notes.push("A period here sold more than 2,500 distinct items — the smallest ones beyond that cap are excluded.");
     }
+    // Every item sold, not just the twelve the table shows. Margin aggregates
+    // over retail only — the same universe the margin rows are filtered to,
+    // since services carry no item cost.
+    headlineVals = periods.map((_, i) => {
+      let rev = 0;
+      let units = 0;
+      let retailRev = 0;
+      let retailCost = 0;
+      for (const e of merged.values()) {
+        const r = e.sides[i];
+        if (!r) continue;
+        rev += Number(r.revenue);
+        units += Number(r.units);
+        if (!e.svc) {
+          retailRev += Number(r.revenue);
+          retailCost += Number(r.cost);
+        }
+      }
+      if (metric.key === "revenue") return rev;
+      if (metric.key === "units") return units;
+      return retailRev > 0 ? (retailRev - retailCost) / retailRev : null;
+    });
     const margin = (r?: Row): number | null =>
       r && Number(r.revenue) > 0 && Number(r.cost) > 0 ? (Number(r.revenue) - Number(r.cost)) / Number(r.revenue) : null;
     const val = (r?: Row): number | null => {
@@ -1523,6 +1590,13 @@ export async function getCompareData(mode: CompareMode, metricKey: string, a: Co
     format: metric.format,
     metricLabel: metric.label,
     pointDelta: metric.format === "pct",
+    headline: {
+      label: metric.label,
+      format: metric.format,
+      additive: ADDITIVE_METRICS.has(metric.key),
+      a: headlineVals[0] ?? null,
+      bs: headlineVals.slice(1),
+    },
     revenue,
     days,
     pace,
@@ -1739,8 +1813,17 @@ async function loadMoney(ids: string[], range: { start: string; end: string } | 
   return { totals, buckets, cogsSplit, revSplit, monthsIncluded: months.size, openMonths: [...openMonths] };
 }
 
+// QuickBooks closes MONTHLY — there is no such thing as one day's P&L, and the
+// pnl tables are keyed on the first of the month. A raw day range would read
+// empty on most days but match the whole month's row when the day IS the 1st,
+// reporting a month of profit as a single day's. Every books read goes through
+// here, so a day gets a window that matches nothing and the money views fall
+// into their existing "no data for this period" state instead of lying.
+const NO_BOOKS = { start: "2000-01-01", end: "2000-01-01" }; // start === end → matches nothing
+const pnlRange = (month: MonthValue) => (isDay(month) ? NO_BOOKS : monthRange(month));
+
 const moneyFor = (scope: Scope, month: MonthValue) =>
-  loadMoney(qboTotalIds(scope), monthRange(month), month === "all" || isYear(month));
+  loadMoney(qboTotalIds(scope), pnlRange(month), month === "all" || isYear(month));
 
 // FranPOS read window aligned to the QBO closed-month window. "all" is the
 // trailing 12 months INCLUDING the open current month on the POS side, but the
@@ -1759,7 +1842,7 @@ export async function getMoneyOverview(scope: Scope, month: MonthValue): Promise
   const rev = d.totals.revenue;
   let unallocated: number | null = null;
   if (scope === "all") {
-    const rows = await loadPnlTotals(["wm", "lv", "wm-lv"], monthRange(month), [PNL_LABEL.netIncome]);
+    const rows = await loadPnlTotals(["wm", "lv", "wm-lv"], pnlRange(month), [PNL_LABEL.netIncome]);
     const open = curMonthFirst();
     const excludeOpen = month === "all" || isYear(month);
     const net = (id: string) => rows.filter((r) => r.client_id === id && !(excludeOpen && r.month === open)).reduce((s, r) => s + Number(r.amount), 0);
@@ -1855,7 +1938,11 @@ export async function getOwnerRevenue(scope: Scope, month: MonthValue): Promise<
   const range = monthRange(month);
   const ids = qboTotalIds(scope);
   const [mix, byStore] = await Promise.all([
-    range ? loadIncomeMix(ids, range.start, range.end) : Promise.resolve({ total: 0, tips: 0, other: 0, monthsCovered: 0 }),
+    // A single day has no books to count the owner's way (see pnlRange), so it
+    // falls through to register sales — the honest number for one day.
+    range && !isDay(month)
+      ? loadIncomeMix(ids, range.start, range.end)
+      : Promise.resolve({ total: 0, tips: 0, other: 0, monthsCovered: 0 }),
     loadDaily(month),
   ]);
   const registerSales = sumScope(byStore, scopeIds(scope)).rev;
@@ -1926,6 +2013,7 @@ export async function getProfitDeltas(scope: Scope, month: MonthValue): Promise<
   const NULLD: ProfitDeltas = { revenue: null, netIncome: null, netMargin: null, expenses: null };
   let prev: MonthValue | null = null;
   if (month === "all") return NULLD; // trailing-12 has no clean prior window here
+  if (isDay(month)) return NULLD; // books close monthly — a day has no P&L to compare
   if (isYear(month)) prev = String(Number(month) - 1);
   else {
     const [y, m] = month.split("-").map(Number);
@@ -1948,7 +2036,7 @@ export async function getProfitDeltas(scope: Scope, month: MonthValue): Promise<
 
 // ── public: cross-store cost benchmark ──────────────────────────────────────
 export async function getCostBenchmark(month: MonthValue): Promise<StoreCostBenchmark[]> {
-  const range = monthRange(month);
+  const range = pnlRange(month);
   const excludeOpen = month === "all" || isYear(month);
   const out = await Promise.all(
     STORE_QBO_IDS.map(async (id) => {
@@ -1968,7 +2056,7 @@ export async function getCostBenchmark(month: MonthValue): Promise<StoreCostBenc
 
 // ── public: consolidated owner P&L (all stores) ─────────────────────────────
 export async function getConsolidatedPnl(month: MonthValue): Promise<ConsolidatedPnl> {
-  const range = monthRange(month);
+  const range = pnlRange(month);
   const excludeOpen = month === "all" || isYear(month);
   const open = curMonthFirst();
   const rows = await loadPnlTotals(["wp", "wg", "wm", "lv", "wm-lv"], range, PNL_LABELS);
