@@ -5,7 +5,8 @@
 // but the context is the company vault (not store metrics), and the user picks a
 // PROJECT (context scope) and a MODEL (routed via the org's BYO provider keys).
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
@@ -16,10 +17,46 @@ import type { BrainProvider } from "@/lib/brain/types";
 type ThreadSummary = { id: string; title: string; project_id: string | null; model: string; updated_at: string };
 type ProjectOption = { id: string; name: string };
 
-const TOOL_LABELS: Record<string, string> = {
-  fetch_doc: "read a doc",
-  search_docs: "searched the vault",
-  list_docs: "listed docs",
+// Tool-activity chips: show WHAT the brain actually touched (real doc titles,
+// search queries), and mark writes distinctly so edits are never invisible.
+type ToolPart = { type: string; text?: string; input?: unknown; output?: unknown };
+const WRITE_TOOLS = new Set(["create_doc", "update_doc", "link_docs", "delete_doc"]);
+
+function toolChips(parts: ToolPart[]): { label: string; write: boolean }[] {
+  const chips: { label: string; write: boolean }[] = [];
+  const seen = new Set<string>();
+  const str = (v: unknown) => (typeof v === "string" && v ? v : null);
+  const baseName = (v: string | null) => (v ? (v.split("/").pop() ?? v).replace(/\.md$/i, "") : null);
+  for (const p of parts) {
+    if (!p.type.startsWith("tool-")) continue;
+    const name = p.type.slice(5);
+    const input = (p.input ?? {}) as Record<string, unknown>;
+    const output = (p.output ?? {}) as Record<string, unknown>;
+    let label: string;
+    switch (name) {
+      case "fetch_doc": label = `read · ${str(output.title) ?? baseName(str(input.path)) ?? "doc"}`; break;
+      case "search_docs": label = `searched · ${str(input.query) ?? "vault"}`; break;
+      case "list_docs": label = "listed docs"; break;
+      case "create_doc": label = `created · ${baseName(str(output.created)) ?? str(input.title) ?? "doc"}`; break;
+      case "update_doc": label = `updated · ${baseName(str(input.path)) ?? "doc"}`; break;
+      case "link_docs": label = "connected docs"; break;
+      case "delete_doc": label = `deleted · ${baseName(str(input.path)) ?? "doc"}`; break;
+      default: label = name.replace(/_/g, " ");
+    }
+    if (label.length > 44) label = `${label.slice(0, 43)}…`;
+    if (seen.has(label)) continue;
+    seen.add(label);
+    chips.push({ label, write: WRITE_TOOLS.has(name) });
+  }
+  return chips;
+}
+
+const timeAgo = (iso: string): string => {
+  const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+  if (s < 60) return "now";
+  if (s < 3600) return `${Math.floor(s / 60)}m`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h`;
+  return `${Math.floor(s / 86400)}d`;
 };
 
 const SUGGESTIONS: Record<string, string[]> = {
@@ -53,11 +90,6 @@ const SUGGESTIONS: Record<string, string[]> = {
     "What's blocked and waiting on whom, across all projects?",
     "What should we build or sell next, based on the vault?",
   ],
-};
-
-const toolLabel = (type: string) => {
-  const name = type.replace(/^tool-/, "");
-  return TOOL_LABELS[name] ?? name.replace(/_/g, " ");
 };
 
 // Pre-stream failures reach useChat as the raw JSON body the route returned
@@ -97,25 +129,31 @@ function Message({ role, parts, live = false }: { role: string; parts: { type: s
       </div>
     );
   }
-  const tools = Array.from(new Set(parts.filter((p) => p.type.startsWith("tool-")).map((p) => toolLabel(p.type))));
+  const chips = toolChips(parts as ToolPart[]);
   const text = parts.filter((p) => p.type === "text").map((p) => p.text ?? "").join("");
   return (
     <div className="tip-in flex gap-3">
       <span className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-full border border-edge bg-raise text-orange"><Spark /></span>
       <div className="min-w-0 flex-1 space-y-2">
-        {tools.length > 0 && (
+        {chips.length > 0 && (
           <div className="flex flex-wrap items-center gap-1.5 font-mono text-[9.5px] uppercase tracking-[0.12em] text-ink-dimmer">
-            <span className="text-orange">consulted</span>
-            {tools.map((n) => (
-              <span key={n} className="chip-in rounded-full border border-edge px-1.5 py-[2px]">{n}</span>
+            {chips.map((c) => (
+              <span
+                key={c.label}
+                className={`chip-in rounded-full border px-2 py-[3px] ${
+                  c.write ? "border-[rgba(254,81,0,0.45)] bg-orange-wash text-orange" : "border-edge"
+                }`}
+              >
+                {c.label}
+              </span>
             ))}
           </div>
         )}
         {text ? (
           <RichText text={text} className="text-[14px] text-ink" />
-        ) : tools.length > 0 && live ? (
-          <ThinkingLabel label="reading the vault" />
-        ) : tools.length > 0 ? (
+        ) : chips.length > 0 && live ? (
+          <ThinkingLabel label="working in the vault" />
+        ) : chips.length > 0 ? (
           <span className="text-[12.5px] italic text-ink-dimmer">No written answer was saved for this turn.</span>
         ) : null}
       </div>
@@ -139,7 +177,7 @@ function EmptyState({ firstName, departmentId, departmentName, onPick, busy }: {
         <h2 className="mt-4 text-[20px] font-bold tracking-[-0.01em] text-ink">Good to see you, {firstName}.</h2>
         <p className="mt-2 text-[14px] leading-[1.6] text-ink-dim">
           I&rsquo;m the company brain. I already know you&rsquo;re in {departmentName}, which project you&rsquo;re on, and
-          everything in the vault — departments, projects, contracts, standing rules. Just ask.
+          everything in the vault — and I can write to it too: save notes, update docs, connect them. Just ask.
         </p>
         <div className="mt-6 flex flex-col gap-2 text-left">
           {suggestions.map((s) => (
@@ -167,7 +205,7 @@ function TrashIcon() {
   );
 }
 
-function ThreadRow({ thread, active, onOpen, onDelete, onRename }: { thread: ThreadSummary; active: boolean; onOpen: () => void; onDelete: () => void; onRename: (title: string) => void }) {
+function ThreadRow({ thread, projectName, active, onOpen, onDelete, onRename }: { thread: ThreadSummary; projectName: string | null; active: boolean; onOpen: () => void; onDelete: () => void; onRename: (title: string) => void }) {
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState(thread.title);
   const startEdit = () => { setVal(thread.title); setEditing(true); };
@@ -194,9 +232,12 @@ function ThreadRow({ thread, active, onOpen, onDelete, onRename }: { thread: Thr
   }
 
   return (
-    <div className={`group flex items-center gap-1 rounded-lg pl-2.5 pr-1.5 text-[13px] transition-colors ${active ? "bg-raise text-ink" : "text-ink-dim hover:bg-raise/60 hover:text-ink"}`}>
-      <button onClick={onOpen} onDoubleClick={startEdit} className="min-w-0 flex-1 cursor-pointer truncate py-2 text-left" title={`${thread.title}  (double-click to rename)`}>
-        {thread.title}
+    <div className={`group flex items-center gap-1 rounded-lg pl-2.5 pr-1.5 text-[13px] transition-colors duration-200 ${active ? "bg-raise text-ink" : "text-ink-dim hover:bg-raise/60 hover:text-ink"}`}>
+      <button onClick={onOpen} onDoubleClick={startEdit} className="min-w-0 flex-1 cursor-pointer py-2 text-left" title={`${thread.title}  (double-click to rename)`}>
+        <span className="block truncate leading-tight">{thread.title}</span>
+        <span className="mt-0.5 block truncate font-mono text-[9px] uppercase tracking-[0.1em] text-ink-dimmer">
+          {projectName ?? "company-wide"} · {timeAgo(thread.updated_at)}
+        </span>
       </button>
       <button
         onClick={onDelete}
@@ -211,13 +252,13 @@ function ThreadRow({ thread, active, onOpen, onDelete, onRename }: { thread: Thr
 }
 
 function ThreadRail({
-  threads, activeThreadId, onOpen, onNew, onDelete, onRename, busy, className = "",
+  threads, projectNames, activeThreadId, onOpen, onNew, onDelete, onRename, busy, className = "",
 }: {
-  threads: ThreadSummary[]; activeThreadId: string | null; onOpen: (id: string) => void; onNew: () => void;
+  threads: ThreadSummary[]; projectNames: Record<string, string>; activeThreadId: string | null; onOpen: (id: string) => void; onNew: () => void;
   onDelete: (id: string) => void; onRename: (id: string, title: string) => void; busy: boolean; className?: string;
 }) {
   return (
-    <div className={`w-60 shrink-0 flex-col border-r border-edge bg-bg/40 ${className}`}>
+    <div className={`w-64 shrink-0 flex-col border-r border-edge bg-bg/40 ${className}`}>
       <div className="p-3">
         <button
           onClick={onNew}
@@ -238,7 +279,14 @@ function ThreadRail({
           <ul className="space-y-0.5">
             {threads.map((t) => (
               <li key={t.id}>
-                <ThreadRow thread={t} active={t.id === activeThreadId} onOpen={() => onOpen(t.id)} onDelete={() => onDelete(t.id)} onRename={(title) => onRename(t.id, title)} />
+                <ThreadRow
+                  thread={t}
+                  projectName={t.project_id ? projectNames[t.project_id] ?? t.project_id : null}
+                  active={t.id === activeThreadId}
+                  onOpen={() => onOpen(t.id)}
+                  onDelete={() => onDelete(t.id)}
+                  onRename={(title) => onRename(t.id, title)}
+                />
               </li>
             ))}
           </ul>
@@ -270,6 +318,7 @@ export function BrainConsole({
 }) {
   const [input, setInput] = useState("");
   const [railOpen, setRailOpen] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const [threads, setThreads] = useState<ThreadSummary[]>([]);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [hydrating, setHydrating] = useState(true);
@@ -428,14 +477,31 @@ export function BrainConsole({
 
   const firstName = userName.split(" ")[0] || "there";
   const noKeys = availableProviders.length === 0;
+  const projectNames = useMemo(() => Object.fromEntries(projects.map((p) => [p.id, p.name])), [projects]);
 
-  return (
+  // Full-screen mode: Esc exits, body scroll locks while open.
+  useEffect(() => {
+    if (!expanded) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setExpanded(false);
+    };
+    document.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [expanded]);
+
+  const body = (
     // `relative` anchors the mobile thread-rail overlay (absolute inset-0) to
     // THIS panel — without it the drawer positions against the viewport.
     <div className="relative flex h-full overflow-hidden rounded-none border border-edge bg-panel shadow-[var(--pop-shadow)]">
       <ThreadRail
         className="hidden md:flex"
         threads={threads}
+        projectNames={projectNames}
         activeThreadId={activeThreadId}
         onOpen={openThread}
         onNew={newThread}
@@ -448,6 +514,7 @@ export function BrainConsole({
           <ThreadRail
             className="flex max-w-[80%] bg-panel"
             threads={threads}
+            projectNames={projectNames}
             activeThreadId={activeThreadId}
             onOpen={openThread}
             onNew={newThread}
@@ -503,6 +570,18 @@ export function BrainConsole({
                 </optgroup>
               ))}
             </select>
+            <button
+              onClick={() => setExpanded((e) => !e)}
+              aria-label={expanded ? "Exit full screen" : "Full screen"}
+              title={expanded ? "Exit full screen (Esc)" : "Full screen"}
+              className="grid size-8 shrink-0 cursor-pointer place-items-center rounded-lg border border-edge text-ink-dim transition-colors duration-200 hover:border-edge-strong hover:text-ink"
+            >
+              {expanded ? (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M9 9 4 4M9 4H4v5M15 9l5-5M15 4h5v5M9 15l-5 5M4 15v5h5M15 15l5 5M20 15v5h-5" /></svg>
+              ) : (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg>
+              )}
+            </button>
           </div>
         </div>
 
@@ -594,12 +673,30 @@ export function BrainConsole({
                 </button>
               )}
             </form>
-            <p className="mt-2 px-1 text-[10.5px] leading-[1.4] text-ink-dimmer">
-              Urso Brain answers from the company vault and can make mistakes — verify anything that drives a real decision.
-            </p>
+            <div className="mt-2 flex items-baseline justify-between gap-3 px-1">
+              <p className="text-[10.5px] leading-[1.4] text-ink-dimmer">
+                Urso Brain answers from — and can write to — the company vault. Verify anything that drives a real decision.
+              </p>
+              <p className="hidden shrink-0 font-mono text-[9px] uppercase tracking-[0.12em] text-ink-dimmer md:block">
+                ⏎ send · ⇧⏎ new line
+              </p>
+            </div>
           </div>
         </div>
       </div>
     </div>
   );
+
+  if (expanded && typeof document !== "undefined") {
+    return createPortal(
+      <div className="theme-scope fixed inset-0 z-[60] bg-bg">
+        <div className="mx-auto flex h-full max-w-[1280px] flex-col p-3 md:p-6">
+          <div className="animate-stage-in flex h-full flex-col overflow-hidden">{body}</div>
+        </div>
+      </div>,
+      document.body,
+    );
+  }
+
+  return body;
 }

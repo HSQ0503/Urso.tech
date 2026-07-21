@@ -25,8 +25,15 @@ create table if not exists brain_projects (
   sort          int  not null default 0
 );
 
--- One synced vault doc per row. `path` is the stable sync key (vault-relative);
--- the sync script hash-upserts and prunes by it.
+-- One doc per row. `path` is the stable key (vault-relative for synced docs;
+-- "_Brain/…" for AI-created ones). Two origins, two sources of truth:
+--   'vault'  the markdown vault on disk owns it — sync hash-upserts/prunes it
+--   'brain'  the AI (or app) wrote/edited it — the DB owns it; sync must NOT
+--            overwrite it (report divergence; `--export` writes it back to the
+--            vault folder and flips origin to 'vault')
+-- Deletes are SOFT (deleted_at) so an agent mistake is always recoverable.
+-- `links` holds the RESOLVED [[wikilink]] target paths extracted from content —
+-- the doc graph. Backlinks = `where links @> array[path]` (GIN-indexed).
 create table if not exists brain_docs (
   id            uuid primary key default gen_random_uuid(),
   path          text not null unique,
@@ -37,13 +44,18 @@ create table if not exists brain_docs (
   doc_type      text not null default 'doc' check (doc_type in ('core', 'doc', 'rule')),
   audience      text[] not null default '{}',   -- rules: department slugs or 'all'
   tags          text[] not null default '{}',
+  links         text[] not null default '{}',   -- resolved outgoing wikilink paths
   content       text not null,
   content_hash  text not null,
+  origin        text not null default 'vault' check (origin in ('vault', 'brain')),
+  updated_by    text not null default '',       -- email of the last brain-side editor
+  deleted_at    timestamptz,                    -- soft delete; readers filter null
   synced_at     timestamptz not null default now()
 );
 create index if not exists brain_docs_project_idx    on brain_docs (project_id);
 create index if not exists brain_docs_department_idx on brain_docs (department_id);
 create index if not exists brain_docs_type_idx       on brain_docs (doc_type);
+create index if not exists brain_docs_links_idx      on brain_docs using gin (links);
 
 -- Who the user is inside the brain. Department/title are self-serve (settings);
 -- switching department is also how a demo persona is played.

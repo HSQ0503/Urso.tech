@@ -28,7 +28,11 @@ export type BrainDocMeta = {
   audience: string[];
 };
 
-export type BrainDoc = BrainDocMeta & { content: string };
+export type BrainDoc = BrainDocMeta & {
+  content: string;
+  links: string[]; // resolved outgoing wikilink target paths (the doc graph)
+  origin: "vault" | "brain"; // who owns the copy: the disk vault or the DB
+};
 
 export type BrainProfile = {
   user_id: string;

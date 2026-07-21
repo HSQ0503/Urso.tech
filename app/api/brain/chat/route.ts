@@ -83,7 +83,7 @@ export async function POST(req: Request) {
 
   if (BRAIN_DEBUG) console.log(`\n┌─ [brain] ${profile.name} (${department.id}) · ${activeProject?.id ?? "no project"} · ${provider}/${modelId}`);
 
-  const tools = buildBrainTools();
+  const tools = buildBrainTools({ email: user.email });
 
   const result = streamText({
     model: brainModel(provider, modelId, apiKey),

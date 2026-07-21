@@ -1,11 +1,33 @@
-// Tool belt for Urso Brain: three small tools over the synced vault. All brain
-// members can read all docs in v1 (per-doc access control is schema-ready but
-// deliberately not enforced yet — see the spec's "out of scope").
+// Tool belt for Urso Brain — the AI's hands on the vault. Three read tools plus
+// FULL write access (create / update / connect / delete), so the brain can grow
+// its own knowledge base from conversations. Guardrails:
+//   - deletes are SOFT (recoverable) and gated on an explicit `confirm` flag
+//   - meta (department/project/type) is validated against the real tables
+//   - every write records the acting user's email (updated_by)
+//   - AI-written docs get origin='brain' — the vault sync reports rather than
+//     overwrites them, and `--export` mirrors them back into Obsidian
+// Links are Obsidian-style [[wikilinks]] in the markdown itself; brain_docs.links
+// carries the resolved target paths so the graph is queryable (backlinks).
 
+import { createHash } from "crypto";
 import { tool } from "ai";
 import { z } from "zod";
 import { ursoDb } from "./supabase";
-import { getDocByPath, getDocManifest, searchDocs } from "./db";
+import {
+  getBacklinks,
+  getDepartments,
+  getDocByPath,
+  getDocManifest,
+  getDocTitles,
+  getProjects,
+  insertBrainDoc,
+  listLinkTargets,
+  searchDocs,
+  softDeleteBrainDoc,
+  updateBrainDoc,
+  type BrainDocWrite,
+} from "./db";
+import { extractWikilinks, resolveLinks } from "./links";
 
 const meta = (d: { path: string; title: string; description: string; department_id: string | null; project_id: string | null; doc_type: string }) => ({
   path: d.path,
@@ -16,17 +38,71 @@ const meta = (d: { path: string; title: string; description: string; department_
   type: d.doc_type,
 });
 
-export function buildBrainTools() {
+// Same hash recipe as scripts/brain-sync.mjs, so a brain-written doc that gets
+// exported to disk hashes identically on the next sync (no churn).
+const hashDoc = (d: Omit<BrainDocWrite, "path" | "content_hash">) =>
+  createHash("sha256")
+    .update(JSON.stringify([d.title, d.description, d.department_id, d.project_id, d.doc_type, d.audience, d.tags, d.content]))
+    .digest("hex");
+
+const sanitizePathPart = (s: string) => s.replace(/[\\:*?"<>|#^[\]]/g, "").replace(/\s+/g, " ").trim();
+
+const DOC_TYPES = ["core", "doc", "rule"] as const;
+
+type Db = ReturnType<typeof ursoDb>;
+
+// Validate + normalize the meta fields shared by create_doc and update_doc.
+async function checkMeta(
+  admin: Db,
+  fields: { department?: string; project?: string; type?: string },
+): Promise<{ error?: string; department_id?: string | null; project_id?: string | null; doc_type?: "core" | "doc" | "rule" }> {
+  const out: { department_id?: string | null; project_id?: string | null; doc_type?: "core" | "doc" | "rule" } = {};
+  if (fields.department !== undefined) {
+    if (fields.department === "" || fields.department === "none") out.department_id = null;
+    else {
+      const deps = await getDepartments(admin);
+      if (!deps.some((d) => d.id === fields.department)) {
+        return { error: `Unknown department "${fields.department}". Valid: ${deps.map((d) => d.id).join(", ")}, or "none".` };
+      }
+      out.department_id = fields.department;
+    }
+  }
+  if (fields.project !== undefined) {
+    if (fields.project === "" || fields.project === "none") out.project_id = null;
+    else {
+      const projs = await getProjects(admin);
+      if (!projs.some((p) => p.id === fields.project)) {
+        return { error: `Unknown project "${fields.project}". Valid: ${projs.map((p) => p.id).join(", ")}, or "none".` };
+      }
+      out.project_id = fields.project;
+    }
+  }
+  if (fields.type !== undefined) {
+    if (!DOC_TYPES.includes(fields.type as (typeof DOC_TYPES)[number])) {
+      return { error: `Unknown doc type "${fields.type}". Valid: core, doc, rule.` };
+    }
+    out.doc_type = fields.type as "core" | "doc" | "rule";
+  }
+  return out;
+}
+
+async function linksFor(admin: Db, content: string): Promise<string[]> {
+  const targets = await listLinkTargets(admin);
+  return resolveLinks(extractWikilinks(content), targets);
+}
+
+export function buildBrainTools(actor: { email: string }) {
   return {
     fetch_doc: tool({
       description:
-        "Read one vault doc in full by its exact path (as listed in the manifest or returned by search_docs/list_docs).",
+        "Read one vault doc in full by its exact path. Returns the content plus its graph edges: outgoing links (docs it references) and backlinks (docs that reference it).",
       inputSchema: z.object({ path: z.string().describe("Exact doc path from the manifest") }),
       execute: async ({ path }) => {
         const admin = ursoDb();
         const doc = await getDocByPath(admin, path);
         if (!doc) return { error: `No doc at "${path}". Check the manifest or use search_docs.` };
-        return { ...meta(doc), content: doc.content };
+        const [outgoing, backlinks] = await Promise.all([getDocTitles(admin, doc.links), getBacklinks(admin, path)]);
+        return { ...meta(doc), origin: doc.origin, content: doc.content, links: outgoing, backlinks };
       },
     }),
 
@@ -53,6 +129,150 @@ export function buildBrainTools() {
         if (project) docs = docs.filter((d) => d.project_id === project);
         if (department) docs = docs.filter((d) => d.department_id === department);
         return { docs: docs.map(meta) };
+      },
+    }),
+
+    create_doc: tool({
+      description:
+        "Create a new vault doc. Use when the user asks to save, note down, or document something — or when a conversation produces knowledge worth keeping. Connect it to related docs by writing [[Doc Title]] wikilinks in the content.",
+      inputSchema: z.object({
+        title: z.string().min(2).max(120).describe("Doc title (also the H1)"),
+        content: z.string().min(1).describe("Full markdown body. Use [[Doc Title]] wikilinks to connect related docs."),
+        description: z.string().max(200).optional().describe("One-line summary for the manifest"),
+        department: z.string().optional().describe("Owning department slug, or omit"),
+        project: z.string().optional().describe("Owning project slug, or omit"),
+        type: z.enum(["doc", "rule"]).optional().describe("'rule' only for standing rules other departments must follow"),
+        audience: z.array(z.string()).optional().describe("For rules: department slugs (or 'all') the rule binds"),
+        path: z.string().optional().describe("Optional explicit path; defaults to _Brain/<title>.md"),
+      }),
+      execute: async ({ title, content, description, department, project, type, audience, path }) => {
+        const admin = ursoDb();
+        const checked = await checkMeta(admin, { department, project, type });
+        if (checked.error) return { error: checked.error };
+
+        const cleanTitle = sanitizePathPart(title);
+        let docPath = path ? sanitizePathPart(path).replace(/^\/+/, "") : `_Brain/${cleanTitle}.md`;
+        if (docPath.includes("..")) return { error: "Path must not contain '..'." };
+        if (!/\.md$/i.test(docPath)) docPath += ".md";
+        if (docPath.length > 200) return { error: "Path too long (max 200 chars)." };
+
+        if (await getDocByPath(admin, docPath)) {
+          return { error: `A doc already exists at "${docPath}" — use update_doc to change it, or pick another path.` };
+        }
+
+        const row: BrainDocWrite = {
+          path: docPath,
+          title: cleanTitle,
+          description: (description ?? "").trim().slice(0, 200),
+          department_id: checked.department_id ?? null,
+          project_id: checked.project_id ?? null,
+          doc_type: checked.doc_type ?? "doc",
+          audience: checked.doc_type === "rule" ? (audience?.length ? audience : ["all"]) : [],
+          tags: [],
+          links: await linksFor(admin, content),
+          content: content.trim(),
+          content_hash: "",
+        };
+        row.content_hash = hashDoc(row);
+        await insertBrainDoc(admin, row, actor.email);
+        return { created: docPath, links: row.links, note: "Doc created. It syncs back to the Obsidian vault on the next export." };
+      },
+    }),
+
+    update_doc: tool({
+      description:
+        "Update an existing vault doc — content and/or metadata. ALWAYS fetch_doc first and pass the complete new content (this replaces the whole body). Adding or removing [[wikilinks]] in the content is how connections change.",
+      inputSchema: z.object({
+        path: z.string().describe("Exact path of the doc to update"),
+        content: z.string().optional().describe("Complete new markdown body (full replacement)"),
+        title: z.string().min(2).max(120).optional(),
+        description: z.string().max(200).optional(),
+        department: z.string().optional().describe("New department slug, or 'none' to clear"),
+        project: z.string().optional().describe("New project slug, or 'none' to clear"),
+        type: z.enum(["core", "doc", "rule"]).optional(),
+        audience: z.array(z.string()).optional().describe("For rules: department slugs (or 'all')"),
+      }),
+      execute: async ({ path, content, title, description, department, project, type, audience }) => {
+        const admin = ursoDb();
+        const existing = await getDocByPath(admin, path);
+        if (!existing) return { error: `No doc at "${path}". Check the manifest or use search_docs.` };
+
+        const checked = await checkMeta(admin, { department, project, type });
+        if (checked.error) return { error: checked.error };
+
+        const next: BrainDocWrite = {
+          path,
+          title: title ? sanitizePathPart(title) : existing.title,
+          description: description !== undefined ? description.trim().slice(0, 200) : existing.description,
+          department_id: checked.department_id !== undefined ? checked.department_id : existing.department_id,
+          project_id: checked.project_id !== undefined ? checked.project_id : existing.project_id,
+          doc_type: checked.doc_type ?? existing.doc_type,
+          audience: audience ?? existing.audience,
+          tags: [],
+          links: content !== undefined ? await linksFor(admin, content) : existing.links,
+          content: content !== undefined ? content.trim() : existing.content,
+          content_hash: "",
+        };
+        next.content_hash = hashDoc(next);
+        const patch: Omit<BrainDocWrite, "path"> & { path?: string } = { ...next };
+        delete patch.path;
+        const ok = await updateBrainDoc(admin, path, patch, actor.email);
+        if (!ok) return { error: `Update didn't apply — the doc at "${path}" may have just been deleted.` };
+        return {
+          updated: path,
+          links: next.links,
+          note:
+            existing.origin === "vault"
+              ? "Updated. This doc came from the Obsidian vault — the brain now holds the newer copy; the disk file follows on the next export."
+              : "Updated.",
+        };
+      },
+    }),
+
+    link_docs: tool({
+      description:
+        "Connect two docs: appends a [[wikilink]] to the target under a 'Related' section in the source doc. For richer connections, prefer update_doc and weave the link into the prose.",
+      inputSchema: z.object({
+        from: z.string().describe("Path of the doc to add the link IN"),
+        to: z.string().describe("Path of the doc to link TO"),
+      }),
+      execute: async ({ from, to }) => {
+        const admin = ursoDb();
+        const [src, dst] = await Promise.all([getDocByPath(admin, from), getDocByPath(admin, to)]);
+        if (!src) return { error: `No doc at "${from}".` };
+        if (!dst) return { error: `No doc at "${to}".` };
+        if (src.links.includes(to)) return { already: true, note: `"${from}" already links to "${dst.title}".` };
+
+        const linkLine = `- [[${dst.title}]]`;
+        const content = /^##\s+Related\s*$/m.test(src.content)
+          ? src.content.replace(/^(##\s+Related\s*)$/m, `$1\n${linkLine}`)
+          : `${src.content.trimEnd()}\n\n## Related\n${linkLine}\n`;
+
+        const links = await linksFor(admin, content);
+        const next = { ...src, content, links };
+        const content_hash = hashDoc({
+          title: next.title, description: next.description, department_id: next.department_id,
+          project_id: next.project_id, doc_type: next.doc_type, audience: next.audience, tags: [], content, links,
+        });
+        const ok = await updateBrainDoc(admin, from, { content, links, content_hash }, actor.email);
+        if (!ok) return { error: "Link didn't apply — the source doc may have just been deleted." };
+        return { linked: { from, to }, note: `"${src.title}" now links to "${dst.title}".` };
+      },
+    }),
+
+    delete_doc: tool({
+      description:
+        "Delete a vault doc. ONLY when the user explicitly asked to delete it — never as cleanup on your own initiative. The delete is soft (recoverable by an admin).",
+      inputSchema: z.object({
+        path: z.string().describe("Exact path of the doc to delete"),
+        confirm: z.boolean().describe("Must be true. Set only after the user explicitly asked for this deletion."),
+      }),
+      execute: async ({ path, confirm }) => {
+        if (!confirm) return { error: "Refused: deletion requires the user's explicit request (confirm=true)." };
+        const admin = ursoDb();
+        const ok = await softDeleteBrainDoc(admin, path, actor.email);
+        if (!ok) return { error: `No live doc at "${path}" — nothing deleted.` };
+        return { deleted: path, note: "Soft-deleted (an admin can restore it). If the doc also exists in the Obsidian vault on disk, the file remains there; the brain just stops reading it." };
       },
     }),
   };
