@@ -10,6 +10,7 @@ import { render } from "@react-email/components";
 import { CronReportEmail, type CronReportProps } from "@/emails/cron-report";
 import { DiscoverySubmissionEmail, type DiscoverySubmission } from "@/emails/discovery-submission";
 import { ContactSubmissionEmail, type ContactSubmission } from "@/emails/contact-submission";
+import { PasswordSetupEmail, type PasswordSetup } from "@/emails/password-setup";
 
 const FROM = process.env.CRON_EMAIL_FROM ?? "Urso Server <server@urso.ws>";
 const TO = (process.env.CRON_EMAIL_TO ?? "han@urso.ws,guga@urso.ws")
@@ -34,6 +35,10 @@ const CONTACT_TO = (process.env.CONTACT_EMAIL_TO ?? "han@urso.ws,guga@urso.ws")
   .split(",")
   .map((s) => s.trim())
   .filter(Boolean);
+
+// Password-setup links go to the account holder, not the founders — so this one
+// has no TO list. Shares the login sender with the admin magic link.
+const LOGIN_FROM = process.env.URSO_LOGIN_FROM ?? "Urso <hello@urso.ws>";
 
 const nyStamp = () =>
   `${new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", dateStyle: "full", timeStyle: "short" }).format(new Date())} ET`;
@@ -142,6 +147,42 @@ export async function sendContactSubmission(input: Omit<ContactSubmission, "subm
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     console.warn(`[email] contact notification threw: ${msg}`);
+    return { sent: false, error: msg };
+  }
+}
+
+// The one-time link a provisioned user follows to choose their own dashboard
+// password. Unlike the notification emails above this goes to the account
+// holder, so `to` is a parameter. The caller never surfaces the result to the
+// browser — telling a visitor "that send failed" would leak which addresses
+// have accounts — so failures are logged here and returned for the server log.
+export async function sendPasswordSetup(input: PasswordSetup & { to: string }): Promise<{ sent: boolean; error?: string }> {
+  const key = process.env.RESEND_API;
+  if (!key) {
+    console.warn("[email] RESEND_API not set — skipping password setup link");
+    return { sent: false, error: "RESEND_API not set" };
+  }
+  try {
+    const resend = new Resend(key);
+    const { to, ...props } = input;
+    // Render to HTML with the static `render` import (not resend's `react` prop),
+    // which Next's serverless file-tracing misses in prod — see sendCronReport.
+    const html = await render(<PasswordSetupEmail {...props} />);
+    const { error } = await resend.emails.send({
+      from: LOGIN_FROM,
+      to,
+      subject: "Set your Urso dashboard password",
+      html,
+    });
+    if (error) {
+      const msg = typeof error === "string" ? error : (error as { message?: string }).message ?? JSON.stringify(error);
+      console.warn(`[email] password setup send failed: ${msg}`);
+      return { sent: false, error: msg };
+    }
+    return { sent: true };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.warn(`[email] password setup threw: ${msg}`);
     return { sent: false, error: msg };
   }
 }

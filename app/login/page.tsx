@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getSession, homePathFor } from "@/lib/auth";
-import { signIn } from "./actions";
+import { signIn, requestPasswordReset } from "./actions";
 import Link from "next/link";
 
 export const metadata: Metadata = {
@@ -30,7 +30,9 @@ export default async function LoginPage({
 
   const sp = await searchParams;
   const error = sp.error ? (errorCopy[sp.error] ?? errorCopy.invalid) : null;
-  const sent = sp.sent === "1";
+  // Two things land on the same "check your email" panel: the admin magic link
+  // (sent=1) and a password-setup link (sent=reset). The copy differs.
+  const sent = sp.sent === "1" ? "link" : sp.sent === "reset" ? "reset" : null;
 
   return (
     <main className="flex min-h-screen items-center justify-center px-5 py-12">
@@ -50,7 +52,9 @@ export default async function LoginPage({
             <div className="rounded-xl border border-edge bg-panel px-4 py-5">
               <p className="text-[13.5px] font-medium text-ink">Check your email.</p>
               <p className="mt-1.5 text-[12.5px] leading-[1.55] text-ink-dim">
-                If that address is a provisioned admin, we sent a sign-in link. It expires in 15 minutes.
+                {sent === "reset"
+                  ? "If that address has a dashboard account, we sent a link to set a new password. It expires in an hour."
+                  : "If that address is a provisioned admin, we sent a sign-in link. It expires in 15 minutes."}
               </p>
             </div>
             <a href="/login" className="mt-4 inline-block text-[12.5px] text-ink-dim underline underline-offset-2 hover:text-ink">
@@ -95,6 +99,16 @@ export default async function LoginPage({
               className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-orange py-3 text-[13.5px] font-medium text-black transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange/60"
             >
               Sign in →
+            </button>
+
+            {/* Reuses the email field above via formAction. Sign in stays the
+                first submit button, so Enter still signs in. */}
+            <button
+              type="submit"
+              formAction={requestPasswordReset}
+              className="flex w-full cursor-pointer items-center justify-center rounded-xl border border-edge py-2.5 text-[12.5px] text-ink-dim transition-colors hover:border-edge-strong hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-orange/60"
+            >
+              Email me a link to set a new password
             </button>
           </form>
         )}
