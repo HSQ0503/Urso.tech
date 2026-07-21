@@ -11,7 +11,10 @@ import { updateBrainSession } from "@/lib/brain/middleware";
 export async function proxy(request: NextRequest) {
   if (
     request.nextUrl.pathname.startsWith("/CanesPressure/crew") ||
-    request.nextUrl.pathname === "/CanesPressure/auth/callback"
+    request.nextUrl.pathname === "/CanesPressure/auth/callback" ||
+    // The PIN screen serves technicians too — their Supabase session must be
+    // refreshed here or an expired token would bounce them to login instead.
+    request.nextUrl.pathname === "/CanesPressure/pin"
   ) {
     return updateCanesCrewSession(request);
   }
@@ -28,6 +31,7 @@ export const config = {
     "/login",
     "/CanesPressure/crew/:path*",
     "/CanesPressure/auth/callback",
+    "/CanesPressure/pin",
     "/brain/:path*",
     "/brain",
   ],

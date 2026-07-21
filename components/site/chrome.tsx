@@ -16,12 +16,29 @@ export function SiteNav() {
   const pathname = usePathname();
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
+  // Signed-in state for the "Log in" slot: when a session cookie already
+  // exists (Sebastian, Han, or a technician), show "Enter dashboard" instead.
+  // Resolved server-side by /api/session/state — the cookies are httpOnly.
+  const [dash, setDash] = useState<{ href: string; label: string } | null>(null);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/session/state", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (alive && j?.dash?.href) setDash(j.dash);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -72,10 +89,10 @@ export function SiteNav() {
 
           <div className="col-start-3 flex items-center gap-1.5 justify-self-end">
             <WipeLink
-              href="/login"
+              href={dash?.href ?? "/login"}
               className="hidden whitespace-nowrap rounded-full px-3 py-2 font-mono text-[11px] uppercase tracking-[0.12em] text-ink-dim transition-colors hover:text-ink sm:inline-flex"
             >
-              Log in
+              {dash ? dash.label : "Log in"}
             </WipeLink>
             <WipeLink
               href="/discovery"
@@ -119,11 +136,11 @@ export function SiteNav() {
               </WipeLink>
             ))}
             <WipeLink
-              href="/login"
+              href={dash?.href ?? "/login"}
               onNavigate={() => setOpen(false)}
               className="flex items-center justify-between border-b border-edge py-5 text-[22px] font-medium tracking-[-0.02em] text-ink-dim"
             >
-              Log in
+              {dash ? dash.label : "Log in"}
               <Arrow className="text-ink-dimmer" />
             </WipeLink>
           </nav>

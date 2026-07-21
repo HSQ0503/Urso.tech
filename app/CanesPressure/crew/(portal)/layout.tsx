@@ -1,7 +1,11 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { CalendarDays, LogOut, UserRound } from "lucide-react";
 import { requireTechnicianActor } from "@/lib/canes/crew-auth";
 import { signOutTechnician } from "@/app/CanesPressure/crew/auth-actions";
+import { canesConfigured } from "@/lib/canes/supabase";
+import { crewPinKey, pinGate } from "@/lib/canes/pin";
+import { PinWatchdog } from "@/app/CanesPressure/components/pin-watchdog";
 
 export default async function TechnicianPortalLayout({
   children,
@@ -9,6 +13,16 @@ export default async function TechnicianPortalLayout({
   children: React.ReactNode;
 }) {
   const actor = await requireTechnicianActor();
+
+  // Quick-PIN re-lock, same contract as the owner console: first login sets
+  // the PIN, a 30-minute-old tab re-enters it. Live deploys only.
+  let pinRelockMs: number | null = null;
+  if (canesConfigured()) {
+    const gate = await pinGate(crewPinKey(actor.accountId));
+    if (gate.status !== "ok") redirect("/CanesPressure/pin?to=/CanesPressure/crew");
+    pinRelockMs = gate.relockInMs;
+  }
+
   return (
     <div className="min-h-screen bg-[var(--cp-bg)]">
       <header className="sticky top-0 z-30 border-b border-[var(--cp-chrome-line)] bg-[var(--cp-chrome)] text-[var(--cp-chrome-ink)]">
@@ -59,6 +73,10 @@ export default async function TechnicianPortalLayout({
           My week
         </Link>
       </nav>
+
+      {pinRelockMs !== null && (
+        <PinWatchdog relockInMs={pinRelockMs} lockBase="/CanesPressure/pin" />
+      )}
     </div>
   );
 }

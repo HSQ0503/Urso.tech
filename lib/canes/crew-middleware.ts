@@ -7,7 +7,17 @@ import {
 
 export async function updateCanesCrewSession(request: NextRequest) {
   let response = NextResponse.next({ request });
-  const { url, key } = getCanesAuthServerEnv();
+  // Fail soft: on a deploy without the Canes auth env (getCanesAuthServerEnv
+  // throws), just pass the request through instead of 500-ing. The gated
+  // layouts still enforce access server-side; this only skips the token
+  // refresh nothing can do here anyway.
+  let env: { url: string; key: string };
+  try {
+    env = getCanesAuthServerEnv();
+  } catch {
+    return response;
+  }
+  const { url, key } = env;
   const supabase = createServerClient(url, key, {
     cookieOptions: {
       name: CANES_CREW_AUTH_COOKIE,

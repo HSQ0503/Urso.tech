@@ -8,6 +8,8 @@ import { signOutAdmin } from "@/app/login/actions";
 import { CanesNav } from "../components/nav";
 import { CanesTour } from "../components/tour";
 import { getTechnicianActor } from "@/lib/canes/crew-auth";
+import { adminPinKey, pinGate } from "@/lib/canes/pin";
+import { PinWatchdog } from "../components/pin-watchdog";
 import { ThemeToggle } from "@/components/dashboard/theme-toggle";
 
 // The gated application shell: dark Urso chrome sidebar on desktop, five
@@ -30,6 +32,16 @@ export default async function CanesAppLayout({ children }: { children: React.Rea
   // the Urso admin login. This branch is now only reachable in demo mode.
   if (!(await hasAccess())) {
     redirect(gateEnabled() ? "/CanesPressure/login" : "/login");
+  }
+
+  // Quick-PIN re-lock (live only — demo has no DB to hold a PIN). First login
+  // routes to setup; an expired 30-minute unlock routes to the lock screen.
+  // The watchdog below handles the tab that sits open past its window.
+  let pinRelockMs: number | null = null;
+  if (admin && !demo) {
+    const gate = await pinGate(adminPinKey(admin.email));
+    if (gate.status !== "ok") redirect("/CanesPressure/pin?to=/CanesPressure");
+    pinRelockMs = gate.relockInMs;
   }
 
   return (
@@ -98,6 +110,11 @@ export default async function CanesAppLayout({ children }: { children: React.Rea
       <Suspense fallback={null}>
         <CanesTour />
       </Suspense>
+
+      {/* Re-lock a tab the moment its PIN unlock window lapses */}
+      {pinRelockMs !== null && (
+        <PinWatchdog relockInMs={pinRelockMs} lockBase="/CanesPressure/pin" />
+      )}
     </div>
     </div>
   );
