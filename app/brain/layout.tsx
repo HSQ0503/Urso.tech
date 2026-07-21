@@ -34,6 +34,7 @@ export default async function BrainLayout({ children }: { children: React.ReactN
           {user ? (
             <nav className="flex items-center gap-1 text-[13px]">
               <Link href="/brain" className="rounded-lg px-3 py-1.5 text-ink-dim transition-colors hover:bg-raise hover:text-ink">Chat</Link>
+              <Link href="/brain/graph" className="rounded-lg px-3 py-1.5 text-ink-dim transition-colors hover:bg-raise hover:text-ink">Graph</Link>
               <Link href="/brain/docs" className="rounded-lg px-3 py-1.5 text-ink-dim transition-colors hover:bg-raise hover:text-ink">Vault</Link>
               <Link href="/brain/settings" className="rounded-lg px-3 py-1.5 text-ink-dim transition-colors hover:bg-raise hover:text-ink">Settings</Link>
               <SignOutButton />

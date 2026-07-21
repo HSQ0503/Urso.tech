@@ -87,6 +87,26 @@ export async function searchDocs(admin: Admin, query: string, limit = 12): Promi
 
 // ---------- the doc graph + brain-side writes ----------
 
+export type GraphDoc = {
+  path: string;
+  title: string;
+  department_id: string | null;
+  project_id: string | null;
+  doc_type: "core" | "doc" | "rule";
+  origin: "vault" | "brain";
+  links: string[];
+};
+
+// Every live doc with its edges — the full graph for /brain/graph.
+export async function getGraph(admin: Admin): Promise<GraphDoc[]> {
+  const { data } = await admin
+    .from("brain_docs")
+    .select("path, title, department_id, project_id, doc_type, origin, links")
+    .is("deleted_at", null)
+    .order("path");
+  return (data ?? []) as GraphDoc[];
+}
+
 // Every live doc as a wikilink resolution target.
 export async function listLinkTargets(admin: Admin): Promise<{ path: string; title: string }[]> {
   const { data } = await admin.from("brain_docs").select("path, title").is("deleted_at", null);

@@ -62,14 +62,23 @@ export default async function BrainDocsPage() {
 
   return (
     <div className="mx-auto w-full max-w-[860px] space-y-9 py-6">
-      <div>
-        <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-orange">Urso Brain · Vault</div>
-        <h1 className="mt-2 text-[22px] font-bold tracking-[-0.02em] text-ink">The vault</h1>
-        <p className="mt-1.5 text-[13.5px] text-ink-dim">
-          {manifest.length === 0
-            ? "Nothing synced yet — run node scripts/brain-sync.mjs."
-            : `${manifest.length} docs. This is everything the brain can read.`}
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-orange">Urso Brain · Vault</div>
+          <h1 className="mt-2 text-[22px] font-bold tracking-[-0.02em] text-ink">The vault</h1>
+          <p className="mt-1.5 text-[13.5px] text-ink-dim">
+            {manifest.length === 0
+              ? "Nothing synced yet — run node scripts/brain-sync.mjs."
+              : `${manifest.length} docs. This is everything the brain can read.`}
+          </p>
+        </div>
+        <Link
+          href="/brain/docs/new"
+          className="dash-press inline-flex cursor-pointer items-center gap-2 rounded-none border border-[rgba(254,81,0,0.4)] bg-orange-soft px-4 py-2 text-[13px] font-medium text-orange transition-colors hover:bg-[rgba(254,81,0,0.18)]"
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" aria-hidden><path d="M12 5v14M5 12h14" /></svg>
+          New doc
+        </Link>
       </div>
 
       {core.length > 0 && (

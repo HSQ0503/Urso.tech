@@ -9,25 +9,21 @@
 // Links are Obsidian-style [[wikilinks]] in the markdown itself; brain_docs.links
 // carries the resolved target paths so the graph is queryable (backlinks).
 
-import { createHash } from "crypto";
 import { tool } from "ai";
 import { z } from "zod";
 import { ursoDb } from "./supabase";
 import {
   getBacklinks,
-  getDepartments,
   getDocByPath,
   getDocManifest,
   getDocTitles,
-  getProjects,
   insertBrainDoc,
-  listLinkTargets,
   searchDocs,
   softDeleteBrainDoc,
   updateBrainDoc,
   type BrainDocWrite,
 } from "./db";
-import { extractWikilinks, resolveLinks } from "./links";
+import { checkMeta, hashDoc, linksFor, normalizeDocPath, sanitizePathPart } from "./write";
 
 const meta = (d: { path: string; title: string; description: string; department_id: string | null; project_id: string | null; doc_type: string }) => ({
   path: d.path,
@@ -38,58 +34,9 @@ const meta = (d: { path: string; title: string; description: string; department_
   type: d.doc_type,
 });
 
-// Same hash recipe as scripts/brain-sync.mjs, so a brain-written doc that gets
-// exported to disk hashes identically on the next sync (no churn).
-const hashDoc = (d: Omit<BrainDocWrite, "path" | "content_hash">) =>
-  createHash("sha256")
-    .update(JSON.stringify([d.title, d.description, d.department_id, d.project_id, d.doc_type, d.audience, d.tags, d.content]))
-    .digest("hex");
-
-const sanitizePathPart = (s: string) => s.replace(/[\\:*?"<>|#^[\]]/g, "").replace(/\s+/g, " ").trim();
-
-const DOC_TYPES = ["core", "doc", "rule"] as const;
-
-type Db = ReturnType<typeof ursoDb>;
-
-// Validate + normalize the meta fields shared by create_doc and update_doc.
-async function checkMeta(
-  admin: Db,
-  fields: { department?: string; project?: string; type?: string },
-): Promise<{ error?: string; department_id?: string | null; project_id?: string | null; doc_type?: "core" | "doc" | "rule" }> {
-  const out: { department_id?: string | null; project_id?: string | null; doc_type?: "core" | "doc" | "rule" } = {};
-  if (fields.department !== undefined) {
-    if (fields.department === "" || fields.department === "none") out.department_id = null;
-    else {
-      const deps = await getDepartments(admin);
-      if (!deps.some((d) => d.id === fields.department)) {
-        return { error: `Unknown department "${fields.department}". Valid: ${deps.map((d) => d.id).join(", ")}, or "none".` };
-      }
-      out.department_id = fields.department;
-    }
-  }
-  if (fields.project !== undefined) {
-    if (fields.project === "" || fields.project === "none") out.project_id = null;
-    else {
-      const projs = await getProjects(admin);
-      if (!projs.some((p) => p.id === fields.project)) {
-        return { error: `Unknown project "${fields.project}". Valid: ${projs.map((p) => p.id).join(", ")}, or "none".` };
-      }
-      out.project_id = fields.project;
-    }
-  }
-  if (fields.type !== undefined) {
-    if (!DOC_TYPES.includes(fields.type as (typeof DOC_TYPES)[number])) {
-      return { error: `Unknown doc type "${fields.type}". Valid: core, doc, rule.` };
-    }
-    out.doc_type = fields.type as "core" | "doc" | "rule";
-  }
-  return out;
-}
-
-async function linksFor(admin: Db, content: string): Promise<string[]> {
-  const targets = await listLinkTargets(admin);
-  return resolveLinks(extractWikilinks(content), targets);
-}
+// hashDoc / sanitizePathPart / checkMeta / linksFor / normalizeDocPath live in
+// lib/brain/write.ts — the ONE validated write path shared with the manual
+// editor's API route (/api/brain/docs).
 
 export function buildBrainTools(actor: { email: string }) {
   return {
@@ -151,10 +98,9 @@ export function buildBrainTools(actor: { email: string }) {
         if (checked.error) return { error: checked.error };
 
         const cleanTitle = sanitizePathPart(title);
-        let docPath = path ? sanitizePathPart(path).replace(/^\/+/, "") : `_Brain/${cleanTitle}.md`;
-        if (docPath.includes("..")) return { error: "Path must not contain '..'." };
-        if (!/\.md$/i.test(docPath)) docPath += ".md";
-        if (docPath.length > 200) return { error: "Path too long (max 200 chars)." };
+        const normalized = normalizeDocPath(path, cleanTitle);
+        if (normalized.error || !normalized.path) return { error: normalized.error ?? "Invalid path." };
+        const docPath = normalized.path;
 
         if (await getDocByPath(admin, docPath)) {
           return { error: `A doc already exists at "${docPath}" — use update_doc to change it, or pick another path.` };
@@ -249,10 +195,9 @@ export function buildBrainTools(actor: { email: string }) {
           : `${src.content.trimEnd()}\n\n## Related\n${linkLine}\n`;
 
         const links = await linksFor(admin, content);
-        const next = { ...src, content, links };
         const content_hash = hashDoc({
-          title: next.title, description: next.description, department_id: next.department_id,
-          project_id: next.project_id, doc_type: next.doc_type, audience: next.audience, tags: [], content, links,
+          title: src.title, description: src.description, department_id: src.department_id,
+          project_id: src.project_id, doc_type: src.doc_type, audience: src.audience, tags: [], content,
         });
         const ok = await updateBrainDoc(admin, from, { content, links, content_hash }, actor.email);
         if (!ok) return { error: "Link didn't apply — the source doc may have just been deleted." };

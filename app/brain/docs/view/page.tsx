@@ -56,12 +56,20 @@ export default async function BrainDocViewPage({ searchParams }: { searchParams:
       <Link href="/brain/docs" className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-ink-dimmer transition-colors hover:text-orange">← Vault</Link>
       <div className="mt-4 rounded-none border border-edge bg-panel p-6 md:p-8">
         <div className="flex items-center justify-between gap-3">
-          <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-dimmer">{doc.path}</div>
-          {doc.origin === "brain" && (
-            <span className="rounded-full border border-[rgba(254,81,0,0.35)] px-2 py-[2px] font-mono text-[9px] uppercase tracking-[0.12em] text-orange" title="Written by the brain — flows back to Obsidian on the next export">
-              brain-written
-            </span>
-          )}
+          <div className="min-w-0 truncate font-mono text-[10px] uppercase tracking-[0.14em] text-ink-dimmer">{doc.path}</div>
+          <div className="flex shrink-0 items-center gap-2">
+            {doc.origin === "brain" && (
+              <span className="rounded-full border border-[rgba(254,81,0,0.35)] px-2 py-[2px] font-mono text-[9px] uppercase tracking-[0.12em] text-orange" title="Written by the brain — flows back to Obsidian on the next export">
+                brain-written
+              </span>
+            )}
+            <Link
+              href={`/brain/docs/edit?path=${encodeURIComponent(doc.path)}`}
+              className="rounded-none border border-edge px-2.5 py-1 text-[11.5px] text-ink-dim transition-colors hover:border-edge-strong hover:text-ink"
+            >
+              Edit
+            </Link>
+          </div>
         </div>
         <h1 className="mt-2 text-[22px] font-bold tracking-[-0.02em] text-ink">{doc.title}</h1>
         {doc.description && <p className="mt-1.5 text-[13.5px] leading-[1.6] text-ink-dim">{doc.description}</p>}
