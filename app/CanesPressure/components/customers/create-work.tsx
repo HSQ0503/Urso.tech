@@ -5,6 +5,7 @@ import { useState, useTransition } from "react";
 import { Check, FileText, Plus } from "lucide-react";
 import { createEstimateForCustomer, createManualJob } from "@/app/CanesPressure/actions";
 import { etLocalToIso, fmtPhone, type Address, type Contact, type Crew } from "@/lib/canes/types";
+import { AddressInput } from "../address-input";
 import { isCompleteWhen, SchedulePicker } from "@/app/CanesPressure/components/leads/schedule-picker";
 
 const CUSTOM_ADDRESS = "__custom__";
@@ -133,10 +134,9 @@ export function CreateWork({
             <option value={CUSTOM_ADDRESS}>Different address...</option>
           </select>
           {addressChoice === CUSTOM_ADDRESS && (
-            <input
+            <AddressInput
               name="customAddress"
               className="cp-input mt-2"
-              placeholder="Street, city"
               aria-label="Custom job address"
             />
           )}

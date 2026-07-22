@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { AddressInput } from "./address-input";
+import { PhoneInput } from "./phone-input";
 
 // Public request-a-quote form. Posts to /api/canes/lead/intake, which creates a
 // website lead and fires the speed-to-lead automation. The consent checkbox
@@ -98,16 +100,7 @@ export default function RequestForm() {
         <label className="cp-label" htmlFor="rq-phone">
           Phone
         </label>
-        <input
-          id="rq-phone"
-          className="cp-input"
-          type="tel"
-          inputMode="tel"
-          placeholder="(561) 555-0123"
-          value={phone}
-          onChange={(e) => setPhone(e.target.value)}
-          autoComplete="tel"
-        />
+        <PhoneInput id="rq-phone" defaultValue={phone} onChange={setPhone} />
         {errors.phone && <p className="mt-1 text-[12.5px] text-[var(--cp-danger)]">{errors.phone}</p>}
       </div>
 
@@ -130,14 +123,7 @@ export default function RequestForm() {
         <label className="cp-label" htmlFor="rq-address">
           Property address (optional)
         </label>
-        <input
-          id="rq-address"
-          className="cp-input"
-          placeholder="Street, city"
-          value={address}
-          onChange={(e) => setAddress(e.target.value)}
-          autoComplete="street-address"
-        />
+        <AddressInput id="rq-address" value={address} onChange={setAddress} />
       </div>
 
       <div>

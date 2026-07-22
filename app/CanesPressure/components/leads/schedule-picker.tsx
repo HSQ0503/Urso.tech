@@ -3,26 +3,27 @@
 import { useMemo, useState } from "react";
 import { ET } from "@/lib/canes/types";
 
-// Tap-to-book scheduler: day chips for the coming week plus hourly visit
-// slots, all Eastern time. Replaces the raw datetime-local inputs — Sebastian
-// books estimates in two taps instead of typing a date. Emits the same naive
-// "YYYY-MM-DDTHH:mm" string the old input produced, so etLocalToIso at the
-// call sites keeps doing the timezone conversion; a day-only pick emits just
-// "YYYY-MM-DD", which callers treat as incomplete.
+// Tap-to-book scheduler: day chips for the coming week, hour slots, and a
+// quarter-hour row (Sebastian's ask — 15-minute starts, not just on the hour),
+// all Eastern time. Replaces the raw datetime-local inputs — a booking is
+// still two taps (day + hour lands on :00); the minute row refines it. Emits
+// the same naive "YYYY-MM-DDTHH:mm" string the old input produced, so
+// etLocalToIso at the call sites keeps doing the timezone conversion; a
+// day-only pick emits just "YYYY-MM-DD", which callers treat as incomplete.
 
-const SLOTS = [
-  "08:00", "09:00", "10:00", "11:00", "12:00", "13:00",
-  "14:00", "15:00", "16:00", "17:00", "18:00",
-];
+const HOURS = ["08", "09", "10", "11", "12", "13", "14", "15", "16", "17", "18"];
+const QUARTERS = ["00", "15", "30", "45"];
 
 export function isCompleteWhen(v: string): boolean {
   return /T\d{2}:\d{2}$/.test(v);
 }
 
+// "8 AM" for an "HH", "8:15 AM" for an "HH:mm" off the hour.
 function slotLabel(t: string): string {
   const h = Number(t.slice(0, 2));
+  const m = t.slice(3, 5);
   const h12 = h % 12 === 0 ? 12 : h % 12;
-  return `${h12} ${h >= 12 ? "PM" : "AM"}`;
+  return `${h12}${m && m !== "00" ? `:${m}` : ""} ${h >= 12 ? "PM" : "AM"}`;
 }
 
 type Day = { date: string; label: string; sub: string };
@@ -75,10 +76,24 @@ export function SchedulePicker({
 
   const pickedDay = value.slice(0, 10);
   const time = isCompleteWhen(value) ? value.slice(11, 16) : "";
+  const hour = time.slice(0, 2);
+  const minute = time.slice(3, 5);
   // Nothing picked yet reads as tomorrow — the most common booking.
   const day = days.some((d) => d.date === pickedDay) ? pickedDay : days[1].date;
   const isToday = day === days[0].date;
   const nowHm = etNowHm();
+  const isPast = (t: string) => isToday && t <= nowHm;
+
+  // Tapping an hour keeps the chosen quarter when it still works, else falls
+  // to the hour's first future quarter (today's current hour never lands on a
+  // minute that already passed).
+  function pickHour(hh: string) {
+    const mm =
+      minute && !isPast(`${hh}:${minute}`)
+        ? minute
+        : (QUARTERS.find((q) => !isPast(`${hh}:${q}`)) ?? "00");
+    onChange(`${day}T${hh}:${mm}`);
+  }
 
   const summary = time
     ? (() => {
@@ -134,16 +149,32 @@ export function SchedulePicker({
       </div>
 
       <div className="grid grid-cols-4 gap-1.5">
-        {SLOTS.map((t) => (
+        {HOURS.map((hh) => (
           <button
-            key={t}
+            key={hh}
             type="button"
             className="cp-slot"
-            data-selected={t === time}
-            disabled={isToday && t <= nowHm}
-            onClick={() => onChange(`${day}T${t}`)}
+            data-selected={hh === hour}
+            // The hour is gone only once its last quarter is behind us.
+            disabled={isPast(`${hh}:45`)}
+            onClick={() => pickHour(hh)}
           >
-            {slotLabel(t)}
+            {slotLabel(hh)}
+          </button>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-4 gap-1.5">
+        {QUARTERS.map((mm) => (
+          <button
+            key={mm}
+            type="button"
+            className="cp-slot"
+            data-selected={hour !== "" && mm === minute}
+            disabled={!hour || isPast(`${hour}:${mm}`)}
+            onClick={() => onChange(`${day}T${hour}:${mm}`)}
+          >
+            :{mm}
           </button>
         ))}
       </div>

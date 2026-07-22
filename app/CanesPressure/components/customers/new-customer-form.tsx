@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { createCustomer } from "@/app/CanesPressure/actions";
 import { SOURCE_LABEL, type LeadSource } from "@/lib/canes/types";
+import { AddressInput } from "../address-input";
+import { PhoneInput } from "../phone-input";
 
 // Create form for a customer who never came through the lead pipeline
 // (repeat work, cash referrals). A phone that already belongs to a contact
@@ -61,7 +63,7 @@ export function NewCustomerForm() {
         </div>
         <div>
           <label className="cp-label" htmlFor="nc-phone">Phone</label>
-          <input id="nc-phone" name="phone" type="tel" className="cp-input" placeholder="(561) 555-0123" />
+          <PhoneInput id="nc-phone" name="phone" />
         </div>
         <div>
           <label className="cp-label" htmlFor="nc-email">Email</label>
@@ -77,7 +79,7 @@ export function NewCustomerForm() {
         </div>
         <div className="sm:col-span-2">
           <label className="cp-label" htmlFor="nc-address">Property address</label>
-          <input id="nc-address" name="address" className="cp-input" placeholder="Street, city" />
+          <AddressInput id="nc-address" name="address" />
         </div>
         <div className="sm:col-span-2">
           <label className="cp-label" htmlFor="nc-notes">Notes</label>

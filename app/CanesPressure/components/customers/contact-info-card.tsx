@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { Check, Mail, Pencil, Phone } from "lucide-react";
 import { updateCustomer } from "@/app/CanesPressure/actions";
 import { CallButton } from "../call-button";
+import { PhoneInput } from "../phone-input";
 import { fmtEt, fmtPhone, SOURCE_LABEL, type Contact } from "@/lib/canes/types";
 
 // Contact info with an inline edit toggle. The card owns its edit state; the
@@ -145,7 +146,7 @@ export function ContactInfoCard({ contact }: { contact: Contact }) {
             </div>
             <div>
               <label className="cp-label" htmlFor="ci-phone-m">Phone</label>
-              <input id="ci-phone-m" name="phone" type="tel" className="cp-input" defaultValue={contact.phone ?? ""} />
+              <PhoneInput id="ci-phone-m" name="phone" defaultValue={contact.phone} />
             </div>
             <div>
               <label className="cp-label" htmlFor="ci-email-m">Email</label>
@@ -249,7 +250,7 @@ export function ContactInfoCard({ contact }: { contact: Contact }) {
             </div>
             <div>
               <label className="cp-label" htmlFor="ci-phone">Phone</label>
-              <input id="ci-phone" name="phone" type="tel" className="cp-input" defaultValue={contact.phone ?? ""} />
+              <PhoneInput id="ci-phone" name="phone" defaultValue={contact.phone} />
             </div>
             <div>
               <label className="cp-label" htmlFor="ci-email">Email</label>

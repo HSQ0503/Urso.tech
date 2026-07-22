@@ -10,6 +10,7 @@ import {
 } from "@/app/CanesPressure/crew-owner-actions";
 import { fmtPhone, type Crew } from "@/lib/canes/types";
 import type { TechnicianAccountAdminRow } from "@/lib/canes/crew-types";
+import { PhoneInput } from "../phone-input";
 
 export function CrewAccountManager({
   ready,
@@ -206,7 +207,7 @@ export function CrewAccountManager({
           </div>
           <div>
             <label className="cp-label" htmlFor="crew-account-phone">Phone</label>
-            <input id="crew-account-phone" className="cp-input min-h-11" name="phone" type="tel" required />
+            <PhoneInput id="crew-account-phone" className="cp-input min-h-11" name="phone" required />
           </div>
           <div>
             <label className="cp-label" htmlFor="crew-account-crew">Crew</label>

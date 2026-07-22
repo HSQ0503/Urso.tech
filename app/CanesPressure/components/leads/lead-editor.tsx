@@ -4,6 +4,8 @@ import { useState, useTransition } from "react";
 import { Check } from "lucide-react";
 import { updateLeadFields } from "@/app/CanesPressure/actions";
 import { SOURCE_LABEL, type Lead, type LeadSource } from "@/lib/canes/types";
+import { AddressInput } from "../address-input";
+import { PhoneInput } from "../phone-input";
 
 // Inline-editable lead details. One Save button for the whole form so a call
 // in progress never fights half-committed field state.
@@ -47,7 +49,7 @@ export function LeadEditor({ lead }: { lead: Lead }) {
         </div>
         <div>
           <label className="cp-label" htmlFor="lead-phone">Phone</label>
-          <input id="lead-phone" name="phone" type="tel" className="cp-input" defaultValue={lead.phone ?? ""} />
+          <PhoneInput id="lead-phone" name="phone" defaultValue={lead.phone} />
         </div>
         <div>
           <label className="cp-label" htmlFor="lead-email">Email</label>
@@ -74,7 +76,7 @@ export function LeadEditor({ lead }: { lead: Lead }) {
       </div>
       <div>
         <label className="cp-label" htmlFor="lead-address">Address</label>
-        <input id="lead-address" name="address" className="cp-input" defaultValue={lead.address ?? ""} />
+        <AddressInput id="lead-address" name="address" defaultValue={lead.address ?? ""} />
       </div>
       <div>
         <label className="cp-label" htmlFor="lead-notes">Notes</label>

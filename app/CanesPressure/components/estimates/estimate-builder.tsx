@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 import { Check, Plus, Trash2 } from "lucide-react";
+import { AddressInput } from "../address-input";
+import { PhoneInput } from "../phone-input";
 import {
   createEstimate,
   saveEstimateItems,
@@ -475,14 +477,11 @@ export function EstimateBuilder({
           </div>
           <div>
             <label className="cp-label" htmlFor="est-phone">Phone</label>
-            <input
+            <PhoneInput
               id="est-phone"
-              type="tel"
-              className="cp-input"
-              value={customerPhone}
-              onChange={(e) => setCustomerPhone(e.target.value)}
+              defaultValue={customerPhone}
+              onChange={setCustomerPhone}
               disabled={disabled}
-              placeholder="(561) 555-0123"
             />
           </div>
           <div>
@@ -510,13 +509,11 @@ export function EstimateBuilder({
           </div>
           <div className="sm:col-span-2">
             <label className="cp-label" htmlFor="est-address">Job address</label>
-            <input
+            <AddressInput
               id="est-address"
-              className="cp-input"
               value={jobAddress}
-              onChange={(e) => setJobAddress(e.target.value)}
+              onChange={setJobAddress}
               disabled={disabled}
-              placeholder="Street, city"
             />
           </div>
           <div>

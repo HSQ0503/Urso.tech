@@ -5,6 +5,7 @@ import { useState, useTransition } from "react";
 import { MapPin, Plus } from "lucide-react";
 import { addCustomerAddress, setPrimaryAddress } from "@/app/CanesPressure/actions";
 import type { Address } from "@/lib/canes/types";
+import { AddressInput } from "../address-input";
 
 // Service addresses for this customer. The primary address prefills new
 // estimates and jobs; any other row can be promoted with one tap. Desktop
@@ -54,7 +55,7 @@ export function PropertiesCard({ contactId, addresses }: { contactId: string; ad
       <form onSubmit={handleAdd} className="space-y-3">
         <div>
           <label className="cp-label" htmlFor={`${idPrefix}line`}>Address</label>
-          <input id={`${idPrefix}line`} name="line" required className="cp-input" placeholder="Street, city" />
+          <AddressInput id={`${idPrefix}line`} name="line" required />
         </div>
         <div>
           <label className="cp-label" htmlFor={`${idPrefix}notes`}>Site notes (optional)</label>

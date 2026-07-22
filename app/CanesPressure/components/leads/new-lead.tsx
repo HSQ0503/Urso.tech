@@ -6,6 +6,8 @@ import { useState, useTransition } from "react";
 import { Plus } from "lucide-react";
 import { createLead } from "@/app/CanesPressure/actions";
 import { etLocalToIso, SOURCE_LABEL, type LeadSource, type LeadType } from "@/lib/canes/types";
+import { AddressInput } from "../address-input";
+import { PhoneInput } from "../phone-input";
 import { isCompleteWhen, SchedulePicker } from "./schedule-picker";
 
 // Loose on purpose: 10 digits with an optional +1 and common separators.
@@ -106,7 +108,7 @@ export function NewLead({ variant = "button" }: { variant?: "button" | "icon" })
             </div>
             <div>
               <label className="cp-label" htmlFor={`${idp}phone`}>Phone</label>
-              <input id={`${idp}phone`} name="phone" type="tel" required className="cp-input" placeholder="(561) 555-0123" />
+              <PhoneInput id={`${idp}phone`} name="phone" required />
             </div>
             <div>
               <label className="cp-label" htmlFor={`${idp}email`}>Email (optional)</label>
@@ -150,7 +152,7 @@ export function NewLead({ variant = "button" }: { variant?: "button" | "icon" })
             </div>
             <div>
               <label className="cp-label" htmlFor={`${idp}address`}>Address</label>
-              <input id={`${idp}address`} name="address" className="cp-input" placeholder="Street, city" />
+              <AddressInput id={`${idp}address`} name="address" />
             </div>
             {type === "hot" && (
               <div className="sm:col-span-2">

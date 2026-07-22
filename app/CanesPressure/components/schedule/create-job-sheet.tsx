@@ -3,6 +3,8 @@
 import { useState, useTransition } from "react";
 import { createManualJob, type ActionResult } from "@/app/CanesPressure/actions";
 import { etLocalToIso, fmtMoney, type Crew } from "@/lib/canes/types";
+import { AddressInput } from "../address-input";
+import { PhoneInput } from "../phone-input";
 import { isCompleteWhen, SchedulePicker } from "../leads/schedule-picker";
 import { SheetShell } from "./sheet-shell";
 
@@ -75,13 +77,11 @@ export function CreateJobSheet({ crews, onClose }: { crews: Crew[]; onClose: () 
 
         <div>
           <label className="cp-label" htmlFor="job-phone">Phone (optional)</label>
-          <input
+          <PhoneInput
             id="job-phone"
-            className="cp-input"
-            inputMode="tel"
             placeholder="(561) 555-0134"
-            value={customerPhone}
-            onChange={(e) => setCustomerPhone(e.target.value)}
+            defaultValue={customerPhone}
+            onChange={setCustomerPhone}
           />
         </div>
 
@@ -118,12 +118,11 @@ export function CreateJobSheet({ crews, onClose }: { crews: Crew[]; onClose: () 
 
         <div>
           <label className="cp-label" htmlFor="job-address">Address (optional)</label>
-          <input
+          <AddressInput
             id="job-address"
-            className="cp-input"
             placeholder="812 Palmetto Dr, Lake Worth"
             value={jobAddress}
-            onChange={(e) => setJobAddress(e.target.value)}
+            onChange={setJobAddress}
           />
         </div>
 
