@@ -527,6 +527,22 @@ export const DEMO_ESTIMATES: Estimate[] = [
     sent_at: min(12150), viewed_at: min(11900), approved_at: null,
     declined_at: min(11600), decline_reason: "Went with a cheaper quote", signature_name: null, employee: "Sebastian",
   },
+  // est5 — SENT, awaiting the customer: the state that exercises the owner's
+  // "Mark approved — agreed in person" rail and the reminder automations.
+  {
+    id: "est5", created_at: min(2000), updated_at: min(1900),
+    lead_id: null, contact_id: "ct5", address_id: null,
+    number: "EST-000005", estimate_type: "standard", status: "sent",
+    customer_name: "Dana Osei", customer_phone: "+15615550190", customer_email: "dana.osei@example.com",
+    job_address: "410 Lakeview Ct, Royal Palm Beach", job_name: "Back patio + pool deck",
+    subtotal_cents: 27500, discount_cents: 0, adjustment_cents: 0,
+    tax_cents: 0, tax_rate_bps: 0, total_cents: 27500, deposit_percent: 0, deposit_cents: 0,
+    message_to_customer: "Thanks for having us out. Here is your estimate.",
+    terms: "Payment due on completion unless a deposit is agreed.",
+    internal_notes: null, expires_at: hrAhead(28 * 24), public_token: "demo-token-est5",
+    sent_at: min(1900), viewed_at: null, approved_at: null,
+    declined_at: null, decline_reason: null, signature_name: null, employee: "Sebastian",
+  },
 ];
 
 export const DEMO_ESTIMATE_ITEMS: EstimateItem[] = [
@@ -555,6 +571,13 @@ export const DEMO_ESTIMATE_ITEMS: EstimateItem[] = [
     name: "Gutter brightening", description: "Remove tiger stripes from gutters", kind: "service", quantity: 1,
     unit_price_cents: 12000, discount_cents: 0, taxable: false, line_total_cents: 12000,
     is_option: true, is_mandatory: false, is_selected: false, package_group: null,
+  },
+  // est5 line
+  {
+    id: "ei9", estimate_id: "est5", catalog_id: "cat4", position: 0,
+    name: "Pool deck / paver clean", description: "Back patio and pool deck surface clean", kind: "service", quantity: 1,
+    unit_price_cents: 27500, discount_cents: 0, taxable: false, line_total_cents: 27500,
+    is_option: false, is_mandatory: false, is_selected: true, package_group: null,
   },
   // est3 line
   {
@@ -760,6 +783,17 @@ export const DEMO_JOBS: Job[] = [
     total_cents: 62000, deposit_cents: 0, scheduled_at: etAt(-2, "10:00"), assigned_to: "Crew A", notes: null,
     duration_minutes: 180, ends_at: addMinutes(etAt(-2, "10:00"), 180), arrival_window_minutes: 0,
     crew_id: "crewA", confirmed_at: min(2900), customer_phone: "+15615550212", customer_email: "bianca.reyes@example.com", job_name: "Roof wash (tile)",
+    gate_code: null, site_notes: null, canceled_reason: null,
+  },
+  // job19 — COMPLETED this morning, not yet billed: the state that shows the
+  // billing panel and the "Completed by mistake? Reopen" control.
+  {
+    id: "job19", created_at: min(1300), estimate_id: null, lead_id: null, contact_id: "ct6",
+    status: "completed", customer_name: "Elaine Brooks",
+    job_address: "12 Sailfish Ct, Palm Beach Gardens",
+    total_cents: 28000, deposit_cents: 0, scheduled_at: etAt(0, "07:30"), assigned_to: "Crew B", notes: null,
+    duration_minutes: 120, ends_at: addMinutes(etAt(0, "07:30"), 120), arrival_window_minutes: 0,
+    crew_id: "crewB", confirmed_at: min(1200), customer_phone: "+15615550161", customer_email: "elaine.brooks@example.com", job_name: "Driveway + walkway wash",
     gate_code: null, site_notes: null, canceled_reason: null,
   },
 ];

@@ -2,13 +2,14 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { CalendarCheck2, Send, Trash2 } from "lucide-react";
+import { BadgeCheck, CalendarCheck2, Send, Trash2 } from "lucide-react";
 import {
+  approveEstimateInPerson,
   sendEstimate,
   voidEstimate,
   type ActionResult,
 } from "@/app/CanesPressure/actions";
-import { fmtEt, type EstimateStatus } from "@/lib/canes/types";
+import { fmtEt, type EstimateStatus, type EstimateType } from "@/lib/canes/types";
 import {
   ChannelPicker,
   choiceToChannels,
@@ -54,6 +55,7 @@ function Notice({ value }: { value: Feedback }) {
 export function EstimateActions({
   estimateId,
   status,
+  estimateType,
   phone,
   email,
   optedOut,
@@ -61,6 +63,7 @@ export function EstimateActions({
 }: {
   estimateId: string;
   status: EstimateStatus;
+  estimateType: EstimateType;
   phone: string;
   email: string;
   optedOut: boolean;
@@ -68,6 +71,7 @@ export function EstimateActions({
 }) {
   const { isPending, feedback, run } = useAction();
   const [voidOpen, setVoidOpen] = useState(false);
+  const [approveOpen, setApproveOpen] = useState(false);
   const [channelChoice, setChannelChoice] = useState<ChannelChoice>("both");
   const [override, setOverride] = useState<SendOverride>(EMPTY_OVERRIDE);
 
@@ -90,6 +94,9 @@ export function EstimateActions({
         <Link href="/CanesPressure/schedule" className="cp-btn cp-btn-sm w-full">
           View on the schedule
         </Link>
+        {/* An in-person approval flips this branch in the same transition —
+            its success notice lands here. */}
+        <Notice value={feedback} />
       </div>
     );
   }
@@ -139,6 +146,52 @@ export function EstimateActions({
             <p className="text-[12px] tabular-nums text-[var(--cp-faint)]">Last sent {fmtEt(sentAt)}</p>
           )}
         </>
+      )}
+
+      {/* In-person approval — the client said yes verbally, so Sebastian
+          approves on their behalf. Two-step confirm; sent/viewed only (drafts
+          go out through the builder first), standard estimates only (options
+          and packages derive totals from the customer's own selection). */}
+      {!isDraft && estimateType === "standard" && !approveOpen && (
+        <button
+          type="button"
+          className="cp-btn cp-btn-sm w-full"
+          disabled={isPending}
+          onClick={() => setApproveOpen(true)}
+        >
+          <BadgeCheck size={15} strokeWidth={2} />
+          Mark approved — agreed in person
+        </button>
+      )}
+
+      {approveOpen && (
+        <div className="space-y-2">
+          <p className="text-[12.5px] leading-snug text-[var(--cp-muted)]">
+            This approves the estimate exactly as if the customer tapped Approve —
+            the job is created and reminders stop. Only do this when they&apos;ve
+            clearly agreed.
+          </p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className="cp-btn cp-btn-sm flex-1"
+              disabled={isPending}
+              onClick={() => setApproveOpen(false)}
+            >
+              Not yet
+            </button>
+            <button
+              type="button"
+              className="cp-btn cp-btn-primary cp-btn-sm flex-1"
+              disabled={isPending}
+              onClick={() =>
+                run(() => approveEstimateInPerson(estimateId), () => setApproveOpen(false))
+              }
+            >
+              {isPending ? "Approving..." : "Confirm approval"}
+            </button>
+          </div>
+        </div>
       )}
 
       <button

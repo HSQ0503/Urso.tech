@@ -231,6 +231,23 @@ export function fmtEt(
   return new Intl.DateTimeFormat("en-US", { ...opts, timeZone: ET }).format(new Date(iso));
 }
 
+// Compact ET time range for job cards — "9:00–11:30 AM", crossing meridiems
+// as "9:00 AM–12:30 PM". Start alone when there is no end.
+export function fmtEtTimeRange(
+  startIso: string | null | undefined,
+  endIso: string | null | undefined,
+): string {
+  if (!startIso) return "—";
+  const t = (iso: string) => fmtEt(iso, { hour: "numeric", minute: "2-digit" });
+  const start = t(startIso);
+  if (!endIso) return start;
+  const end = t(endIso);
+  const meridiem = start.slice(-2);
+  return meridiem === end.slice(-2)
+    ? `${start.slice(0, -3)}–${end}`
+    : `${start}–${end}`;
+}
+
 export function minutesSince(iso: string): number {
   return Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 60_000));
 }

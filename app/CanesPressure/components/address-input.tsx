@@ -163,12 +163,14 @@ export function AddressInput({
         autoComplete="off"
         role="combobox"
         aria-expanded={open}
+        aria-controls={id ? `${id}-listbox` : undefined}
         aria-autocomplete="list"
         aria-label={ariaLabel}
         aria-activedescendant={active >= 0 && id ? `${id}-opt-${active}` : undefined}
       />
       {open && (
         <ul
+          id={id ? `${id}-listbox` : undefined}
           role="listbox"
           className="absolute inset-x-0 top-full z-30 mt-1 overflow-hidden rounded-md border border-[var(--cp-line)] bg-[var(--cp-surface)] py-1 shadow-[0_10px_28px_var(--cp-shadow)]"
         >

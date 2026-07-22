@@ -281,7 +281,11 @@ async function drainDueTasks() {
       if (
         !job ||
         (job.status !== "scheduled" && job.status !== "confirmed") ||
-        job.scheduled_at !== scheduledAt
+        !scheduledAt ||
+        // Epoch compare, never string: PostgREST serializes timestamptz with
+        // "+00:00" while the armed payload stored toISOString()'s "Z" — a
+        // strict string compare canceled every confirmation as "slot moved".
+        new Date(job.scheduled_at ?? 0).getTime() !== new Date(scheduledAt).getTime()
       ) {
         await db.from("tasks").update({ status: "canceled" }).eq("id", task.id);
         canceled++;

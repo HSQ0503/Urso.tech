@@ -37,6 +37,7 @@ import { WaitTimer } from "@/app/CanesPressure/components/leads/wait-timer";
 import {
   AppointmentCard,
   CallFlow,
+  DeleteLeadCard,
   ResendConfirmationButton,
   SnoozeCard,
   StatusCard,
@@ -520,6 +521,11 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
               </figure>
             )}
           </section>
+
+          {/* Junk / duplicate cleanup — deliberately last on the page. */}
+          <div className="pb-2">
+            <DeleteLeadCard leadId={lead.id} />
+          </div>
         </div>
       </div>
     </div>

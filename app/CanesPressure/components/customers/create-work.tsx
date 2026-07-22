@@ -155,7 +155,7 @@ export function CreateWork({
             )}
           </div>
           <div className="mt-1.5">
-            <SchedulePicker value={when} onChange={setWhen} />
+            <SchedulePicker value={when} onChange={setWhen} allowPast />
           </div>
           {!isCompleteWhen(when) && (
             <p className="mt-1 text-[12px] text-[var(--cp-faint)]">

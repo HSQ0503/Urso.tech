@@ -134,7 +134,12 @@ export async function listCustomers(query?: string): Promise<CustomerSummary[]> 
       );
     });
   }
-  return rows.sort((a, b) => b.last_activity_at.localeCompare(a.last_activity_at));
+  // ABC order, the way Sebastian works his Markate list. Nameless contacts
+  // (shouldn't happen, but) sink to the bottom rather than sorting as "".
+  return rows.sort((a, b) => {
+    if (!a.name || !b.name) return a.name ? -1 : b.name ? 1 : 0;
+    return a.name.localeCompare(b.name, "en", { sensitivity: "base" });
+  });
 }
 
 export async function getCustomer(id: string): Promise<CustomerDetail | null> {

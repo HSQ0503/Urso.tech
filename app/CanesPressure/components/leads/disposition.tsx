@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { CalendarClock, MessageSquareText } from "lucide-react";
+import { CalendarClock, MessageSquareText, Trash2 } from "lucide-react";
 import {
+  deleteLead,
   logCallOutcome,
   sendConfirmationNow,
   setAppointment,
@@ -27,6 +28,11 @@ function useAction() {
     setFeedback(null);
     startTransition(async () => {
       const res = await fn();
+      // A redirecting action (deleteLead) never reaches here: Next rejects
+      // its promise with the redirect control-flow error, React carries it
+      // through the transition, and the router navigates. The null-check is
+      // belt-and-braces for an action that resolves empty.
+      if (!res) return;
       setFeedback(res.notice ? { ok: res.ok, text: res.notice } : null);
       if (res.ok) onOk?.();
     });
@@ -363,6 +369,58 @@ export function SnoozeCard({ leadId, snoozedUntil }: { leadId: string; snoozedUn
         <p className="text-[12.5px] tabular-nums text-[var(--cp-muted)]">
           Snoozed until {fmtEt(snoozedUntil)}
         </p>
+      )}
+      <Notice value={feedback} />
+    </div>
+  );
+}
+
+// Danger zone: permanently remove a junk or duplicate lead. Two-step confirm;
+// on success the action itself redirects to the pipeline (the profile page no
+// longer exists). Opted-out leads and leads with active work are refused
+// server-side.
+export function DeleteLeadCard({ leadId }: { leadId: string }) {
+  const { isPending, feedback, run } = useAction();
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="space-y-2">
+      {!open ? (
+        <button
+          type="button"
+          className="cp-btn cp-btn-sm cp-btn-danger"
+          disabled={isPending}
+          onClick={() => setOpen(true)}
+        >
+          <Trash2 size={14} strokeWidth={2} /> Delete lead
+        </button>
+      ) : (
+        <>
+          <p className="text-[12.5px] leading-snug text-[var(--cp-muted)]">
+            This permanently deletes the lead, its timeline, and any queued
+            automations. The text thread survives. Leads with an active
+            estimate or job can&apos;t be deleted — mark those lost instead.
+            This can&apos;t be undone.
+          </p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className="cp-btn cp-btn-sm flex-1"
+              disabled={isPending}
+              onClick={() => setOpen(false)}
+            >
+              Keep it
+            </button>
+            <button
+              type="button"
+              className="cp-btn cp-btn-sm cp-btn-danger flex-1"
+              disabled={isPending}
+              onClick={() => run(() => deleteLead(leadId))}
+            >
+              {isPending ? "Deleting..." : "Confirm delete"}
+            </button>
+          </div>
+        </>
       )}
       <Notice value={feedback} />
     </div>

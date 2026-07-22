@@ -92,7 +92,7 @@ export async function sendCanesSms(opts: {
     statusCallback: statusCallbackUrl(),
   });
   if (canesConfigured()) {
-    await canesDb().from("messages").insert({
+    const row = {
       lead_id: opts.leadId ?? null,
       peer_phone: opts.to,
       direction: "out",
@@ -100,7 +100,13 @@ export async function sendCanesSms(opts: {
       automated: opts.automated ?? false,
       twilio_sid: res.sid ?? null,
       delivery_status: res.ok ? "queued" : "failed",
-    });
+    };
+    const { error } = await canesDb().from("messages").insert(row);
+    // A lead deleted mid-send leaves a dangling lead_id (FK) — keep the
+    // outbound record rather than losing it with the lead.
+    if (error && row.lead_id) {
+      await canesDb().from("messages").insert({ ...row, lead_id: null });
+    }
   }
   return res.ok ? { ok: true, sid: res.sid } : { ok: false, error: res.error };
 }

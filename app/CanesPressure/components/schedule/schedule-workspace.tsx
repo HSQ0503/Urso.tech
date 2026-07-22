@@ -17,6 +17,7 @@ import {
 import {
   etLocalToIso,
   fmtEt,
+  fmtEtTimeRange,
   fmtMoney,
   JOB_STATUS_LABEL,
   type CalendarEvent,
@@ -746,9 +747,7 @@ function MobileJobRow({
   onOpen: () => void;
 }) {
   const finished = ["completed", "invoiced", "paid"].includes(job.status);
-  const time = job.scheduled_at
-    ? fmtEt(job.scheduled_at, { hour: "numeric", minute: "2-digit" })
-    : "—";
+  const time = job.scheduled_at ? fmtEtTimeRange(job.scheduled_at, job.ends_at) : "—";
   return (
     <button
       type="button"
@@ -873,7 +872,7 @@ function MobileScheduleSheet({
         {job.job_name ? ` · ${job.job_name}` : ""}
       </p>
 
-      <SchedulePicker value={when} onChange={setWhen} />
+      <SchedulePicker value={when} onChange={setWhen} allowPast />
 
       <div className="mt-3 flex flex-col gap-1">
         <label className="cp-label">Crew</label>

@@ -536,8 +536,15 @@ export default async function TodayPage() {
                   href="/CanesPressure/schedule"
                   className="cp-list-row"
                 >
-                  <span className="w-[58px] shrink-0 text-[14px] font-semibold tabular-nums">
-                    {fmtEt(job.scheduled_at, { hour: "numeric", minute: "2-digit" })}
+                  <span className="w-[64px] shrink-0 tabular-nums">
+                    <span className="block text-[14px] font-semibold">
+                      {fmtEt(job.scheduled_at, { hour: "numeric", minute: "2-digit" })}
+                    </span>
+                    {job.ends_at && (
+                      <span className="block text-[12px] text-[var(--cp-muted)]">
+                        –{fmtEt(job.ends_at, { hour: "numeric", minute: "2-digit" })}
+                      </span>
+                    )}
                   </span>
                   <div className="min-w-0 flex-1">
                     <p className="cp-list-title flex items-center gap-2 truncate">

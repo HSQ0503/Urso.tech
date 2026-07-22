@@ -21,6 +21,7 @@ import {
   assignJob,
   moveJob,
   scheduleJob,
+  reopenJob,
   setJobStatus,
   unscheduleJob,
   updateJobDetails,
@@ -598,7 +599,7 @@ export function JobDetailSheet({
             </div>
           ) : (
             <div className="space-y-2.5">
-              <SchedulePicker value={when} onChange={setWhen} />
+              <SchedulePicker value={when} onChange={setWhen} allowPast />
 
               <div>
                 <p className="cp-label">Duration</p>
@@ -763,6 +764,25 @@ export function JobDetailSheet({
       {/* Billing — completion → invoice → card/cash payment. Shown for every
           job that isn't canceled; drives the whole money flow. */}
       {job.status !== "canceled" && <JobBilling job={job} invoice={invoice ?? null} />}
+
+      {/* Undo an accidental Complete: back to the live schedule, draft invoice
+          removed. Once the invoice is sent, the action guides to void instead. */}
+      {job.status === "completed" && (
+        <section className="cp-card mt-4 space-y-2 p-4 md:p-5">
+          <p className="cp-group-label">Completed by mistake?</p>
+          <button
+            type="button"
+            className="cp-btn cp-btn-sm w-full"
+            disabled={isPending}
+            onClick={() => run(() => reopenJob(job.id), onClose)}
+          >
+            <Undo2 size={14} strokeWidth={2} /> Reopen job
+          </button>
+          <p className="text-[12px] leading-snug text-[var(--cp-faint)]">
+            Puts the job back on the schedule and sets its draft invoice aside.
+          </p>
+        </section>
+      )}
 
       {job.status === "canceled" && (
         <div className="cp-divider mt-4 pt-3">

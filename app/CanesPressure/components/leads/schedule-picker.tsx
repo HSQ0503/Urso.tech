@@ -67,9 +67,13 @@ function etNowHm(): string {
 export function SchedulePicker({
   value,
   onChange,
+  allowPast = false,
 }: {
   value: string;
   onChange: (v: string) => void;
+  // Job flows pass true so Sebastian can back-date work he forgot to log;
+  // lead-appointment and expiry flows keep the future-only guard.
+  allowPast?: boolean;
 }) {
   const days = useMemo(() => nextDays(7), []);
   const [custom, setCustom] = useState(false);
@@ -82,7 +86,7 @@ export function SchedulePicker({
   const day = days.some((d) => d.date === pickedDay) ? pickedDay : days[1].date;
   const isToday = day === days[0].date;
   const nowHm = etNowHm();
-  const isPast = (t: string) => isToday && t <= nowHm;
+  const isPast = (t: string) => !allowPast && isToday && t <= nowHm;
 
   // Tapping an hour keeps the chosen quarter when it still works, else falls
   // to the hour's first future quarter (today's current hour never lands on a
@@ -137,8 +141,9 @@ export function SchedulePicker({
             className="cp-slot"
             data-selected={d.date === day}
             onClick={() => {
-              // Switching to today drops a time that is already in the past.
-              const keep = time && !(d.date === days[0].date && time <= nowHm);
+              // Switching to today drops a time that is already in the past
+              // (unless back-dating is allowed).
+              const keep = time && (allowPast || !(d.date === days[0].date && time <= nowHm));
               onChange(keep ? `${d.date}T${time}` : d.date);
             }}
           >

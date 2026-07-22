@@ -2,6 +2,7 @@
 
 import { randomBytes } from "crypto";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { canesConfigured, canesDb, squareConfigured } from "@/lib/canes/supabase";
 import { getSettings, getLead } from "@/lib/canes/data";
 import { sendCanesSms, fillTemplate, canesTwilioCreds, alertOwner } from "@/lib/canes/twilio";
@@ -210,6 +211,53 @@ export async function logCallOutcome(
 }
 
 // ── Messaging ────────────────────────────────────────────────────────────────
+
+// Permanently remove a junk or duplicate lead. Two refusals protect the
+// business: an opted-out lead IS the do-not-text record for that number
+// (deleting it would let a future inbound re-create the lead with a clean
+// consent slate — an A2P violation waiting to happen), and a lead with an
+// estimate or job carries the queued sends/reminders/confirmations for that
+// work (tasks cascade with the lead even though the work itself survives).
+// The SMS thread survives either way; tasks and timeline events cascade.
+export async function deleteLead(leadId: string): Promise<ActionResult> {
+  if (!canesConfigured()) return DEMO;
+  const lead = await getLead(leadId);
+  if (!lead) return { ok: false, notice: "Lead not found." };
+  if (lead.opted_out) {
+    return {
+      ok: false,
+      notice: "This number texted STOP — the lead is the record that keeps automations from ever texting it again, so it can't be deleted.",
+    };
+  }
+  const db = canesDb();
+  // Only LIVE work blocks deletion — a long-dead duplicate whose estimate was
+  // voided (or job canceled) is exactly the junk this cleans up. Active work
+  // keeps the lead: its queued sends/reminders/confirmations ride the lead
+  // row, and channel attribution needs the source.
+  const [est, jobs] = await Promise.all([
+    db
+      .from("estimates")
+      .select("id")
+      .eq("lead_id", leadId)
+      .not("status", "in", "(void,declined,expired)")
+      .limit(1),
+    db.from("jobs").select("id").eq("lead_id", leadId).neq("status", "canceled").limit(1),
+  ]);
+  if (est.error) return { ok: false, notice: est.error.message };
+  if (jobs.error) return { ok: false, notice: jobs.error.message };
+  if ((est.data ?? []).length > 0 || (jobs.data ?? []).length > 0) {
+    return {
+      ok: false,
+      notice: "This lead has an active estimate or job on file — keep it for the record and mark it lost instead.",
+    };
+  }
+  const { error } = await db.from("leads").delete().eq("id", leadId);
+  if (error) return { ok: false, notice: error.message };
+  refresh();
+  // The profile page no longer exists — redirect from the action so the
+  // navigation and the revalidation land together (no not-found flash).
+  redirect("/CanesPressure/leads");
+}
 
 export async function sendMessage(peerPhone: string, body: string, leadId?: string | null): Promise<ActionResult> {
   if (!body.trim()) return { ok: false, notice: "Empty message." };
@@ -846,7 +894,47 @@ export async function approveEstimate(
   if (estimate.expires_at && new Date(estimate.expires_at).getTime() < Date.now()) {
     return { ok: false, notice: "This estimate has expired. Please contact us for a new one." };
   }
+  return finalizeEstimateApproval(estimate, signature, { selectedItemIds });
+}
 
+// Owner-side approval for a client who said yes in person or on the phone —
+// Sebastian's "manually approve" ask. Same finalize path as the public page
+// (job creation, deposit link, lead → won), with the e-signature recorded as
+// an in-person agreement. Standard estimates only: options/packages totals
+// derive from the customer's selection, which only the public page captures —
+// approving those here would silently drop every unselected line. (No
+// separate expiry check: the cron already flips overdue estimates to
+// 'expired', which the sent/viewed guard rejects.)
+export async function approveEstimateInPerson(
+  estimateId: string,
+): Promise<ActionResult & { depositUrl?: string | null }> {
+  if (!canesConfigured()) return DEMO;
+  const estimate = await getEstimate(estimateId);
+  if (!estimate) return { ok: false, notice: "Estimate not found." };
+  if (estimate.status === "approved") return { ok: false, notice: "This estimate is already approved." };
+  if (!["sent", "viewed"].includes(estimate.status)) {
+    return { ok: false, notice: "Only a sent estimate can be marked approved." };
+  }
+  if (estimate.estimate_type !== "standard") {
+    return {
+      ok: false,
+      notice: "Options and package estimates need the customer's own selection — have them approve from their link.",
+    };
+  }
+  const signature = `${estimate.customer_name ?? "Customer"} (agreed in person)`;
+  return finalizeEstimateApproval(estimate, signature, { inPerson: true });
+}
+
+// The shared back half of an approval, after each caller's own guards: claim
+// the status flip, promote the lead, upsert the contact, create the job, mint
+// the deposit link. Owner notifications only fire for the public path — the
+// in-person path IS the owner acting.
+async function finalizeEstimateApproval(
+  estimate: Estimate,
+  signature: string,
+  opts: { selectedItemIds?: string[]; inPerson?: boolean } = {},
+): Promise<ActionResult & { depositUrl?: string | null }> {
+  const { selectedItemIds } = opts;
   const db = canesDb();
   // Options estimates: persist the customer's selection before recomputing so
   // the approved totals reflect exactly what they chose.
@@ -874,7 +962,14 @@ export async function approveEstimate(
     .select("id");
   if (error) return { ok: false, notice: error.message };
   if (!claimed || claimed.length === 0) {
-    return { ok: true, notice: "This estimate is already approved." };
+    // The status moved between the caller's read and our claim. A double-tap
+    // or replayed approve really is approved — but a markViewed race is not,
+    // and must not masquerade as success.
+    const current = await getEstimate(estimate.id);
+    if (current?.status === "approved") {
+      return { ok: true, notice: "This estimate is already approved." };
+    }
+    return { ok: false, notice: "This estimate just changed — please try again." };
   }
 
   const approved: Estimate = {
@@ -912,15 +1007,18 @@ export async function approveEstimate(
 
   // Notifications are best-effort: a Twilio/network throw here must never
   // strand an approved estimate without its job (the approve claim already
-  // happened, so a retried approve would bail as "already approved").
-  try {
-    await alertOwner(
-      `Estimate ${approved.number} approved by ${approved.customer_name ?? signature} — ` +
-        `${fmtMoney(approved.total_cents)}. A job was created; time to schedule.`,
-    );
-    await notifyEstimateApproved(approved);
-  } catch (err) {
-    console.error(`[canes] approval notifications failed for ${approved.number}:`, err);
+  // happened, so a retried approve would bail as "already approved"). The
+  // in-person path skips them — alerting Sebastian about his own tap is noise.
+  if (!opts.inPerson) {
+    try {
+      await alertOwner(
+        `Estimate ${approved.number} approved by ${approved.customer_name ?? signature} — ` +
+          `${fmtMoney(approved.total_cents)}. A job was created; time to schedule.`,
+      );
+      await notifyEstimateApproved(approved);
+    } catch (err) {
+      console.error(`[canes] approval notifications failed for ${approved.number}:`, err);
+    }
   }
 
   const withItems = await getEstimateWithItems(estimate.id);
@@ -928,7 +1026,17 @@ export async function approveEstimate(
 
   const deposit = await createDepositLink(approved, jobId);
   refresh();
-  return { ok: true, depositUrl: deposit.url };
+  return {
+    ok: true,
+    depositUrl: deposit.url,
+    ...(opts.inPerson
+      ? {
+          notice: deposit.url
+            ? "Approved — job created. The customer's estimate link now shows their deposit button."
+            : "Approved — the job is in the schedule tray.",
+        }
+      : {}),
+  };
 }
 
 export async function declineEstimate(token: string, reason: string): Promise<ActionResult> {
@@ -1242,8 +1350,16 @@ export async function scheduleJob(
   if (error) return { ok: false, notice: error.message };
 
   const conflict = await findConflictNotice(jobId, crewId, startIso, endIso);
-  await armJobConfirmation(job, startIso);
-  if (crew) await notifyCrewAssignment(job, crew.name, startIso);
+  // Back-dating (logging a job Sebastian forgot to schedule): never text the
+  // customer a confirmation for a visit that already happened — and drop any
+  // pending one from the job's old future slot.
+  const pastSlot = when.getTime() < Date.now();
+  if (pastSlot) {
+    await cancelJobConfirmation(jobId);
+  } else {
+    await armJobConfirmation(job, startIso);
+  }
+  if (crew && !pastSlot) await notifyCrewAssignment(job, crew.name, startIso);
   await logJobEvent(job.lead_id, `Scheduled ${fmtEt(startIso)} · ${crewLabel(crew)}`);
   refresh();
   return { ok: true, notice: conflict };
@@ -1309,7 +1425,9 @@ export async function assignJob(jobId: string, crewId: string | null): Promise<A
   if (job.scheduled_at && job.ends_at) {
     notice = await findConflictNotice(jobId, crewId, job.scheduled_at, job.ends_at);
   }
-  if (crew) await notifyCrewAssignment(job, crew.name, job.scheduled_at);
+  // A back-dated (already-done) job doesn't need an assignment alert.
+  const pastSlot = !!job.scheduled_at && new Date(job.scheduled_at).getTime() < Date.now();
+  if (crew && !pastSlot) await notifyCrewAssignment(job, crew.name, job.scheduled_at);
   await logJobEvent(job.lead_id, crew ? `Assigned to ${crew.name}` : "Crew unassigned");
   refresh();
   return { ok: true, notice };
@@ -1483,8 +1601,18 @@ export async function completeJob(jobId: string): Promise<ActionResult & { invoi
       ? { ok: true, invoiceId: existing.id }
       : { ok: false, notice: `This job is ${job.status}.` };
   }
-  const { error } = await canesDb().from("jobs").update({ status: "completed" }).eq("id", jobId);
+  // Claimed write (mirrors the guard above): a job that just went canceled,
+  // invoiced, or paid in another tab is not silently re-completed.
+  const { data: claimedJob, error } = await canesDb()
+    .from("jobs")
+    .update({ status: "completed" })
+    .eq("id", jobId)
+    .in("status", ["unscheduled", "scheduled", "confirmed", "in_progress", "completed"])
+    .select("id");
   if (error) return { ok: false, notice: error.message };
+  if (!claimedJob || claimedJob.length === 0) {
+    return { ok: false, notice: "This job just changed — refresh and try again." };
+  }
   await logJobEvent(job.lead_id, "Job completed");
   const inv = await createInvoiceFromJob(jobId);
   refresh();
@@ -1497,6 +1625,110 @@ export async function completeJob(jobId: string): Promise<ActionResult & { invoi
     };
   }
   return { ok: true, invoiceId: inv.invoiceId };
+}
+
+// Undo an accidental "Complete": put the job back in its live state and set
+// the draft invoice completeJob minted aside (voided, never deleted — the
+// re-bill path already steps around void invoices, and deposit ledger rows
+// re-point onto the next bill). A sent or paid invoice blocks the reopen.
+// Concurrency discipline mirrors recordCashPayment: every write is an
+// optimistic claim whose row count is checked, so a racing send or cash
+// payment aborts the reopen instead of being clobbered.
+export async function reopenJob(jobId: string): Promise<ActionResult> {
+  if (!canesConfigured()) return DEMO;
+  const job = await getJob(jobId);
+  if (!job) return { ok: false, notice: "Job not found." };
+  if (job.status !== "completed") {
+    return { ok: false, notice: `Only a completed job can be reopened — this one is ${job.status}.` };
+  }
+
+  const db = canesDb();
+  const invoice = await getInvoiceByJob(jobId); // void invoices step aside
+  if (invoice) {
+    if (invoice.status !== "draft") {
+      return {
+        ok: false,
+        notice: `Invoice ${invoice.number} has already been ${invoice.status === "paid" ? "paid" : "sent"} — void it from the invoice page first.`,
+      };
+    }
+    // Square ids on a draft mean a send is mid-flight (they persist before the
+    // status flips) — let it finish rather than voiding under it.
+    if (invoice.square_invoice_id) {
+      return { ok: false, notice: `Invoice ${invoice.number} is being sent right now — refresh and void it from the invoice page instead.` };
+    }
+    // Claim draft → void. The status filter + row-count check means a send or
+    // full cash settle that got there first wins and the reopen aborts; once
+    // void, recordCashPayment/sendInvoice claims can no longer touch it. The
+    // square-id filter re-asserts the mid-send guard atomically, and the
+    // amount_paid filter catches a partial cash claim whose ledger insert
+    // hasn't landed yet (recordCashPayment bumps the cache before inserting).
+    const { data: voided, error: voidErr } = await db
+      .from("invoices")
+      .update({ status: "void", updated_at: new Date().toISOString() })
+      .eq("id", invoice.id)
+      .eq("status", "draft")
+      .is("square_invoice_id", null)
+      .eq("amount_paid_cents", invoice.amount_paid_cents)
+      .select("id");
+    if (voidErr) return { ok: false, notice: voidErr.message };
+    if (!voided || voided.length === 0) {
+      return { ok: false, notice: `Invoice ${invoice.number} just changed (it may have been sent or paid) — check the invoice page.` };
+    }
+    // Post-claim money check: a cash row that landed before our claim is
+    // visible now, and nothing new can attach. Deposits are fine (job-anchored,
+    // re-point on the next complete); anything else reverts the void + aborts.
+    const { data: paidRows, error: payErr } = await db
+      .from("payments")
+      .select("id")
+      .eq("invoice_id", invoice.id)
+      .neq("kind", "deposit")
+      .limit(1);
+    if (!payErr && (paidRows ?? []).length > 0) {
+      await db.from("invoices").update({ status: "draft" }).eq("id", invoice.id).eq("status", "void");
+      return { ok: false, notice: `Invoice ${invoice.number} already has a payment recorded — it can't be set aside.` };
+    }
+    if (payErr) {
+      await db.from("invoices").update({ status: "draft" }).eq("id", invoice.id).eq("status", "void");
+      return { ok: false, notice: payErr.message };
+    }
+  }
+
+  const status: JobStatus = job.scheduled_at
+    ? (job.confirmed_at ? "confirmed" : "scheduled")
+    : "unscheduled";
+  // Same claim discipline on the job: only a still-completed job reverts. A
+  // racing send that flipped it to invoiced keeps its state, and we hand the
+  // invoice back.
+  const { data: reverted, error } = await db
+    .from("jobs")
+    .update({ status })
+    .eq("id", jobId)
+    .eq("status", "completed")
+    .select("id");
+  if (error) return { ok: false, notice: error.message };
+  if (!reverted || reverted.length === 0) {
+    if (invoice) {
+      await db.from("invoices").update({ status: "draft" }).eq("id", invoice.id).eq("status", "void");
+    }
+    return { ok: false, notice: "This job just changed in another tab — refresh and try again." };
+  }
+
+  // The cron cancels the day-before confirmation while a job sits (wrongly)
+  // completed — revive it for a still-future, not-yet-confirmed visit.
+  if (status === "scheduled" && job.scheduled_at && new Date(job.scheduled_at).getTime() > Date.now()) {
+    const scheduledIso = new Date(job.scheduled_at).toISOString();
+    const { data: revived } = await db
+      .from("tasks")
+      .update({ status: "pending" })
+      .eq("dedupe_key", `job_confirmation:${job.id}:${scheduledIso}`)
+      .eq("status", "canceled")
+      .select("id");
+    if (!revived || revived.length === 0) await armJobConfirmation(job, scheduledIso);
+  }
+
+  await logJobEvent(job.lead_id, "Completion undone — job reopened, draft invoice set aside");
+  refresh();
+  return { ok: true, notice: "Job reopened." };
 }
 
 // Internal-ish: create the draft invoice backing a job, snapshotting job_items
@@ -1615,6 +1847,11 @@ export async function createInvoiceFromJob(
       : claimDeposits.is("invoice_id", null);
   const { error: claimErr } = await claimDeposits;
   if (claimErr) console.error(`[canes] deposit re-point failed for ${invoiceId}: ${claimErr.message}`);
+  // The void bills just lost their deposit rows — refresh their paid caches so
+  // a set-aside invoice never shows money it no longer holds.
+  if (!claimErr) {
+    for (const vid of voidIds) await recomputeInvoicePaid(vid);
+  }
 
   await recomputeInvoiceTotals(invoiceId);
   await recomputeInvoicePaid(invoiceId); // fold the deposit into the paid cache
@@ -1756,12 +1993,27 @@ export async function sendInvoice(
   }
 
   const now = new Date().toISOString();
-  const { error } = await db
+  // House claim discipline: only a live draft/sent/viewed row flips to sent —
+  // a reopen that voided this invoice mid-send (or a webhook that settled it)
+  // wins, and we abort BEFORE any customer contact, killing the just-published
+  // Square pay page so nothing chargeable outlives the abort.
+  const { data: flipped, error } = await db
     .from("invoices")
     .update({ status: "sent", sent_at: fresh.sent_at ?? now, updated_at: now })
     .eq("id", invoiceId)
-    .neq("status", "paid");
+    .in("status", ["draft", "sent", "viewed"])
+    .select("id");
   if (error) return { ok: false, notice: error.message };
+  if (!flipped || flipped.length === 0) {
+    const current = await getInvoice(invoiceId);
+    if (current?.status === "void" && current.square_invoice_id) {
+      await cancelSquareInvoice(current.square_invoice_id);
+    }
+    return {
+      ok: false,
+      notice: `Invoice ${invoice.number} changed while sending (now ${current?.status ?? "gone"}) — refresh and check it.`,
+    };
+  }
   const sent: Invoice = { ...fresh, status: "sent", sent_at: fresh.sent_at ?? now, hosted_payment_url: hostedUrl ?? null };
 
   if (canEmail) await notifyInvoiceSent(sent);
@@ -2663,7 +2915,9 @@ export async function createManualJob(input: {
     line_total_cents: total,
   });
 
-  if (startIso) {
+  // A back-dated manual job (forgot-to-log) must never trigger the customer
+  // confirmation text — the visit already happened.
+  if (startIso && new Date(startIso).getTime() >= Date.now()) {
     const job = await getJob(jobId);
     if (job) await armJobConfirmation(job, startIso);
   }

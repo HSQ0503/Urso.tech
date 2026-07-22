@@ -85,6 +85,7 @@ export default async function EstimatePage({ params }: { params: Promise<{ id: s
           <EstimateActions
             estimateId={estimate.id}
             status={estimate.status}
+            estimateType={estimate.estimate_type}
             phone={estimate.customer_phone ?? ""}
             email={estimate.customer_email ?? ""}
             optedOut={optedOut}

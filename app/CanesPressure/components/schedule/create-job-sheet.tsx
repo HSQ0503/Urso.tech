@@ -138,7 +138,7 @@ export function CreateJobSheet({ crews, onClose }: { crews: Crew[]; onClose: () 
 
         {scheduleNow && (
           <div className="space-y-3">
-            <SchedulePicker value={when} onChange={setWhen} />
+            <SchedulePicker value={when} onChange={setWhen} allowPast />
 
             <div>
               <p className="cp-label">Duration</p>
