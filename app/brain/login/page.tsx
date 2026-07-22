@@ -16,7 +16,7 @@ export default async function BrainLoginPage() {
   );
 
   return (
-    <div className="grid flex-1 place-items-center py-10">
+    <div className="grid place-items-center p-8">
       <div className="w-full max-w-[400px]">
         <div className="mb-6 text-center">
           <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-orange">Urso Brain</div>

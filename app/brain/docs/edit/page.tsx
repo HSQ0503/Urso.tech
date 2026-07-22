@@ -22,21 +22,22 @@ export default async function BrainDocEditPage({ searchParams }: { searchParams:
   if (!doc) redirect("/brain/docs");
 
   return (
-    <div className="mx-auto w-full max-w-[760px] py-6">
-      <Link
-        href={`/brain/docs/view?path=${encodeURIComponent(doc.path)}`}
-        className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-ink-dimmer transition-colors hover:text-orange"
-      >
-        ← Back to doc
-      </Link>
-      <h1 className="mt-3 text-[22px] font-bold tracking-[-0.02em] text-ink">Edit doc</h1>
-      {doc.origin === "vault" && (
-        <p className="mt-1.5 text-[13.5px] leading-[1.6] text-ink-dim">
-          This doc came from the Obsidian vault — saving makes the brain&rsquo;s copy the newer one; the disk file
-          catches up on the next <code className="text-orange">--export</code>.
-        </p>
-      )}
-      <div className="mt-6">
+    <div className="ob-content">
+      <div className="ob-wide !max-w-[760px]">
+        <Link
+          href={`/brain/docs/view?path=${encodeURIComponent(doc.path)}`}
+          className="text-[13px] text-[var(--ob-accent)] hover:underline"
+        >
+          ← Back to doc
+        </Link>
+        <h1 className="ob-title mt-2 !text-[1.7em]">Edit doc</h1>
+        {doc.origin === "vault" && (
+          <p className="mt-1.5 text-[14px] leading-[1.55] text-[var(--ob-muted)]">
+            This doc came from the Obsidian vault — saving makes the brain&rsquo;s copy the newer one; the disk file
+            catches up on the next <code>--export</code>.
+          </p>
+        )}
+        <div className="mt-6">
         <DocEditor
           mode="edit"
           departments={departments}
@@ -54,5 +55,6 @@ export default async function BrainDocEditPage({ searchParams }: { searchParams:
         />
       </div>
     </div>
+      </div>
   );
 }
