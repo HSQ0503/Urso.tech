@@ -803,6 +803,8 @@ export function GraphView({ nodes, edges }: { nodes: GraphNode[]; edges: [number
     let moved = false;
     let lastX = 0;
     let lastY = 0;
+    let downX = 0;
+    let downY = 0;
     let pinchDist = 0;
 
     const zoomAt = (mx: number, my: number, factor: number) => {
@@ -840,6 +842,8 @@ export function GraphView({ nodes, edges }: { nodes: GraphNode[]; edges: [number
       moved = false;
       lastX = e.clientX;
       lastY = e.clientY;
+      downX = e.clientX;
+      downY = e.clientY;
       const hit = nodeAt(x, y);
       if (hit !== null) {
         dragNode = hit;
@@ -869,6 +873,10 @@ export function GraphView({ nodes, edges }: { nodes: GraphNode[]; edges: [number
       }
 
       if (dragNode !== null) {
+        // A click carries a few pixels of jitter between down and up; without
+        // this dead zone it counted as a drag and the click-through to the doc
+        // never fired. Inside the zone the node holds still and stays a click.
+        if (!moved && Math.hypot(e.clientX - downX, e.clientY - downY) < 4) return;
         moved = true;
         px[dragNode] = (x - width / 2 - panX) / scale;
         py[dragNode] = (y - height / 2 - panY) / scale;
