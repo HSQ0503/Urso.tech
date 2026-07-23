@@ -5,6 +5,7 @@ import Link from "next/link";
 import { BadgeCheck, CalendarCheck2, Eye, Send, Trash2 } from "lucide-react";
 import {
   approveEstimateInPerson,
+  deleteEstimate,
   sendEstimate,
   voidEstimate,
   type ActionResult,
@@ -43,6 +44,9 @@ function useAction() {
     setFeedback(null);
     startTransition(async () => {
       const res = await fn();
+      // A redirecting action (deleteEstimate) never reaches here — Next
+      // carries its redirect through the transition. Belt-and-braces only.
+      if (!res) return;
       setFeedback(res.notice ? { ok: res.ok, text: res.notice } : null);
       if (res.ok) onOk?.();
     });
@@ -83,6 +87,7 @@ export function EstimateActions({
   const { isPending, feedback, run } = useAction();
   const [voidOpen, setVoidOpen] = useState(false);
   const [approveOpen, setApproveOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const [depositCollected, setDepositCollected] = useState(false);
   const [depositMethod, setDepositMethod] = useState<PaymentMethod>("cash");
   const [channelChoice, setChannelChoice] = useState<ChannelChoice>("both");
@@ -114,13 +119,58 @@ export function EstimateActions({
     );
   }
 
-  if (status === "declined" || status === "expired") {
+  if (status === "declined") {
     return (
       <p className="text-[13px] text-[var(--cp-muted)]">
-        {status === "declined"
-          ? "This estimate was declined. Start a new one from the lead if the customer changes their mind."
-          : "This estimate expired before the customer approved it. Start a new one to re-quote."}
+        This estimate was declined. Start a new one from the lead if the customer changes their mind.
       </p>
+    );
+  }
+
+  // Expired covers both a lapsed estimate and a voided one — the only two
+  // states (plus drafts) where a permanent delete is allowed.
+  if (status === "expired") {
+    return (
+      <div className="space-y-2.5">
+        <p className="text-[13px] text-[var(--cp-muted)]">
+          This estimate is no longer live — it expired or was voided. Start a new one to re-quote.
+        </p>
+        {!deleteOpen ? (
+          <button
+            type="button"
+            className="cp-btn cp-btn-sm cp-btn-danger w-full"
+            disabled={isPending}
+            onClick={() => setDeleteOpen(true)}
+          >
+            <Trash2 size={15} strokeWidth={2} /> Delete estimate
+          </button>
+        ) : (
+          <div className="space-y-2">
+            <p className="text-[12.5px] leading-snug text-[var(--cp-muted)]">
+              This permanently removes the estimate from your list. This can&apos;t be undone.
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                className="cp-btn cp-btn-sm flex-1"
+                disabled={isPending}
+                onClick={() => setDeleteOpen(false)}
+              >
+                Keep it
+              </button>
+              <button
+                type="button"
+                className="cp-btn cp-btn-sm cp-btn-danger flex-1"
+                disabled={isPending}
+                onClick={() => run(() => deleteEstimate(estimateId))}
+              >
+                {isPending ? "Deleting..." : "Confirm delete"}
+              </button>
+            </div>
+          </div>
+        )}
+        <Notice value={feedback} />
+      </div>
     );
   }
 
@@ -264,6 +314,44 @@ export function EstimateActions({
         <Trash2 size={15} strokeWidth={2} />
         Void estimate
       </button>
+
+      {/* Drafts were never sent, so they can be deleted outright; a sent
+          estimate must be voided first (the customer may have the link). */}
+      {isDraft && !deleteOpen && (
+        <button
+          type="button"
+          className="cp-btn cp-btn-sm cp-btn-danger w-full"
+          disabled={isPending}
+          onClick={() => setDeleteOpen(true)}
+        >
+          <Trash2 size={15} strokeWidth={2} /> Delete draft
+        </button>
+      )}
+      {isDraft && deleteOpen && (
+        <div className="space-y-2">
+          <p className="text-[12.5px] leading-snug text-[var(--cp-muted)]">
+            This permanently removes the draft. This can&apos;t be undone.
+          </p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className="cp-btn cp-btn-sm flex-1"
+              disabled={isPending}
+              onClick={() => setDeleteOpen(false)}
+            >
+              Keep it
+            </button>
+            <button
+              type="button"
+              className="cp-btn cp-btn-sm cp-btn-danger flex-1"
+              disabled={isPending}
+              onClick={() => run(() => deleteEstimate(estimateId))}
+            >
+              {isPending ? "Deleting..." : "Confirm delete"}
+            </button>
+          </div>
+        </div>
+      )}
 
       {voidOpen && (
         <div className="space-y-2">

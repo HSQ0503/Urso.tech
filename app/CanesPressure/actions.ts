@@ -1076,6 +1076,57 @@ export async function voidEstimate(estimateId: string): Promise<ActionResult> {
   return { ok: true };
 }
 
+// Permanently remove a mistyped or dead estimate — Sebastian's junk-cleanup
+// ask, mirroring deleteLead's discipline. Drafts and voided/expired ones
+// only: a live sent estimate must be voided first (the customer may have the
+// link open), declined stays (it IS the win-rate record), and anything that
+// spawned a job or invoice is business history. Items cascade; the sender
+// tasks are canceled explicitly rather than left for the cron to reap.
+export async function deleteEstimate(estimateId: string): Promise<ActionResult> {
+  if (!canesConfigured()) return DEMO;
+  const estimate = await getEstimate(estimateId);
+  if (!estimate) return { ok: false, notice: "Estimate not found." };
+  if (!["draft", "expired"].includes(estimate.status)) {
+    if (estimate.status === "approved") {
+      return { ok: false, notice: "This estimate was approved and has a job — it can't be deleted." };
+    }
+    if (estimate.status === "declined") {
+      return { ok: false, notice: "Declined estimates are part of your win-rate record — keep this one." };
+    }
+    return { ok: false, notice: "Void the estimate first, then delete it." };
+  }
+
+  const db = canesDb();
+  const [jobRef, invRef] = await Promise.all([
+    db.from("jobs").select("id").eq("estimate_id", estimateId).limit(1),
+    db.from("invoices").select("id").eq("estimate_id", estimateId).limit(1),
+  ]);
+  if (jobRef.error) return { ok: false, notice: jobRef.error.message };
+  if (invRef.error) return { ok: false, notice: invRef.error.message };
+  if ((jobRef.data ?? []).length > 0 || (invRef.data ?? []).length > 0) {
+    return { ok: false, notice: "This estimate has a job or invoice attached — keep it for the record." };
+  }
+
+  await db
+    .from("tasks")
+    .update({ status: "canceled" })
+    .eq("status", "pending")
+    .in("dedupe_key", [
+      `estimate_send:${estimateId}`,
+      `estimate_reminder:${estimateId}:d2`,
+      `estimate_reminder:${estimateId}:d5`,
+    ]);
+  const { error } = await db.from("estimates").delete().eq("id", estimateId);
+  if (error) return { ok: false, notice: error.message };
+  if (estimate.lead_id) {
+    await logEvent(estimate.lead_id, "estimate", `Estimate ${estimate.number} deleted`);
+  }
+  refresh();
+  // The detail page no longer exists — redirect from the action so navigation
+  // and revalidation land together (no not-found flash).
+  redirect("/CanesPressure/estimates");
+}
+
 // ── Public, token-scoped (called from the ungated /CanesPressure/e/[token]) ──
 
 export async function markViewed(token: string): Promise<ActionResult> {
