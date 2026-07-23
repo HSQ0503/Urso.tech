@@ -79,7 +79,19 @@ export function JobBilling({
   // a stale pre-discount prefill invites verifying more cash than is owed.
   const [summary, setSummary] = useState<JobInvoiceSummary | null>(invoice);
   const billedCents = summary?.total_cents ?? job.total_cents;
-  const [cashAmount, setCashAmount] = useState<string>((billedCents / 100).toFixed(2));
+  // Money already in hand against this bill: invoice-attached payments
+  // (deposits fold into amount_paid_cents) — or, before a bill exists, the
+  // job's collected deposit. Every ask below quotes the BALANCE, never the
+  // face total: "how is the customer paying $2,100" on a job with $520 down
+  // was Sebastian's headline bug, and a face-total cash prefill invites
+  // verifying money that isn't owed.
+  const creditCents = summary
+    ? Math.min(summary.amount_paid_cents, billedCents)
+    : job.deposit_paid_at
+      ? Math.min(job.deposit_cents, billedCents)
+      : 0;
+  const dueCents = Math.max(0, billedCents - creditCents);
+  const [cashAmount, setCashAmount] = useState<string>((dueCents / 100).toFixed(2));
   const refreshSummary = (id: string | null = invoiceId) => {
     if (!id) return;
     getInvoiceSummaryAction(id).then((s) => {
@@ -122,7 +134,8 @@ export function JobBilling({
         <div className="flex items-center gap-2">
           <Send size={15} strokeWidth={2} className="shrink-0 text-[var(--cp-muted)]" />
           <p className="text-[13px] font-medium">
-            Invoice {summary?.number ?? ""} sent — awaiting card payment ({fmtMoney(billedCents)}).
+            Invoice {summary?.number ?? ""} sent — awaiting card payment ({fmtMoney(dueCents)}
+            {creditCents > 0 ? " balance" : ""}).
           </p>
         </div>
         {mode !== "cash" ? (
@@ -210,8 +223,13 @@ export function JobBilling({
       {mode === "choose" && (
         <div className="space-y-2.5">
           <p className="text-[13px] font-medium">
-            How is the customer paying {fmtMoney(billedCents)}?
+            How is the customer paying {fmtMoney(dueCents)}?
           </p>
+          {creditCents > 0 && (
+            <p className="tabular-nums text-[12px] text-[var(--cp-muted)]">
+              {fmtMoney(billedCents)} − {fmtMoney(creditCents)} already collected.
+            </p>
+          )}
           <div className="grid grid-cols-1 gap-2">
             <button
               type="button"

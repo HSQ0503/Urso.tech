@@ -791,7 +791,7 @@ export const DEMO_JOBS: Job[] = [
     id: "job19", created_at: min(1300), estimate_id: null, lead_id: null, contact_id: "ct6",
     status: "completed", customer_name: "Elaine Brooks",
     job_address: "12 Sailfish Ct, Palm Beach Gardens",
-    total_cents: 28000, deposit_cents: 0, scheduled_at: etAt(0, "07:30"), assigned_to: "Crew B", notes: null,
+    total_cents: 28000, deposit_cents: 10000, deposit_paid_at: min(1250), scheduled_at: etAt(0, "07:30"), assigned_to: "Crew B", notes: null,
     duration_minutes: 120, ends_at: addMinutes(etAt(0, "07:30"), 120), arrival_window_minutes: 0,
     crew_id: "crewB", confirmed_at: min(1200), customer_phone: "+15615550161", customer_email: "elaine.brooks@example.com", job_name: "Driveway + walkway wash",
     gate_code: null, site_notes: null, canceled_reason: null,
@@ -931,6 +931,22 @@ export const DEMO_CALENDAR_EVENTS: CalendarEvent[] = [
 // ── Phase 2.5 fixtures: invoices, invoice line items, payments ────────────────
 
 export const DEMO_INVOICES: Invoice[] = [
+  // inv12 — DRAFT with a deposit already credited (job19): the billing panel
+  // must ask for the $180 balance, never the $280 face total.
+  {
+    id: "inv12", created_at: min(1290), updated_at: min(1250),
+    job_id: "job19", estimate_id: null, lead_id: null, contact_id: "ct6",
+    number: "INV-000012", status: "draft",
+    customer_name: "Elaine Brooks", customer_phone: "+15615550161", customer_email: "elaine.brooks@example.com",
+    job_address: "12 Sailfish Ct, Palm Beach Gardens", job_name: "Driveway + walkway wash",
+    subtotal_cents: 28000, adjustment_cents: 0, tax_cents: 0, tax_rate_bps: 0,
+    total_cents: 28000, amount_paid_cents: 10000,
+    message_to_customer: "Thanks for choosing Canes Pressure Washing! Your invoice is ready.",
+    terms: "Payment is due upon receipt. Thank you for your business.",
+    internal_notes: null, public_token: "demo-token-inv12",
+    square_invoice_id: null, square_order_id: null, hosted_payment_url: null,
+    sent_at: null, viewed_at: null, paid_at: null, voided_at: null, employee: "Sebastian",
+  },
   // inv1 — SENT, awaiting card payment (backs completed job6).
   {
     id: "inv1", created_at: min(1400), updated_at: min(1380),
@@ -1087,6 +1103,14 @@ export const DEMO_INVOICE_ITEMS: InvoiceItem[] = [
 ];
 
 export const DEMO_PAYMENTS: Payment[] = [
+  // job19's up-front deposit — Sebastian's "$520 down on a $2,100 job" state:
+  // completed job, draft invoice, deposit already folded into amount_paid.
+  {
+    id: "pay13", created_at: min(1250), invoice_id: "inv12", job_id: "job19",
+    amount_cents: 10000, currency: "USD", method: "cash", source: "manual",
+    status: "completed", kind: "deposit", square_payment_id: null, external_event_id: null,
+    recorded_by: "owner", note: null,
+  },
   // inv2 was settled in cash — one manual ledger row.
   {
     id: "pay2", created_at: min(2880), invoice_id: "inv2", job_id: "job7",
