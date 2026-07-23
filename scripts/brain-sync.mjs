@@ -45,6 +45,34 @@ const config = JSON.parse(readFileSync(new URL("./brain-sync.config.json", impor
 const VAULT = config.vaultRoot;
 const ORGANIZATION_ID = config.organizationId ?? "urso";
 
+// Scope metadata is relational, so validate it against the live organization
+// before constructing rows. Existing vault files may already use `project:` as
+// a human-readable label; only known slugs are treated as Brain project IDs.
+const [{ data: projectRows, error: projectReadError }, { data: departmentRows, error: departmentReadError }] =
+  await Promise.all([
+    supabase.from("brain_projects").select("id").eq("organization_id", ORGANIZATION_ID),
+    supabase.from("brain_departments").select("id").eq("organization_id", ORGANIZATION_ID),
+  ]);
+if (projectReadError || departmentReadError) {
+  console.error(
+    `✖ Could not read Brain scope catalog: ${projectReadError?.message ?? departmentReadError?.message}\n` +
+      "  (run 0001_brain.sql and then 0002_company_brain.sql in the URSO HQ project's SQL editor first)",
+  );
+  process.exit(1);
+}
+const projectIds = new Set((projectRows ?? []).map((row) => row.id));
+const departmentIds = new Set((departmentRows ?? []).map((row) => row.id));
+for (const root of config.roots) {
+  if (root.project && !projectIds.has(root.project)) {
+    console.error(`✖ Unknown project "${root.project}" in brain-sync.config.json for root "${root.dir}"`);
+    process.exit(1);
+  }
+  if (root.department && !departmentIds.has(root.department)) {
+    console.error(`✖ Unknown department "${root.department}" in brain-sync.config.json for root "${root.dir}"`);
+    process.exit(1);
+  }
+}
+
 // ---------- frontmatter + markdown helpers ----------
 
 const asList = (v) =>
@@ -143,6 +171,26 @@ function* mdFiles(dir, recursive) {
 }
 
 const disk = new Map(); // path -> row (links resolved later)
+const ignoredLegacyScopes = [];
+
+function resolveScope({ meta, explicitKey, legacyKey, rootValue, knownIds, kind, path }) {
+  const explicitValue = meta[explicitKey];
+  if (explicitValue) {
+    if (explicitValue === "none") return null;
+    if (knownIds.has(explicitValue)) return explicitValue;
+    console.error(`✖ Unknown ${kind} "${explicitValue}" in ${path} (${explicitKey})`);
+    process.exit(1);
+  }
+
+  const legacyValue = meta[legacyKey];
+  if (!legacyValue) return rootValue ?? null;
+  if (legacyValue === "none") return null;
+  if (knownIds.has(legacyValue)) return legacyValue;
+
+  ignoredLegacyScopes.push({ path, field: legacyKey, value: legacyValue });
+  return rootValue ?? null;
+}
+
 for (const root of config.roots) {
   const dir = join(VAULT, root.dir);
   // A root may not exist yet — _Brain/ appears on the first --export.
@@ -160,8 +208,24 @@ for (const root of config.roots) {
     const filename = relPath.split("/").pop();
 
     const doc_type = ["core", "doc", "rule"].includes(meta.type) ? meta.type : root.type ?? "doc";
-    const project = meta.project === "none" ? null : meta.project || root.project || null;
-    const department = meta.department === "none" ? null : meta.department || root.department || null;
+    const project = resolveScope({
+      meta,
+      explicitKey: "brain_project",
+      legacyKey: "project",
+      rootValue: root.project,
+      knownIds: projectIds,
+      kind: "project",
+      path: relPath,
+    });
+    const department = resolveScope({
+      meta,
+      explicitKey: "brain_department",
+      legacyKey: "department",
+      rootValue: root.department,
+      knownIds: departmentIds,
+      kind: "department",
+      path: relPath,
+    });
     const visibility = ["organization", "department", "project", "restricted"].includes(meta.visibility)
       ? meta.visibility
       : "organization";
@@ -197,6 +261,13 @@ for (const root of config.roots) {
     count++;
   }
   console.log(`  ${root.dir || "."} → ${count} docs`);
+}
+if (ignoredLegacyScopes.length) {
+  const values = [...new Set(ignoredLegacyScopes.map(({ field, value }) => `${field}: ${value}`))];
+  console.log(
+    `\nℹ Ignored ${ignoredLegacyScopes.length} legacy scope value${ignoredLegacyScopes.length === 1 ? "" : "s"} ` +
+      `that are not Brain slugs; folder scope was used:\n  ${values.join("\n  ")}`,
+  );
 }
 
 // ---------- read DB state ----------
