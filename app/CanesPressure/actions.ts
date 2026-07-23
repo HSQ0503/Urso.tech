@@ -441,7 +441,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // The contact snapshot fields that stay editable after an estimate/invoice is
 // sent — a typo'd phone/email must be fixable or the document is undeliverable.
-const CONTACT_PATCH_KEYS = ["customerName", "customerPhone", "customerEmail"];
+const CONTACT_PATCH_KEYS = ["customerName", "customerPhone", "customerEmail", "contactId"];
 
 function lineTotalCents(item: { quantity: number; unit_price_cents: number; discount_cents: number }): number {
   return Math.round(item.quantity * item.unit_price_cents) - item.discount_cents;
@@ -517,6 +517,45 @@ export async function createEstimateFromLead(
   });
 }
 
+// Which client record an estimate files under: an explicit picker hit wins;
+// with no phone/email to key on, dedupe by exact (escaped) name against live
+// contacts; else ensureContact creates/links one. The client-first rule —
+// every estimate lives under Customers from the first touch.
+async function resolveEstimateContact(input: {
+  contactId?: string | null;
+  name?: string | null;
+  phone?: string | null; // already E.164 (or null)
+  email?: string | null;
+  address?: string | null;
+  leadId?: string | null;
+}): Promise<string | null> {
+  if (input.contactId) return input.contactId;
+  const name = input.name?.trim();
+  if (!name && !input.phone) return null;
+  if (name && !input.phone && !input.email?.trim()) {
+    // ilike is a pattern match — escape the pattern chars a real business
+    // name could carry ("100% Clean LLC") so it can't match strangers.
+    const pattern = name.replace(/[\\%_]/g, (c) => `\\${c}`);
+    const { data: sameName } = await canesDb()
+      .from("contacts")
+      .select("id")
+      .ilike("name", pattern)
+      .eq("archived", false)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (sameName?.id) return sameName.id as string;
+  }
+  const contact = await ensureContact({
+    name: input.name,
+    phone: input.phone,
+    email: input.email,
+    address: input.address,
+    leadId: input.leadId,
+  });
+  return contact?.id ?? null;
+}
+
 export async function createEstimate(input: {
   leadId?: string;
   contactId?: string;
@@ -537,11 +576,23 @@ export async function createEstimate(input: {
   const expiresAt = new Date(
     Date.now() + settings.estimate_expiry_days * 86_400_000,
   ).toISOString();
+  // Client-first (Sebastian's ask): an estimate for an unmatched name creates
+  // the customer record NOW, not at approval — so the Contacts tab is the one
+  // place every client lives from the first touch.
+  const contactId = await resolveEstimateContact({
+    contactId: input.contactId,
+    name: input.customerName,
+    phone,
+    email: input.customerEmail,
+    address: input.jobAddress,
+    leadId: input.leadId,
+  });
+
   const { data, error } = await canesDb()
     .from("estimates")
     .insert({
       lead_id: input.leadId ?? null,
-      contact_id: input.contactId ?? null,
+      contact_id: contactId,
       number,
       estimate_type: input.estimateType,
       status: "draft",
@@ -573,6 +624,7 @@ export async function updateEstimate(
     customerName?: string;
     customerPhone?: string;
     customerEmail?: string;
+    contactId?: string | null;
     jobAddress?: string;
     jobName?: string;
     estimateType?: EstimateType;
@@ -606,6 +658,22 @@ export async function updateEstimate(
     row.customer_phone = phone;
   }
   if (patch.customerEmail !== undefined) row.customer_email = patch.customerEmail || null;
+  if (patch.contactId !== undefined) {
+    // An explicit unlink with a typed name is a NEW client — resolve it now
+    // (same client-first rule as createEstimate) rather than leaving the
+    // estimate orphaned from Customers.
+    row.contact_id =
+      patch.contactId ??
+      (await resolveEstimateContact({
+        name: patch.customerName ?? estimate.customer_name,
+        phone: patch.customerPhone !== undefined
+          ? ((row.customer_phone as string | null) ?? null)
+          : estimate.customer_phone,
+        email: patch.customerEmail ?? estimate.customer_email,
+        address: patch.jobAddress ?? estimate.job_address,
+        leadId: estimate.lead_id,
+      }));
+  }
   if (patch.jobAddress !== undefined) row.job_address = patch.jobAddress || null;
   if (patch.jobName !== undefined) row.job_name = patch.jobName || null;
   if (patch.estimateType !== undefined) row.estimate_type = patch.estimateType;

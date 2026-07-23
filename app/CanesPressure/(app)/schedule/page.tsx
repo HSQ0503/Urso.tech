@@ -1,4 +1,5 @@
 import { listVisitsInRange } from "@/lib/canes/data";
+import { listCustomerDirectory } from "@/lib/canes/customers";
 import {
   getScheduleBoard,
   getUnscheduledJobs,
@@ -52,7 +53,7 @@ export default async function SchedulePage({
   // Run the ET midnight through etLocalToIso so DST never shifts the boundary.
   const rangeStart = etLocalToIso(`${fetchYmd}T00:00`);
 
-  const [board, unscheduled, visits, crews, events, invoiceRows] = await Promise.all([
+  const [board, unscheduled, visits, crews, events, invoiceRows, customers] = await Promise.all([
     getScheduleBoard(rangeStart, days),
     getUnscheduledJobs(),
     // Visits come from the same window as the board — getAgenda only looked
@@ -61,6 +62,7 @@ export default async function SchedulePage({
     listCrews(true),
     listCalendarEvents(rangeStart, days),
     listInvoices(),
+    listCustomerDirectory(),
   ]);
 
   // A token-free job→invoice summary so the job sheet can show billing state.
@@ -112,6 +114,7 @@ export default async function SchedulePage({
         unscheduled={unscheduled}
         visits={visits}
         crews={crews}
+        customers={customers}
         events={events}
         invoices={invoices}
         view={view}

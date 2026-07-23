@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, ChevronLeft, ExternalLink } from "lucide-react";
 import { getLead, getSettings } from "@/lib/canes/data";
+import { listCustomerDirectory } from "@/lib/canes/customers";
 import { getEstimate, getEstimateItems, listCatalog } from "@/lib/canes/estimates";
 import {
   fmtEt,
@@ -21,11 +22,12 @@ export const dynamic = "force-dynamic";
 export default async function EstimatePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
-  const [estimate, items, catalog, settings] = await Promise.all([
+  const [estimate, items, catalog, settings, customers] = await Promise.all([
     getEstimate(id),
     getEstimateItems(id),
     listCatalog(true),
     getSettings(),
+    listCustomerDirectory(),
   ]);
   if (!estimate) notFound();
 
@@ -115,6 +117,7 @@ export default async function EstimatePage({ params }: { params: Promise<{ id: s
             estimate={estimate}
             initialItems={items}
             catalog={catalog}
+            customers={customers}
             depositPresets={settings.deposit_presets}
             readOnly={readOnly}
             optedOut={optedOut}

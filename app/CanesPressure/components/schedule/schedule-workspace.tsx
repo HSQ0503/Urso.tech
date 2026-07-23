@@ -34,6 +34,7 @@ import { JobDetailSheet } from "./job-detail-sheet";
 import { VisitSheet } from "./visit-sheet";
 import { DayRunSheet } from "./day-run-sheet";
 import { CreateEventSheet } from "./create-event-sheet";
+import type { CustomerHit } from "@/lib/canes/customers";
 import { CreateJobSheet } from "./create-job-sheet";
 import { SheetShell, useSheetBehavior } from "./sheet-shell";
 import {
@@ -152,6 +153,7 @@ export function ScheduleWorkspace({
   unscheduled,
   visits,
   crews,
+  customers,
   events,
   invoices,
   view: viewProp,
@@ -162,6 +164,7 @@ export function ScheduleWorkspace({
   unscheduled: JobWithItems[];
   visits: Lead[];
   crews: Crew[];
+  customers: CustomerHit[];
   events: CalendarEvent[];
   invoices: Record<string, JobInvoiceSummary>;
   view: CalView;
@@ -632,7 +635,9 @@ export function ScheduleWorkspace({
         />
       )}
       {createEventOpen && <CreateEventSheet crews={crews} onClose={() => setCreateEventOpen(false)} />}
-      {createJobOpen && <CreateJobSheet crews={crews} onClose={() => setCreateJobOpen(false)} />}
+      {createJobOpen && (
+        <CreateJobSheet crews={crews} customers={customers} onClose={() => setCreateJobOpen(false)} />
+      )}
       {createMenuOpen && (
         <SheetShell title="Create" onClose={() => setCreateMenuOpen(false)}>
           <div className="flex flex-col gap-2">

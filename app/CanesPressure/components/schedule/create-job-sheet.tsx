@@ -1,16 +1,19 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { createManualJob, type ActionResult } from "@/app/CanesPressure/actions";
 import { etLocalToIso, fmtMoney, type Crew } from "@/lib/canes/types";
+import type { CustomerHit } from "@/lib/canes/customers";
 import { AddressInput } from "../address-input";
+import { CustomerPicker } from "../customer-picker";
 import { PhoneInput } from "../phone-input";
 import { isCompleteWhen, SchedulePicker } from "../leads/schedule-picker";
 import { SheetShell } from "./sheet-shell";
 
-// Manual-job sheet — the mobile FAB's "Job" path. A lean version of the
-// customers-page form: name a customer and a job, price it, optionally put it
-// on the calendar. createManualJob links the contact and lead server-side.
+// Manual-job sheet — the mobile FAB's "Job" path. Client-first: the name
+// field is a typeahead over existing customers; a pick links the contact and
+// prefills phone + address, an unmatched name becomes a new Customers entry
+// server-side (createManualJob → ensureContact).
 
 type Feedback = { ok: boolean; text: string } | null;
 
@@ -22,7 +25,15 @@ function toCents(raw: string): number {
   return Number.isFinite(n) ? Math.round(n * 100) : 0;
 }
 
-export function CreateJobSheet({ crews, onClose }: { crews: Crew[]; onClose: () => void }) {
+export function CreateJobSheet({
+  crews,
+  customers,
+  onClose,
+}: {
+  crews: Crew[];
+  customers: CustomerHit[];
+  onClose: () => void;
+}) {
   const [isPending, startTransition] = useTransition();
   const [feedback, setFeedback] = useState<Feedback>(null);
 
@@ -35,6 +46,35 @@ export function CreateJobSheet({ crews, onClose }: { crews: Crew[]; onClose: () 
   const [when, setWhen] = useState("");
   const [duration, setDuration] = useState(120);
   const [crewId, setCrewId] = useState("");
+  const [contact, setContact] = useState<CustomerHit | null>(null);
+  const [pickSeq, setPickSeq] = useState(0);
+  // What the last pick filled in — editing the name only clears fields the
+  // pick wrote (never something Sebastian typed himself).
+  const applied = useRef<{ phone: string; address: string }>({ phone: "", address: "" });
+
+  // Compare phones by digits — the input shows "(561) 555-0118" while the
+  // directory carries "+15615550118".
+  const digits = (v: string) => v.replace(/\D/g, "");
+
+  function pickCustomer(hit: CustomerHit) {
+    setContact(hit);
+    setPickSeq((n) => n + 1); // remount PhoneInput even when re-picking the same client
+    setCustomerName(hit.name ?? "");
+    setCustomerPhone(hit.phone ?? "");
+    setJobAddress(hit.address ?? "");
+    applied.current = { phone: hit.phone ?? "", address: hit.address ?? "" };
+  }
+
+  function changeName(name: string) {
+    setCustomerName(name);
+    if (contact && name.trim() !== (contact.name ?? "").trim()) {
+      setContact(null);
+      if (digits(customerPhone) === digits(applied.current.phone)) setCustomerPhone("");
+      if (jobAddress === applied.current.address) setJobAddress("");
+      applied.current = { phone: "", address: "" };
+      setPickSeq((n) => n + 1); // remount PhoneInput so a cleared phone shows empty
+    }
+  }
 
   const cents = toCents(total);
   const canSubmit =
@@ -47,6 +87,7 @@ export function CreateJobSheet({ crews, onClose }: { crews: Crew[]; onClose: () 
     setFeedback(null);
     startTransition(async () => {
       const res: ActionResult = await createManualJob({
+        contactId: contact?.id,
         customerName: customerName.trim(),
         customerPhone: customerPhone.trim() || undefined,
         jobName: jobName.trim(),
@@ -65,19 +106,21 @@ export function CreateJobSheet({ crews, onClose }: { crews: Crew[]; onClose: () 
     <SheetShell title="New job" onClose={onClose}>
       <div className="space-y-3">
         <div>
-          <label className="cp-label" htmlFor="job-customer">Customer name</label>
-          <input
+          <label className="cp-label" htmlFor="job-customer">Client name</label>
+          <CustomerPicker
             id="job-customer"
-            className="cp-input"
-            placeholder="Jane Rivera"
+            customers={customers}
             value={customerName}
-            onChange={(e) => setCustomerName(e.target.value)}
+            onChange={changeName}
+            onPick={pickCustomer}
+            linkedId={contact?.id ?? null}
           />
         </div>
 
         <div>
           <label className="cp-label" htmlFor="job-phone">Phone (optional)</label>
           <PhoneInput
+            key={`${contact?.id ?? "new"}:${pickSeq}`}
             id="job-phone"
             placeholder="(561) 555-0134"
             defaultValue={customerPhone}

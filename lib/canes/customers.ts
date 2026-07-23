@@ -47,6 +47,56 @@ function invoiceContactId(inv: Invoice, jobById: Map<string, Job>): string | nul
   return inv.contact_id ?? (inv.job_id ? jobById.get(inv.job_id)?.contact_id ?? null : null);
 }
 
+// The lean client directory behind the CustomerPicker typeahead: every live
+// (non-archived) contact with its primary address, ABC order. Small enough to
+// ship to the client whole — filtering happens per keystroke in the browser.
+export type CustomerHit = {
+  id: string;
+  name: string | null;
+  phone: string | null;
+  email: string | null;
+  address: string | null;
+};
+
+export async function listCustomerDirectory(): Promise<CustomerHit[]> {
+  let contacts: Contact[];
+  let addresses: Address[];
+  if (isDemo()) {
+    contacts = DEMO_CONTACTS.filter((c) => !c.archived);
+    addresses = DEMO_ADDRESSES;
+  } else {
+    const db = canesDb();
+    const [c, a] = await Promise.all([
+      db.from("contacts").select("*").eq("archived", false).limit(1000),
+      db.from("addresses").select("*").limit(2000),
+    ]);
+    // Degrade, never throw: a directory blip must not 500 the pages that
+    // merely feed the typeahead — the picker falls back to a plain input.
+    if (c.error) {
+      console.error(`[canes] listCustomerDirectory: ${c.error.message}`);
+      return [];
+    }
+    contacts = (c.data ?? []) as Contact[];
+    addresses = (a.data ?? []) as Address[];
+  }
+  const primaryByContact = new Map<string, string>();
+  for (const a of addresses) {
+    if (!a.contact_id) continue;
+    if (a.is_primary || !primaryByContact.has(a.contact_id)) {
+      primaryByContact.set(a.contact_id, a.line);
+    }
+  }
+  return contacts
+    .map((c) => ({
+      id: c.id,
+      name: c.name,
+      phone: c.phone,
+      email: c.email,
+      address: primaryByContact.get(c.id) ?? null,
+    }))
+    .sort((a, b) => (a.name ?? "￿").localeCompare(b.name ?? "￿", "en", { sensitivity: "base" }));
+}
+
 export async function listCustomers(query?: string): Promise<CustomerSummary[]> {
   let contacts: Contact[];
   let addresses: Address[];

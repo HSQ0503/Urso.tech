@@ -2,9 +2,11 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { Check, Plus, Trash2 } from "lucide-react";
+import type { CustomerHit } from "@/lib/canes/customers";
 import { AddressInput } from "../address-input";
+import { CustomerPicker } from "../customer-picker";
 import { PhoneInput } from "../phone-input";
 import {
   createEstimate,
@@ -179,11 +181,14 @@ export function EstimateBuilder({
   depositPresets,
   readOnly = false,
   optedOut = false,
+  customers = [],
 }: {
   mode: "create" | "edit";
   estimate?: Estimate;
   initialItems?: EstimateItem[];
   catalog: CatalogItem[];
+  // The client directory behind the name typeahead.
+  customers?: CustomerHit[];
   // Create-mode seeds; edit-mode derives its seeds from `estimate`.
   prefill?: {
     customerName?: string;
@@ -233,6 +238,49 @@ export function EstimateBuilder({
   const [customerPhone, setCustomerPhone] = useState(seed.customerPhone);
   const [customerEmail, setCustomerEmail] = useState(seed.customerEmail);
   const [jobAddress, setJobAddress] = useState(seed.jobAddress);
+  // Client link (Sebastian's client-first ask): a picker hit binds contact_id;
+  // typing a different name unbinds it and reads as a new client. pickedName
+  // tracks the name the current link belongs to.
+  const [contactId, setContactId] = useState(seed.contactId);
+  const [pickSeq, setPickSeq] = useState(0);
+  const pickedName = useRef<string | null>(seed.contactId ? seed.customerName : null);
+  // What the current link filled in — a seeded link's fields count too, so
+  // unlinking a seeded client never leaves their phone/email/address behind
+  // on a "new" client (ensureContact would silently re-link them by phone).
+  const appliedPick = useRef<{ phone: string; email: string; address: string }>(
+    seed.contactId
+      ? { phone: seed.customerPhone, email: seed.customerEmail, address: seed.jobAddress }
+      : { phone: "", email: "", address: "" },
+  );
+
+  // Compare phones by digits — the input shows "(561) 555-0118" while the
+  // directory carries "+15615550118".
+  const digits = (v: string) => v.replace(/\D/g, "");
+
+  function pickCustomer(hit: CustomerHit) {
+    setContactId(hit.id);
+    setPickSeq((n) => n + 1); // remount PhoneInput even when re-picking the same client
+    pickedName.current = hit.name ?? "";
+    setCustomerName(hit.name ?? "");
+    setCustomerPhone(hit.phone ?? "");
+    setCustomerEmail(hit.email ?? "");
+    setJobAddress(hit.address ?? "");
+    appliedPick.current = { phone: hit.phone ?? "", email: hit.email ?? "", address: hit.address ?? "" };
+  }
+
+  function changeCustomerName(name: string) {
+    setCustomerName(name);
+    if (contactId && name.trim() !== (pickedName.current ?? "").trim()) {
+      setContactId(null);
+      pickedName.current = null;
+      // Only clear what the link wrote — never something typed by hand.
+      if (digits(customerPhone) === digits(appliedPick.current.phone)) setCustomerPhone("");
+      if (customerEmail === appliedPick.current.email) setCustomerEmail("");
+      if (jobAddress === appliedPick.current.address) setJobAddress("");
+      appliedPick.current = { phone: "", email: "", address: "" };
+      setPickSeq((n) => n + 1); // remount PhoneInput so a cleared phone shows empty
+    }
+  }
   const [jobName, setJobName] = useState(seed.jobName);
   const [message, setMessage] = useState(seed.messageToCustomer);
   const [terms, setTerms] = useState(seed.terms);
@@ -314,6 +362,7 @@ export function EstimateBuilder({
       customerName,
       customerPhone,
       customerEmail,
+      contactId,
       jobAddress,
       jobName,
       estimateType: type,
@@ -339,7 +388,7 @@ export function EstimateBuilder({
     }
     const created = await createEstimate({
       leadId: seed.leadId ?? undefined,
-      contactId: seed.contactId ?? undefined,
+      contactId: contactId ?? undefined,
       estimateType: type,
       customerName: customerName || undefined,
       customerPhone: customerPhone || undefined,
@@ -348,7 +397,10 @@ export function EstimateBuilder({
       jobName: jobName || undefined,
     });
     if (!created.ok || !created.estimateId) return created;
-    const upd = await updateEstimate(created.estimateId, detailsPatch());
+    // Never send contactId in the follow-up patch: for a new client the state
+    // is null, and it would wipe the contact link createEstimate just resolved
+    // server-side (name dedupe / ensureContact).
+    const upd = await updateEstimate(created.estimateId, { ...detailsPatch(), contactId: undefined });
     if (!upd.ok) return upd;
     const items = await saveEstimateItems(created.estimateId, itemsPayload());
     if (!items.ok) return items;
@@ -465,19 +517,21 @@ export function EstimateBuilder({
         <h2 className="text-[15px] font-semibold">Customer &amp; job</h2>
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
           <div>
-            <label className="cp-label" htmlFor="est-name">Customer name</label>
-            <input
+            <label className="cp-label" htmlFor="est-name">Client name</label>
+            <CustomerPicker
               id="est-name"
-              className="cp-input"
+              customers={customers}
               value={customerName}
-              onChange={(e) => setCustomerName(e.target.value)}
+              onChange={changeCustomerName}
+              onPick={pickCustomer}
+              linkedId={contactId}
               disabled={disabled}
-              placeholder="Customer name"
             />
           </div>
           <div>
             <label className="cp-label" htmlFor="est-phone">Phone</label>
             <PhoneInput
+              key={`${contactId ?? "manual"}:${pickSeq}`}
               id="est-phone"
               defaultValue={customerPhone}
               onChange={setCustomerPhone}

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ArrowLeft, ChevronLeft } from "lucide-react";
 import { getLead, getSettings } from "@/lib/canes/data";
-import { getCustomer } from "@/lib/canes/customers";
+import { getCustomer, listCustomerDirectory } from "@/lib/canes/customers";
 import { listCatalog } from "@/lib/canes/estimates";
 import { EstimateBuilder } from "@/app/CanesPressure/components/estimates/estimate-builder";
 
@@ -19,11 +19,12 @@ export default async function NewEstimatePage({
 }) {
   const { lead: leadId, customer: customerId } = await searchParams;
 
-  const [lead, customer, catalog, settings] = await Promise.all([
+  const [lead, customer, catalog, settings, customers] = await Promise.all([
     leadId ? getLead(leadId) : Promise.resolve(null),
     !leadId && customerId ? getCustomer(customerId) : Promise.resolve(null),
     listCatalog(true),
     getSettings(),
+    listCustomerDirectory(),
   ]);
 
   // eslint-disable-next-line react-hooks/purity -- per-request dynamic server render; "now" is stable for this render
@@ -108,6 +109,7 @@ export default async function NewEstimatePage({
         <EstimateBuilder
           mode="create"
           catalog={catalog}
+          customers={customers}
           depositPresets={settings.deposit_presets}
           optedOut={Boolean(lead?.opted_out ?? customer?.lead?.opted_out)}
           prefill={{
