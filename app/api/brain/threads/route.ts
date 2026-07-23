@@ -2,6 +2,7 @@
 // service-role client (ownership enforced in code).
 
 import { getBrainUser } from "@/lib/brain/access";
+import { resolveBrainPrincipal } from "@/lib/brain/authorization";
 import { ursoDbSafe, URSO_DB_MISSING } from "@/lib/brain/supabase";
 
 export async function GET() {
@@ -10,9 +11,12 @@ export async function GET() {
 
   const admin = ursoDbSafe();
   if (!admin) return Response.json({ error: URSO_DB_MISSING }, { status: 503 });
+  const principal = await resolveBrainPrincipal(admin, user);
+  if (!principal) return Response.json({ error: "active brain membership required" }, { status: 403 });
   const { data, error } = await admin
     .from("brain_threads")
     .select("id, title, project_id, model, updated_at")
+    .eq("organization_id", principal.organizationId)
     .eq("user_id", user.id)
     .order("updated_at", { ascending: false })
     .limit(50);
@@ -28,9 +32,15 @@ export async function POST(req: Request) {
   const body = (await req.json().catch(() => ({}))) as { projectId?: string };
   const admin = ursoDbSafe();
   if (!admin) return Response.json({ error: URSO_DB_MISSING }, { status: 503 });
+  const principal = await resolveBrainPrincipal(admin, user);
+  if (!principal) return Response.json({ error: "active brain membership required" }, { status: 403 });
   const { data, error } = await admin
     .from("brain_threads")
-    .insert({ user_id: user.id, project_id: body.projectId ?? null })
+    .insert({
+      organization_id: principal.organizationId,
+      user_id: user.id,
+      project_id: body.projectId ?? null,
+    })
     .select("id, title, project_id, model, updated_at")
     .single();
   if (error) return Response.json({ error: error.message }, { status: 500 });

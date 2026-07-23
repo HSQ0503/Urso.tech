@@ -9,19 +9,38 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport } from "ai";
-import { Check, ChevronDown, Copy, Maximize2, Menu, Minimize2, PenLine, Send, Square, Trash2 } from "lucide-react";
+import { DefaultChatTransport, type UIMessage } from "ai";
+import {
+  Check,
+  ChevronDown,
+  Copy,
+  Database,
+  FileText,
+  LockKeyhole,
+  Maximize2,
+  Menu,
+  Minimize2,
+  PanelRight,
+  PenLine,
+  Search,
+  Send,
+  ShieldCheck,
+  Square,
+  Trash2,
+  X,
+} from "lucide-react";
 import { RichText } from "@/components/dashboard/rich-text";
 import { BRAIN_PROVIDERS } from "@/lib/brain/catalog";
-import type { BrainProvider } from "@/lib/brain/types";
+import type { BrainContextReceipt, BrainProvider, BrainUIData } from "@/lib/brain/types";
 
 type ThreadSummary = { id: string; title: string; project_id: string | null; model: string; updated_at: string };
 type ProjectOption = { id: string; name: string };
+type BrainUIMessage = UIMessage<unknown, BrainUIData>;
 
 // Tool-activity chips: show WHAT the brain actually touched (real doc titles,
 // search queries), and mark writes distinctly so edits are never invisible.
 type ToolPart = { type: string; text?: string; input?: unknown; output?: unknown };
-const WRITE_TOOLS = new Set(["create_doc", "update_doc", "link_docs", "delete_doc"]);
+const WRITE_TOOLS = new Set(["propose_knowledge_update"]);
 
 function toolChips(parts: ToolPart[]): { label: string; write: boolean }[] {
   const chips: { label: string; write: boolean }[] = [];
@@ -42,6 +61,7 @@ function toolChips(parts: ToolPart[]): { label: string; write: boolean }[] {
       case "update_doc": label = `updated · ${baseName(str(input.path)) ?? "doc"}`; break;
       case "link_docs": label = "connected docs"; break;
       case "delete_doc": label = `deleted · ${baseName(str(input.path)) ?? "doc"}`; break;
+      case "propose_knowledge_update": label = `proposed · ${baseName(str(output.targetPath) ?? str(input.targetPath)) ?? "knowledge"}`; break;
       default: label = name.replace(/_/g, " ");
     }
     if (label.length > 44) label = `${label.slice(0, 43)}…`;
@@ -118,6 +138,174 @@ function ThinkingLabel({ label }: { label: string }) {
       <span className="size-2 animate-pulse rounded-full bg-orange" />
       {label}…
     </span>
+  );
+}
+
+const compactNumber = (value: number): string =>
+  new Intl.NumberFormat("en-US", { notation: value >= 1000 ? "compact" : "standard" }).format(value);
+
+function ContextReceiptPanel({
+  receipt,
+  onClose,
+}: {
+  receipt: BrainContextReceipt | null;
+  onClose: () => void;
+}) {
+  return (
+    <aside
+      aria-label="Context receipt"
+      className="absolute inset-y-0 right-0 z-30 flex w-[min(370px,calc(100%-12px))] flex-col border-l border-[var(--brain-border)] bg-[color-mix(in_srgb,var(--brain-rail)_96%,transparent)] shadow-[-18px_0_60px_rgba(0,0,0,0.3)] backdrop-blur-xl"
+    >
+      <header className="flex min-h-[72px] shrink-0 items-center justify-between border-b border-[var(--brain-border)] px-5">
+        <div>
+          <div className="flex items-center gap-2 text-[13px] font-semibold tracking-[-0.01em]">
+            <ShieldCheck className="size-4 text-orange" />
+            Context Receipt
+          </div>
+          <p className="mt-1 text-[10.5px] uppercase tracking-[0.12em] text-[var(--brain-muted)]">
+            Server-compiled evidence
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close context receipt"
+          className="grid size-11 cursor-pointer place-items-center rounded-full text-[var(--brain-muted)] transition-colors hover:bg-[var(--brain-soft)] hover:text-[var(--brain-text)]"
+        >
+          <X className="size-4" />
+        </button>
+      </header>
+
+      {!receipt ? (
+        <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-8 text-center">
+          <span className="grid size-12 place-items-center rounded-2xl bg-orange-soft text-orange">
+            <PanelRight className="size-5" />
+          </span>
+          <h2 className="mt-5 text-[15px] font-medium">Evidence will appear here</h2>
+          <p className="mt-2 max-w-[260px] text-[12.5px] leading-5 text-[var(--brain-muted)]">
+            Ask the Brain anything. Before the model runs, the server will authorize, retrieve, and disclose the exact context it loaded.
+          </p>
+        </div>
+      ) : (
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4">
+          <div className="rounded-2xl border border-orange/20 bg-orange-wash p-4">
+            <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-orange">
+              <LockKeyhole className="size-3.5" />
+              Authorization passed
+            </div>
+            <p className="mt-2 text-[12px] leading-5 text-[var(--brain-muted-strong)]">
+              Membership, visibility, and ACL policy ran before search. The model received only the evidence listed below.
+            </p>
+          </div>
+
+          <section className="mt-5">
+            <h2 className="px-1 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-[var(--brain-muted)]">Scope</h2>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              {[
+                ["Department", receipt.scope.department],
+                ["Role", receipt.scope.role.replaceAll("_", " ")],
+                ["Project", receipt.scope.project?.name ?? "Company-wide"],
+                ["Catalog", `${receipt.authorization.permittedEvidenceCount} permitted`],
+              ].map(([label, value]) => (
+                <div key={label} className="min-w-0 rounded-xl bg-[var(--brain-soft)] px-3 py-2.5">
+                  <div className="text-[10px] text-[var(--brain-muted)]">{label}</div>
+                  <div className="mt-1 truncate text-[11.5px] font-medium capitalize text-[var(--brain-text)]" title={value}>
+                    {value}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className="mt-5">
+            <h2 className="px-1 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-[var(--brain-muted)]">Retrieval</h2>
+            <div className="mt-2 grid grid-cols-4 gap-1.5 rounded-2xl bg-[var(--brain-soft)] p-2">
+              {[
+                [receipt.retrieval.mode, "mode"],
+                [String(receipt.retrieval.selectedChunks), "loaded"],
+                [compactNumber(receipt.retrieval.estimatedTokens), "tokens"],
+                [`${receipt.retrieval.latencyMs}ms`, "latency"],
+              ].map(([value, label]) => (
+                <div key={label} className="min-w-0 rounded-xl px-1 py-2 text-center">
+                  <div className="truncate text-[11.5px] font-semibold capitalize text-[var(--brain-text)]">{value}</div>
+                  <div className="mt-1 text-[9.5px] text-[var(--brain-muted)]">{label}</div>
+                </div>
+              ))}
+            </div>
+            {receipt.plan.terms.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1.5 px-1">
+                <Search className="mr-0.5 mt-1 size-3 text-[var(--brain-muted)]" />
+                {receipt.plan.terms.slice(0, 8).map((term) => (
+                  <span key={term} className="rounded-full bg-[var(--brain-soft)] px-2 py-1 text-[9.5px] text-[var(--brain-muted-strong)]">
+                    {term}
+                  </span>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section className="mt-5">
+            <div className="flex items-center justify-between px-1">
+              <h2 className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-[var(--brain-muted)]">Evidence</h2>
+              <span className="text-[10px] text-[var(--brain-muted)]">{receipt.evidence.length} chunks</span>
+            </div>
+            <ol className="mt-2 space-y-2">
+              {receipt.evidence.map((item) => (
+                <li key={item.id}>
+                  <Link
+                    href={`/brain/docs/view?path=${encodeURIComponent(item.path)}`}
+                    className="group block rounded-2xl border border-transparent bg-[var(--brain-soft)] p-3 transition-[border-color,background-color] hover:border-orange/20 hover:bg-[var(--brain-soft-hover)]"
+                  >
+                    <div className="flex items-start gap-2.5">
+                      <span className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-lg bg-[var(--brain-canvas)] text-[10px] font-semibold text-orange">
+                        {item.id}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-[11.5px] font-medium text-[var(--brain-text)]">{item.title}</div>
+                        <div className="mt-1 flex items-center gap-1.5 truncate text-[9.5px] text-[var(--brain-muted)]">
+                          <FileText className="size-3 shrink-0" />
+                          <span className="truncate">{item.heading || item.path}</span>
+                          <span className="shrink-0">v{item.version}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <p className="mt-2.5 line-clamp-3 text-[10.5px] leading-[1.55] text-[var(--brain-muted-strong)]">
+                      {item.excerpt}
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {item.reasons.slice(0, 3).map((reason) => (
+                        <span key={reason} className="rounded-full bg-[var(--brain-canvas)] px-2 py-0.5 text-[9px] text-[var(--brain-muted)]">
+                          {reason}
+                        </span>
+                      ))}
+                    </div>
+                  </Link>
+                </li>
+              ))}
+            </ol>
+          </section>
+
+          <section className="mt-5 rounded-2xl bg-[var(--brain-soft)] p-3.5">
+            <div className="flex items-center gap-2 text-[10.5px] font-semibold uppercase tracking-[0.1em] text-[var(--brain-muted)]">
+              <Database className="size-3.5" />
+              Resolution
+            </div>
+            <p className="mt-2 text-[11px] leading-5 text-[var(--brain-muted-strong)]">
+              {receipt.conflicts.length
+                ? `${receipt.conflicts.length} conflict${receipt.conflicts.length === 1 ? "" : "s"} flagged.`
+                : "Current document versions selected. No version conflicts detected."}
+            </p>
+            {receipt.missing.map((item) => (
+              <p key={item} className="mt-1 text-[11px] leading-5 text-orange">{item}</p>
+            ))}
+          </section>
+
+          <p className="px-1 pb-2 pt-4 font-mono text-[9px] text-[var(--brain-muted)]">
+            run {receipt.runId}
+          </p>
+        </div>
+      )}
+    </aside>
   );
 }
 
@@ -342,6 +530,7 @@ export function BrainConsole({
 }) {
   const [input, setInput] = useState("");
   const [railOpen, setRailOpen] = useState(false);
+  const [receiptOpen, setReceiptOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [threads, setThreads] = useState<ThreadSummary[]>([]);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
@@ -369,9 +558,18 @@ export function BrainConsole({
     } catch { /* keep current list */ }
   }, []);
 
-  const chat = useChat({
+  const chat = useChat<BrainUIMessage>({
     transport: new DefaultChatTransport({ api: "/api/brain/chat" }),
-    onFinish: () => { void refreshThreads(); },
+    onFinish: ({ message, isError }) => {
+      void refreshThreads();
+      if (
+        !isError &&
+        message.parts.some((part) => part.type === "data-context-receipt") &&
+        window.matchMedia("(min-width: 1280px)").matches
+      ) {
+        setReceiptOpen(true);
+      }
+    },
   });
   const { messages, status, error, stop, setMessages } = chat;
   const busy = status === "submitted" || status === "streaming";
@@ -503,6 +701,16 @@ export function BrainConsole({
   const noKeys = availableProviders.length === 0;
   const projectNames = useMemo(() => Object.fromEntries(projects.map((p) => [p.id, p.name])), [projects]);
   const activeThread = threads.find((thread) => thread.id === activeThreadId);
+  const latestReceipt = useMemo(() => {
+    for (let messageIndex = messages.length - 1; messageIndex >= 0; messageIndex--) {
+      const parts = messages[messageIndex].parts;
+      for (let partIndex = parts.length - 1; partIndex >= 0; partIndex--) {
+        const part = parts[partIndex];
+        if (part.type === "data-context-receipt") return part.data;
+      }
+    }
+    return null;
+  }, [messages]);
 
   // Full-screen mode: Esc exits, body scroll locks while open.
   useEffect(() => {
@@ -607,6 +815,20 @@ export function BrainConsole({
               <ChevronDown aria-hidden className="pointer-events-none absolute right-4 top-1/2 size-4 -translate-y-1/2 text-[var(--brain-muted-strong)]" />
             </div>
             <button
+              type="button"
+              onClick={() => setReceiptOpen((open) => !open)}
+              aria-label={receiptOpen ? "Close context receipt" : "Open context receipt"}
+              aria-expanded={receiptOpen}
+              className={`flex min-h-11 cursor-pointer items-center gap-2 rounded-full px-3 text-[11.5px] font-medium transition-colors ${
+                receiptOpen
+                  ? "bg-orange-soft text-orange"
+                  : "text-[var(--brain-muted-strong)] hover:bg-[var(--brain-soft)] hover:text-[var(--brain-text)]"
+              }`}
+            >
+              <ShieldCheck className="size-[17px]" />
+              <span className="hidden xl:inline">{latestReceipt ? `${latestReceipt.evidence.length} sources` : "Context"}</span>
+            </button>
+            <button
               onClick={() => setExpanded((e) => !e)}
               aria-label={expanded ? "Exit full screen" : "Full screen"}
               title={expanded ? "Exit full screen (Esc)" : "Full screen"}
@@ -706,18 +928,29 @@ export function BrainConsole({
               )}
             </form>
             <p className="mt-2.5 px-3 text-center text-[11px] leading-4 text-[var(--brain-muted)]">
-              Urso Brain can read and update the company vault. Verify anything that drives a real decision.
+              Answers use authorized evidence. Knowledge changes require steward approval.
             </p>
           </div>
         </div>
       </div>
+      {receiptOpen && (
+        <>
+          <button
+            type="button"
+            aria-label="Close context receipt"
+            onClick={() => setReceiptOpen(false)}
+            className="absolute inset-0 z-20 cursor-default bg-black/20 backdrop-blur-[1px]"
+          />
+          <ContextReceiptPanel receipt={latestReceipt} onClose={() => setReceiptOpen(false)} />
+        </>
+      )}
     </div>
   );
 
   if (expanded && typeof document !== "undefined") {
     return createPortal(
       <div className="brain-chat theme-scope fixed inset-0 z-[60] bg-[var(--brain-canvas)]">
-        <div className="mx-auto flex h-full max-w-[1280px] flex-col p-3 md:p-6">
+        <div className="mx-auto flex h-full max-w-[1600px] flex-col p-3 md:p-6">
           <div className="animate-stage-in flex h-full flex-col overflow-hidden">{body}</div>
         </div>
       </div>,

@@ -4,6 +4,7 @@
 
 import { redirect } from "next/navigation";
 import { getBrainUser } from "@/lib/brain/access";
+import { resolveBrainPrincipal } from "@/lib/brain/authorization";
 import { ursoDbSafe } from "@/lib/brain/supabase";
 import { getDepartments, getOrgKeyStatus, getProfile, getProjects } from "@/lib/brain/db";
 import { BRAIN_PROVIDERS } from "@/lib/brain/catalog";
@@ -20,14 +21,19 @@ export default async function BrainPage() {
 
   // Tolerate the pre-migration state too: treat DB errors as "no data yet" so
   // the page renders the notice instead of crashing.
-  const [profile, departments, projects, keyStatus] = admin
+  const [profile, principal] = admin
     ? await Promise.all([
         getProfile(admin, user.id).catch(() => null),
-        getDepartments(admin).catch(() => []),
-        getProjects(admin).catch(() => []),
-        getOrgKeyStatus(admin).catch(() => []),
+        resolveBrainPrincipal(admin, user).catch(() => null),
       ])
-    : ([null, [], [], []] as const);
+    : ([null, null] as const);
+  const departments = admin ? await getDepartments(admin).catch(() => []) : [];
+  const [projects, keyStatus] = admin && principal
+    ? await Promise.all([
+        getProjects(admin, principal.organizationId).catch(() => []),
+        getOrgKeyStatus(admin, principal.organizationId).catch(() => []),
+      ])
+    : ([[], []] as const);
 
   if (!admin || departments.length === 0) {
     return (
@@ -42,9 +48,9 @@ export default async function BrainPage() {
               </>
             ) : (
               <>
-                Run <code className="text-orange">supabase/urso/0001_brain.sql</code> in the URSO project&rsquo;s SQL
-                editor (not Woof Gang&rsquo;s), then <code className="text-orange">node scripts/brain-sync.mjs</code> to
-                load the vault.
+                Run <code className="text-orange">0001_brain.sql</code> and then{" "}
+                <code className="text-orange">0002_company_brain.sql</code> in the URSO project&rsquo;s SQL editor,
+                then run <code className="text-orange">node scripts/brain-sync.mjs</code>.
               </>
             )}
           </p>
@@ -54,8 +60,20 @@ export default async function BrainPage() {
   }
 
   if (!profile) redirect("/brain/welcome");
+  if (!principal) {
+    return (
+      <div className="grid min-h-0 flex-1 place-items-center">
+        <div className="ob-card max-w-[460px] text-center">
+          <h1 className="text-[17px] font-bold text-[var(--ob-text)]">Brain access is inactive</h1>
+          <p className="mt-2 text-[13.5px] leading-[1.6] text-[var(--ob-muted)]">
+            Your profile exists, but you do not have an active organization membership.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
-  const department = departments.find((d) => d.id === profile.department_id);
+  const department = departments.find((d) => d.id === principal.departmentId);
   const available = keyStatus.map((k) => k.provider);
   const initialProvider = available[0] ?? null;
   const initialModel = initialProvider ? BRAIN_PROVIDERS[initialProvider].defaultModel : null;
@@ -63,9 +81,9 @@ export default async function BrainPage() {
   return (
     <div className="min-h-0 flex-1 overflow-hidden">
       <BrainConsole
-        userName={profile.name}
-        departmentId={profile.department_id}
-        departmentName={department?.name ?? profile.department_id}
+        userName={principal.name}
+        departmentId={principal.departmentId}
+        departmentName={department?.name ?? principal.departmentId}
         projects={projects.map((p) => ({ id: p.id, name: p.name }))}
         availableProviders={available}
         initialProvider={initialProvider}

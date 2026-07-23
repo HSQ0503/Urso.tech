@@ -3,10 +3,17 @@
 
 import { redirect } from "next/navigation";
 import { getBrainUser } from "@/lib/brain/access";
+import {
+  canEditBrainTruth,
+  getAuthorizedDocManifest,
+  resolveBrainPrincipal,
+} from "@/lib/brain/authorization";
 import { ursoDbSafe } from "@/lib/brain/supabase";
-import { getDepartments, getDocManifest, getOrgKeyStatus, getProfile } from "@/lib/brain/db";
+import { getDepartments, getOrgKeyStatus, getProfile } from "@/lib/brain/db";
 import { OnboardingForm } from "@/components/brain/onboarding-form";
 import { KeysManager } from "@/components/brain/keys-manager";
+import { BrainIndexManager } from "@/components/brain/index-manager";
+import { ProposalQueue } from "@/components/brain/proposal-queue";
 
 export default async function BrainSettingsPage() {
   const user = await getBrainUser();
@@ -14,11 +21,15 @@ export default async function BrainSettingsPage() {
 
   const admin = ursoDbSafe();
   if (!admin) redirect("/brain"); // setup notice lives there
+  const principal = await resolveBrainPrincipal(admin, user);
+  if (!principal) redirect("/brain");
   const [profile, departments, keys, manifest] = await Promise.all([
-    getProfile(admin, user.id).catch(() => null),
-    getDepartments(admin).catch(() => []),
-    getOrgKeyStatus(admin).catch(() => []),
-    getDocManifest(admin).catch(() => []),
+    getProfile(admin, user.id, principal.organizationId).catch(() => null),
+    getDepartments(admin, principal.organizationId).catch(() => []),
+    canEditBrainTruth(principal)
+      ? getOrgKeyStatus(admin, principal.organizationId).catch(() => [])
+      : Promise.resolve([]),
+    getAuthorizedDocManifest(admin, principal, null).catch(() => []),
   ]);
   if (departments.length === 0) redirect("/brain"); // pre-migration notice lives there
   if (!profile) redirect("/brain/welcome");
@@ -34,7 +45,9 @@ export default async function BrainSettingsPage() {
         <section className="mt-8">
           <h2 className="text-[15px] font-semibold text-[var(--ob-text)]">Your profile</h2>
           <p className="mt-1 text-[13.5px] leading-[1.55] text-[var(--ob-muted)]">
-            The brain loads context for whichever department you&rsquo;re in — switch it to work (or demo) as a different role.
+            {canEditBrainTruth(principal)
+              ? "The Brain loads context for your assigned department. As a steward, you may switch it for controlled demos."
+              : "Your department identity is assigned by an administrator and controls which context the Brain may retrieve."}
           </p>
           <div className="mt-4">
             <OnboardingForm
@@ -44,19 +57,37 @@ export default async function BrainSettingsPage() {
               initialTitle={profile.title}
               submitLabel="Save profile"
               redirectTo={null}
+              departmentLocked={!canEditBrainTruth(principal)}
             />
           </div>
         </section>
 
-        <section className="mt-8 border-t border-[var(--ob-border)] pt-8">
-          <h2 className="text-[15px] font-semibold text-[var(--ob-text)]">Org API keys</h2>
-          <p className="mt-1 text-[13.5px] leading-[1.55] text-[var(--ob-muted)]">
-            Bring-your-own keys: one per provider, org-wide. Everyone&rsquo;s chats route through these.
-          </p>
-          <div className="mt-4">
-            <KeysManager initialKeys={keys} />
-          </div>
-        </section>
+        {canEditBrainTruth(principal) && (
+          <section className="mt-8 border-t border-[var(--ob-border)] pt-8">
+            <h2 className="text-[15px] font-semibold text-[var(--ob-text)]">Org API keys</h2>
+            <p className="mt-1 text-[13.5px] leading-[1.55] text-[var(--ob-muted)]">
+              Bring-your-own keys: one per provider, org-wide. Everyone&rsquo;s chats route through these.
+            </p>
+            <div className="mt-4">
+              <KeysManager initialKeys={keys} />
+            </div>
+            <div className="mt-4">
+              <BrainIndexManager />
+            </div>
+          </section>
+        )}
+
+        {canEditBrainTruth(principal) && (
+          <section className="mt-8 border-t border-[var(--ob-border)] pt-8">
+            <h2 className="text-[15px] font-semibold text-[var(--ob-text)]">Knowledge proposals</h2>
+            <p className="mt-1 text-[13.5px] leading-[1.55] text-[var(--ob-muted)]">
+              Review AI-suggested changes before they become a new immutable document version.
+            </p>
+            <div className="mt-4">
+              <ProposalQueue />
+            </div>
+          </section>
+        )}
 
         <section className="mt-8 border-t border-[var(--ob-border)] pt-8">
           <h2 className="text-[15px] font-semibold text-[var(--ob-text)]">Vault sync</h2>

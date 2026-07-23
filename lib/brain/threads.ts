@@ -2,8 +2,11 @@
 // without the distilled-memory layer. Ownership is enforced here in code; the
 // brain_* tables are RLS-on / no-policies / service-role-only.
 
+import "server-only";
+
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { ursoDb } from "@/lib/brain/supabase";
+import { DEFAULT_BRAIN_ORGANIZATION_ID } from "@/lib/brain/types";
 
 type Admin = SupabaseClient;
 type UIPart = { type: string; text?: string };
@@ -17,10 +20,12 @@ export async function getOwnedBrainThread(
   admin: Admin,
   userId: string,
   threadId: string,
+  organizationId = DEFAULT_BRAIN_ORGANIZATION_ID,
 ): Promise<{ id: string; title: string; project_id: string | null } | null> {
   const { data } = await admin
     .from("brain_threads")
     .select("id, user_id, title, project_id")
+    .eq("organization_id", organizationId)
     .eq("id", threadId)
     .maybeSingle();
   if (!data || (data as { user_id: string }).user_id !== userId) return null;

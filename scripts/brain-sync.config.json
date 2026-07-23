@@ -1,5 +1,6 @@
 {
-  "vaultRoot": "C:\\Users\\HSQ05\\OneDrive\\Desktop\\Obby Vault\\Projects\\Urso",
+  "organizationId": "urso",
+  "vaultRoot": "/Users/han/Research Vault/Projects/Urso",
   "roots": [
     { "dir": ".", "recursive": false, "department": "exec" },
     { "dir": "01 - Urso", "type": "core" },

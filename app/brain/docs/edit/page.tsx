@@ -3,8 +3,13 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getBrainUser } from "@/lib/brain/access";
+import {
+  canEditBrainTruth,
+  getAuthorizedBrainDoc,
+  resolveBrainPrincipal,
+} from "@/lib/brain/authorization";
 import { ursoDbSafe } from "@/lib/brain/supabase";
-import { getDepartments, getDocByPath, getProjects } from "@/lib/brain/db";
+import { getDepartments, getProjects } from "@/lib/brain/db";
 import { DocEditor } from "@/components/brain/doc-editor";
 
 export default async function BrainDocEditPage({ searchParams }: { searchParams: Promise<{ path?: string }> }) {
@@ -12,12 +17,14 @@ export default async function BrainDocEditPage({ searchParams }: { searchParams:
   if (!user) redirect("/brain/login");
   const admin = ursoDbSafe();
   if (!admin) redirect("/brain");
+  const principal = await resolveBrainPrincipal(admin, user);
+  if (!principal || !canEditBrainTruth(principal)) redirect("/brain/docs");
 
   const { path } = await searchParams;
   const [doc, departments, projects] = await Promise.all([
-    path ? getDocByPath(admin, path).catch(() => null) : Promise.resolve(null),
-    getDepartments(admin).catch(() => []),
-    getProjects(admin).catch(() => []),
+    path ? getAuthorizedBrainDoc(admin, principal, path).catch(() => null) : Promise.resolve(null),
+    getDepartments(admin, principal.organizationId).catch(() => []),
+    getProjects(admin, principal.organizationId).catch(() => []),
   ]);
   if (!doc) redirect("/brain/docs");
 

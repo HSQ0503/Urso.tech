@@ -7,8 +7,14 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Pencil } from "lucide-react";
 import { getBrainUser } from "@/lib/brain/access";
+import {
+  canEditBrainTruth,
+  getAuthorizedBrainDoc,
+  getAuthorizedDocManifest,
+  resolveBrainPrincipal,
+} from "@/lib/brain/authorization";
 import { ursoDbSafe } from "@/lib/brain/supabase";
-import { getBacklinks, getDocByPath, listLinkTargets } from "@/lib/brain/db";
+import { getBacklinks, listLinkTargets } from "@/lib/brain/db";
 import { VaultMarkdown, countWords } from "@/components/brain/markdown";
 
 export default async function BrainDocViewPage({ searchParams }: { searchParams: Promise<{ path?: string }> }) {
@@ -17,9 +23,13 @@ export default async function BrainDocViewPage({ searchParams }: { searchParams:
 
   const { path } = await searchParams;
   const admin = ursoDbSafe();
-  const doc = path && admin ? await getDocByPath(admin, path).catch(() => null) : null;
+  const principal = admin ? await resolveBrainPrincipal(admin, user).catch(() => null) : null;
+  const doc =
+    path && admin && principal
+      ? await getAuthorizedBrainDoc(admin, principal, path).catch(() => null)
+      : null;
 
-  if (!doc || !admin) {
+  if (!doc || !admin || !principal) {
     return (
       <div className="ob-content">
         <div className="ob-note">
@@ -35,10 +45,14 @@ export default async function BrainDocViewPage({ searchParams }: { searchParams:
   // Every live doc is a wikilink target, so [[links]] inside the body resolve
   // the same way they do in Obsidian — including to docs this one doesn't
   // already list in its `links` column.
-  const [targets, backlinks] = await Promise.all([
-    listLinkTargets(admin).catch(() => []),
-    getBacklinks(admin, doc.path).catch(() => []),
+  const [manifest, allTargets, allBacklinks] = await Promise.all([
+    getAuthorizedDocManifest(admin, principal, doc.project_id).catch(() => []),
+    listLinkTargets(admin, principal.organizationId).catch(() => []),
+    getBacklinks(admin, doc.path, principal.organizationId).catch(() => []),
   ]);
+  const permittedPaths = new Set(manifest.map((item) => item.path));
+  const targets = allTargets.filter((item) => permittedPaths.has(item.path));
+  const backlinks = allBacklinks.filter((item) => permittedPaths.has(item.path));
 
   const words = countWords(doc.content);
 
@@ -48,13 +62,15 @@ export default async function BrainDocViewPage({ searchParams }: { searchParams:
         <div className="ob-note">
           <div className="mb-4 flex items-start justify-between gap-4">
             <h1 className="ob-title">{doc.title}</h1>
-            <Link
-              href={`/brain/docs/edit?path=${encodeURIComponent(doc.path)}`}
-              className="ob-icon-btn mt-2 shrink-0"
-              title="Edit"
-            >
-              <Pencil size={15} />
-            </Link>
+            {canEditBrainTruth(principal) && (
+              <Link
+                href={`/brain/docs/edit?path=${encodeURIComponent(doc.path)}`}
+                className="ob-icon-btn mt-2 shrink-0"
+                title="Edit"
+              >
+                <Pencil size={15} />
+              </Link>
+            )}
           </div>
           {doc.description && (
             <p className="mb-5 text-[15px] leading-[1.55] text-[var(--ob-muted)]">{doc.description}</p>

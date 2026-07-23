@@ -6,8 +6,13 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { FileText, Plus } from "lucide-react";
 import { getBrainUser } from "@/lib/brain/access";
+import {
+  canEditBrainTruth,
+  getAuthorizedDocManifest,
+  resolveBrainPrincipal,
+} from "@/lib/brain/authorization";
 import { ursoDbSafe } from "@/lib/brain/supabase";
-import { getDepartments, getDocManifest, getProjects } from "@/lib/brain/db";
+import { getDepartments, getProjects } from "@/lib/brain/db";
 import type { BrainDocMeta } from "@/lib/brain/types";
 
 function DocRow({ doc }: { doc: BrainDocMeta }) {
@@ -37,13 +42,14 @@ export default async function BrainDocsPage() {
   if (!user) redirect("/brain/login");
 
   const admin = ursoDbSafe();
-  const [manifest, projects, departments] = admin
-    ? await Promise.all([
-        getDocManifest(admin).catch(() => []),
-        getProjects(admin).catch(() => []),
-        getDepartments(admin).catch(() => []),
-      ])
-    : ([[], [], []] as const);
+  if (!admin) redirect("/brain");
+  const principal = await resolveBrainPrincipal(admin, user);
+  if (!principal) redirect("/brain");
+  const [manifest, projects, departments] = await Promise.all([
+    getAuthorizedDocManifest(admin, principal, null).catch(() => []),
+    getProjects(admin, principal.organizationId).catch(() => []),
+    getDepartments(admin, principal.organizationId).catch(() => []),
+  ]);
 
   const core = manifest.filter((d) => d.doc_type === "core");
   const rules = manifest.filter((d) => d.doc_type === "rule");
@@ -68,13 +74,15 @@ export default async function BrainDocsPage() {
               <p className="mt-1 text-[14px] text-[var(--ob-muted)]">
                 {manifest.length === 0
                   ? "Nothing synced yet — run node scripts/brain-sync.mjs."
-                  : `${manifest.length} docs. This is everything the brain can read.`}
+                  : `${manifest.length} permitted docs. This is everything the Brain may load for you.`}
               </p>
             </div>
-            <Link href="/brain/docs/new" className="ob-btn ob-btn-cta">
-              <Plus size={14} />
-              New doc
-            </Link>
+            {canEditBrainTruth(principal) && (
+              <Link href="/brain/docs/new" className="ob-btn ob-btn-cta">
+                <Plus size={14} />
+                New doc
+              </Link>
+            )}
           </div>
 
           <Section title="Company core — always in context" docs={core} />

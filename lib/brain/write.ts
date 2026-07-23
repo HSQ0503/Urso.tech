@@ -2,10 +2,13 @@
 // that writes a doc, whether the author is the AI (lib/brain/tools.ts) or a
 // human in the vault browser (/api/brain/docs). Server-only.
 
+import "server-only";
+
 import { createHash } from "crypto";
 import type { ursoDb } from "./supabase";
 import { getDepartments, getProjects, listLinkTargets, type BrainDocWrite } from "./db";
 import { extractWikilinks, resolveLinks } from "./links";
+import { DEFAULT_BRAIN_ORGANIZATION_ID } from "./types";
 
 type Db = ReturnType<typeof ursoDb>;
 
@@ -15,7 +18,19 @@ export const DOC_TYPES = ["core", "doc", "rule"] as const;
 // exported to disk hashes identically on the next sync (no churn).
 export const hashDoc = (d: Omit<BrainDocWrite, "path" | "content_hash" | "links">) =>
   createHash("sha256")
-    .update(JSON.stringify([d.title, d.description, d.department_id, d.project_id, d.doc_type, d.audience, d.tags, d.content]))
+    .update(
+      JSON.stringify([
+        d.title,
+        d.description,
+        d.department_id,
+        d.project_id,
+        d.doc_type,
+        d.audience,
+        d.tags,
+        d.visibility ?? "organization",
+        d.content,
+      ]),
+    )
     .digest("hex");
 
 export const sanitizePathPart = (s: string) => s.replace(/[\\:*?"<>|#^[\]]/g, "").replace(/\s+/g, " ").trim();
@@ -24,12 +39,13 @@ export const sanitizePathPart = (s: string) => s.replace(/[\\:*?"<>|#^[\]]/g, ""
 export async function checkMeta(
   admin: Db,
   fields: { department?: string; project?: string; type?: string },
+  organizationId = DEFAULT_BRAIN_ORGANIZATION_ID,
 ): Promise<{ error?: string; department_id?: string | null; project_id?: string | null; doc_type?: "core" | "doc" | "rule" }> {
   const out: { department_id?: string | null; project_id?: string | null; doc_type?: "core" | "doc" | "rule" } = {};
   if (fields.department !== undefined) {
     if (fields.department === "" || fields.department === "none") out.department_id = null;
     else {
-      const deps = await getDepartments(admin);
+      const deps = await getDepartments(admin, organizationId);
       if (!deps.some((d) => d.id === fields.department)) {
         return { error: `Unknown department "${fields.department}". Valid: ${deps.map((d) => d.id).join(", ")}, or "none".` };
       }
@@ -39,7 +55,7 @@ export async function checkMeta(
   if (fields.project !== undefined) {
     if (fields.project === "" || fields.project === "none") out.project_id = null;
     else {
-      const projs = await getProjects(admin);
+      const projs = await getProjects(admin, organizationId);
       if (!projs.some((p) => p.id === fields.project)) {
         return { error: `Unknown project "${fields.project}". Valid: ${projs.map((p) => p.id).join(", ")}, or "none".` };
       }
@@ -55,8 +71,12 @@ export async function checkMeta(
   return out;
 }
 
-export async function linksFor(admin: Db, content: string): Promise<string[]> {
-  const targets = await listLinkTargets(admin);
+export async function linksFor(
+  admin: Db,
+  content: string,
+  organizationId = DEFAULT_BRAIN_ORGANIZATION_ID,
+): Promise<string[]> {
+  const targets = await listLinkTargets(admin, organizationId);
   return resolveLinks(extractWikilinks(content), targets);
 }
 

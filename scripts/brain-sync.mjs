@@ -43,6 +43,7 @@ const DRY = process.argv.includes("--dry");
 
 const config = JSON.parse(readFileSync(new URL("./brain-sync.config.json", import.meta.url), "utf8"));
 const VAULT = config.vaultRoot;
+const ORGANIZATION_ID = config.organizationId ?? "urso";
 
 // ---------- frontmatter + markdown helpers ----------
 
@@ -161,6 +162,9 @@ for (const root of config.roots) {
     const doc_type = ["core", "doc", "rule"].includes(meta.type) ? meta.type : root.type ?? "doc";
     const project = meta.project === "none" ? null : meta.project || root.project || null;
     const department = meta.department === "none" ? null : meta.department || root.department || null;
+    const visibility = ["organization", "department", "project", "restricted"].includes(meta.visibility)
+      ? meta.visibility
+      : "organization";
     const row = {
       path: relPath,
       title: meta.title || deriveTitle(body, filename),
@@ -170,11 +174,24 @@ for (const root of config.roots) {
       doc_type,
       audience: doc_type === "rule" ? (asList(meta.audience).length ? asList(meta.audience) : ["all"]) : [],
       tags: asList(meta.tags),
+      visibility,
       content: body.trim(),
       origin: "vault",
     };
     row.content_hash = createHash("sha256")
-      .update(JSON.stringify([row.title, row.description, row.department_id, row.project_id, row.doc_type, row.audience, row.tags, row.content]))
+      .update(
+        JSON.stringify([
+          row.title,
+          row.description,
+          row.department_id,
+          row.project_id,
+          row.doc_type,
+          row.audience,
+          row.tags,
+          row.visibility,
+          row.content,
+        ]),
+      )
       .digest("hex");
     disk.set(relPath, row);
     count++;
@@ -186,9 +203,10 @@ for (const root of config.roots) {
 
 const { data: existing, error: readErr } = await supabase
   .from("brain_docs")
-  .select("path, title, content_hash, links, origin, deleted_at");
+  .select("path, title, content_hash, links, origin, deleted_at")
+  .eq("organization_id", ORGANIZATION_ID);
 if (readErr) {
-  console.error(`✖ Could not read brain_docs: ${readErr.message}\n  (run supabase/urso/0001_brain.sql in the URSO HQ project's SQL editor first)`);
+  console.error(`✖ Could not read brain_docs: ${readErr.message}\n  (run 0001_brain.sql and 0002_company_brain.sql in the URSO HQ project's SQL editor first)`);
   process.exit(1);
 }
 const db = new Map((existing ?? []).map((r) => [r.path, r]));
@@ -229,8 +247,14 @@ if (DRY) {
 
 const now = new Date().toISOString();
 for (let i = 0; i < toUpsert.length; i += 20) {
-  const batch = toUpsert.slice(i, i + 20).map((d) => ({ ...d, synced_at: now }));
-  const { error } = await supabase.from("brain_docs").upsert(batch, { onConflict: "path" });
+  const batch = toUpsert.slice(i, i + 20).map((d) => ({
+    ...d,
+    organization_id: ORGANIZATION_ID,
+    synced_at: now,
+  }));
+  const { error } = await supabase
+    .from("brain_docs")
+    .upsert(batch, { onConflict: "organization_id,path" });
   if (error) {
     console.error(`✖ Upsert failed: ${error.message}`);
     process.exit(1);
@@ -243,7 +267,8 @@ if (toUpsert.length) console.log(`✓ Upserted ${toUpsert.length} docs`);
 if (EXPORT && brainDocs.length) {
   const { data: fullRows, error } = await supabase
     .from("brain_docs")
-    .select("path, title, description, department_id, project_id, doc_type, audience, tags, content")
+    .select("path, title, description, department_id, project_id, doc_type, audience, tags, visibility, content")
+    .eq("organization_id", ORGANIZATION_ID)
     .in("path", brainDocs.map((r) => r.path));
   if (error) {
     console.error(`✖ Export read failed: ${error.message}`);
@@ -256,6 +281,7 @@ if (EXPORT && brainDocs.length) {
       if (r.project_id) fm.push(`project: ${r.project_id}`);
       if (r.doc_type === "rule" && r.audience?.length) fm.push(`audience: [${r.audience.join(", ")}]`);
       if (r.tags?.length) fm.push(`tags: [${r.tags.join(", ")}]`);
+      if (r.visibility && r.visibility !== "organization") fm.push(`visibility: ${r.visibility}`);
       fm.push("---", "");
       const file = join(VAULT, r.path);
       mkdirSync(dirname(file), { recursive: true });
@@ -266,6 +292,7 @@ if (EXPORT && brainDocs.length) {
     const { error: flipErr } = await supabase
       .from("brain_docs")
       .update({ origin: "vault", synced_at: now })
+      .eq("organization_id", ORGANIZATION_ID)
       .in("path", (fullRows ?? []).map((r) => r.path));
     if (flipErr) console.error(`✖ Origin flip failed: ${flipErr.message}`);
     else console.log(`✓ Exported ${fullRows?.length ?? 0} brain docs to the vault (now vault-owned)`);
@@ -288,7 +315,11 @@ if (deletedInBrain.length) {
 
 if (gone.length) {
   if (PRUNE) {
-    const { error } = await supabase.from("brain_docs").delete().in("path", gone);
+    const { error } = await supabase
+      .from("brain_docs")
+      .delete()
+      .eq("organization_id", ORGANIZATION_ID)
+      .in("path", gone);
     if (error) console.error(`✖ Prune failed: ${error.message}`);
     else console.log(`✓ Pruned ${gone.length} deleted docs`);
   } else {

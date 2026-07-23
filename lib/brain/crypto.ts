@@ -2,6 +2,8 @@
 // key derived from BRAIN_KEYS_SECRET — server-only; never import client-side.
 // Ciphertext format: "v1:<iv b64>:<tag b64>:<data b64>".
 
+import "server-only";
+
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "crypto";
 
 function derivedKey(): Buffer {

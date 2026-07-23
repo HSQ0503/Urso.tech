@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { getBrainUser } from "@/lib/brain/access";
+import { canEditBrainTruth, resolveBrainPrincipal } from "@/lib/brain/authorization";
 import { ursoDbSafe } from "@/lib/brain/supabase";
 import { getDepartments, getProjects } from "@/lib/brain/db";
 import { DocEditor } from "@/components/brain/doc-editor";
@@ -11,10 +12,12 @@ export default async function BrainDocNewPage() {
   if (!user) redirect("/brain/login");
   const admin = ursoDbSafe();
   if (!admin) redirect("/brain");
+  const principal = await resolveBrainPrincipal(admin, user);
+  if (!principal || !canEditBrainTruth(principal)) redirect("/brain/docs");
 
   const [departments, projects] = await Promise.all([
-    getDepartments(admin).catch(() => []),
-    getProjects(admin).catch(() => []),
+    getDepartments(admin, principal.organizationId).catch(() => []),
+    getProjects(admin, principal.organizationId).catch(() => []),
   ]);
   if (departments.length === 0) redirect("/brain");
 

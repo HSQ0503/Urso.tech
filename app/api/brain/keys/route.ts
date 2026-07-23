@@ -1,26 +1,33 @@
-// Org BYO API keys. v1: any signed-in Urso HQ user may manage them (the project
-// holds only Urso's own people); add a role column before provisioning demo
-// users for outsiders. Keys are AES-256-GCM encrypted at rest; only the last 4
-// characters ever leave the server.
-
 import { getBrainUser } from "@/lib/brain/access";
-import { ursoDbSafe, URSO_DB_MISSING } from "@/lib/brain/supabase";
+import { auditBrainEvent, canEditBrainTruth, resolveBrainPrincipal } from "@/lib/brain/authorization";
 import { encryptApiKey } from "@/lib/brain/crypto";
 import { getOrgKeyStatus } from "@/lib/brain/db";
 import { isBrainProvider } from "@/lib/brain/models";
+import { ursoDbSafe, URSO_DB_MISSING } from "@/lib/brain/supabase";
+
+async function authorizedAdmin() {
+  const user = await getBrainUser();
+  if (!user) return { error: Response.json({ error: "unauthorized" }, { status: 401 }) };
+  const admin = ursoDbSafe();
+  if (!admin) return { error: Response.json({ error: URSO_DB_MISSING }, { status: 503 }) };
+  const principal = await resolveBrainPrincipal(admin, user);
+  if (!principal || !canEditBrainTruth(principal)) {
+    return { error: Response.json({ error: "knowledge steward access required" }, { status: 403 }) };
+  }
+  return { admin, principal };
+}
 
 export async function GET() {
-  const user = await getBrainUser();
-  if (!user) return Response.json({ error: "unauthorized" }, { status: 401 });
-
-  const admin = ursoDbSafe();
-  if (!admin) return Response.json({ error: URSO_DB_MISSING }, { status: 503 });
-  return Response.json({ keys: await getOrgKeyStatus(admin) });
+  const auth = await authorizedAdmin();
+  if ("error" in auth) return auth.error;
+  return Response.json({
+    keys: await getOrgKeyStatus(auth.admin, auth.principal.organizationId),
+  });
 }
 
 export async function POST(req: Request) {
-  const user = await getBrainUser();
-  if (!user) return Response.json({ error: "unauthorized" }, { status: 401 });
+  const auth = await authorizedAdmin();
+  if ("error" in auth) return auth.error;
 
   const body = (await req.json().catch(() => ({}))) as { provider?: string; key?: string };
   const provider = body.provider ?? "";
@@ -31,40 +38,40 @@ export async function POST(req: Request) {
   let ciphertext: string;
   try {
     ciphertext = encryptApiKey(key);
-  } catch (e) {
-    // BRAIN_KEYS_SECRET missing — tell the admin exactly what to fix.
-    return Response.json({ error: e instanceof Error ? e.message : String(e) }, { status: 503 });
+  } catch (error) {
+    return Response.json({ error: error instanceof Error ? error.message : String(error) }, { status: 503 });
   }
 
-  const admin = ursoDbSafe();
-  if (!admin) return Response.json({ error: URSO_DB_MISSING }, { status: 503 });
-  const { error } = await admin.from("brain_org_keys").upsert(
+  const { error } = await auth.admin.from("brain_org_keys").upsert(
     {
+      organization_id: auth.principal.organizationId,
       provider,
       key_ciphertext: ciphertext,
       key_last4: key.slice(-4),
-      updated_by: user.email,
+      updated_by: auth.principal.email,
       updated_at: new Date().toISOString(),
     },
-    { onConflict: "provider" },
+    { onConflict: "organization_id,provider" },
   );
   if (error) return Response.json({ error: error.message }, { status: 500 });
-
+  await auditBrainEvent(auth.admin, auth.principal, "provider_key.saved", "provider_key", provider);
   return Response.json({ ok: true, provider, last4: key.slice(-4) });
 }
 
 export async function DELETE(req: Request) {
-  const user = await getBrainUser();
-  if (!user) return Response.json({ error: "unauthorized" }, { status: 401 });
+  const auth = await authorizedAdmin();
+  if ("error" in auth) return auth.error;
 
   const body = (await req.json().catch(() => ({}))) as { provider?: string };
   const provider = body.provider ?? "";
   if (!isBrainProvider(provider)) return Response.json({ error: "unknown provider" }, { status: 400 });
 
-  const admin = ursoDbSafe();
-  if (!admin) return Response.json({ error: URSO_DB_MISSING }, { status: 503 });
-  const { error } = await admin.from("brain_org_keys").delete().eq("provider", provider);
+  const { error } = await auth.admin
+    .from("brain_org_keys")
+    .delete()
+    .eq("organization_id", auth.principal.organizationId)
+    .eq("provider", provider);
   if (error) return Response.json({ error: error.message }, { status: 500 });
-
+  await auditBrainEvent(auth.admin, auth.principal, "provider_key.deleted", "provider_key", provider);
   return Response.json({ ok: true });
 }

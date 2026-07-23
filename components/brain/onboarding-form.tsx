@@ -16,6 +16,7 @@ export function OnboardingForm({
   initialTitle = "",
   submitLabel = "Enter the brain",
   redirectTo = "/brain",
+  departmentLocked = false,
 }: {
   departments: Department[];
   initialName: string;
@@ -23,6 +24,7 @@ export function OnboardingForm({
   initialTitle?: string;
   submitLabel?: string;
   redirectTo?: string | null;
+  departmentLocked?: boolean;
 }) {
   const router = useRouter();
   const [name, setName] = useState(initialName);
@@ -81,8 +83,11 @@ export function OnboardingForm({
               <button
                 type="button"
                 key={d.id}
+                disabled={departmentLocked}
                 onClick={() => setDepartmentId(d.id)}
-                className={`cursor-pointer rounded-none border px-3.5 py-3 text-left transition-colors ${
+                className={`rounded-none border px-3.5 py-3 text-left transition-colors ${
+                  departmentLocked ? "cursor-not-allowed opacity-70" : "cursor-pointer"
+                } ${
                   active ? "border-[rgba(254,81,0,0.5)] bg-orange-wash" : "border-edge bg-raise hover:border-edge-strong"
                 }`}
               >

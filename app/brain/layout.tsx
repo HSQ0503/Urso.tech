@@ -8,8 +8,12 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
 import { getBrainUser } from "@/lib/brain/access";
+import {
+  canEditBrainTruth,
+  getAuthorizedDocManifest,
+  resolveBrainPrincipal,
+} from "@/lib/brain/authorization";
 import { ursoDbSafe } from "@/lib/brain/supabase";
-import { getDocManifest } from "@/lib/brain/db";
 import { BrainShell } from "@/components/brain/shell";
 
 export const metadata: Metadata = {
@@ -23,7 +27,9 @@ export default async function BrainLayout({ children }: { children: React.ReactN
   // signed-in user, so the vault's shape never leaks to the login screen.
   const user = await getBrainUser();
   const admin = user ? ursoDbSafe() : null;
-  const manifest = admin ? await getDocManifest(admin).catch(() => []) : [];
+  const principal = admin && user ? await resolveBrainPrincipal(admin, user).catch(() => null) : null;
+  const manifest =
+    admin && principal ? await getAuthorizedDocManifest(admin, principal, null).catch(() => []) : [];
   const files = manifest.map((d) => ({ path: d.path, title: d.title }));
 
   return (
@@ -31,7 +37,9 @@ export default async function BrainLayout({ children }: { children: React.ReactN
       {/* The shell reads ?path= to know which doc is open, and Next requires a
           boundary around useSearchParams. */}
       <Suspense fallback={<div className="ob-app" />}>
-        <BrainShell files={files}>{children}</BrainShell>
+        <BrainShell files={files} canEdit={principal ? canEditBrainTruth(principal) : false}>
+          {children}
+        </BrainShell>
       </Suspense>
     </div>
   );

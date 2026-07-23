@@ -39,7 +39,15 @@ type Tab = { href: string; label: string; kind: "doc" | "view" };
 
 const BARE = ["/brain/login", "/brain/welcome"];
 
-export function BrainShell({ files, children }: { files: VaultFile[]; children: React.ReactNode }) {
+export function BrainShell({
+  files,
+  children,
+  canEdit,
+}: {
+  files: VaultFile[];
+  children: React.ReactNode;
+  canEdit: boolean;
+}) {
   const pathname = usePathname();
   const search = useSearchParams();
   const router = useRouter();
@@ -126,9 +134,11 @@ export function BrainShell({ files, children }: { files: VaultFile[]; children: 
         <Link href="/brain/docs" className={`ob-rib-btn ${pathname === "/brain/docs" ? "is-active" : ""}`} title="Vault">
           <Files size={17} />
         </Link>
-        <Link href="/brain/docs/new" className={`ob-rib-btn ${pathname === "/brain/docs/new" ? "is-active" : ""}`} title="New doc">
-          <FilePlus size={17} />
-        </Link>
+        {canEdit && (
+          <Link href="/brain/docs/new" className={`ob-rib-btn ${pathname === "/brain/docs/new" ? "is-active" : ""}`} title="New doc">
+            <FilePlus size={17} />
+          </Link>
+        )}
         <div className="flex-1" />
         <Link href="/brain/settings" className={`ob-rib-btn ${pathname === "/brain/settings" ? "is-active" : ""}`} title="Settings">
           <Settings size={17} />
@@ -151,12 +161,16 @@ export function BrainShell({ files, children }: { files: VaultFile[]; children: 
           </Link>
         </div>
         <div className="ob-nav-actions">
-          <Link href="/brain/docs/new" className="ob-nav-btn" title="New doc">
-            <FilePlus size={15} />
-          </Link>
-          <Link href="/brain/docs/new" className="ob-nav-btn" title="New folder">
-            <FolderPlus size={15} />
-          </Link>
+          {canEdit && (
+            <>
+              <Link href="/brain/docs/new" className="ob-nav-btn" title="New doc">
+                <FilePlus size={15} />
+              </Link>
+              <Link href="/brain/docs/new" className="ob-nav-btn" title="New folder">
+                <FolderPlus size={15} />
+              </Link>
+            </>
+          )}
           <button type="button" className="ob-nav-btn" title="Collapse all" onClick={() => setCollapseSignal((n) => n + 1)}>
             <ChevronsDownUp size={15} />
           </button>
@@ -200,9 +214,11 @@ export function BrainShell({ files, children }: { files: VaultFile[]; children: 
               </button>
             </div>
           ))}
-          <Link href="/brain/docs/new" className="ob-tab-new" title="New doc">
-            <Plus size={16} />
-          </Link>
+          {canEdit && (
+            <Link href="/brain/docs/new" className="ob-tab-new" title="New doc">
+              <Plus size={16} />
+            </Link>
+          )}
         </div>
 
         <div className="ob-viewhead">

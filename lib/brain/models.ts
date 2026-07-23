@@ -2,6 +2,8 @@
 // in catalog.ts so client components can import it without dragging provider
 // SDKs into the bundle; this file is server-only.
 
+import "server-only";
+
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";

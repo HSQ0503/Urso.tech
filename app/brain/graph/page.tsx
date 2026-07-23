@@ -4,6 +4,7 @@
 
 import { redirect } from "next/navigation";
 import { getBrainUser } from "@/lib/brain/access";
+import { getAuthorizedDocManifest, resolveBrainPrincipal } from "@/lib/brain/authorization";
 import { ursoDbSafe } from "@/lib/brain/supabase";
 import { getGraph, getProjects } from "@/lib/brain/db";
 import { GraphLegend, GraphView, type GraphNode } from "@/components/brain/graph-view";
@@ -13,8 +14,16 @@ export default async function BrainGraphPage() {
   if (!user) redirect("/brain/login");
   const admin = ursoDbSafe();
   if (!admin) redirect("/brain");
+  const principal = await resolveBrainPrincipal(admin, user);
+  if (!principal) redirect("/brain");
 
-  const [docs, projects] = await Promise.all([getGraph(admin).catch(() => []), getProjects(admin).catch(() => [])]);
+  const [allDocs, manifest, projects] = await Promise.all([
+    getGraph(admin, principal.organizationId).catch(() => []),
+    getAuthorizedDocManifest(admin, principal, null).catch(() => []),
+    getProjects(admin, principal.organizationId).catch(() => []),
+  ]);
+  const permittedPaths = new Set(manifest.map((doc) => doc.path));
+  const docs = allDocs.filter((doc) => permittedPaths.has(doc.path));
 
   const nodes: GraphNode[] = docs.map((d) => ({
     path: d.path,

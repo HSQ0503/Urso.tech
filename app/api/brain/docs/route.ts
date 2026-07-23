@@ -4,6 +4,12 @@
 // semantics: manual edits flow back to Obsidian via `brain-sync --export`.
 
 import { getBrainUser } from "@/lib/brain/access";
+import {
+  auditBrainEvent,
+  canEditBrainTruth,
+  getAuthorizedBrainDoc,
+  resolveBrainPrincipal,
+} from "@/lib/brain/authorization";
 import { ursoDbSafe, URSO_DB_MISSING } from "@/lib/brain/supabase";
 import { getDocByPath, insertBrainDoc, softDeleteBrainDoc, updateBrainDoc, type BrainDocWrite } from "@/lib/brain/db";
 import { checkMeta, hashDoc, linksFor, normalizeDocPath, sanitizePathPart } from "@/lib/brain/write";
@@ -24,6 +30,10 @@ export async function POST(req: Request) {
   if (!user) return Response.json({ error: "unauthorized" }, { status: 401 });
   const admin = ursoDbSafe();
   if (!admin) return Response.json({ error: URSO_DB_MISSING }, { status: 503 });
+  const principal = await resolveBrainPrincipal(admin, user);
+  if (!principal || !canEditBrainTruth(principal)) {
+    return Response.json({ error: "knowledge steward access required" }, { status: 403 });
+  }
 
   const body = (await req.json().catch(() => ({}))) as Body;
   const title = sanitizePathPart(body.title ?? "");
@@ -31,12 +41,16 @@ export async function POST(req: Request) {
   if (title.length < 2) return Response.json({ error: "Title is required (2+ chars)." }, { status: 400 });
   if (!content) return Response.json({ error: "Content is required." }, { status: 400 });
 
-  const checked = await checkMeta(admin, { department: body.department, project: body.project, type: body.type });
+  const checked = await checkMeta(
+    admin,
+    { department: body.department, project: body.project, type: body.type },
+    principal.organizationId,
+  );
   if (checked.error) return Response.json({ error: checked.error }, { status: 400 });
 
   const normalized = normalizeDocPath(body.path, title);
   if (normalized.error || !normalized.path) return Response.json({ error: normalized.error ?? "Invalid path." }, { status: 400 });
-  if (await getDocByPath(admin, normalized.path)) {
+  if (await getDocByPath(admin, normalized.path, principal.organizationId)) {
     return Response.json({ error: `A doc already exists at "${normalized.path}".` }, { status: 409 });
   }
 
@@ -49,13 +63,15 @@ export async function POST(req: Request) {
     doc_type: checked.doc_type ?? "doc",
     audience: checked.doc_type === "rule" ? (body.audience?.length ? body.audience : ["all"]) : [],
     tags: [],
-    links: await linksFor(admin, content),
+    links: await linksFor(admin, content, principal.organizationId),
     content,
     content_hash: "",
+    visibility: "organization",
   };
   row.content_hash = hashDoc(row);
   try {
-    await insertBrainDoc(admin, row, user.email);
+    await insertBrainDoc(admin, row, user.email, principal.organizationId);
+    await auditBrainEvent(admin, principal, "document.created", "document", row.path);
   } catch (e) {
     return Response.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
   }
@@ -67,13 +83,21 @@ export async function PATCH(req: Request) {
   if (!user) return Response.json({ error: "unauthorized" }, { status: 401 });
   const admin = ursoDbSafe();
   if (!admin) return Response.json({ error: URSO_DB_MISSING }, { status: 503 });
+  const principal = await resolveBrainPrincipal(admin, user);
+  if (!principal || !canEditBrainTruth(principal)) {
+    return Response.json({ error: "knowledge steward access required" }, { status: 403 });
+  }
 
   const body = (await req.json().catch(() => ({}))) as Body;
   if (!body.path) return Response.json({ error: "path required" }, { status: 400 });
-  const existing = await getDocByPath(admin, body.path);
+  const existing = await getAuthorizedBrainDoc(admin, principal, body.path);
   if (!existing) return Response.json({ error: "No doc at that path." }, { status: 404 });
 
-  const checked = await checkMeta(admin, { department: body.department, project: body.project, type: body.type });
+  const checked = await checkMeta(
+    admin,
+    { department: body.department, project: body.project, type: body.type },
+    principal.organizationId,
+  );
   if (checked.error) return Response.json({ error: checked.error }, { status: 400 });
 
   const content = body.content !== undefined ? body.content.trim() : existing.content;
@@ -86,14 +110,16 @@ export async function PATCH(req: Request) {
     doc_type: checked.doc_type ?? existing.doc_type,
     audience: body.audience ?? existing.audience,
     tags: [],
-    links: body.content !== undefined ? await linksFor(admin, content) : existing.links,
+    links: body.content !== undefined ? await linksFor(admin, content, principal.organizationId) : existing.links,
     content,
     content_hash: "",
+    visibility: existing.visibility,
   };
   next.content_hash = hashDoc(next);
   try {
-    const ok = await updateBrainDoc(admin, body.path, next, user.email);
+    const ok = await updateBrainDoc(admin, body.path, next, user.email, principal.organizationId);
     if (!ok) return Response.json({ error: "Update didn't apply — the doc may have just been deleted." }, { status: 409 });
+    await auditBrainEvent(admin, principal, "document.updated", "document", body.path);
   } catch (e) {
     return Response.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
   }
@@ -105,12 +131,19 @@ export async function DELETE(req: Request) {
   if (!user) return Response.json({ error: "unauthorized" }, { status: 401 });
   const admin = ursoDbSafe();
   if (!admin) return Response.json({ error: URSO_DB_MISSING }, { status: 503 });
+  const principal = await resolveBrainPrincipal(admin, user);
+  if (!principal || !canEditBrainTruth(principal)) {
+    return Response.json({ error: "knowledge steward access required" }, { status: 403 });
+  }
 
   const body = (await req.json().catch(() => ({}))) as { path?: string };
   if (!body.path) return Response.json({ error: "path required" }, { status: 400 });
   try {
-    const ok = await softDeleteBrainDoc(admin, body.path, user.email);
+    const existing = await getAuthorizedBrainDoc(admin, principal, body.path);
+    if (!existing) return Response.json({ error: "No live doc at that path." }, { status: 404 });
+    const ok = await softDeleteBrainDoc(admin, body.path, user.email, principal.organizationId);
     if (!ok) return Response.json({ error: "No live doc at that path." }, { status: 404 });
+    await auditBrainEvent(admin, principal, "document.deleted", "document", body.path);
   } catch (e) {
     return Response.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
   }
