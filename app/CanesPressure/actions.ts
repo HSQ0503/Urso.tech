@@ -42,13 +42,14 @@ import {
   notifyInvoiceReceipt,
   notifyRewardClaimed,
 } from "@/lib/canes/notify";
-import { cancelSquareInvoice, createDepositLink, createSquareInvoice, recomputeInvoicePaid } from "@/lib/canes/square";
+import { cancelSquareInvoice, createDepositLink, createSquareInvoice, deleteDepositLink, recomputeInvoicePaid } from "@/lib/canes/square";
 import { PRACTICE_PHONE } from "@/lib/canes/tour";
 import {
   fmtEt,
   fmtMoney,
   fmtPhone,
   toE164,
+  PAYMENT_METHOD_LABEL,
   type CalendarEventKind,
   type CatalogKind,
   type Estimate,
@@ -64,6 +65,7 @@ import {
   type JobStatus,
   type LeadStatus,
   type LeadSource,
+  type PaymentMethod,
   type TeamRole,
   type CompType,
   type ExpenseFrequency,
@@ -211,6 +213,155 @@ export async function logCallOutcome(
 }
 
 // ── Messaging ────────────────────────────────────────────────────────────────
+
+// Append a manually collected deposit (cash in hand, Zelle, card on site) to
+// the ledger, job-anchored — Sebastian's "$2,100 job, they paid $520 up
+// front" flow. createInvoiceFromJob later re-points the row onto the bill and
+// folds it into amount_paid_cents, so the invoice opens at balance due and
+// the Square hosted invoice shows "Deposit received −$X". When a draft
+// invoice already exists the row attaches to it directly.
+async function insertJobDepositRow(
+  job: Job,
+  amountCents: number,
+  method: PaymentMethod,
+  invoiceId?: string | null,
+): Promise<ActionResult> {
+  const db = canesDb();
+  const { error } = await db.from("payments").insert({
+    invoice_id: invoiceId ?? null,
+    job_id: job.id,
+    amount_cents: amountCents,
+    currency: "USD",
+    method,
+    source: "manual",
+    status: "completed",
+    kind: "deposit",
+    recorded_by: "owner",
+  });
+  if (error) return { ok: false, notice: error.message };
+
+  let attachedTo = invoiceId ?? null;
+  if (!attachedTo) {
+    // A completeJob racing this insert may have just minted the invoice and
+    // already run its deposit re-point — catch stragglers by claiming this
+    // job's null-invoice deposit rows onto the live invoice now (same
+    // predicate as createInvoiceFromJob's claim, so both sides converge).
+    const inv = await getInvoiceByJob(job.id);
+    if (inv) {
+      await db
+        .from("payments")
+        .update({ invoice_id: inv.id })
+        .eq("job_id", job.id)
+        .eq("kind", "deposit")
+        .is("invoice_id", null);
+      attachedTo = inv.id;
+    }
+  }
+
+  // deposit_cents becomes the CUMULATIVE collected figure (the job sheet and
+  // public estimate page read it), so partials and "record another" always
+  // display what the ledger actually holds.
+  const { data: depRows } = await db
+    .from("payments")
+    .select("amount_cents")
+    .eq("job_id", job.id)
+    .eq("kind", "deposit")
+    .eq("status", "completed");
+  const collected = ((depRows ?? []) as { amount_cents: number }[]).reduce(
+    (s, r) => s + r.amount_cents,
+    0,
+  );
+  await db
+    .from("jobs")
+    .update({ deposit_paid_at: new Date().toISOString(), deposit_cents: collected || amountCents })
+    .eq("id", job.id);
+
+  // An outstanding online deposit link is now double-payment risk — kill it.
+  // (Any remainder simply rides the final invoice, which bills the balance.)
+  if (job.deposit_link_id) {
+    await deleteDepositLink(job.deposit_link_id);
+    await db.from("jobs").update({ deposit_link_id: null, deposit_link_url: null }).eq("id", job.id);
+  }
+
+  if (attachedTo) await recomputeInvoicePaid(attachedTo);
+  await logJobEvent(job.lead_id, `Deposit recorded — ${fmtMoney(amountCents)} (${PAYMENT_METHOD_LABEL[method]})`);
+  return { ok: true };
+}
+
+// Owner action: record a deposit the customer already paid outside the
+// system. Refused once the invoice has gone out — at that point money is
+// recorded on the invoice itself (Record cash payment), where the totals and
+// the Square hosted bill stay consistent.
+export async function recordJobDeposit(
+  jobId: string,
+  amountCents: number,
+  method: PaymentMethod,
+): Promise<ActionResult> {
+  if (!canesConfigured()) return DEMO;
+  const amount = Math.round(amountCents);
+  if (!Number.isFinite(amount) || amount <= 0) return { ok: false, notice: "Enter the deposit amount collected." };
+  const job = await getJob(jobId);
+  if (!job) return { ok: false, notice: "Job not found." };
+  if (job.status === "canceled" || job.status === "paid") {
+    return { ok: false, notice: `This job is ${job.status} — no deposit to record.` };
+  }
+
+  const db = canesDb();
+  // Existing deposits: the cumulative cap, and the double-submit guard (a
+  // second identical tap within the window is the same deposit, not a new
+  // one — two devices or a double-tap must never double the ledger).
+  const { data: priorRows, error: priorErr } = await db
+    .from("payments")
+    .select("amount_cents, created_at")
+    .eq("job_id", jobId)
+    .eq("kind", "deposit")
+    .eq("status", "completed");
+  if (priorErr) return { ok: false, notice: priorErr.message };
+  const prior = (priorRows ?? []) as { amount_cents: number; created_at: string }[];
+  const dupe = prior.find(
+    (r) => r.amount_cents === amount && Date.now() - new Date(r.created_at).getTime() < 20_000,
+  );
+  if (dupe) return { ok: true, notice: `Deposit of ${fmtMoney(amount)} already recorded.` };
+  const priorSum = prior.reduce((s, r) => s + r.amount_cents, 0);
+  if (priorSum + amount > job.total_cents) {
+    return {
+      ok: false,
+      notice: `That would put deposits at ${fmtMoney(priorSum + amount)} on a ${fmtMoney(job.total_cents)} job — check the amount.`,
+    };
+  }
+
+  const invoice = await getInvoiceByJob(jobId); // void steps aside
+  if (invoice) {
+    if (invoice.status !== "draft") {
+      return {
+        ok: false,
+        notice: `Invoice ${invoice.number} has already gone out — record the money on the invoice instead.`,
+      };
+    }
+    // Mid-send signal: Square ids persist on the draft before the status
+    // flips. A deposit landing then would miss the just-published bill.
+    if (invoice.square_invoice_id) {
+      return { ok: false, notice: `Invoice ${invoice.number} is being sent right now — record the money on the invoice instead.` };
+    }
+    // Claim the draft (same optimistic discipline as recordCashPayment): a
+    // send that grabs it first wins and this deposit is refused, never lost.
+    const { data: claimed, error: claimErr } = await db
+      .from("invoices")
+      .update({ updated_at: new Date().toISOString() })
+      .eq("id", invoice.id)
+      .eq("status", "draft")
+      .is("square_invoice_id", null)
+      .select("id");
+    if (claimErr) return { ok: false, notice: claimErr.message };
+    if (!claimed || claimed.length === 0) {
+      return { ok: false, notice: `Invoice ${invoice.number} just changed — refresh and record the money there.` };
+    }
+  }
+  const res = await insertJobDepositRow(job, amount, method, invoice?.id ?? null);
+  if (!res.ok) return res;
+  refresh();
+  return { ok: true, notice: `Deposit of ${fmtMoney(amount)} recorded.` };
+}
 
 // Permanently remove a junk or duplicate lead. Two refusals protect the
 // business: an opted-out lead IS the do-not-text record for that number
@@ -975,6 +1126,7 @@ export async function approveEstimate(
 // 'expired', which the sent/viewed guard rejects.)
 export async function approveEstimateInPerson(
   estimateId: string,
+  opts?: { depositCollected?: boolean; depositMethod?: PaymentMethod },
 ): Promise<ActionResult & { depositUrl?: string | null }> {
   if (!canesConfigured()) return DEMO;
   const estimate = await getEstimate(estimateId);
@@ -990,7 +1142,11 @@ export async function approveEstimateInPerson(
     };
   }
   const signature = `${estimate.customer_name ?? "Customer"} (agreed in person)`;
-  return finalizeEstimateApproval(estimate, signature, { inPerson: true });
+  return finalizeEstimateApproval(estimate, signature, {
+    inPerson: true,
+    depositCollected: Boolean(opts?.depositCollected),
+    depositMethod: opts?.depositMethod ?? "cash",
+  });
 }
 
 // The shared back half of an approval, after each caller's own guards: claim
@@ -1000,7 +1156,12 @@ export async function approveEstimateInPerson(
 async function finalizeEstimateApproval(
   estimate: Estimate,
   signature: string,
-  opts: { selectedItemIds?: string[]; inPerson?: boolean } = {},
+  opts: {
+    selectedItemIds?: string[];
+    inPerson?: boolean;
+    depositCollected?: boolean;
+    depositMethod?: PaymentMethod;
+  } = {},
 ): Promise<ActionResult & { depositUrl?: string | null }> {
   const { selectedItemIds } = opts;
   const db = canesDb();
@@ -1091,6 +1252,25 @@ async function finalizeEstimateApproval(
 
   const withItems = await getEstimateWithItems(estimate.id);
   const jobId = withItems ? await createJobFromEstimate(withItems) : null;
+
+  // Deposit already in hand (in-person approval): ledger it now and never
+  // mint an online link — the customer must not be able to pay twice. The
+  // approval itself already committed, so a failed ledger write can only be
+  // reported honestly, never rolled back.
+  if (opts.depositCollected && jobId && approved.deposit_cents > 0) {
+    const job = await getJob(jobId);
+    const dep = job
+      ? await insertJobDepositRow(job, approved.deposit_cents, opts.depositMethod ?? "cash")
+      : { ok: false as const, notice: "job not found" };
+    refresh();
+    return dep.ok
+      ? { ok: true, depositUrl: null, notice: "Approved — deposit recorded, job in the schedule tray." }
+      : {
+          ok: true,
+          depositUrl: null,
+          notice: "Approved — but the deposit could NOT be recorded. Open the job and record it there.",
+        };
+  }
 
   const deposit = await createDepositLink(approved, jobId);
   refresh();
@@ -2910,6 +3090,10 @@ export async function createManualJob(input: {
   jobAddress?: string;
   jobName: string;
   totalCents: number;
+  // Money the customer already handed over (Sebastian's "$520 up front") —
+  // lands in the ledger as a job-anchored deposit and nets off the invoice.
+  depositCollectedCents?: number;
+  depositMethod?: PaymentMethod;
   scheduledAtIso?: string;
   durationMinutes?: number;
   crewId?: string;
@@ -2922,6 +3106,9 @@ export async function createManualJob(input: {
   if (!jobName) return { ok: false, notice: "A job name is required." };
   const total = Math.round(input.totalCents);
   if (!Number.isFinite(total) || total < 0) return { ok: false, notice: "Enter a valid job total." };
+  if (Math.round(input.depositCollectedCents ?? 0) > total) {
+    return { ok: false, notice: "The deposit can't exceed the job total." };
+  }
   const phone = input.customerPhone?.trim() ? toE164(input.customerPhone) : null;
   if (input.customerPhone?.trim() && !phone) return { ok: false, notice: "That phone number doesn't look valid." };
   const email = input.customerEmail?.trim() || null;
@@ -2989,9 +3176,18 @@ export async function createManualJob(input: {
     const job = await getJob(jobId);
     if (job) await armJobConfirmation(job, startIso);
   }
+  const depositCollected = Math.round(input.depositCollectedCents ?? 0);
+  let depositNotice: string | undefined;
+  if (depositCollected > 0) {
+    const job = await getJob(jobId);
+    const dep = job
+      ? await insertJobDepositRow(job, depositCollected, input.depositMethod ?? "cash")
+      : { ok: false as const };
+    if (!dep.ok) depositNotice = "Job created, but the deposit could NOT be recorded — open the job and record it there.";
+  }
   await logJobEvent(lead, `Job created manually${startIso ? ` — scheduled ${fmtEt(startIso)}` : ""}`);
   refresh();
-  return { ok: true, jobId };
+  return { ok: true, jobId, ...(depositNotice ? { notice: depositNotice } : {}) };
 }
 
 // The lead behind a phone number, if any — manual jobs keep the lead timeline

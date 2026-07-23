@@ -2,14 +2,21 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { BadgeCheck, CalendarCheck2, Send, Trash2 } from "lucide-react";
+import { BadgeCheck, CalendarCheck2, Eye, Send, Trash2 } from "lucide-react";
 import {
   approveEstimateInPerson,
   sendEstimate,
   voidEstimate,
   type ActionResult,
 } from "@/app/CanesPressure/actions";
-import { fmtEt, type EstimateStatus, type EstimateType } from "@/lib/canes/types";
+import {
+  fmtEt,
+  fmtMoney,
+  PAYMENT_METHOD_LABEL,
+  type EstimateStatus,
+  type EstimateType,
+  type PaymentMethod,
+} from "@/lib/canes/types";
 import {
   ChannelPicker,
   choiceToChannels,
@@ -56,22 +63,28 @@ export function EstimateActions({
   estimateId,
   status,
   estimateType,
+  depositCents = 0,
   phone,
   email,
   optedOut,
   sentAt,
+  viewedAt = null,
 }: {
   estimateId: string;
   status: EstimateStatus;
   estimateType: EstimateType;
+  depositCents?: number;
   phone: string;
   email: string;
   optedOut: boolean;
   sentAt: string | null;
+  viewedAt?: string | null;
 }) {
   const { isPending, feedback, run } = useAction();
   const [voidOpen, setVoidOpen] = useState(false);
   const [approveOpen, setApproveOpen] = useState(false);
+  const [depositCollected, setDepositCollected] = useState(false);
+  const [depositMethod, setDepositMethod] = useState<PaymentMethod>("cash");
   const [channelChoice, setChannelChoice] = useState<ChannelChoice>("both");
   const [override, setOverride] = useState<SendOverride>(EMPTY_OVERRIDE);
 
@@ -145,6 +158,17 @@ export function EstimateActions({
           {sentAt && (
             <p className="text-[12px] tabular-nums text-[var(--cp-faint)]">Last sent {fmtEt(sentAt)}</p>
           )}
+          {/* The Markate-style read receipt — the public page stamps the
+              first open of a sent estimate. */}
+          {viewedAt ? (
+            <p className="inline-flex items-center gap-1 text-[12px] font-medium tabular-nums text-[var(--cp-good)]">
+              <Eye size={12} strokeWidth={2.5} /> Viewed {fmtEt(viewedAt)}
+            </p>
+          ) : (
+            sentAt && (
+              <p className="text-[12px] text-[var(--cp-faint)]">Not viewed yet</p>
+            )
+          )}
         </>
       )}
 
@@ -171,6 +195,36 @@ export function EstimateActions({
             the job is created and reminders stop. Only do this when they&apos;ve
             clearly agreed.
           </p>
+          {/* The Markate flow: deposit handed over on the spot → ledger it at
+              approval; no online pay link gets minted. */}
+          {depositCents > 0 && (
+            <div className="space-y-1.5">
+              <label className="flex cursor-pointer items-center gap-2 text-[13px]">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-[var(--cp-brand-fill)]"
+                  checked={depositCollected}
+                  onChange={(e) => setDepositCollected(e.target.checked)}
+                />
+                They already paid the {fmtMoney(depositCents)} deposit
+              </label>
+              {depositCollected && (
+                <div className="flex flex-wrap items-center gap-1.5 pl-6">
+                  {(Object.keys(PAYMENT_METHOD_LABEL) as PaymentMethod[]).map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      className="cp-slot"
+                      data-selected={m === depositMethod}
+                      onClick={() => setDepositMethod(m)}
+                    >
+                      {PAYMENT_METHOD_LABEL[m]}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           <div className="flex gap-2">
             <button
               type="button"
@@ -185,7 +239,14 @@ export function EstimateActions({
               className="cp-btn cp-btn-primary cp-btn-sm flex-1"
               disabled={isPending}
               onClick={() =>
-                run(() => approveEstimateInPerson(estimateId), () => setApproveOpen(false))
+                run(
+                  () =>
+                    approveEstimateInPerson(estimateId, {
+                      depositCollected,
+                      depositMethod,
+                    }),
+                  () => setApproveOpen(false),
+                )
               }
             >
               {isPending ? "Approving..." : "Confirm approval"}

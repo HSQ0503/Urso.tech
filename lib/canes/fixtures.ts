@@ -536,7 +536,7 @@ export const DEMO_ESTIMATES: Estimate[] = [
     customer_name: "Dana Osei", customer_phone: "+15615550190", customer_email: "dana.osei@example.com",
     job_address: "410 Lakeview Ct, Royal Palm Beach", job_name: "Back patio + pool deck",
     subtotal_cents: 27500, discount_cents: 0, adjustment_cents: 0,
-    tax_cents: 0, tax_rate_bps: 0, total_cents: 27500, deposit_percent: 0, deposit_cents: 0,
+    tax_cents: 0, tax_rate_bps: 0, total_cents: 27500, deposit_percent: 25, deposit_cents: 6875,
     message_to_customer: "Thanks for having us out. Here is your estimate.",
     terms: "Payment due on completion unless a deposit is agreed.",
     internal_notes: null, expires_at: hrAhead(28 * 24), public_token: "demo-token-est5",

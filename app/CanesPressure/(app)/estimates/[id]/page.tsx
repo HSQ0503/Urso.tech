@@ -56,6 +56,12 @@ export default async function EstimatePage({ params }: { params: Promise<{ id: s
         <p className="mt-1 text-[13.5px] tabular-nums text-[var(--cp-muted)]">
           {estimate.customer_name ?? "No customer"} · {fmtMoney(estimate.total_cents)}
         </p>
+        {(estimate.sent_at || estimate.viewed_at) && (
+          <p className="mt-0.5 text-[12.5px] tabular-nums text-[var(--cp-faint)]">
+            {estimate.sent_at && <>Sent {fmtEt(estimate.sent_at)}</>}
+            {estimate.viewed_at && <> · Viewed {fmtEt(estimate.viewed_at)}</>}
+          </p>
+        )}
       </div>
 
       {/* ── Desktop (md+): unchanged, frozen. ── */}
@@ -77,6 +83,7 @@ export default async function EstimatePage({ params }: { params: Promise<{ id: s
       <p className="mt-1 text-[13.5px] tabular-nums text-[var(--cp-muted)]">
         {estimate.customer_name ?? "No customer"} · {fmtMoney(estimate.total_cents)}
         {estimate.sent_at && <> · Sent {fmtEt(estimate.sent_at)}</>}
+        {estimate.viewed_at && <> · Viewed {fmtEt(estimate.viewed_at)}</>}
         {estimate.approved_at && <> · Approved {fmtEt(estimate.approved_at)}</>}
       </p>
       </div>
@@ -88,10 +95,12 @@ export default async function EstimatePage({ params }: { params: Promise<{ id: s
             estimateId={estimate.id}
             status={estimate.status}
             estimateType={estimate.estimate_type}
+            depositCents={estimate.deposit_cents}
             phone={estimate.customer_phone ?? ""}
             email={estimate.customer_email ?? ""}
             optedOut={optedOut}
             sentAt={estimate.sent_at}
+            viewedAt={estimate.viewed_at}
           />
           {/* The exact page the customer sees — same affordance the invoice
               detail page carries (draft links 404, so only show once sent). */}

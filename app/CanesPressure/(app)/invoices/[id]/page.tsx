@@ -54,6 +54,12 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
         <p className="mt-1 text-[13.5px] tabular-nums text-[var(--cp-muted)]">
           {invoice.customer_name ?? "No customer"} · {fmtMoney(invoice.total_cents)}
         </p>
+        {(invoice.sent_at || invoice.viewed_at) && (
+          <p className="mt-0.5 text-[12.5px] tabular-nums text-[var(--cp-faint)]">
+            {invoice.sent_at && <>Sent {fmtEt(invoice.sent_at)}</>}
+            {invoice.viewed_at && <> · Viewed {fmtEt(invoice.viewed_at)}</>}
+          </p>
+        )}
       </div>
 
       {/* ── Desktop (md+): unchanged, frozen. ── */}
@@ -74,6 +80,7 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
       <p className="mt-1 text-[13.5px] tabular-nums text-[var(--cp-muted)]">
         {invoice.customer_name ?? "No customer"} · {fmtMoney(invoice.total_cents)}
         {invoice.sent_at && <> · Sent {fmtEt(invoice.sent_at)}</>}
+        {invoice.viewed_at && <> · Viewed {fmtEt(invoice.viewed_at)}</>}
         {invoice.paid_at && <> · Paid {fmtEt(invoice.paid_at)}</>}
       </p>
       </div>

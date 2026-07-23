@@ -2,7 +2,7 @@
 
 import { useRef, useState, useTransition } from "react";
 import { createManualJob, type ActionResult } from "@/app/CanesPressure/actions";
-import { etLocalToIso, fmtMoney, type Crew } from "@/lib/canes/types";
+import { etLocalToIso, fmtMoney, PAYMENT_METHOD_LABEL, type Crew, type PaymentMethod } from "@/lib/canes/types";
 import type { CustomerHit } from "@/lib/canes/customers";
 import { AddressInput } from "../address-input";
 import { CustomerPicker } from "../customer-picker";
@@ -41,6 +41,8 @@ export function CreateJobSheet({
   const [customerPhone, setCustomerPhone] = useState("");
   const [jobName, setJobName] = useState("");
   const [total, setTotal] = useState("");
+  const [deposit, setDeposit] = useState("");
+  const [depositMethod, setDepositMethod] = useState<PaymentMethod>("cash");
   const [jobAddress, setJobAddress] = useState("");
   const [scheduleNow, setScheduleNow] = useState(false);
   const [when, setWhen] = useState("");
@@ -77,10 +79,12 @@ export function CreateJobSheet({
   }
 
   const cents = toCents(total);
+  const depositCents = toCents(deposit);
   const canSubmit =
     customerName.trim().length > 0 &&
     jobName.trim().length > 0 &&
     cents > 0 &&
+    depositCents <= cents &&
     (!scheduleNow || isCompleteWhen(when));
 
   function submit() {
@@ -92,6 +96,8 @@ export function CreateJobSheet({
         customerPhone: customerPhone.trim() || undefined,
         jobName: jobName.trim(),
         totalCents: cents,
+        depositCollectedCents: depositCents > 0 ? depositCents : undefined,
+        depositMethod: depositCents > 0 ? depositMethod : undefined,
         jobAddress: jobAddress.trim() || undefined,
         scheduledAtIso: scheduleNow && isCompleteWhen(when) ? etLocalToIso(when) : undefined,
         durationMinutes: scheduleNow ? duration : undefined,
@@ -157,6 +163,49 @@ export function CreateJobSheet({
               onChange={(e) => setTotal(e.target.value)}
             />
           </div>
+        </div>
+
+        <div>
+          <label className="cp-label" htmlFor="job-deposit">Deposit already collected (optional)</label>
+          <div className="relative">
+            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[13px] text-[var(--cp-muted)]">
+              $
+            </span>
+            <input
+              id="job-deposit"
+              className="cp-input tabular-nums"
+              style={{ paddingLeft: 24 }}
+              inputMode="decimal"
+              placeholder="0.00"
+              value={deposit}
+              onChange={(e) => setDeposit(e.target.value)}
+            />
+          </div>
+          {depositCents > 0 && (
+            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+              {(Object.keys(PAYMENT_METHOD_LABEL) as PaymentMethod[]).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  className="cp-slot"
+                  data-selected={m === depositMethod}
+                  onClick={() => setDepositMethod(m)}
+                >
+                  {PAYMENT_METHOD_LABEL[m]}
+                </button>
+              ))}
+            </div>
+          )}
+          {depositCents > cents && cents > 0 && (
+            <p className="mt-1 text-[12px] text-[var(--cp-warn)]">
+              The deposit can&apos;t exceed the job total.
+            </p>
+          )}
+          {depositCents > 0 && depositCents <= cents && (
+            <p className="mt-1 text-[12px] text-[var(--cp-faint)]">
+              Goes in the ledger now — the invoice will bill {fmtMoney(cents - depositCents)}.
+            </p>
+          )}
         </div>
 
         <div>

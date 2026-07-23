@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { CallButton } from "../call-button";
 import {
+  Banknote,
   CalendarClock,
   Check,
   CircleSlash,
@@ -20,6 +21,7 @@ import {
 import {
   assignJob,
   moveJob,
+  recordJobDeposit,
   scheduleJob,
   reopenJob,
   setJobStatus,
@@ -37,10 +39,12 @@ import {
   fmtMoney,
   fmtPhone,
   JOB_STATUS_LABEL,
+  PAYMENT_METHOD_LABEL,
   type Crew,
   type JobInvoiceSummary,
   type JobStatus,
   type JobWithItems,
+  type PaymentMethod,
 } from "@/lib/canes/types";
 import { isCompleteWhen, SchedulePicker } from "../leads/schedule-picker";
 import { JobMediaSection } from "../media/job-media-section";
@@ -88,6 +92,12 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 
 const DURATIONS = [60, 90, 120, 180, 240, 300] as const;
 
+// "$450" / "450.00" → integer cents; NaN → 0.
+function depositCents(raw: string): number {
+  const n = Number(raw.replace(/[^0-9.]/g, ""));
+  return Number.isFinite(n) ? Math.round(n * 100) : 0;
+}
+
 function durationLabel(minutes: number): string {
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
@@ -123,6 +133,9 @@ export function JobDetailSheet({
   const [pickCrew, setPickCrew] = useState<string>(job.crew_id ?? "");
   const [cancelOpen, setCancelOpen] = useState(false);
   const [reason, setReason] = useState("");
+  const [depositOpen, setDepositOpen] = useState(false);
+  const [depositAmt, setDepositAmt] = useState("");
+  const [depositMethod, setDepositMethod] = useState<PaymentMethod>("cash");
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [editNotes, setEditNotes] = useState("");
   const [editGateCode, setEditGateCode] = useState("");
@@ -754,6 +767,118 @@ export function JobDetailSheet({
                   }}
                 >
                   Keep
+                </button>
+              </div>
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* Deposit — money collected up front, before the invoice exists. Once
+          the bill has gone out, payments are recorded on the invoice itself. */}
+      {job.status !== "canceled" && job.status !== "paid" && (!invoice || invoice.status === "draft") && (
+        <section className="cp-card mt-4 space-y-2 p-4 md:p-5">
+          <p className="cp-group-label">Deposit</p>
+          {job.deposit_paid_at ? (
+            <p className="text-[13px] leading-snug">
+              <span className="font-semibold text-[var(--cp-good)]">
+                {fmtMoney(job.deposit_cents)} on file
+              </span>{" "}
+              <span className="text-[var(--cp-muted)]">
+                · {fmtEt(job.deposit_paid_at)} — nets off the invoice automatically.
+              </span>
+            </p>
+          ) : (
+            <p className="text-[12.5px] leading-snug text-[var(--cp-muted)]">
+              {job.deposit_cents > 0
+                ? `Expecting ${fmtMoney(job.deposit_cents)}. `
+                : ""}
+              Collected cash, Zelle, or a card payment up front? Record it here
+              and the invoice bills the balance.
+            </p>
+          )}
+          {!depositOpen ? (
+            <button
+              type="button"
+              className="cp-btn cp-btn-sm"
+              disabled={isPending}
+              onClick={() => {
+                setDepositAmt(
+                  !job.deposit_paid_at && job.deposit_cents > 0
+                    ? (job.deposit_cents / 100).toFixed(2)
+                    : "",
+                );
+                setDepositOpen(true);
+              }}
+            >
+              <Banknote size={14} strokeWidth={2} />
+              {job.deposit_paid_at ? "Record another deposit" : "Record deposit"}
+            </button>
+          ) : (
+            <div className="space-y-2">
+              <div className="relative">
+                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[13px] text-[var(--cp-muted)]">
+                  $
+                </span>
+                <input
+                  className="cp-input tabular-nums"
+                  style={{ paddingLeft: 24 }}
+                  inputMode="decimal"
+                  placeholder="0.00"
+                  value={depositAmt}
+                  onChange={(e) => setDepositAmt(e.target.value)}
+                />
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {(Object.keys(PAYMENT_METHOD_LABEL) as PaymentMethod[]).map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    className="cp-slot"
+                    data-selected={m === depositMethod}
+                    onClick={() => setDepositMethod(m)}
+                  >
+                    {PAYMENT_METHOD_LABEL[m]}
+                  </button>
+                ))}
+              </div>
+              {depositCents(depositAmt) > job.total_cents && (
+                <p className="text-[12px] text-[var(--cp-warn)]">
+                  The deposit can&apos;t exceed the job total ({fmtMoney(job.total_cents)}).
+                </p>
+              )}
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  className="cp-btn cp-btn-primary cp-btn-sm flex-1"
+                  disabled={
+                    isPending ||
+                    depositCents(depositAmt) <= 0 ||
+                    depositCents(depositAmt) > job.total_cents
+                  }
+                  onClick={() =>
+                    run(
+                      () => recordJobDeposit(job.id, depositCents(depositAmt), depositMethod),
+                      () => {
+                        setDepositOpen(false);
+                        setDepositAmt("");
+                      },
+                    )
+                  }
+                >
+                  {isPending
+                    ? "Recording..."
+                    : depositCents(depositAmt) > 0
+                      ? `Record ${fmtMoney(depositCents(depositAmt))}`
+                      : "Record deposit"}
+                </button>
+                <button
+                  type="button"
+                  className="cp-btn cp-btn-sm"
+                  disabled={isPending}
+                  onClick={() => setDepositOpen(false)}
+                >
+                  Cancel
                 </button>
               </div>
             </div>

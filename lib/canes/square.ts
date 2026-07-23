@@ -129,8 +129,9 @@ export async function createDepositLink(
 
 // Delete a paid quick-pay link so the same URL can never charge twice (Square
 // keeps payment links chargeable after a payment). Best-effort — a failure
-// only means the double-payment alert is the backstop.
-async function deleteDepositLink(linkId: string): Promise<void> {
+// only means the double-payment alert is the backstop. Exported so a deposit
+// recorded manually (cash in hand) can kill its outstanding online link too.
+export async function deleteDepositLink(linkId: string): Promise<void> {
   if (!squareConfigured()) return;
   try {
     const res = await fetch(`${SQUARE_API_BASE}/v2/online-checkout/payment-links/${linkId}`, {
