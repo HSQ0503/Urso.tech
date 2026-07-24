@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ChevronRight, Plus } from "lucide-react";
+import { ChevronRight, Eye, Plus } from "lucide-react";
 import { requirePagePermission } from "@/lib/canes/access";
 import { listEstimates } from "@/lib/canes/estimates";
 import {
@@ -52,15 +52,31 @@ function matchesTab(e: Estimate, tab: Tab): boolean {
   return tab === "all" || e.status === (tab as EstimateStatus);
 }
 
-// The client-facing milestone that matters on a list row: what the CUSTOMER
-// has (or hasn't) done with the quote, latest event first.
+// Outcome and delivery context stay separate from the persistent viewed marker
+// so approving or declining an estimate never hides that the customer opened it.
 function clientMilestone(e: Estimate): { text: string; cls: string } | null {
   const d = (iso: string) => fmtEt(iso, { month: "short", day: "numeric" });
   if (e.declined_at) return { text: `Declined ${d(e.declined_at)}`, cls: "text-[var(--cp-danger)]" };
   if (e.approved_at) return { text: `Approved ${d(e.approved_at)}`, cls: "text-[var(--cp-good)]" };
-  if (e.viewed_at) return { text: `Viewed ${d(e.viewed_at)}`, cls: "text-[var(--cp-muted)]" };
-  if (e.sent_at) return { text: `Sent ${d(e.sent_at)}, not viewed yet`, cls: "text-[var(--cp-faint)]" };
+  if (e.sent_at && !e.viewed_at) {
+    return { text: `Sent ${d(e.sent_at)}, not viewed yet`, cls: "text-[var(--cp-faint)]" };
+  }
   return null;
+}
+
+function EstimateViewed({ estimate }: { estimate: Estimate }) {
+  if (!estimate.viewed_at) return null;
+  const viewedAt = fmtEt(estimate.viewed_at);
+  return (
+    <span
+      className="inline-flex items-center gap-1 text-[12px] font-semibold text-[var(--cp-good)]"
+      aria-label={`Viewed by customer ${viewedAt}`}
+      title={`Viewed by customer ${viewedAt}`}
+    >
+      <Eye size={14} strokeWidth={2.25} aria-hidden="true" />
+      Viewed
+    </span>
+  );
 }
 
 // iOS grouped-list row (md:hidden mobile tree): number + customer, status chip,
@@ -77,8 +93,15 @@ function MobileEstimateRow({ estimate }: { estimate: Estimate }) {
           </span>
         </div>
         <p className="cp-list-sub truncate">{estimate.customer_name ?? "No customer name"}</p>
-        {milestone && (
-          <p className={`truncate text-[12px] tabular-nums ${milestone.cls}`}>{milestone.text}</p>
+        {(estimate.viewed_at || milestone) && (
+          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+            <EstimateViewed estimate={estimate} />
+            {milestone && (
+              <span className={`truncate text-[12px] tabular-nums ${milestone.cls}`}>
+                {milestone.text}
+              </span>
+            )}
+          </div>
         )}
       </div>
       <span className="shrink-0 text-[15px] font-semibold tabular-nums">
@@ -103,6 +126,7 @@ function EstimateRow({ estimate }: { estimate: Estimate }) {
             <span className={`cp-chip ${ESTIMATE_STATUS_CLASS[estimate.status]}`}>
               {ESTIMATE_STATUS_LABEL[estimate.status]}
             </span>
+            <EstimateViewed estimate={estimate} />
             {milestone && (
               <span className={`text-[12px] font-medium tabular-nums ${milestone.cls}`}>
                 {milestone.text}
