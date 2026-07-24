@@ -26,6 +26,7 @@ import {
   EditContactQuick,
 } from "@/app/CanesPressure/components/customers/contact-info-card";
 import { CreateWork } from "@/app/CanesPressure/components/customers/create-work";
+import { DeleteCustomerCard } from "@/app/CanesPressure/components/customers/delete-customer";
 import { NotesCard } from "@/app/CanesPressure/components/customers/notes-card";
 import { PropertiesCard } from "@/app/CanesPressure/components/customers/properties-card";
 
@@ -559,6 +560,9 @@ export default async function CustomerPage({
 
           <NotesCard contactId={contact.id} notes={contact.notes} />
           <CreateWork contact={contact} addresses={addresses} crews={crews} />
+
+          {/* Junk / duplicate cleanup — deliberately last on the page. */}
+          <DeleteCustomerCard contactId={contact.id} />
         </div>
       </div>
     </div>

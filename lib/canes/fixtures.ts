@@ -8,6 +8,7 @@ import type {
   Contact,
   Crew,
   Estimate,
+  EstimateExpense,
   EstimateItem,
   Invoice,
   InvoiceItem,
@@ -596,6 +597,18 @@ export const DEMO_ESTIMATE_ITEMS: EstimateItem[] = [
 ];
 
 // ── Phase 2 scheduler fixtures: crews, jobs, job line items, calendar events ──
+
+// Projected costs on est5 (0014) — the quote-time cost model the builder shows.
+export const DEMO_ESTIMATE_EXPENSES: EstimateExpense[] = [
+  {
+    id: "ee1", created_at: min(1990), estimate_id: "est5",
+    amount_cents: 3500, category: "Materials", note: "Surface cleaner + degreaser", created_by: "owner",
+  },
+  {
+    id: "ee2", created_at: min(1985), estimate_id: "est5",
+    amount_cents: 2000, category: "Gas / travel", note: null, created_by: "owner",
+  },
+];
 
 export const DEMO_CREWS: Crew[] = [
   { id: "crewA", created_at: min(9000), name: "Crew A", color: "#0b6aa2", active: true, sort: 0 },

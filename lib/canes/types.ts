@@ -417,6 +417,14 @@ export type JobExpense = {
   crew_id: string | null; created_by: string | null;
 };
 
+// Projected cost on an estimate (0014) — the quote-time cost model. Approval
+// copies these onto the job as job_expenses seeds.
+export type EstimateExpense = {
+  id: string; created_at: string; estimate_id: string;
+  amount_cents: number; category: string; note: string | null;
+  created_by: string | null;
+};
+
 // ── Phase 5: business overhead expenses + payouts (0008_growth.sql) ───────────
 
 export type ExpenseFrequency = "one_time" | "monthly" | "yearly";

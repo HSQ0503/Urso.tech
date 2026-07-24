@@ -13,6 +13,7 @@ import {
 } from "@/lib/canes/types";
 import { EstimateBuilder } from "@/app/CanesPressure/components/estimates/estimate-builder";
 import { EstimateActions } from "@/app/CanesPressure/components/estimates/estimate-actions";
+import { EstimateCosts } from "@/app/CanesPressure/components/estimates/estimate-costs";
 
 export const dynamic = "force-dynamic";
 
@@ -131,6 +132,15 @@ export default async function EstimatePage({ params }: { params: Promise<{ id: s
             readOnly={readOnly}
             optedOut={optedOut}
           />
+          {/* Quote-time cost model — owner-side planning, never on the
+              customer page. Approval seeds the job's expense sheet from it. */}
+          {estimate.status !== "declined" && estimate.status !== "expired" && (
+            <EstimateCosts
+              estimateId={estimate.id}
+              totalCents={estimate.total_cents - estimate.tax_cents}
+              readOnly={estimate.status === "approved"}
+            />
+          )}
         </div>
       </div>
     </div>

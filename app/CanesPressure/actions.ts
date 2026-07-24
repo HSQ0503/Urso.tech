@@ -29,7 +29,14 @@ import {
   enqueueInvoiceSend,
   enqueueInvoiceReminders,
 } from "@/lib/canes/invoices";
-import { listJobExpenses, addJobExpenseRow, deleteJobExpenseRow } from "@/lib/canes/expenses";
+import {
+  listJobExpenses,
+  addJobExpenseRow,
+  deleteJobExpenseRow,
+  listEstimateExpenses,
+  addEstimateExpenseRow,
+  deleteEstimateExpenseRow,
+} from "@/lib/canes/expenses";
 import { addBusinessExpenseRow, deleteBusinessExpenseRow } from "@/lib/canes/overhead";
 import { ensureContact, getCustomer } from "@/lib/canes/customers";
 import { listInvoiceRewards, rewardConfigFrom, getRewardConfig, type RewardConfig } from "@/lib/canes/rewards";
@@ -53,6 +60,7 @@ import {
   type CalendarEventKind,
   type CatalogKind,
   type Estimate,
+  type EstimateExpense,
   type EstimateItem,
   type EstimateType,
   type EstimateWithItems,
@@ -1127,6 +1135,133 @@ export async function deleteEstimate(estimateId: string): Promise<ActionResult> 
   redirect("/CanesPressure/estimates");
 }
 
+// Permanently remove a dead invoice — drafts and voids only, and never one
+// money has touched. A sent/viewed/paid invoice is the customer-facing money
+// record; Square history (ids on the row) also keeps it. Deposit rows detach
+// automatically (SET NULL, job-anchored) and re-point onto the next bill.
+export async function deleteInvoice(invoiceId: string): Promise<ActionResult> {
+  if (!canesConfigured()) return DEMO;
+  const invoice = await getInvoice(invoiceId);
+  if (!invoice) return { ok: false, notice: "Invoice not found." };
+  if (invoice.status !== "draft" && invoice.status !== "void") {
+    return { ok: false, notice: "Only a draft or voided invoice can be deleted — void it first if it was sent." };
+  }
+  if (invoice.square_invoice_id) {
+    return { ok: false, notice: "This invoice has Square history — keep it for reconciliation." };
+  }
+  const db = canesDb();
+  const { data: payRows, error: payErr } = await db
+    .from("payments")
+    .select("id")
+    .eq("invoice_id", invoiceId)
+    .neq("kind", "deposit")
+    .limit(1);
+  if (payErr) return { ok: false, notice: payErr.message };
+  if ((payRows ?? []).length > 0) {
+    return { ok: false, notice: "This invoice has a payment recorded — it can't be deleted." };
+  }
+  // Same optimistic discipline as reopenJob: only a still-draft/void row at
+  // the amount we read deletes — a racing send keeps its invoice, and a
+  // racing partial cash payment (which bumps amount_paid_cents while status
+  // stays draft) aborts instead of orphaning its ledger row.
+  const { data: deleted, error } = await db
+    .from("invoices")
+    .delete()
+    .eq("id", invoiceId)
+    .in("status", ["draft", "void"])
+    .eq("amount_paid_cents", invoice.amount_paid_cents)
+    .select("id");
+  if (error) return { ok: false, notice: error.message };
+  if (!deleted || deleted.length === 0) {
+    return { ok: false, notice: "This invoice just changed — refresh and check it." };
+  }
+  // Cancel the sender tasks only AFTER the delete claim wins — canceling
+  // first would strip a racing send's queued text/reminders from an invoice
+  // that survives.
+  await db
+    .from("tasks")
+    .update({ status: "canceled" })
+    .eq("status", "pending")
+    .like("dedupe_key", `invoice_%:${invoiceId}%`);
+  if (invoice.lead_id) await logInvoiceEvent(invoice.lead_id, `Invoice ${invoice.number} deleted`);
+  refresh();
+  redirect("/CanesPressure/invoices");
+}
+
+// Permanently remove a junk job. Manual jobs only (an estimate-backed job is
+// the approval's record — cancel it instead), and never one with an invoice
+// or money attached. Items, expenses, time entries, and media rows cascade.
+export async function deleteJob(jobId: string): Promise<ActionResult> {
+  if (!canesConfigured()) return DEMO;
+  const job = await getJob(jobId);
+  if (!job) return { ok: false, notice: "Job not found." };
+  if (job.estimate_id) {
+    return { ok: false, notice: "This job came from an approved estimate — cancel it instead so the record stays." };
+  }
+  const db = canesDb();
+  const [invRef, payRef, timeRef] = await Promise.all([
+    db.from("invoices").select("id").eq("job_id", jobId).limit(1),
+    db.from("payments").select("id").eq("job_id", jobId).limit(1),
+    db.from("job_time_entries").select("id").eq("job_id", jobId).limit(1),
+  ]);
+  if (invRef.error) return { ok: false, notice: invRef.error.message };
+  if (payRef.error) return { ok: false, notice: payRef.error.message };
+  if (timeRef.error) return { ok: false, notice: timeRef.error.message };
+  if ((invRef.data ?? []).length > 0) {
+    return { ok: false, notice: "This job has an invoice — delete or void the invoice first." };
+  }
+  if ((payRef.data ?? []).length > 0) {
+    return { ok: false, notice: "This job has money in the ledger (a deposit or payment) — it can't be deleted." };
+  }
+  if ((timeRef.data ?? []).length > 0) {
+    return { ok: false, notice: "Crew hours are logged on this job — the timesheet keeps it. Cancel it instead." };
+  }
+  await cancelJobConfirmation(jobId);
+  // Claimed delete: only a still-idle job goes — a racing Complete (which
+  // flips status and mints the invoice) wins and this aborts. The ms-scale
+  // window against a concurrent deposit insert is accepted for a one-owner
+  // shop; the payments precheck above covers every human-speed path.
+  const { data: deleted, error } = await db
+    .from("jobs")
+    .delete()
+    .eq("id", jobId)
+    .in("status", ["unscheduled", "scheduled", "confirmed", "canceled"])
+    .select("id");
+  if (error) return { ok: false, notice: error.message };
+  if (!deleted || deleted.length === 0) {
+    return { ok: false, notice: "This job just changed (it may be in progress or billed) — refresh and check it." };
+  }
+  await logJobEvent(job.lead_id, `Job deleted — ${job.job_name ?? "job"}`);
+  refresh();
+  return { ok: true, notice: "Job deleted." };
+}
+
+// Permanently remove a junk or duplicate customer. Anyone with an estimate,
+// job, or invoice on file is business history and stays; addresses cascade,
+// and any linked lead survives with its consent state intact.
+export async function deleteContact(contactId: string): Promise<ActionResult> {
+  if (!canesConfigured()) return DEMO;
+  const db = canesDb();
+  const [est, jobs, invs] = await Promise.all([
+    db.from("estimates").select("id").eq("contact_id", contactId).limit(1),
+    db.from("jobs").select("id").eq("contact_id", contactId).limit(1),
+    db.from("invoices").select("id").eq("contact_id", contactId).limit(1),
+  ]);
+  if (est.error) return { ok: false, notice: est.error.message };
+  if (jobs.error) return { ok: false, notice: jobs.error.message };
+  if (invs.error) return { ok: false, notice: invs.error.message };
+  if ((est.data ?? []).length > 0 || (jobs.data ?? []).length > 0 || (invs.data ?? []).length > 0) {
+    return {
+      ok: false,
+      notice: "This customer has an estimate, job, or invoice on file — archive them instead of deleting.",
+    };
+  }
+  const { error } = await db.from("contacts").delete().eq("id", contactId);
+  if (error) return { ok: false, notice: error.message };
+  refresh();
+  redirect("/CanesPressure/customers");
+}
+
 // ── Public, token-scoped (called from the ungated /CanesPressure/e/[token]) ──
 
 export async function markViewed(token: string): Promise<ActionResult> {
@@ -1459,6 +1594,24 @@ export async function createJobFromEstimate(estimate: EstimateWithItems): Promis
     if (itemsErr) {
       console.error(`[canes] job_items snapshot failed for job ${jobId}: ${itemsErr.message}`);
     }
+  }
+
+  // The quote-time cost model (0014) seeds the job's real expense sheet, so
+  // margin carries from estimate to job without re-entry. Best-effort, and
+  // runs at most once — a retried approve early-returns on the existing job.
+  const projected = await listEstimateExpenses(estimate.id);
+  if (projected.length > 0) {
+    const { error: expErr } = await db.from("job_expenses").insert(
+      projected.map((e) => ({
+        job_id: jobId,
+        amount_cents: e.amount_cents,
+        category: e.category,
+        note: e.note,
+        crew_id: null,
+        created_by: "estimate",
+      })),
+    );
+    if (expErr) console.error(`[canes] expense copy failed for job ${jobId}: ${expErr.message}`);
   }
   return jobId;
 }
@@ -2878,6 +3031,44 @@ export async function addJobExpense(input: {
   });
   if (!id) return { ok: false, notice: "Couldn't save the expense. Please try again." };
   await logJobEvent(job.lead_id, `Expense added — ${fmtMoney(amount)} (${category})`);
+  refresh();
+  return { ok: true };
+}
+
+// ── Estimate expenses (0014) — the quote-time cost model ─────────────────────
+
+export async function listEstimateExpensesAction(estimateId: string): Promise<EstimateExpense[]> {
+  return listEstimateExpenses(estimateId);
+}
+
+export async function addEstimateExpense(input: {
+  estimateId: string;
+  amountCents: number;
+  category: string;
+  note?: string;
+}): Promise<ActionResult> {
+  if (!canesConfigured()) return DEMO;
+  const amount = Math.round(input.amountCents);
+  if (!Number.isFinite(amount) || amount <= 0) return { ok: false, notice: "Enter the cost amount." };
+  const category = input.category.trim();
+  if (!category) return { ok: false, notice: "Pick a category." };
+  const estimate = await getEstimate(input.estimateId);
+  if (!estimate) return { ok: false, notice: "Estimate not found." };
+  const id = await addEstimateExpenseRow({
+    estimateId: input.estimateId,
+    amountCents: amount,
+    category,
+    note: input.note?.trim() || null,
+  });
+  if (!id) return { ok: false, notice: "Couldn't save the cost. Please try again." };
+  refresh();
+  return { ok: true };
+}
+
+export async function deleteEstimateExpense(id: string): Promise<ActionResult> {
+  if (!canesConfigured()) return DEMO;
+  const ok = await deleteEstimateExpenseRow(id);
+  if (!ok) return { ok: false, notice: "Couldn't remove the cost. Please try again." };
   refresh();
   return { ok: true };
 }

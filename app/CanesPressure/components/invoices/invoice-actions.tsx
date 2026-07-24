@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { Banknote, CalendarCheck2, CreditCard, Pencil, Send, Trash2 } from "lucide-react";
 import {
+  deleteInvoice,
   recordCashPayment,
   sendInvoice,
   updateInvoice,
@@ -39,6 +40,9 @@ function useAction() {
     setFeedback(null);
     startTransition(async () => {
       const res = await fn();
+      // A redirecting action (deleteInvoice) never reaches here — Next
+      // carries its redirect through the transition. Belt-and-braces only.
+      if (!res) return;
       setFeedback(res.notice ? { ok: res.ok, text: res.notice } : null);
       if (res.ok) onOk?.();
     });
@@ -82,6 +86,7 @@ export function InvoiceActions({
   const { isPending, feedback, run } = useAction();
   const [channelChoice, setChannelChoice] = useState<ChannelChoice>("both");
   const [voidOpen, setVoidOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const [cashOpen, setCashOpen] = useState(false);
   const [cashAmount, setCashAmount] = useState((balanceCents / 100).toFixed(2));
   const [override, setOverride] = useState<SendOverride>(EMPTY_OVERRIDE);
@@ -115,9 +120,46 @@ export function InvoiceActions({
 
   if (status === "void") {
     return (
-      <p className="text-[13px] text-[var(--cp-muted)]">
-        This invoice was voided. Complete the job again to re-bill if needed.
-      </p>
+      <div className="space-y-2.5">
+        <p className="text-[13px] text-[var(--cp-muted)]">
+          This invoice was voided. Complete the job again to re-bill if needed.
+        </p>
+        {!deleteOpen ? (
+          <button
+            type="button"
+            className="cp-btn cp-btn-sm cp-btn-danger w-full"
+            disabled={isPending}
+            onClick={() => setDeleteOpen(true)}
+          >
+            <Trash2 size={15} strokeWidth={2} /> Delete invoice
+          </button>
+        ) : (
+          <div className="space-y-2">
+            <p className="text-[12.5px] leading-snug text-[var(--cp-muted)]">
+              This permanently removes the voided invoice from your list. This can&apos;t be undone.
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                className="cp-btn cp-btn-sm flex-1"
+                disabled={isPending}
+                onClick={() => setDeleteOpen(false)}
+              >
+                Keep it
+              </button>
+              <button
+                type="button"
+                className="cp-btn cp-btn-sm cp-btn-danger flex-1"
+                disabled={isPending}
+                onClick={() => run(() => deleteInvoice(invoiceId))}
+              >
+                {isPending ? "Deleting..." : "Confirm delete"}
+              </button>
+            </div>
+          </div>
+        )}
+        <Notice value={feedback} />
+      </div>
     );
   }
 
@@ -295,6 +337,47 @@ export function InvoiceActions({
           </div>
         )}
       </div>
+
+      {/* Delete — drafts only (never sent, nothing to protect). A sent
+          invoice voids instead; the void panel then offers delete. */}
+      {isDraft && (
+        <div className="cp-divider pt-3">
+          {!deleteOpen ? (
+            <button
+              type="button"
+              className="cp-btn cp-btn-sm cp-btn-danger w-full"
+              disabled={isPending}
+              onClick={() => setDeleteOpen(true)}
+            >
+              <Trash2 size={15} strokeWidth={2} /> Delete draft
+            </button>
+          ) : (
+            <div className="space-y-2">
+              <p className="text-[12.5px] leading-snug text-[var(--cp-muted)]">
+                This permanently removes the draft invoice. This can&apos;t be undone.
+              </p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  className="cp-btn cp-btn-sm flex-1"
+                  disabled={isPending}
+                  onClick={() => setDeleteOpen(false)}
+                >
+                  Keep it
+                </button>
+                <button
+                  type="button"
+                  className="cp-btn cp-btn-sm cp-btn-danger flex-1"
+                  disabled={isPending}
+                  onClick={() => run(() => deleteInvoice(invoiceId))}
+                >
+                  {isPending ? "Deleting..." : "Confirm delete"}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Void */}
       <div className="cp-divider pt-3">

@@ -689,6 +689,10 @@ export function ScheduleWorkspace({
             );
             setScheduleTarget(null);
           }}
+          onOpenDetails={() => {
+            setDetailJobId(scheduleTarget.id);
+            setScheduleTarget(null);
+          }}
         />
       )}
     </div>
@@ -859,12 +863,16 @@ function MobileScheduleSheet({
   isPending,
   onClose,
   onSchedule,
+  onOpenDetails,
 }: {
   job: JobWithItems;
   crews: Crew[];
   isPending: boolean;
   onClose: () => void;
   onSchedule: (scheduledIso: string, durationMinutes: number, crewId: string | null) => void;
+  // Mobile tray jobs only reach this sheet — the details link is their sole
+  // path to the job editor (deposit, delete, edit) before scheduling.
+  onOpenDetails: () => void;
 }) {
   const [when, setWhen] = useState("");
   const [duration, setDuration] = useState(job.duration_minutes || 120);
@@ -917,6 +925,13 @@ function MobileScheduleSheet({
         onClick={() => onSchedule(etLocalToIso(when), duration, crewId)}
       >
         {isPending ? "Scheduling..." : "Schedule"}
+      </button>
+      <button
+        type="button"
+        className="mt-3 min-h-9 w-full cursor-pointer text-center text-[12.5px] font-semibold text-[var(--cp-brand-deep)] hover:underline"
+        onClick={onOpenDetails}
+      >
+        Open job details instead
       </button>
     </SheetShell>
   );

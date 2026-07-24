@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { computePayouts, listTeamMembers, parsePayoutRange } from "@/lib/canes/payouts";
+import { computePayouts, fmtMinutes, getTeamHours, listTeamMembers, parsePayoutRange } from "@/lib/canes/payouts";
 import { listCrews } from "@/lib/canes/estimates";
-import { fmtMoney, TEAM_ROLE_LABEL, type PayoutLine, type PayoutRangeKey, type TeamRole } from "@/lib/canes/types";
+import { fmtEt, fmtMoney, TEAM_ROLE_LABEL, type PayoutLine, type PayoutRangeKey, type TeamRole } from "@/lib/canes/types";
 import { SplitEditor } from "@/app/CanesPressure/components/payouts/split-editor";
 import { TeamManager } from "@/app/CanesPressure/components/payouts/team-manager";
 
@@ -143,14 +143,16 @@ function PayoutRow({ line, max }: { line: PayoutLine; max: number }) {
 export default async function PayoutsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ range?: string | string[] }>;
+  searchParams: Promise<{ range?: string | string[]; hours?: string | string[] }>;
 }) {
   const sp = await searchParams;
   const rangeKey = parsePayoutRange(Array.isArray(sp.range) ? sp.range[0] : sp.range);
-  const [summary, team, crews] = await Promise.all([
+  const hoursMemberId = Array.isArray(sp.hours) ? sp.hours[0] : (sp.hours ?? null);
+  const [summary, team, crews, hours] = await Promise.all([
     computePayouts(rangeKey),
     listTeamMembers(),
     listCrews(true),
+    getTeamHours(),
   ]);
 
   const splitMembers = team.filter((m) => m.comp_type === "profit_split");
@@ -174,7 +176,7 @@ export default async function PayoutsPage({
           {RANGE_TABS.map((r) => (
             <Link
               key={r.key}
-              href={`/CanesPressure/payouts?range=${r.key}`}
+              href={`/CanesPressure/payouts?range=${r.key}${hoursMemberId ? `&hours=${hoursMemberId}` : ""}`}
               className="cp-seg-btn flex-1"
               data-active={r.key === rangeKey}
             >
@@ -196,7 +198,7 @@ export default async function PayoutsPage({
           {RANGE_TABS.map((r) => (
             <Link
               key={r.key}
-              href={`/CanesPressure/payouts?range=${r.key}`}
+              href={`/CanesPressure/payouts?range=${r.key}${hoursMemberId ? `&hours=${hoursMemberId}` : ""}`}
               className="cp-seg-btn min-w-[56px]"
               data-active={r.key === rangeKey}
             >
@@ -260,14 +262,108 @@ export default async function PayoutsPage({
                 </div>
               )}
               <p className="mt-3 text-[11.5px] leading-snug text-[var(--cp-faint)]">
-                Worker hours are estimated from scheduled job durations until crew check-in ships.
+                Payout labor is still estimated from scheduled job durations; the
+                Hours worked section below shows the crew&apos;s real check-ins.
               </p>
             </>
           )}
         </div>
       </section>
 
-      {/* 3 — Team + split */}
+      {/* 3 — Hours, from real crew check-ins (tamper-proof: portal stamps,
+          not self-reported numbers). ?hours=<memberId> expands the audit list. */}
+      <section className="cp-card p-4 md:p-5">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="text-[15px] font-semibold">Hours worked</h2>
+          <p className="cp-mono">From crew check-ins</p>
+        </div>
+        {hours.truncated && (
+          <p className="mt-1 text-[11.5px] leading-snug text-[var(--cp-faint)]">
+            Showing the most recent check-ins only — all-time totals exclude older history.
+          </p>
+        )}
+        <div className="mt-3 divide-y divide-[var(--cp-line)]">
+          {hours.members.map((h) => {
+            const open = hoursMemberId === h.member.id;
+            return (
+              <div key={h.member.id} className="py-3 first:pt-0 last:pb-0">
+                <Link
+                  href={
+                    open
+                      ? `/CanesPressure/payouts?range=${rangeKey}`
+                      : `/CanesPressure/payouts?range=${rangeKey}&hours=${h.member.id}`
+                  }
+                  className="flex flex-wrap items-center gap-x-3 gap-y-1"
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[14px] font-semibold">
+                      {h.member.name}
+                      {h.onClockJobName && (
+                        <span className="ml-2 inline-flex items-center gap-1 text-[11.5px] font-semibold text-[var(--cp-good)]">
+                          <span className="inline-block h-1.5 w-1.5 rounded-full bg-[var(--cp-good)]" />
+                          On the clock — {h.onClockJobName}
+                        </span>
+                      )}
+                    </span>
+                    <span className="block text-[12px] text-[var(--cp-muted)]">
+                      {TEAM_ROLE_LABEL[h.member.role]}
+                      {!h.hasAccount && " · no portal account — hours aren't tracked"}
+                    </span>
+                  </span>
+                  {h.hasAccount && (
+                    <span className="grid shrink-0 grid-cols-4 gap-x-4 text-right tabular-nums">
+                      {(
+                        [
+                          ["Today", h.todayMinutes],
+                          ["Week", h.weekMinutes],
+                          ["Month", h.monthMinutes],
+                          ["All time", h.allTimeMinutes],
+                        ] as const
+                      ).map(([label, mins]) => (
+                        <span key={label}>
+                          <span className="cp-mono block">{label}</span>
+                          <span className="block text-[13.5px] font-semibold">{fmtMinutes(mins)}</span>
+                        </span>
+                      ))}
+                    </span>
+                  )}
+                </Link>
+                {open && h.hasAccount && (
+                  <div className="mt-2.5 rounded-md border border-[var(--cp-line)] bg-[var(--cp-bg)] px-3 py-2">
+                    {h.entries.length === 0 ? (
+                      <p className="py-1 text-[12.5px] text-[var(--cp-muted)]">
+                        No check-ins yet — hours appear the first time they check in on a job.
+                      </p>
+                    ) : (
+                      <ul className="divide-y divide-[var(--cp-line)]">
+                        {h.entries.map((e) => (
+                          <li key={e.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 py-1.5">
+                            <span className="min-w-0 flex-1 truncate text-[12.5px]">
+                              {e.customerName ?? "Customer"} · {e.jobName}
+                            </span>
+                            <span className="cp-mono tabular-nums">
+                              {fmtEt(e.checkedInAt, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                              {" → "}
+                              {e.checkedOutAt
+                                ? fmtEt(e.checkedOutAt, { hour: "numeric", minute: "2-digit" })
+                                : "on the clock"}
+                            </span>
+                            <span className="shrink-0 text-[12.5px] font-semibold tabular-nums">
+                              {fmtMinutes(e.minutes)}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* 4 — Team + split */}
       {splitMembers.length > 0 && <SplitEditor members={splitMembers} />}
       <TeamManager team={team} crews={crews} />
     </div>

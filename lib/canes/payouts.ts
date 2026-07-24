@@ -190,3 +190,156 @@ export async function computePayouts(key: PayoutRangeKey): Promise<PayoutSummary
     lines,
   };
 }
+
+// ── Crew hours (0009 job_time_entries) — the owner's tamper-proof timesheet ──
+// Sourced from the crew portal's real check-in/out stamps, never self-reported
+// numbers: today / this week / this month / all time per team member, plus the
+// raw entry list so Sebastian can audit any line. Display-only — the payout
+// waterfall above still uses the crew-job-duration proxy until it is
+// intentionally migrated and reconciled against these entries.
+
+export type TeamHoursEntry = {
+  id: string;
+  jobName: string;
+  customerName: string | null;
+  checkedInAt: string;
+  checkedOutAt: string | null; // null = still on the clock
+  minutes: number; // open entries count elapsed time so far
+};
+
+export type MemberHours = {
+  member: TeamMember;
+  hasAccount: boolean;
+  onClockJobName: string | null;
+  todayMinutes: number;
+  weekMinutes: number;
+  monthMinutes: number;
+  allTimeMinutes: number;
+  entries: TeamHoursEntry[]; // newest first, capped for display
+};
+
+export type TeamHours = {
+  members: MemberHours[];
+  // The fetch is capped — when history exceeds it, "all time" undercounts and
+  // the page says so instead of silently lying.
+  truncated: boolean;
+};
+
+const ENTRY_DISPLAY_CAP = 25;
+const ENTRY_FETCH_CAP = 5000;
+
+// Minutes of [inMs, outMs] that fall inside [startMs, endMs].
+function overlapMinutes(inMs: number, outMs: number, startMs: number, endMs: number): number {
+  const from = Math.max(inMs, startMs);
+  const to = Math.min(outMs, endMs);
+  return to > from ? Math.round((to - from) / 60_000) : 0;
+}
+
+export async function getTeamHours(): Promise<TeamHours> {
+  const team = await listTeamMembers();
+  const empty = (member: TeamMember): MemberHours => ({
+    member,
+    hasAccount: false,
+    onClockJobName: null,
+    todayMinutes: 0,
+    weekMinutes: 0,
+    monthMinutes: 0,
+    allTimeMinutes: 0,
+    entries: [],
+  });
+  if (isDemo()) return { members: team.map(empty), truncated: false };
+
+  const db = canesDb();
+  const [acc, ent] = await Promise.all([
+    db.from("crew_accounts").select("id, team_member_id"),
+    db
+      .from("job_time_entries")
+      .select("*")
+      .order("checked_in_at", { ascending: false })
+      .limit(ENTRY_FETCH_CAP),
+  ]);
+  if (acc.error) throw new Error(`getTeamHours accounts: ${acc.error.message}`);
+  if (ent.error) throw new Error(`getTeamHours entries: ${ent.error.message}`);
+  const accounts = (acc.data ?? []) as { id: string; team_member_id: string }[];
+  const entries = (ent.data ?? []) as {
+    id: string;
+    job_id: string;
+    account_id: string;
+    checked_in_at: string;
+    checked_out_at: string | null;
+  }[];
+  const memberByAccount = new Map(accounts.map((a) => [a.id, a.team_member_id]));
+  const accountMembers = new Set(accounts.map((a) => a.team_member_id));
+
+  // Job names for the audit list — chunked so the .in() filter never blows a
+  // URL-length limit as history grows; a failed chunk just falls back to the
+  // "Job" label rather than dropping the hours math.
+  const jobIds = [...new Set(entries.map((e) => e.job_id))];
+  const jobById = new Map<string, { job_name: string | null; customer_name: string | null }>();
+  for (let i = 0; i < jobIds.length; i += 100) {
+    const { data: jobRows, error: jobErr } = await db
+      .from("jobs")
+      .select("id, job_name, customer_name")
+      .in("id", jobIds.slice(i, i + 100));
+    if (jobErr) {
+      console.error(`[canes] getTeamHours job lookup: ${jobErr.message}`);
+      continue;
+    }
+    for (const j of (jobRows ?? []) as { id: string; job_name: string | null; customer_name: string | null }[]) {
+      jobById.set(j.id, { job_name: j.job_name, customer_name: j.customer_name });
+    }
+  }
+
+  const nowMs = Date.now();
+  const day = rangeBounds("day");
+  const week = rangeBounds("week");
+  const month = rangeBounds("month");
+  const dayStart = Date.parse(day.startIso);
+  const weekStart = Date.parse(week.startIso);
+  const monthStart = Date.parse(month.startIso);
+
+  const byMember = new Map<string, MemberHours>();
+  for (const member of team) {
+    byMember.set(member.id, { ...empty(member), hasAccount: accountMembers.has(member.id) });
+  }
+
+  for (const e of entries) {
+    const memberId = memberByAccount.get(e.account_id);
+    const row = memberId ? byMember.get(memberId) : undefined;
+    if (!row) continue;
+    const inMs = Date.parse(e.checked_in_at);
+    const outMs = e.checked_out_at ? Math.min(Date.parse(e.checked_out_at), nowMs) : nowMs;
+    const job = jobById.get(e.job_id);
+    row.todayMinutes += overlapMinutes(inMs, outMs, dayStart, nowMs);
+    row.weekMinutes += overlapMinutes(inMs, outMs, weekStart, nowMs);
+    row.monthMinutes += overlapMinutes(inMs, outMs, monthStart, nowMs);
+    row.allTimeMinutes += overlapMinutes(inMs, outMs, 0, nowMs);
+    if (!e.checked_out_at && !row.onClockJobName) {
+      row.onClockJobName = job?.job_name ?? job?.customer_name ?? "a job";
+    }
+    if (row.entries.length < ENTRY_DISPLAY_CAP) {
+      row.entries.push({
+        id: e.id,
+        jobName: job?.job_name ?? "Job",
+        customerName: job?.customer_name ?? null,
+        checkedInAt: e.checked_in_at,
+        checkedOutAt: e.checked_out_at,
+        minutes: Math.max(0, Math.round((outMs - inMs) / 60_000)),
+      });
+    }
+  }
+
+  return {
+    members: team.map((m) => byMember.get(m.id) as MemberHours),
+    truncated: entries.length >= ENTRY_FETCH_CAP,
+  };
+}
+
+// "3h 24m" — the hours-display idiom for the payouts page.
+export function fmtMinutes(minutes: number): string {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  if (h && m) return `${h}h ${m}m`;
+  if (h) return `${h}h`;
+  return `${m}m`;
+}

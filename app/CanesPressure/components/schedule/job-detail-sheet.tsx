@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import {
   assignJob,
+  deleteJob,
   moveJob,
   recordJobDeposit,
   scheduleJob,
@@ -136,6 +137,7 @@ export function JobDetailSheet({
   const [depositOpen, setDepositOpen] = useState(false);
   const [depositAmt, setDepositAmt] = useState("");
   const [depositMethod, setDepositMethod] = useState<PaymentMethod>("cash");
+  const [deleteJobOpen, setDeleteJobOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [editNotes, setEditNotes] = useState("");
   const [editGateCode, setEditGateCode] = useState("");
@@ -921,6 +923,52 @@ export function JobDetailSheet({
               </>
             )}
           </p>
+        </div>
+      )}
+
+      {/* Danger zone — junk-job cleanup. Manual jobs only (an estimate-backed
+          job is the approval's record), idle statuses only (a completed job
+          reopens first), and only before any invoice, money, or logged crew
+          hours exist; the server re-checks all of it. */}
+      {!job.estimate_id &&
+        !invoice &&
+        ["unscheduled", "scheduled", "confirmed", "canceled"].includes(job.status) && (
+        <div className="cp-divider mt-4 space-y-2 pt-3">
+          {!deleteJobOpen ? (
+            <button
+              type="button"
+              className="cp-btn cp-btn-sm cp-btn-danger"
+              disabled={isPending}
+              onClick={() => setDeleteJobOpen(true)}
+            >
+              <Trash2 size={14} strokeWidth={2} /> Delete job
+            </button>
+          ) : (
+            <div className="space-y-2">
+              <p className="text-[12.5px] leading-snug text-[var(--cp-muted)]">
+                This permanently deletes the job, its checklist, expenses, hours,
+                and photos. This can&apos;t be undone.
+              </p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  className="cp-btn cp-btn-sm flex-1"
+                  disabled={isPending}
+                  onClick={() => setDeleteJobOpen(false)}
+                >
+                  Keep it
+                </button>
+                <button
+                  type="button"
+                  className="cp-btn cp-btn-sm cp-btn-danger flex-1"
+                  disabled={isPending}
+                  onClick={() => run(() => deleteJob(job.id), onClose)}
+                >
+                  {isPending ? "Deleting..." : "Confirm delete"}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
