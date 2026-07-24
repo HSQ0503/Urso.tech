@@ -1,4 +1,5 @@
 import { MessageSquare } from "lucide-react";
+import { requirePagePermission } from "@/lib/canes/access";
 import { getThreadCalls, getThreadMessages, listThreads } from "@/lib/canes/data";
 import { findCustomerByPhone, getCustomer } from "@/lib/canes/customers";
 import { toE164, type ThreadKind } from "@/lib/canes/types";
@@ -26,6 +27,7 @@ export default async function InboxPage({
 }: {
   searchParams: Promise<{ t?: string | string[]; thread?: string | string[] }>;
 }) {
+  await requirePagePermission("leads");
   const sp = await searchParams;
   // A raw "+" in the query decodes to a space — re-normalize to E.164.
   const raw = firstParam(sp.thread) ?? firstParam(sp.t);

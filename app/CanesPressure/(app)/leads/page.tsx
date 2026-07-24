@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Calendar, ChevronRight } from "lucide-react";
+import { requirePagePermission } from "@/lib/canes/access";
 import { listLeads } from "@/lib/canes/data";
 import {
   fmtEt,
@@ -113,6 +114,7 @@ export default async function LeadsPage({
 }: {
   searchParams: Promise<{ f?: string | string[] }>;
 }) {
+  await requirePagePermission("leads");
   const { f } = await searchParams;
   const raw = Array.isArray(f) ? f[0] : f;
   const filter: Filter = FILTERS.includes(raw as Filter) ? (raw as Filter) : "open";

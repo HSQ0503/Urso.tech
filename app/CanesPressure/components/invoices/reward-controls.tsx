@@ -41,10 +41,14 @@ function Notice({ value }: { value: Feedback }) {
 export function RewardManager({
   invoiceId,
   invoiceStatus,
+  teamMembers,
   onChanged,
 }: {
   invoiceId: string;
   invoiceStatus: InvoiceStatus;
+  // 0015: active roster for the approve step's "credit a team member" picker.
+  // Optional so hosts that don't fetch it (the schedule sheet) stay unchanged.
+  teamMembers?: { id: string; name: string }[];
   // Fired after any successful mutation — approvals change the invoice total,
   // so hosts (the job sheet's cash prefill) can refresh their own amounts.
   onChanged?: () => void;
@@ -52,6 +56,8 @@ export function RewardManager({
   const [rewards, setRewards] = useState<InvoiceReward[] | null>(null);
   const [config, setConfig] = useState<RewardConfig | null>(null);
   const [feedback, setFeedback] = useState<Feedback>(null);
+  // Who earned the review, per claimed reward row ("" = no one).
+  const [attribution, setAttribution] = useState<Record<string, string>>({});
   const [isPending, startTransition] = useTransition();
 
   useEffect(() => {
@@ -143,12 +149,33 @@ export function RewardManager({
                     ))}
                   </p>
                 )}
+                {teamMembers && teamMembers.length > 0 && (
+                  <label className="mt-2 flex items-center gap-2">
+                    <span className="cp-mono shrink-0">Credit</span>
+                    <select
+                      className="cp-select min-w-0 flex-1"
+                      value={attribution[row.id] ?? ""}
+                      disabled={isPending}
+                      onChange={(e) =>
+                        setAttribution((prev) => ({ ...prev, [row.id]: e.target.value }))
+                      }
+                      aria-label="Credit a team member for this review"
+                    >
+                      <option value="">No one</option>
+                      {teamMembers.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
                 <div className="mt-2 flex gap-2">
                   <button
                     type="button"
                     className="cp-btn cp-btn-primary cp-btn-sm flex-1"
                     disabled={isPending}
-                    onClick={() => run(() => setRewardApproval(row.id, true))}
+                    onClick={() => run(() => setRewardApproval(row.id, true, attribution[row.id] || null))}
                   >
                     <ThumbsUp size={13} strokeWidth={2} />
                     Approve −{fmtMoney(cents)}
@@ -169,10 +196,16 @@ export function RewardManager({
 
           // Applied — the discount is in the total.
           if (row?.status === "approved") {
+            const creditedName = row.attributed_member_id
+              ? teamMembers?.find((m) => m.id === row.attributed_member_id)?.name
+              : undefined;
             return (
               <li key={kind} className="flex items-center justify-between gap-2 text-[13px]">
                 <span className="inline-flex items-center gap-1.5 font-medium text-[var(--cp-good)]">
                   <BadgeCheck size={14} strokeWidth={2} /> {label}
+                  {creditedName && (
+                    <span className="font-normal text-[var(--cp-faint)]">· {creditedName}</span>
+                  )}
                 </span>
                 <span className="tabular-nums font-semibold text-[var(--cp-good)]">
                   −{fmtMoney(cents)} applied

@@ -1,6 +1,8 @@
 import Link from "next/link";
-import { ChevronRight, Plus, Search, Users } from "lucide-react";
+import { ChevronRight, Plus, Repeat, Search, Users } from "lucide-react";
+import { requirePagePermission } from "@/lib/canes/access";
 import { listCustomers } from "@/lib/canes/customers";
+import { getRecurringInsights } from "@/lib/canes/growth";
 import { fmtEt, fmtMoney, fmtPhone, type CustomerSummary } from "@/lib/canes/types";
 import { CustomerAvatar } from "@/app/CanesPressure/components/customers/avatar";
 
@@ -20,7 +22,7 @@ function lastJobLabel(customer: CustomerSummary): string {
 }
 
 // Desktop table row — frozen. Only rendered inside the hidden md:block tree.
-function CustomerRow({ customer }: { customer: CustomerSummary }) {
+function CustomerRow({ customer, recurring }: { customer: CustomerSummary; recurring: boolean }) {
   const lastJob = lastJobLabel(customer);
   return (
     <Link
@@ -33,6 +35,9 @@ function CustomerRow({ customer }: { customer: CustomerSummary }) {
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-1.5">
               <p className="truncate text-[14px] font-semibold">{customer.name ?? "No name"}</p>
+              {recurring && (
+                <span className="cp-chip bg-[var(--cp-good-bg)] text-[var(--cp-good)]">Recurring</span>
+              )}
               {customer.archived && (
                 <span className="cp-chip bg-[var(--cp-bg)] text-[var(--cp-faint)]">Archived</span>
               )}
@@ -61,7 +66,7 @@ function CustomerRow({ customer }: { customer: CustomerSummary }) {
 
 // Mobile iOS row — avatar, name (+ archived chip), address, phone·last job,
 // trailing lifetime money + "$X due" chip, chevron.
-function CustomerListRow({ customer }: { customer: CustomerSummary }) {
+function CustomerListRow({ customer, recurring }: { customer: CustomerSummary; recurring: boolean }) {
   const lastJob = lastJobLabel(customer);
   return (
     <Link href={`/CanesPressure/customers/${customer.id}`} className="cp-list-row">
@@ -69,6 +74,9 @@ function CustomerListRow({ customer }: { customer: CustomerSummary }) {
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
           <span className="cp-list-title truncate">{customer.name ?? "No name"}</span>
+          {recurring && (
+            <span className="cp-chip shrink-0 bg-[var(--cp-good-bg)] text-[var(--cp-good)]">Recurring</span>
+          )}
           {customer.archived && (
             <span className="cp-chip shrink-0 bg-[var(--cp-bg)] text-[var(--cp-faint)]">Archived</span>
           )}
@@ -96,9 +104,15 @@ export default async function CustomersPage({
 }: {
   searchParams: Promise<{ q?: string | string[] }>;
 }) {
+  await requirePagePermission("customers");
   const sp = await searchParams;
   const query = (Array.isArray(sp.q) ? sp.q[0] : sp.q)?.trim() ?? "";
-  const customers = await listCustomers(query || undefined);
+  const [customers, recurring] = await Promise.all([
+    listCustomers(query || undefined),
+    getRecurringInsights(),
+  ]);
+  const recurringIds = new Set(recurring.recurringCustomerIds);
+  const planCount = recurring.rows.length;
   const archivedCount = customers.filter((c) => c.archived).length;
 
   const countLine = query
@@ -163,6 +177,25 @@ export default async function CustomersPage({
         </div>
       </form>
 
+      {/* Recurring plans at a glance — "which of my customers repeat". Rows
+          below carry the matching Recurring chip. */}
+      <div className="cp-card mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3">
+        <span className="inline-flex items-center gap-1.5 text-[13.5px] font-semibold">
+          <Repeat size={14} strokeWidth={2} className="text-[var(--cp-brand-deep)]" />
+          Recurring plans
+        </span>
+        {planCount > 0 ? (
+          <span className="text-[13px] tabular-nums text-[var(--cp-muted)]">
+            {planCount} active plan{planCount === 1 ? "" : "s"} · est.{" "}
+            {fmtMoney(recurring.mrrCents)}/month
+          </span>
+        ) : (
+          <span className="text-[13px] text-[var(--cp-faint)]">
+            None yet — set a job to repeat from the job editor.
+          </span>
+        )}
+      </div>
+
       <div className="mt-4">
         {customers.length === 0 ? (
           <div className="cp-card flex flex-col items-center gap-2 rounded-xl px-6 py-12 text-center md:rounded-md">
@@ -195,7 +228,7 @@ export default async function CustomersPage({
             {/* Mobile: one iOS inset list of avatar rows */}
             <div className="cp-list md:hidden">
               {customers.map((c) => (
-                <CustomerListRow key={c.id} customer={c} />
+                <CustomerListRow key={c.id} customer={c} recurring={recurringIds.has(c.id)} />
               ))}
             </div>
 
@@ -210,7 +243,7 @@ export default async function CustomersPage({
               </div>
               <div className="divide-y divide-[var(--cp-line)]">
                 {customers.map((c) => (
-                  <CustomerRow key={c.id} customer={c} />
+                  <CustomerRow key={c.id} customer={c} recurring={recurringIds.has(c.id)} />
                 ))}
               </div>
             </div>

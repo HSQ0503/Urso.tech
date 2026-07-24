@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, ChevronLeft, ExternalLink } from "lucide-react";
+import { requirePagePermission } from "@/lib/canes/access";
 import { getLead } from "@/lib/canes/data";
 import { getInvoiceWithItems } from "@/lib/canes/invoices";
+import { listTeamMembers } from "@/lib/canes/payouts";
 import { listInvoiceRewards } from "@/lib/canes/rewards";
 import {
   approvedRewardCents,
@@ -15,6 +17,7 @@ import {
 } from "@/lib/canes/types";
 import { InvoiceActions } from "@/app/CanesPressure/components/invoices/invoice-actions";
 import { RewardManager } from "@/app/CanesPressure/components/invoices/reward-controls";
+import { StatusJourney } from "@/app/CanesPressure/components/status-journey";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Invoice" };
@@ -22,9 +25,15 @@ export const metadata = { title: "Invoice" };
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://urso.ws";
 
 export default async function InvoicePage({ params }: { params: Promise<{ id: string }> }) {
+  await requirePagePermission("invoices");
   const { id } = await params;
   const invoice = await getInvoiceWithItems(id);
   if (!invoice) notFound();
+
+  // Active roster feeds the reward panel's "credit a team member" picker.
+  const teamMembers = (await listTeamMembers())
+    .filter((m) => m.active)
+    .map((m) => ({ id: m.id, name: m.name }));
 
   const lead = invoice.lead_id ? await getLead(invoice.lead_id) : null;
   const optedOut = Boolean(lead?.opted_out);
@@ -34,6 +43,16 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
   const appliedRewardCents = approvedRewardCents(await listInvoiceRewards(invoice.id));
   const payLink = `${APP_URL}/CanesPressure/i/${invoice.public_token}`;
   const isPublic = invoice.status !== "draft" && invoice.status !== "void";
+
+  // Client journey — what the CUSTOMER has done with this bill. Voided
+  // replaces the Paid step so the strip always ends at the real outcome.
+  const journeySteps = [
+    { label: "Sent", at: invoice.sent_at },
+    { label: "Viewed", at: invoice.viewed_at },
+    invoice.voided_at
+      ? { label: "Voided", at: invoice.voided_at, tone: "bad" as const }
+      : { label: "Paid", at: invoice.paid_at },
+  ];
 
   return (
     <div>
@@ -85,6 +104,13 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
       </p>
       </div>
 
+      {/* Client journey — shared by both trees; drafts have nothing to track. */}
+      {invoice.status !== "draft" && (
+        <div className="mt-3">
+          <StatusJourney steps={journeySteps} />
+        </div>
+      )}
+
       <div className="mt-5 grid gap-4 md:grid-cols-[2fr_1fr]">
         {/* Rail first on mobile so the primary action sits above the fold. */}
         <div className="order-1 md:order-2">
@@ -99,7 +125,11 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
             sentAt={invoice.sent_at}
           />
           <div className="mt-3">
-            <RewardManager invoiceId={invoice.id} invoiceStatus={invoice.status} />
+            <RewardManager
+              invoiceId={invoice.id}
+              invoiceStatus={invoice.status}
+              teamMembers={teamMembers}
+            />
           </div>
           {isPublic && (
             <div className="cp-card mt-4 p-3">

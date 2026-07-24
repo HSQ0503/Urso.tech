@@ -1,15 +1,22 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Plus, ShieldCheck, UsersRound, UserRoundCheck, UserRoundX } from "lucide-react";
+import { ChevronDown, ChevronUp, Plus, ShieldCheck, UsersRound, UserRoundCheck, UserRoundX } from "lucide-react";
 import {
   addCrew,
   addApprovedTechnician,
+  setCrewAccountPermission,
+  setCrewMemberRole,
   setTechnicianActive,
   type CrewOwnerActionResult,
 } from "@/app/CanesPressure/crew-owner-actions";
 import { fmtPhone, type Crew } from "@/lib/canes/types";
-import type { TechnicianAccountAdminRow } from "@/lib/canes/crew-types";
+import {
+  CREW_PERMISSION_KEYS,
+  CREW_PERMISSION_LABEL,
+  type CrewAccountRole,
+  type TechnicianAccountAdminRow,
+} from "@/lib/canes/crew-types";
 import { PhoneInput } from "../phone-input";
 
 export function CrewAccountManager({
@@ -23,6 +30,8 @@ export function CrewAccountManager({
 }) {
   const [showAddTechnician, setShowAddTechnician] = useState(false);
   const [showAddCrew, setShowAddCrew] = useState(false);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [addRole, setAddRole] = useState<CrewAccountRole>("technician");
   const [result, setResult] = useState<CrewOwnerActionResult | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -44,6 +53,8 @@ export function CrewAccountManager({
           <h2 className="text-[15px] font-semibold">Crews & technician accounts</h2>
           <p className="mt-1 max-w-2xl text-[13px] leading-relaxed text-[var(--cp-muted)]">
             Create the crews that appear on the schedule, then approve each employee and assign them to one crew.
+            Technicians start with no permissions (they can&rsquo;t call customers); an ops manager starts with
+            everything on. Money pages — Insights, Payouts, Expenses and Settings — always stay owner-only.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -162,18 +173,82 @@ export function CrewAccountManager({
                   </div>
                 </div>
               </div>
-              <button
-                type="button"
-                disabled={pending}
-                className={`cp-btn min-h-11 cursor-pointer ${row.active ? "cp-btn-danger" : ""}`}
-                onClick={() => {
-                  setResult(null);
-                  startTransition(async () => setResult(await setTechnicianActive(row.teamMemberId, !row.active)));
-                }}
-              >
-                {row.active ? "Deactivate" : "Reactivate"}
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                {/* key re-syncs the uncontrolled select after the server refresh */}
+                <select
+                  key={row.role}
+                  aria-label={`Role for ${row.name}`}
+                  className="cp-select min-h-11 w-auto cursor-pointer"
+                  defaultValue={row.role}
+                  disabled={pending}
+                  onChange={(event) => {
+                    const role = event.target.value as CrewAccountRole;
+                    setResult(null);
+                    startTransition(async () => setResult(await setCrewMemberRole(row.teamMemberId, role)));
+                  }}
+                >
+                  <option value="technician">Technician</option>
+                  <option value="ops_manager">Ops manager</option>
+                </select>
+                <button
+                  type="button"
+                  className="cp-btn min-h-11 cursor-pointer"
+                  onClick={() =>
+                    setExpandedId(expandedId === row.teamMemberId ? null : row.teamMemberId)
+                  }
+                >
+                  {expandedId === row.teamMemberId
+                    ? <ChevronUp aria-hidden size={16} />
+                    : <ChevronDown aria-hidden size={16} />}
+                  Permissions
+                </button>
+                <button
+                  type="button"
+                  disabled={pending}
+                  className={`cp-btn min-h-11 cursor-pointer ${row.active ? "cp-btn-danger" : ""}`}
+                  onClick={() => {
+                    setResult(null);
+                    startTransition(async () => setResult(await setTechnicianActive(row.teamMemberId, !row.active)));
+                  }}
+                >
+                  {row.active ? "Deactivate" : "Reactivate"}
+                </button>
+              </div>
             </div>
+            {expandedId === row.teamMemberId && (
+              <div className="mt-4 border-t border-[var(--cp-line)] pt-4">
+                <div className="grid gap-2.5 sm:grid-cols-2 md:grid-cols-3">
+                  {CREW_PERMISSION_KEYS.map((key) => (
+                    <label
+                      key={key}
+                      className={`flex items-center gap-2 text-[13px] ${
+                        row.provisioned ? "cursor-pointer" : "cursor-not-allowed opacity-60"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 accent-[var(--cp-brand-fill)]"
+                        checked={row.permissions[key]}
+                        disabled={pending || !row.provisioned}
+                        onChange={(event) => {
+                          const value = event.target.checked;
+                          setResult(null);
+                          startTransition(async () =>
+                            setResult(await setCrewAccountPermission(row.teamMemberId, key, value)),
+                          );
+                        }}
+                      />
+                      {CREW_PERMISSION_LABEL[key]}
+                    </label>
+                  ))}
+                </div>
+                <p className="mt-3 text-[12px] leading-snug text-[var(--cp-faint)]">
+                  {row.provisioned
+                    ? "Changes apply on their next page load."
+                    : "Sign in once to enable."}
+                </p>
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -191,6 +266,7 @@ export function CrewAccountManager({
                 email: String(form.get("email") ?? ""),
                 phone: String(form.get("phone") ?? ""),
                 crewId: String(form.get("crewId") ?? ""),
+                role: addRole,
               });
               setResult(next);
               if (next.ok) setShowAddTechnician(false);
@@ -210,14 +286,40 @@ export function CrewAccountManager({
             <PhoneInput id="crew-account-phone" className="cp-input min-h-11" name="phone" required />
           </div>
           <div>
+            <label className="cp-label" htmlFor="crew-account-role">Role</label>
+            <select
+              id="crew-account-role"
+              className="cp-select min-h-11"
+              name="role"
+              value={addRole}
+              onChange={(event) => setAddRole(event.target.value as CrewAccountRole)}
+            >
+              <option value="technician">Technician</option>
+              <option value="ops_manager">Ops manager</option>
+            </select>
+            <p className="mt-1 text-[12px] text-[var(--cp-faint)]">
+              {addRole === "ops_manager"
+                ? "Runs operations across every crew from this console."
+                : "Crew portal only until you grant permissions."}
+            </p>
+          </div>
+          <div>
             <label className="cp-label" htmlFor="crew-account-crew">Crew</label>
-            <select id="crew-account-crew" className="cp-select min-h-11" name="crewId" required defaultValue="">
-              <option value="" disabled>Choose a crew</option>
+            <select
+              id="crew-account-crew"
+              className="cp-select min-h-11"
+              name="crewId"
+              required={addRole !== "ops_manager"}
+              defaultValue=""
+            >
+              <option value="" disabled={addRole !== "ops_manager"}>
+                {addRole === "ops_manager" ? "All crews" : "Choose a crew"}
+              </option>
               {crews.map((crew) => <option key={crew.id} value={crew.id}>{crew.name}</option>)}
             </select>
           </div>
           <button type="submit" disabled={pending} className="cp-btn cp-btn-primary min-h-11 cursor-pointer sm:col-span-2 sm:w-fit">
-            {pending ? "Approving…" : "Approve technician"}
+            {pending ? "Approving…" : addRole === "ops_manager" ? "Approve ops manager" : "Approve technician"}
           </button>
         </form>
       )}

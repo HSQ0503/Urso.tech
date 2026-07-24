@@ -1,3 +1,4 @@
+import { requirePagePermission } from "@/lib/canes/access";
 import { listCatalog } from "@/lib/canes/estimates";
 import { CatalogEditor } from "@/app/CanesPressure/components/estimates/catalog-editor";
 
@@ -5,6 +6,7 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Catalog" };
 
 export default async function CatalogItemsPage() {
+  await requirePagePermission("estimates");
   const items = await listCatalog();
 
   return (

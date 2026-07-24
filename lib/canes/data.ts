@@ -64,6 +64,7 @@ const DEFAULT_SETTINGS: CanesSettings = {
   invoice_message:
     "Thanks for choosing Canes Pressure Washing! Your invoice is ready. Tap to view the details and pay securely online, or reply to this text with any questions.",
   invoice_reminder_days: [3, 7],
+  estimate_reminder_days: [2, 5],
   confirmation_final_offset_hours: 2,
   confirmation_final_template:
     "Hi{name}, we still need a YES to confirm your Canes Pressure Washing appointment {when} at {address}. If we do not hear back we will have to release the slot. Just reply with a day and time that works (tomorrow or the day after is perfect) and we will lock it in. Reply STOP to opt out.",
@@ -112,6 +113,7 @@ export async function getSettings(): Promise<CanesSettings> {
     invoice_terms: map.invoice_terms ?? DEFAULT_SETTINGS.invoice_terms,
     invoice_message: map.invoice_message ?? DEFAULT_SETTINGS.invoice_message,
     invoice_reminder_days: map.invoice_reminder_days ?? DEFAULT_SETTINGS.invoice_reminder_days,
+    estimate_reminder_days: map.estimate_reminder_days ?? DEFAULT_SETTINGS.estimate_reminder_days,
     confirmation_final_offset_hours: Number(
       map.confirmation_final_offset_hours ?? DEFAULT_SETTINGS.confirmation_final_offset_hours,
     ),

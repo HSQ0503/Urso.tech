@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { ArrowLeft, ChevronLeft } from "lucide-react";
+import { requirePagePermission } from "@/lib/canes/access";
 import { NewCustomerForm } from "@/app/CanesPressure/components/customers/new-customer-form";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "New customer" };
 
-export default function NewCustomerPage() {
+export default async function NewCustomerPage() {
+  await requirePagePermission("customers");
   return (
     <div className="mx-auto max-w-2xl">
       {/* Mobile back row */}

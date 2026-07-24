@@ -1,11 +1,12 @@
 import { canesConfigured, canesDb } from "@/lib/canes/supabase";
 import { getAdminSession } from "@/lib/urso-auth";
 import type { Crew, TeamMember } from "@/lib/canes/types";
-import type { TechnicianAccountAdminRow } from "@/lib/canes/crew-types";
+import { resolvePermissions } from "@/lib/canes/crew-types";
+import type { CrewAccountRole, CrewPermissions, TechnicianAccountAdminRow } from "@/lib/canes/crew-types";
 
 type MemberAdminRow = Pick<
   TeamMember,
-  "id" | "name" | "crew_id" | "active"
+  "id" | "name" | "crew_id" | "active" | "role"
 > & {
   phone: string | null;
   email: string | null;
@@ -16,6 +17,9 @@ type AccountAdminRow = {
   team_member_id: string;
   active: boolean;
   last_login_at: string | null;
+  // 0015 — optional so the panel still lists accounts before the migration runs.
+  account_role?: string | null;
+  permissions?: Partial<CrewPermissions> | null;
 };
 
 export type TechnicianAccountAdminData = {
@@ -32,12 +36,10 @@ export async function listTechnicianAccountsForOwner(): Promise<TechnicianAccoun
   const [membersResult, accountsResult, crewsResult] = await Promise.all([
     db
       .from("team_members")
-      .select("id, name, phone, email, crew_id, active")
-      .eq("role", "worker")
+      .select("id, name, phone, email, crew_id, active, role")
+      .in("role", ["worker", "ops_manager"])
       .order("sort", { ascending: true }),
-    db
-      .from("crew_accounts")
-      .select("id, team_member_id, active, last_login_at"),
+    db.from("crew_accounts").select("*"),
     db.from("crews").select("*").eq("active", true).order("sort", { ascending: true }),
   ]);
   if (membersResult.error || accountsResult.error || crewsResult.error) {
@@ -54,6 +56,8 @@ export async function listTechnicianAccountsForOwner(): Promise<TechnicianAccoun
     crews,
     rows: members.map((member) => {
       const account = accountByMember.get(member.id);
+      // The roster is the role authority (auth-actions syncs accounts to it).
+      const role: CrewAccountRole = member.role === "ops_manager" ? "ops_manager" : "technician";
       return {
         teamMemberId: member.id,
         accountId: account?.id ?? null,
@@ -65,6 +69,8 @@ export async function listTechnicianAccountsForOwner(): Promise<TechnicianAccoun
         active: member.active && (account?.active ?? true),
         provisioned: Boolean(account),
         lastLoginAt: account?.last_login_at ?? null,
+        role,
+        permissions: resolvePermissions(role, account?.permissions),
       };
     }),
   };

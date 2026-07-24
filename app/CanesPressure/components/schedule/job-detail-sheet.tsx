@@ -14,6 +14,7 @@ import {
   Pencil,
   Plus,
   Receipt,
+  Repeat,
   Trash2,
   Undo2,
   UserRound,
@@ -25,6 +26,7 @@ import {
   recordJobDeposit,
   scheduleJob,
   reopenJob,
+  setJobRecurrence,
   setJobStatus,
   unscheduleJob,
   updateJobDetails,
@@ -41,8 +43,10 @@ import {
   fmtPhone,
   JOB_STATUS_LABEL,
   PAYMENT_METHOD_LABEL,
+  RECURRENCE_LABEL,
   type Crew,
   type JobInvoiceSummary,
+  type JobRecurrence,
   type JobStatus,
   type JobWithItems,
   type PaymentMethod,
@@ -146,6 +150,7 @@ export function JobDetailSheet({
   const [newChecklistRequired, setNewChecklistRequired] = useState(true);
 
   const placed = job.scheduled_at !== null;
+  const recurrence: JobRecurrence = job.recurrence ?? "none";
   const terminal =
     job.status === "completed" ||
     job.status === "invoiced" ||
@@ -199,6 +204,11 @@ export function JobDetailSheet({
           <span className="cp-chip bg-[var(--cp-surface)] text-[var(--cp-muted)]">
             {scheduleSummary(job)}
           </span>
+          {recurrence !== "none" && (
+            <span className="cp-chip bg-[var(--cp-good-bg)] text-[var(--cp-good)]">
+              <Repeat size={11} strokeWidth={2} /> {RECURRENCE_LABEL[recurrence]}
+            </span>
+          )}
         </div>
 
         {/* Quick actions */}
@@ -773,6 +783,30 @@ export function JobDetailSheet({
               </div>
             </div>
           )}
+        </section>
+      )}
+
+      {/* Repeats — maintenance-plan cadence. Editable even after billing so a
+          paid first visit can start the plan; insights derive MRR and next-due
+          from it, and nothing is ever booked automatically. */}
+      {job.status !== "canceled" && (
+        <section className="cp-card mt-4 space-y-2 p-4 md:p-5">
+          <p className="cp-group-label">Repeats</p>
+          <select
+            className="cp-select"
+            value={recurrence}
+            disabled={isPending}
+            onChange={(e) => run(() => setJobRecurrence(job.id, e.target.value as JobRecurrence))}
+          >
+            {(Object.keys(RECURRENCE_LABEL) as JobRecurrence[]).map((r) => (
+              <option key={r} value={r}>{RECURRENCE_LABEL[r]}</option>
+            ))}
+          </select>
+          <p className="text-[12px] leading-snug text-[var(--cp-faint)]">
+            {recurrence === "none"
+              ? "Mark a maintenance plan here — it rolls into recurring revenue on Customers."
+              : "Counted as an active recurring plan. Visits are never booked automatically."}
+          </p>
         </section>
       )}
 

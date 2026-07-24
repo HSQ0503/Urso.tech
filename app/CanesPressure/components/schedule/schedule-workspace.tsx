@@ -3,6 +3,7 @@
 import { useMemo, useOptimistic, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
+  CalendarClock,
   CalendarPlus,
   ChevronLeft,
   ChevronRight,
@@ -34,6 +35,7 @@ import { JobDetailSheet } from "./job-detail-sheet";
 import { VisitSheet } from "./visit-sheet";
 import { DayRunSheet } from "./day-run-sheet";
 import { CreateEventSheet } from "./create-event-sheet";
+import { BookVisitSheet } from "./book-visit-sheet";
 import type { CustomerHit } from "@/lib/canes/customers";
 import { CreateJobSheet } from "./create-job-sheet";
 import { SheetShell, useSheetBehavior } from "./sheet-shell";
@@ -152,6 +154,7 @@ export function ScheduleWorkspace({
   jobs,
   unscheduled,
   visits,
+  leads = [],
   crews,
   customers,
   events,
@@ -163,6 +166,9 @@ export function ScheduleWorkspace({
   jobs: JobWithItems[];
   unscheduled: JobWithItems[];
   visits: Lead[];
+  // Open leads (any window) for the Book-quote-visit sheet — `visits` only
+  // carries the booked ones inside the fetched range.
+  leads?: Lead[];
   crews: Crew[];
   customers: CustomerHit[];
   events: CalendarEvent[];
@@ -235,6 +241,7 @@ export function ScheduleWorkspace({
   const [createEventOpen, setCreateEventOpen] = useState(false);
   const [createJobOpen, setCreateJobOpen] = useState(false);
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
+  const [bookVisitOpen, setBookVisitOpen] = useState(false);
 
   // Mobile: tap-to-schedule target + the week strip's day filter.
   const [scheduleTarget, setScheduleTarget] = useState<JobWithItems | null>(null);
@@ -439,6 +446,9 @@ export function ScheduleWorkspace({
                 ))}
               </select>
 
+              <button type="button" className="cp-btn cp-btn-sm" onClick={() => setBookVisitOpen(true)}>
+                <CalendarClock size={14} strokeWidth={2} /> Book quote visit
+              </button>
               <button type="button" className="cp-btn cp-btn-sm" onClick={() => setCreateEventOpen(true)}>
                 <CalendarPlus size={14} strokeWidth={2} /> Event
               </button>
@@ -635,6 +645,7 @@ export function ScheduleWorkspace({
         />
       )}
       {createEventOpen && <CreateEventSheet crews={crews} onClose={() => setCreateEventOpen(false)} />}
+      {bookVisitOpen && <BookVisitSheet leads={leads} onClose={() => setBookVisitOpen(false)} />}
       {createJobOpen && (
         <CreateJobSheet crews={crews} customers={customers} onClose={() => setCreateJobOpen(false)} />
       )}
@@ -654,6 +665,22 @@ export function ScheduleWorkspace({
                 <span className="block text-[13.5px] font-semibold">Job</span>
                 <span className="block text-[12px] text-[var(--cp-muted)]">
                   Add a manual job for a customer
+                </span>
+              </span>
+            </button>
+            <button
+              type="button"
+              className="cp-card cp-card-hover flex items-center gap-3 px-3.5 py-3 text-left"
+              onClick={() => {
+                setCreateMenuOpen(false);
+                setBookVisitOpen(true);
+              }}
+            >
+              <CalendarClock size={16} strokeWidth={2} className="shrink-0 text-[var(--cp-muted)]" />
+              <span className="min-w-0">
+                <span className="block text-[13.5px] font-semibold">Quote visit</span>
+                <span className="block text-[12px] text-[var(--cp-muted)]">
+                  Book an in-person estimate for a lead
                 </span>
               </span>
             </button>

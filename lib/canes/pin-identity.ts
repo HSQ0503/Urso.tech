@@ -44,7 +44,8 @@ export async function resolvePinIdentity(returnTo?: string): Promise<PinIdentity
   if (tech) {
     return {
       key: crewPinKey(tech.accountId),
-      home: "/CanesPressure/crew",
+      // 0015: an ops-manager account's home is the owner console, not My Week.
+      home: tech.role === "ops_manager" ? "/CanesPressure" : "/CanesPressure/crew",
       kind: "crew",
       firstName: tech.name.split(" ")[0] || tech.name,
     };

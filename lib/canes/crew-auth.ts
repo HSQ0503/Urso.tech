@@ -2,7 +2,8 @@ import { cache } from "react";
 import { redirect } from "next/navigation";
 import { canesDb } from "@/lib/canes/supabase";
 import { createCanesAuthClient } from "@/lib/canes/crew-auth-client";
-import type { TechnicianActor } from "@/lib/canes/crew-types";
+import { resolvePermissions } from "@/lib/canes/crew-types";
+import type { CrewAccountRole, CrewPermissions, TechnicianActor } from "@/lib/canes/crew-types";
 
 type AccountRow = {
   id: string;
@@ -10,6 +11,10 @@ type AccountRow = {
   team_member_id: string;
   email: string;
   active: boolean;
+  // 0015 columns — optional so a deploy that lands ahead of the migration
+  // still authenticates technicians (select("*") tolerates their absence).
+  account_role?: string | null;
+  permissions?: Partial<CrewPermissions> | null;
 };
 
 type TeamMemberRow = {
@@ -31,7 +36,7 @@ export const getTechnicianActor = cache(async (): Promise<TechnicianActor | null
   const db = canesDb();
   const { data: rawAccount } = await db
     .from("crew_accounts")
-    .select("id, auth_user_id, team_member_id, email, active")
+    .select("*")
     .eq("auth_user_id", user.id)
     .maybeSingle();
   const account = rawAccount as AccountRow | null;
@@ -45,21 +50,27 @@ export const getTechnicianActor = cache(async (): Promise<TechnicianActor | null
   const member = rawMember as TeamMemberRow | null;
   if (!member?.active) return null;
 
-  // The current permission contract is exactly one roster-assigned crew. Use
-  // team_members.crew_id as the authority so moving an employee immediately
-  // revokes the old crew; access rows become authoritative only when a real
-  // multi-crew manager role and its removal UI are implemented.
-  if (!member.crew_id) return null;
-  const crewIds = [member.crew_id];
+  const role: CrewAccountRole = account.account_role === "ops_manager" ? "ops_manager" : "technician";
+  const permissions = resolvePermissions(role, account.permissions);
 
-  const { data: rawCrews } = await db
-    .from("crews")
-    .select("id, name")
-    .in("id", crewIds)
-    .eq("active", true);
-  const crews = (rawCrews ?? []) as { id: string; name: string }[];
-  const activeIds = crews.map((crew) => crew.id);
-  if (activeIds.length === 0) return null;
+  // Technicians: exactly one roster-assigned crew — team_members.crew_id is the
+  // authority so moving an employee immediately revokes the old crew. An ops
+  // manager runs every crew (DJ dispatches all of them), so their scope is all
+  // active crews and a missing crew_id doesn't lock them out.
+  let crews: { id: string; name: string }[];
+  if (role === "ops_manager") {
+    const { data: rawCrews } = await db.from("crews").select("id, name").eq("active", true);
+    crews = (rawCrews ?? []) as { id: string; name: string }[];
+  } else {
+    if (!member.crew_id) return null;
+    const { data: rawCrews } = await db
+      .from("crews")
+      .select("id, name")
+      .in("id", [member.crew_id])
+      .eq("active", true);
+    crews = (rawCrews ?? []) as { id: string; name: string }[];
+    if (crews.length === 0) return null;
+  }
 
   return {
     kind: "technician",
@@ -69,7 +80,9 @@ export const getTechnicianActor = cache(async (): Promise<TechnicianActor | null
     email: account.email,
     name: member.name,
     phone: member.phone,
-    crewIds: activeIds,
+    role,
+    permissions,
+    crewIds: crews.map((crew) => crew.id),
     crewNames: crews.map((crew) => crew.name),
   };
 });

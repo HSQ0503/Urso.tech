@@ -193,7 +193,9 @@ async function hydrateJobs(
       id: job.id,
       status: technicianStatus,
       customerName: job.customer_name,
-      customerPhone: job.customer_phone,
+      // Owner-controlled: without the calls permission the phone never leaves
+      // the server, so the portal cannot render or leak it.
+      customerPhone: actor.permissions.calls ? job.customer_phone : null,
       jobName: job.job_name,
       jobAddress: job.job_address,
       scheduledAt: job.scheduled_at,

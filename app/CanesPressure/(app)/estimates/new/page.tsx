@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ArrowLeft, ChevronLeft } from "lucide-react";
+import { requirePagePermission } from "@/lib/canes/access";
 import { getLead, getSettings } from "@/lib/canes/data";
 import { getCustomer, listCustomerDirectory } from "@/lib/canes/customers";
 import { listCatalog } from "@/lib/canes/estimates";
@@ -17,6 +18,7 @@ export default async function NewEstimatePage({
 }: {
   searchParams: Promise<{ lead?: string; customer?: string }>;
 }) {
+  await requirePagePermission("estimates");
   const { lead: leadId, customer: customerId } = await searchParams;
 
   const [lead, customer, catalog, settings, customers] = await Promise.all([

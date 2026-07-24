@@ -5,6 +5,7 @@ import {
   ET,
   etLocalToIso,
   fmtEt,
+  fmtMoney,
   type CalendarEvent,
   type Crew,
   type JobWithItems,
@@ -98,6 +99,12 @@ const ACTIVE_JOB_STATUSES = ["scheduled", "confirmed", "in_progress"];
 
 function isFinishedJob(job: JobWithItems): boolean {
   return ["completed", "invoiced", "paid"].includes(job.status);
+}
+
+// Markate-style combined day revenue: the sum of the day's bucketed job totals.
+// Buckets are already crew-filtered, so the number follows the crew filter.
+function dayRevenueCents(buckets: DayBuckets, ymd: string): number {
+  return (buckets.jobs.get(ymd) ?? []).reduce((sum, j) => sum + j.total_cents, 0);
 }
 
 // ── Grouping ─────────────────────────────────────────────────────────────────
@@ -459,13 +466,13 @@ function TimeGridColumn({
             type="button"
             className="cp-timegrid-visit"
             style={style}
-            title={visit.name ?? "Estimate visit"}
+            title={`Quote · ${visit.name ?? "Estimate visit"}`}
             onClick={() => onOpenVisit(visit)}
           >
             <span className="tabular-nums">
               {fmtEt(visit.appointment_at, { hour: "numeric", minute: "2-digit" })}
             </span>
-            <span className="truncate">{visit.name ?? "Visit"}</span>
+            <span className="truncate">Quote · {visit.name ?? "Visit"}</span>
           </button>
         );
       })}
@@ -526,16 +533,26 @@ function TimeGrid({
         <div className="cp-timegrid-daycols">
           {days.map((day) => {
             const head = dayHeadLabel(day, todayYmd);
+            const revenue = dayRevenueCents(buckets, day.ymd);
             return (
               <button
                 key={day.ymd}
                 type="button"
-                className="cp-timegrid-dayhead"
+                // flex-col utilities override the .cp-timegrid-dayhead row so
+                // the revenue chip sits under the date; $0 days stay quiet.
+                className="cp-timegrid-dayhead flex-col items-stretch gap-0.5"
                 data-today={day.ymd === todayYmd}
                 onClick={() => onOpenDay(day.ymd)}
               >
-                <span>{head.dow}</span>
-                <span className="cp-timegrid-dayhead-sub">{head.sub}</span>
+                <span className="flex items-baseline justify-between gap-1">
+                  <span>{head.dow}</span>
+                  <span className="cp-timegrid-dayhead-sub">{head.sub}</span>
+                </span>
+                {revenue > 0 && (
+                  <span className="text-[10px] font-semibold tabular-nums tracking-normal text-[var(--cp-ink)]">
+                    {fmtMoney(revenue)}
+                  </span>
+                )}
               </button>
             );
           })}
@@ -633,10 +650,15 @@ function MonthGrid({
           const dayJobs = (buckets.jobs.get(day.ymd) ?? []).slice().sort((a, b) =>
             (a.scheduled_at ?? "").localeCompare(b.scheduled_at ?? ""),
           );
-          const visitCount = (buckets.visits.get(day.ymd) ?? []).length;
+          const dayVisits = (buckets.visits.get(day.ymd) ?? []).slice().sort((a, b) =>
+            (a.appointment_at ?? "").localeCompare(b.appointment_at ?? ""),
+          );
           const eventCount = (buckets.events.get(day.ymd) ?? []).length;
           const shown = dayJobs.slice(0, 3);
           const more = dayJobs.length - shown.length;
+          const shownVisits = dayVisits.slice(0, 2);
+          const moreVisits = dayVisits.length - shownVisits.length;
+          const revenue = dayRevenueCents(buckets, day.ymd);
           return (
             <button
               key={day.ymd}
@@ -659,6 +681,11 @@ function MonthGrid({
               onDrop={onDropJob(day.ymd)}
             >
               <span className="cp-cal-col-head">{day.anchor.getUTCDate()}</span>
+              {revenue > 0 && (
+                <span className="text-[10.5px] font-semibold tabular-nums leading-none">
+                  {fmtMoney(revenue)}
+                </span>
+              )}
               {shown.map((job) => (
                 <span
                   key={job.id}
@@ -680,10 +707,15 @@ function MonthGrid({
               {more > 0 && (
                 <span className="text-[10px] font-semibold text-[var(--cp-faint)]">+{more} more</span>
               )}
-              {(visitCount > 0 || eventCount > 0) && (
+              {shownVisits.map((v) => (
+                <span key={v.id} className="cp-cal-visit-chip">
+                  Quote · {v.name ?? "Visit"}
+                </span>
+              ))}
+              {(moreVisits > 0 || eventCount > 0) && (
                 <span className="text-[10px] leading-tight text-[var(--cp-faint)]">
-                  {visitCount > 0 && `${visitCount} visit${visitCount === 1 ? "" : "s"}`}
-                  {visitCount > 0 && eventCount > 0 && " · "}
+                  {moreVisits > 0 && `+${moreVisits} more quote${moreVisits === 1 ? "" : "s"}`}
+                  {moreVisits > 0 && eventCount > 0 && " · "}
                   {eventCount > 0 && `${eventCount} event${eventCount === 1 ? "" : "s"}`}
                 </span>
               )}

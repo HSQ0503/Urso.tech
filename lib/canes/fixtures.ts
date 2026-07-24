@@ -689,7 +689,7 @@ export const DEMO_JOBS: Job[] = [
     total_cents: 25000, deposit_cents: 0, scheduled_at: etAt(-2, "14:00"), assigned_to: "Crew B", notes: null,
     duration_minutes: 90, ends_at: addMinutes(etAt(-2, "14:00"), 90), arrival_window_minutes: 0,
     crew_id: "crewB", confirmed_at: min(3100), customer_phone: "+15615550155", customer_email: null, job_name: "Driveway wash",
-    gate_code: null, site_notes: null, canceled_reason: null,
+    gate_code: null, site_notes: null, canceled_reason: null, recurrence: "monthly",
   },
   // ── Historical paid work (last ~2 months) — the Insights dashboard's demo
   //    story: crew mix, cash/card mix, service variety. All terminal, so the
@@ -701,7 +701,7 @@ export const DEMO_JOBS: Job[] = [
     total_cents: 42000, deposit_cents: 0, scheduled_at: etAt(-5, "09:00"), assigned_to: "Crew A", notes: null,
     duration_minutes: 150, ends_at: addMinutes(etAt(-5, "09:00"), 150), arrival_window_minutes: 0,
     crew_id: "crewA", confirmed_at: min(8100), customer_phone: "+15615550161", customer_email: "elaine.brooks@example.com", job_name: "House wash + gutters",
-    gate_code: null, site_notes: null, canceled_reason: null,
+    gate_code: null, site_notes: null, canceled_reason: null, recurrence: "quarterly",
   },
   {
     id: "job9", created_at: min(18500), estimate_id: null, lead_id: null, contact_id: null,
@@ -1196,5 +1196,18 @@ export const DEMO_INVOICE_REWARDS: InvoiceReward[] = [
     id: "rw3", created_at: min(1395), updated_at: min(1395), invoice_id: "inv1",
     kind: "social_follow", label: "Instagram + Facebook follow", amount_cents: 1000,
     status: "offered", claimed_at: null, resolved_at: null, resolved_by: null,
+  },
+  // Approved + credited — feeds the review-leaderboard demo (0015).
+  {
+    id: "rw4", created_at: min(9000), updated_at: min(8600), invoice_id: "inv2",
+    kind: "google_review", label: "Google review", amount_cents: 1500,
+    status: "approved", claimed_at: min(8800), resolved_at: min(8600), resolved_by: "owner",
+    attributed_member_id: "tm4",
+  },
+  {
+    id: "rw5", created_at: min(20000), updated_at: min(19000), invoice_id: "inv3",
+    kind: "google_review", label: "Google review", amount_cents: 1500,
+    status: "approved", claimed_at: min(19500), resolved_at: min(19000), resolved_by: "owner",
+    attributed_member_id: "tm5",
   },
 ];

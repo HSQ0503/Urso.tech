@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
+import { requirePagePermission } from "@/lib/canes/access";
 import { listInvoices } from "@/lib/canes/invoices";
 import {
   INVOICE_STATUS_CLASS,
@@ -32,11 +33,23 @@ function matchesTab(i: Invoice, tab: Tab): boolean {
   return i.status === "void";
 }
 
+// The client-facing milestone that matters on a list row: what the CUSTOMER
+// has (or hasn't) done with the bill, latest event first.
+function clientMilestone(i: Invoice): { text: string; cls: string } | null {
+  const d = (iso: string) => fmtEt(iso, { month: "short", day: "numeric" });
+  if (i.voided_at) return { text: `Voided ${d(i.voided_at)}`, cls: "text-[var(--cp-faint)]" };
+  if (i.paid_at) return { text: `Paid ${d(i.paid_at)}`, cls: "text-[var(--cp-good)]" };
+  if (i.viewed_at) return { text: `Viewed ${d(i.viewed_at)}`, cls: "text-[var(--cp-muted)]" };
+  if (i.sent_at) return { text: `Sent ${d(i.sent_at)}, not viewed yet`, cls: "text-[var(--cp-faint)]" };
+  return null;
+}
+
 // iOS grouped-list row (md:hidden mobile tree): number + customer, status chip,
 // trailing total (or amount due) + chevron.
 function MobileInvoiceRow({ invoice }: { invoice: Invoice }) {
   const balance = invoiceBalanceCents(invoice);
   const owed = balance > 0 && invoice.status !== "void";
+  const milestone = clientMilestone(invoice);
   return (
     <Link href={`/CanesPressure/invoices/${invoice.id}`} className="cp-list-row">
       <div className="min-w-0 flex-1">
@@ -47,6 +60,9 @@ function MobileInvoiceRow({ invoice }: { invoice: Invoice }) {
           </span>
         </div>
         <p className="cp-list-sub truncate">{invoice.customer_name ?? "No customer name"}</p>
+        {milestone && (
+          <p className={`truncate text-[12px] tabular-nums ${milestone.cls}`}>{milestone.text}</p>
+        )}
       </div>
       <div className="shrink-0 text-right">
         <p className="text-[15px] font-semibold tabular-nums">{fmtMoney(invoice.total_cents)}</p>
@@ -64,6 +80,7 @@ function MobileInvoiceRow({ invoice }: { invoice: Invoice }) {
 function InvoiceRow({ invoice }: { invoice: Invoice }) {
   const balance = invoiceBalanceCents(invoice);
   const owed = balance > 0 && invoice.status !== "void";
+  const milestone = clientMilestone(invoice);
   return (
     <Link href={`/CanesPressure/invoices/${invoice.id}`} className="cp-card cp-card-hover block p-4">
       <div className="flex items-start justify-between gap-3">
@@ -73,6 +90,11 @@ function InvoiceRow({ invoice }: { invoice: Invoice }) {
             <span className={`cp-chip ${INVOICE_STATUS_CLASS[invoice.status]}`}>
               {INVOICE_STATUS_LABEL[invoice.status]}
             </span>
+            {milestone && (
+              <span className={`text-[12px] font-medium tabular-nums ${milestone.cls}`}>
+                {milestone.text}
+              </span>
+            )}
           </div>
           <p className="mt-1 truncate text-[14px]">{invoice.customer_name ?? "No customer name"}</p>
           <p className="mt-0.5 truncate text-[13px] text-[var(--cp-muted)]">
@@ -99,6 +121,7 @@ export default async function InvoicesPage({
 }: {
   searchParams: Promise<{ status?: string | string[] }>;
 }) {
+  await requirePagePermission("invoices");
   const { status } = await searchParams;
   const raw = Array.isArray(status) ? status[0] : status;
   const tab: Tab = TABS.includes(raw as Tab) ? (raw as Tab) : "all";

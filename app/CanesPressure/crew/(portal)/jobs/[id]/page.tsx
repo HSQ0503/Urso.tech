@@ -90,7 +90,9 @@ export default async function TechnicianJobPage({
             <div className="min-w-0">
               <p className="cp-mono">Customer</p>
               <p className="mt-1 text-[15px] font-semibold">{job.customerName ?? "Name pending"}</p>
-              <p className="mt-0.5 text-[13px] text-[var(--cp-muted)]">{fmtPhone(job.customerPhone)}</p>
+              {job.customerPhone && (
+                <p className="mt-0.5 text-[13px] text-[var(--cp-muted)]">{fmtPhone(job.customerPhone)}</p>
+              )}
             </div>
           </div>
           <div className="flex gap-3 p-4">
@@ -113,15 +115,13 @@ export default async function TechnicianJobPage({
               <p className="mt-1 text-[14px] font-semibold">{job.jobAddress ?? "Address pending"}</p>
             </div>
           </div>
-          <div className="mt-4 grid grid-cols-2 gap-2">
-            <a
-              href={job.customerPhone ? `tel:${job.customerPhone}` : undefined}
-              aria-disabled={!job.customerPhone}
-              className="cp-btn min-h-12 cursor-pointer aria-disabled:pointer-events-none aria-disabled:opacity-40"
-            >
-              <Phone aria-hidden size={17} />
-              Call customer
-            </a>
+          <div className={`mt-4 grid gap-2 ${job.customerPhone ? "grid-cols-2" : "grid-cols-1"}`}>
+            {job.customerPhone && (
+              <a href={`tel:${job.customerPhone}`} className="cp-btn min-h-12 cursor-pointer">
+                <Phone aria-hidden size={17} />
+                Call customer
+              </a>
+            )}
             <a
               href={directions ?? undefined}
               aria-disabled={!directions}

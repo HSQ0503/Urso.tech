@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getAdminSession } from "@/lib/urso-auth";
+import { getTechnicianActor } from "@/lib/canes/crew-auth";
 import { canesConfigured, canesDb } from "@/lib/canes/supabase";
 import {
   OWNER_UPLOAD_CATEGORIES,
@@ -15,6 +16,11 @@ import {
   type MediaUploadGrant,
 } from "@/lib/canes/media";
 import { toE164, type JobMediaCategory, type JobMediaItem } from "@/lib/canes/types";
+import {
+  CREW_PERMISSION_KEYS,
+  type CrewAccountRole,
+  type CrewPermissionKey,
+} from "@/lib/canes/crew-types";
 
 export type CrewOwnerActionResult = { ok: boolean; notice?: string };
 
@@ -22,6 +28,15 @@ const TERMINAL_JOB_STATUSES = ["completed", "invoiced", "paid", "canceled"];
 
 async function requireOwner(): Promise<boolean> {
   return Boolean(await getAdminSession());
+}
+
+// Owner OR an ops-manager account with the schedule permission (0015) — the
+// job-sheet checklist and photo review are day-to-day dispatch work DJ runs.
+// Roster/role/permission management above stays strictly requireOwner.
+async function requireDispatcher(): Promise<boolean> {
+  if (await getAdminSession()) return true;
+  const actor = await getTechnicianActor();
+  return actor?.role === "ops_manager" && actor.permissions.schedule;
 }
 
 function refreshJobChecklist(jobId: string): void {
@@ -70,32 +85,43 @@ export async function addCrew(input: {
 }
 
 export async function addApprovedTechnician(
-  input: { name: string; email: string; phone: string; crewId: string },
+  input: { name: string; email: string; phone: string; crewId: string; role?: CrewAccountRole },
 ): Promise<CrewOwnerActionResult> {
   if (!(await requireOwner())) return { ok: false, notice: "Owner sign-in required." };
   const name = input.name.trim();
   const email = input.email.trim().toLowerCase();
   const phone = toE164(input.phone);
+  const isOps = input.role === "ops_manager";
   if (!name) return { ok: false, notice: "Name is required." };
   if (!/^\S+@\S+\.\S+$/.test(email)) return { ok: false, notice: "Enter a valid email." };
   if (!phone) return { ok: false, notice: "Enter a valid US phone number." };
 
   const db = canesDb();
-  const { data: crew } = await db
-    .from("crews")
-    .select("id")
-    .eq("id", input.crewId)
-    .eq("active", true)
-    .maybeSingle();
-  if (!crew) return { ok: false, notice: "Choose an active crew." };
+  // An ops manager runs every crew, so the crew pick is optional for them.
+  let crewId: string | null = null;
+  if (input.crewId) {
+    const { data: crew } = await db
+      .from("crews")
+      .select("id")
+      .eq("id", input.crewId)
+      .eq("active", true)
+      .maybeSingle();
+    if (!crew && !isOps) return { ok: false, notice: "Choose an active crew." };
+    crewId = crew ? input.crewId : null;
+  } else if (!isOps) {
+    return { ok: false, notice: "Choose an active crew." };
+  }
 
   const { error } = await db.from("team_members").insert({
     name,
     email,
     phone,
-    crew_id: input.crewId,
-    role: "worker",
-    comp_type: "hourly",
+    crew_id: crewId,
+    // Ops managers default to the 20% profit share the comp plan describes;
+    // the amount stays editable on the Payouts team manager.
+    role: isOps ? "ops_manager" : "worker",
+    comp_type: isOps ? "profit_share" : "hourly",
+    comp_bps: isOps ? 2000 : 0,
     hourly_cents: 0,
     active: true,
     sort: 100,
@@ -120,9 +146,68 @@ export async function setTechnicianActive(
     .from("team_members")
     .update({ active })
     .eq("id", teamMemberId)
-    .eq("role", "worker");
+    .in("role", ["worker", "ops_manager"]);
   if (error) return { ok: false, notice: error.message };
   await db.from("crew_accounts").update({ active }).eq("team_member_id", teamMemberId);
+  revalidatePath("/CanesPressure/settings");
+  return { ok: true };
+}
+
+// ── 0015: roles + permission flags ───────────────────────────────────────────
+
+// Promote/demote between technician and ops manager. Updates the roster row
+// and, when an account already exists, the account itself — so the change
+// takes effect on the next page load, not just the next sign-in.
+export async function setCrewMemberRole(
+  teamMemberId: string,
+  role: CrewAccountRole,
+): Promise<CrewOwnerActionResult> {
+  if (!(await requireOwner())) return { ok: false, notice: "Owner sign-in required." };
+  if (role !== "technician" && role !== "ops_manager") {
+    return { ok: false, notice: "Invalid role." };
+  }
+  const db = canesDb();
+  const teamRole = role === "ops_manager" ? "ops_manager" : "worker";
+  const { error } = await db
+    .from("team_members")
+    .update({ role: teamRole })
+    .eq("id", teamMemberId)
+    .in("role", ["worker", "ops_manager"]);
+  if (error) return { ok: false, notice: error.message };
+  const { error: accErr } = await db
+    .from("crew_accounts")
+    .update({ account_role: role })
+    .eq("team_member_id", teamMemberId);
+  if (accErr) return { ok: false, notice: `Run migration 0015 first: ${accErr.message}` };
+  revalidatePath("/CanesPressure/settings");
+  return { ok: true, notice: role === "ops_manager" ? "Promoted to ops manager." : "Set to technician." };
+}
+
+// Flip one permission flag on an account. Merges into the stored jsonb so the
+// other flags keep their explicit values (unset keys fall back to role defaults).
+export async function setCrewAccountPermission(
+  teamMemberId: string,
+  key: CrewPermissionKey,
+  value: boolean,
+): Promise<CrewOwnerActionResult> {
+  if (!(await requireOwner())) return { ok: false, notice: "Owner sign-in required." };
+  if (!CREW_PERMISSION_KEYS.includes(key)) return { ok: false, notice: "Unknown permission." };
+  const db = canesDb();
+  const { data: account, error: readErr } = await db
+    .from("crew_accounts")
+    .select("id, permissions")
+    .eq("team_member_id", teamMemberId)
+    .maybeSingle();
+  if (readErr) return { ok: false, notice: readErr.message };
+  if (!account) {
+    return { ok: false, notice: "They need to sign in to the portal once before permissions can be set." };
+  }
+  const stored = (account.permissions ?? {}) as Record<string, boolean>;
+  const { error } = await db
+    .from("crew_accounts")
+    .update({ permissions: { ...stored, [key]: value } })
+    .eq("id", account.id);
+  if (error) return { ok: false, notice: `Run migration 0015 first: ${error.message}` };
   revalidatePath("/CanesPressure/settings");
   return { ok: true };
 }
@@ -132,7 +217,7 @@ export async function addJobChecklistItem(input: {
   name: string;
   required: boolean;
 }): Promise<CrewOwnerActionResult> {
-  if (!(await requireOwner())) return { ok: false, notice: "Owner sign-in required." };
+  if (!(await requireDispatcher())) return { ok: false, notice: "Owner sign-in required." };
   const name = input.name.trim();
   if (!name) return { ok: false, notice: "Checklist step is required." };
 
@@ -173,7 +258,7 @@ export async function addJobChecklistItem(input: {
 export async function removeJobChecklistItem(
   itemId: string,
 ): Promise<CrewOwnerActionResult> {
-  if (!(await requireOwner())) return { ok: false, notice: "Owner sign-in required." };
+  if (!(await requireDispatcher())) return { ok: false, notice: "Owner sign-in required." };
   const db = canesDb();
   const { data: item } = await db
     .from("job_items")
@@ -220,7 +305,7 @@ function refreshJobMedia(jobId: string): void {
 export async function ownerListJobMedia(
   jobId: string,
 ): Promise<CrewOwnerActionResult & { items?: JobMediaItem[] }> {
-  if (!(await requireOwner())) return { ok: false, notice: "Owner sign-in required." };
+  if (!(await requireDispatcher())) return { ok: false, notice: "Owner sign-in required." };
   if (!canesConfigured()) return { ok: true, items: [] };
   try {
     return { ok: true, items: await listJobMedia(jobId, "owner") };
@@ -236,7 +321,7 @@ export async function ownerRequestJobPhotoUpload(
   jobId: string,
   input: { mimeType: string; sizeBytes: number; category: JobMediaCategory },
 ): Promise<CrewOwnerActionResult & { grant?: MediaUploadGrant }> {
-  if (!(await requireOwner())) return { ok: false, notice: "Owner sign-in required." };
+  if (!(await requireDispatcher())) return { ok: false, notice: "Owner sign-in required." };
   if (!canesConfigured()) return { ok: false, notice: MEDIA_DEMO_NOTICE };
   if (!OWNER_UPLOAD_CATEGORIES.includes(input.category)) {
     return { ok: false, notice: "Choose a photo category." };
@@ -261,7 +346,7 @@ export async function ownerRequestJobPhotoUpload(
 export async function ownerFinalizeJobPhotoUpload(
   input: MediaFinalizeInput,
 ): Promise<CrewOwnerActionResult> {
-  if (!(await requireOwner())) return { ok: false, notice: "Owner sign-in required." };
+  if (!(await requireDispatcher())) return { ok: false, notice: "Owner sign-in required." };
   if (!canesConfigured()) return { ok: false, notice: MEDIA_DEMO_NOTICE };
   if (!OWNER_UPLOAD_CATEGORIES.includes(input.category)) {
     return { ok: false, notice: "Choose a photo category." };
@@ -281,7 +366,7 @@ export async function updateJobMediaDetails(
   mediaId: string,
   input: { category: JobMediaCategory; caption: string },
 ): Promise<CrewOwnerActionResult> {
-  if (!(await requireOwner())) return { ok: false, notice: "Owner sign-in required." };
+  if (!(await requireDispatcher())) return { ok: false, notice: "Owner sign-in required." };
   if (!canesConfigured()) return { ok: false, notice: MEDIA_DEMO_NOTICE };
   if (!OWNER_UPLOAD_CATEGORIES.includes(input.category)) {
     return { ok: false, notice: "Choose a photo category." };
@@ -309,7 +394,7 @@ export async function setJobMediaCustomerVisible(
   mediaId: string,
   visible: boolean,
 ): Promise<CrewOwnerActionResult> {
-  if (!(await requireOwner())) return { ok: false, notice: "Owner sign-in required." };
+  if (!(await requireDispatcher())) return { ok: false, notice: "Owner sign-in required." };
   if (!canesConfigured()) return { ok: false, notice: MEDIA_DEMO_NOTICE };
   const row = await getJobMediaRow(mediaId);
   if (!row || row.deleted_at) return { ok: false, notice: "Photo not found." };
@@ -331,7 +416,7 @@ export async function setJobMediaCustomerVisible(
 }
 
 export async function deleteJobMedia(mediaId: string): Promise<CrewOwnerActionResult> {
-  if (!(await requireOwner())) return { ok: false, notice: "Owner sign-in required." };
+  if (!(await requireDispatcher())) return { ok: false, notice: "Owner sign-in required." };
   if (!canesConfigured()) return { ok: false, notice: MEDIA_DEMO_NOTICE };
   const row = await getJobMediaRow(mediaId);
   if (!row || row.deleted_at) return { ok: false, notice: "Photo not found." };

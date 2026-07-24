@@ -11,8 +11,9 @@ export type TechnicianLoginResult = { ok: boolean; notice?: string };
 type ApprovedMember = {
   id: string;
   email: string;
-  crew_id: string;
+  crew_id: string | null;
   active: boolean;
+  role: string;
 };
 
 type CrewAccount = {
@@ -67,15 +68,19 @@ async function ensureApprovedTechnicianAccount(
   email: string,
 ): Promise<CrewAccount | null> {
   const db = canesDb();
+  // Workers and ops managers may sign in (0015). A worker still needs a crew;
+  // an ops manager runs every crew, so crew_id is optional for them.
   const { data: rawMember, error: memberError } = await db
     .from("team_members")
-    .select("id, email, crew_id, active")
+    .select("id, email, crew_id, active, role")
     .eq("email", email)
-    .eq("role", "worker")
+    .in("role", ["worker", "ops_manager"])
     .maybeSingle();
   if (memberError) throw new Error(memberError.message);
   const member = rawMember as ApprovedMember | null;
-  if (!member?.active || !member.crew_id) return null;
+  if (!member?.active) return null;
+  const isOps = member.role === "ops_manager";
+  if (!isOps && !member.crew_id) return null;
 
   const { data: rawExisting } = await db
     .from("crew_accounts")
@@ -85,15 +90,25 @@ async function ensureApprovedTechnicianAccount(
   const existing = rawExisting as CrewAccount | null;
   if (existing) {
     if (!existing.active) return null;
-    await db
-      .from("crew_account_access")
-      .delete()
-      .eq("account_id", existing.id)
-      .neq("crew_id", member.crew_id);
-    await db.from("crew_account_access").upsert(
-      { account_id: existing.id, crew_id: member.crew_id },
-      { onConflict: "account_id,crew_id", ignoreDuplicates: true },
-    );
+    // Keep the account's role in sync with the roster: promoting/demoting on
+    // the roster takes effect at the next sign-in. Metadata — a failed update
+    // (0015 not yet migrated) must not block login.
+    const { error: roleErr } = await db
+      .from("crew_accounts")
+      .update({ account_role: isOps ? "ops_manager" : "technician" })
+      .eq("id", existing.id);
+    if (roleErr) console.error(`[canes crew auth] account_role sync failed: ${roleErr.message}`);
+    if (!isOps && member.crew_id) {
+      await db
+        .from("crew_account_access")
+        .delete()
+        .eq("account_id", existing.id)
+        .neq("crew_id", member.crew_id);
+      await db.from("crew_account_access").upsert(
+        { account_id: existing.id, crew_id: member.crew_id },
+        { onConflict: "account_id,crew_id", ignoreDuplicates: true },
+      );
+    }
     return existing;
   }
 
@@ -123,6 +138,9 @@ async function ensureApprovedTechnicianAccount(
       team_member_id: member.id,
       email,
       active: true,
+      // account_role only when ops: the column default covers technicians, and
+      // omitting it keeps worker logins working before 0015 widens the check.
+      ...(isOps ? { account_role: "ops_manager" } : {}),
     })
     .select("id, auth_user_id, active")
     .single();
@@ -137,10 +155,12 @@ async function ensureApprovedTechnicianAccount(
     return raced as CrewAccount;
   }
   const created = rawCreated as CrewAccount;
-  await db.from("crew_account_access").upsert(
-    { account_id: created.id, crew_id: member.crew_id },
-    { onConflict: "account_id,crew_id", ignoreDuplicates: true },
-  );
+  if (!isOps && member.crew_id) {
+    await db.from("crew_account_access").upsert(
+      { account_id: created.id, crew_id: member.crew_id },
+      { onConflict: "account_id,crew_id", ignoreDuplicates: true },
+    );
+  }
   return created;
 }
 

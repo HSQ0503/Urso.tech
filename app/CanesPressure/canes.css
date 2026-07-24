@@ -46,6 +46,10 @@
   --cp-cold-bg: color-mix(in srgb, var(--cp-ink) 6%, transparent);
   --cp-good: #11935a;
   --cp-good-bg: color-mix(in srgb, var(--cp-good) 12%, transparent);
+  /* quote (estimate-visit) accent — violet, deliberately outside the orange
+     brand family and the cool crew palette so a quote never reads as a job */
+  --cp-quote: #6d28d9;
+  --cp-quote-bg: color-mix(in srgb, var(--cp-quote) 10%, var(--cp-surface));
   --cp-warn: var(--cp-brand);
   --cp-warn-bg: rgba(254, 81, 0, 0.1);
   --cp-danger: #b42318;
@@ -112,6 +116,8 @@
   --cp-cold: var(--cp-muted);
   --cp-cold-bg: color-mix(in srgb, var(--cp-ink) 8%, transparent);
   --cp-good-bg: color-mix(in srgb, var(--cp-good) 13%, transparent);
+  --cp-quote: #a78bfa;
+  --cp-quote-bg: color-mix(in srgb, var(--cp-quote) 14%, var(--cp-surface));
   --cp-danger-bg: color-mix(in srgb, var(--cp-danger) 12%, transparent);
   /* sidebar + chrome follow the dashboard's theme-aware materials */
   --cp-chrome: var(--color-sidebar);
@@ -124,6 +130,7 @@
 }
 :root[data-theme="light"] :is(.canes .theme-scope, .canes.theme-scope) {
   color-scheme: light;
+  --cp-quote: #6d28d9;
   --cp-danger: #b42318;
   --cp-shadow: rgba(15, 18, 22, 0.08);
 }
@@ -144,6 +151,7 @@
     --cp-brand-deep: #c23e00;
     --cp-brand-soft: rgba(254, 81, 0, 0.1);
     --cp-good: #11935a;
+    --cp-quote: #6d28d9;
     --cp-danger: #b42318;
     --cp-shadow: rgba(15, 18, 22, 0.08);
   }
@@ -869,25 +877,49 @@
   color: var(--cp-muted);
 }
 
-/* an estimate visit placed on the grid: hairline outline, transparent fill */
+/* a quote (estimate visit) placed on the grid: the violet quote identity —
+   solid quote rail + dashed hairline + soft violet tint, so it can never be
+   misread as a crew job block or the muted event band */
 .cp-timegrid-visit {
   position: absolute;
   display: flex;
   flex-direction: column;
   gap: 1px;
   overflow: hidden;
-  padding: 3px 6px;
-  border: 1px solid var(--cp-line-strong);
+  padding: 3px 6px 3px 7px;
+  border: 1px dashed color-mix(in srgb, var(--cp-quote) 55%, transparent);
+  border-left: 3px solid var(--cp-quote);
   border-radius: 4px;
-  background: var(--cp-surface);
-  color: var(--cp-muted);
+  background: var(--cp-quote-bg);
+  color: var(--cp-quote);
   font-size: 11px;
+  font-weight: 500;
   line-height: 1.2;
   text-align: left;
   cursor: pointer;
   font-feature-settings: "tnum" 1;
 }
-.cp-timegrid-visit:hover { background: var(--cp-hover); color: var(--cp-ink); z-index: 3; }
+.cp-timegrid-visit:hover {
+  background: color-mix(in srgb, var(--cp-quote) 18%, var(--cp-surface));
+  z-index: 3;
+}
+
+/* a quote visit chip inside a month cell — the same violet identity at chip
+   scale, shaped like the month job chips (left rail + tint) */
+.cp-cal-visit-chip {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  padding: 2px 4px 2px 5px;
+  border-left: 2px solid var(--cp-quote);
+  border-radius: 3px;
+  background: var(--cp-quote-bg);
+  color: var(--cp-quote);
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 1.2;
+  text-align: left;
+}
 
 /* a calendar event placed on the grid: muted hatched band */
 .cp-timegrid-event {

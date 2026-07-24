@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, ChevronLeft, ExternalLink } from "lucide-react";
+import { requirePagePermission } from "@/lib/canes/access";
 import { getLead, getSettings } from "@/lib/canes/data";
 import { listCustomerDirectory } from "@/lib/canes/customers";
 import { getEstimate, getEstimateItems, listCatalog } from "@/lib/canes/estimates";
@@ -14,6 +15,7 @@ import {
 import { EstimateBuilder } from "@/app/CanesPressure/components/estimates/estimate-builder";
 import { EstimateActions } from "@/app/CanesPressure/components/estimates/estimate-actions";
 import { EstimateCosts } from "@/app/CanesPressure/components/estimates/estimate-costs";
+import { StatusJourney } from "@/app/CanesPressure/components/status-journey";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +23,7 @@ export const dynamic = "force-dynamic";
 // builder renders read-only and the actions rail carries whatever moves are
 // still valid (send, void, open public link, mark approved).
 export default async function EstimatePage({ params }: { params: Promise<{ id: string }> }) {
+  await requirePagePermission("estimates");
   const { id } = await params;
 
   const [estimate, items, catalog, settings, customers] = await Promise.all([
@@ -37,6 +40,16 @@ export default async function EstimatePage({ params }: { params: Promise<{ id: s
   const optedOut = Boolean(lead?.opted_out);
 
   const readOnly = estimate.status !== "draft";
+
+  // Client journey — what the CUSTOMER has done with this quote. Declined
+  // replaces the Approved step so the strip always ends at the real outcome.
+  const journeySteps = [
+    { label: "Sent", at: estimate.sent_at },
+    { label: "Viewed", at: estimate.viewed_at },
+    estimate.declined_at
+      ? { label: "Declined", at: estimate.declined_at, tone: "bad" as const }
+      : { label: "Approved", at: estimate.approved_at },
+  ];
 
   return (
     <div>
@@ -88,6 +101,18 @@ export default async function EstimatePage({ params }: { params: Promise<{ id: s
         {estimate.approved_at && <> · Approved {fmtEt(estimate.approved_at)}</>}
       </p>
       </div>
+
+      {/* Client journey — shared by both trees; drafts have nothing to track. */}
+      {estimate.status !== "draft" && (
+        <div className="mt-3">
+          <StatusJourney steps={journeySteps} />
+          {estimate.declined_at && estimate.decline_reason && (
+            <p className="mt-1.5 text-[12.5px] leading-snug text-[var(--cp-muted)]">
+              Decline reason: &ldquo;{estimate.decline_reason}&rdquo;
+            </p>
+          )}
+        </div>
+      )}
 
       <div className="mt-5 grid gap-4 md:grid-cols-[2fr_1fr]">
         {/* Rail first on mobile so the primary action sits above the fold. */}

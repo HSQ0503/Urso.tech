@@ -8,7 +8,8 @@ import { signOutAdmin } from "@/app/login/actions";
 import { CanesNav } from "../components/nav";
 import { CanesTour } from "../components/tour";
 import { getTechnicianActor } from "@/lib/canes/crew-auth";
-import { adminPinKey, pinGate } from "@/lib/canes/pin";
+import { signOutTechnician } from "@/app/CanesPressure/crew/auth-actions";
+import { adminPinKey, crewPinKey, pinGate } from "@/lib/canes/pin";
 import { PinWatchdog } from "../components/pin-watchdog";
 import { ThemeToggle } from "@/components/dashboard/theme-toggle";
 
@@ -21,16 +22,20 @@ export default async function CanesAppLayout({ children }: { children: React.Rea
     getTechnicianActor(),
   ]);
   const demo = isDemo();
+  // 0015: an ops-manager crew account (DJ) works from the owner console, with
+  // the nav filtered to its permission flags. The server-side page + action
+  // guards enforce the same flags — this shell only decides what renders.
+  const ops = !admin && technician?.role === "ops_manager" ? technician : null;
   // A technician session must never inherit owner access from the legacy shared
   // passcode cookie. A real owner session wins if both cookies exist.
-  if (technician && !admin) redirect("/CanesPressure/crew");
-  // Live CRM data is owner-account only. The old shared access-code cookie is
-  // retained solely for an unconfigured/demo environment.
-  if (!admin && !demo) redirect("/login");
+  if (technician && !admin && !ops) redirect("/CanesPressure/crew");
+  // Live CRM data is owner-account (or permitted ops) only. The old shared
+  // access-code cookie is retained solely for an unconfigured/demo environment.
+  if (!admin && !ops && !demo) redirect("/login");
 
   // Locked out → the shared-passcode page if that gate is configured, otherwise
   // the Urso admin login. This branch is now only reachable in demo mode.
-  if (!(await hasAccess())) {
+  if (!admin && !ops && !(await hasAccess())) {
     redirect(gateEnabled() ? "/CanesPressure/login" : "/login");
   }
 
@@ -38,11 +43,25 @@ export default async function CanesAppLayout({ children }: { children: React.Rea
   // routes to setup; an expired 30-minute unlock routes to the lock screen.
   // The watchdog below handles the tab that sits open past its window.
   let pinRelockMs: number | null = null;
-  if (admin && !demo) {
-    const gate = await pinGate(adminPinKey(admin.email));
+  if ((admin || ops) && !demo) {
+    const gate = await pinGate(admin ? adminPinKey(admin.email) : crewPinKey(ops!.accountId));
     if (gate.status !== "ok") redirect("/CanesPressure/pin?to=/CanesPressure");
     pinRelockMs = gate.relockInMs;
   }
+
+  // What the nav shows this session. Owner sees everything; ops sees Today plus
+  // whatever its flags allow — money pages (Expenses, Payouts, Insights,
+  // Settings) stay owner-only.
+  const allowedNav = ops
+    ? [
+        "Today",
+        ...(ops.permissions.leads ? ["Inbox", "Leads"] : []),
+        ...(ops.permissions.customers ? ["Customers"] : []),
+        ...(ops.permissions.estimates ? ["Estimates"] : []),
+        ...(ops.permissions.schedule ? ["Schedule"] : []),
+        ...(ops.permissions.invoices ? ["Invoices"] : []),
+      ]
+    : undefined;
 
   return (
     // theme-scope: the app follows the site-wide dark/light toggle exactly like
@@ -62,7 +81,7 @@ export default async function CanesAppLayout({ children }: { children: React.Rea
             Pressure Washing
           </span>
         </Link>
-        <CanesNav />
+        <CanesNav allowed={allowedNav} />
         <div className="mt-auto px-2">
           {demo && (
             <div className="rounded-md border border-[var(--cp-chrome-line)] bg-[var(--cp-chrome-raise)] px-3 py-2.5 text-[12px] leading-snug text-[var(--cp-chrome-muted)]">
@@ -76,6 +95,22 @@ export default async function CanesAppLayout({ children }: { children: React.Rea
                 {admin.email}
               </span>
               <form action={signOutAdmin}>
+                <button
+                  type="submit"
+                  className="cp-mono shrink-0 transition-colors hover:text-[var(--cp-chrome-ink)]"
+                  style={{ color: "var(--cp-chrome-muted)" }}
+                >
+                  Sign out
+                </button>
+              </form>
+            </div>
+          )}
+          {ops && (
+            <div className="mt-3 flex items-center justify-between gap-2 px-1">
+              <span className="cp-mono min-w-0 truncate" style={{ color: "var(--cp-chrome-faint)" }} title={ops.email}>
+                {ops.name} · Ops
+              </span>
+              <form action={signOutTechnician}>
                 <button
                   type="submit"
                   className="cp-mono shrink-0 transition-colors hover:text-[var(--cp-chrome-ink)]"
@@ -102,7 +137,7 @@ export default async function CanesAppLayout({ children }: { children: React.Rea
         </main>
         {/* Bottom tabs (mobile) — translucent iOS tab bar */}
         <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-[var(--cp-line)] bg-[var(--cp-surface)]/80 px-1 backdrop-blur-xl md:hidden">
-          <CanesNav mobile />
+          <CanesNav mobile allowed={allowedNav} />
         </nav>
       </div>
 

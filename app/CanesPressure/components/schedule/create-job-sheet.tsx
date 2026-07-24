@@ -1,8 +1,16 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
-import { createManualJob, type ActionResult } from "@/app/CanesPressure/actions";
-import { etLocalToIso, fmtMoney, PAYMENT_METHOD_LABEL, type Crew, type PaymentMethod } from "@/lib/canes/types";
+import { createManualJob, setJobRecurrence } from "@/app/CanesPressure/actions";
+import {
+  etLocalToIso,
+  fmtMoney,
+  PAYMENT_METHOD_LABEL,
+  RECURRENCE_LABEL,
+  type Crew,
+  type JobRecurrence,
+  type PaymentMethod,
+} from "@/lib/canes/types";
 import type { CustomerHit } from "@/lib/canes/customers";
 import { AddressInput } from "../address-input";
 import { CustomerPicker } from "../customer-picker";
@@ -44,6 +52,7 @@ export function CreateJobSheet({
   const [deposit, setDeposit] = useState("");
   const [depositMethod, setDepositMethod] = useState<PaymentMethod>("cash");
   const [jobAddress, setJobAddress] = useState("");
+  const [recurrence, setRecurrence] = useState<JobRecurrence>("none");
   const [scheduleNow, setScheduleNow] = useState(false);
   const [when, setWhen] = useState("");
   const [duration, setDuration] = useState(120);
@@ -90,7 +99,7 @@ export function CreateJobSheet({
   function submit() {
     setFeedback(null);
     startTransition(async () => {
-      const res: ActionResult = await createManualJob({
+      const res = await createManualJob({
         contactId: contact?.id,
         customerName: customerName.trim(),
         customerPhone: customerPhone.trim() || undefined,
@@ -103,6 +112,11 @@ export function CreateJobSheet({
         durationMinutes: scheduleNow ? duration : undefined,
         crewId: scheduleNow && crewId ? crewId : undefined,
       });
+      // Cadence is a follow-up write — if it fails the job still exists and
+      // the job editor's Repeats control can set it again.
+      if (res.ok && res.jobId && recurrence !== "none") {
+        await setJobRecurrence(res.jobId, recurrence);
+      }
       setFeedback(res.notice ? { ok: res.ok, text: res.notice } : null);
       if (res.ok) onClose();
     });
@@ -216,6 +230,20 @@ export function CreateJobSheet({
             value={jobAddress}
             onChange={setJobAddress}
           />
+        </div>
+
+        <div>
+          <label className="cp-label" htmlFor="job-repeats">Repeats</label>
+          <select
+            id="job-repeats"
+            className="cp-select"
+            value={recurrence}
+            onChange={(e) => setRecurrence(e.target.value as JobRecurrence)}
+          >
+            {(Object.keys(RECURRENCE_LABEL) as JobRecurrence[]).map((r) => (
+              <option key={r} value={r}>{RECURRENCE_LABEL[r]}</option>
+            ))}
+          </select>
         </div>
 
         <label className="flex cursor-pointer items-center gap-2 text-[13px]">

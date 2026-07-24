@@ -1,7 +1,14 @@
 import Link from "next/link";
+import { requireOwnerPage } from "@/lib/canes/access";
 import { getInsights, parseRange, RANGES, type Insights, type RangeKey } from "@/lib/canes/analytics";
+import { getAllTimeProfit, getRecurringInsights, getReviewLeaderboard } from "@/lib/canes/growth";
 import { fmtMoney } from "@/lib/canes/types";
 import { CollectedTrend } from "@/app/CanesPressure/components/insights/collected-trend";
+import {
+  AllTimeProfitStrip,
+  RecurringRevenueCard,
+  ReviewLeaderboardCard,
+} from "@/app/CanesPressure/components/insights/growth-sections";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Insights" };
@@ -145,9 +152,15 @@ export default async function InsightsPage({
 }: {
   searchParams: Promise<{ range?: string | string[] }>;
 }) {
+  await requireOwnerPage();
   const sp = await searchParams;
   const rangeKey = parseRange(Array.isArray(sp.range) ? sp.range[0] : sp.range);
-  const d = await getInsights(rangeKey);
+  const [d, allTime, recurring, leaderboard] = await Promise.all([
+    getInsights(rangeKey),
+    getAllTimeProfit(),
+    getRecurringInsights(),
+    getReviewLeaderboard(),
+  ]);
 
   const trendHasMoney = d.trend.some((p) => p.cash > 0 || p.card > 0);
   const short = RANGES[rangeKey].short;
@@ -511,6 +524,15 @@ export default async function InsightsPage({
             );
           })}
         </div>
+      </section>
+
+      {/* Growth — whole-ledger, not range-scoped: all-time profit, recurring
+          plans, and the review leaderboard (0015). */}
+      <AllTimeProfitStrip profit={allTime} />
+
+      <section className="grid gap-4 lg:grid-cols-2">
+        <RecurringRevenueCard recurring={recurring} />
+        <ReviewLeaderboardCard leaderboard={leaderboard} />
       </section>
 
       <p className="text-[12.5px] leading-relaxed text-[var(--cp-faint)]">

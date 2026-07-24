@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { requireOwnerPage } from "@/lib/canes/access";
 import { computePayouts, fmtMinutes, getTeamHours, listTeamMembers, parsePayoutRange } from "@/lib/canes/payouts";
 import { listCrews } from "@/lib/canes/estimates";
 import { fmtEt, fmtMoney, TEAM_ROLE_LABEL, type PayoutLine, type PayoutRangeKey, type TeamRole } from "@/lib/canes/types";
@@ -145,6 +146,7 @@ export default async function PayoutsPage({
 }: {
   searchParams: Promise<{ range?: string | string[]; hours?: string | string[] }>;
 }) {
+  await requireOwnerPage();
   const sp = await searchParams;
   const rangeKey = parsePayoutRange(Array.isArray(sp.range) ? sp.range[0] : sp.range);
   const hoursMemberId = Array.isArray(sp.hours) ? sp.hours[0] : (sp.hours ?? null);

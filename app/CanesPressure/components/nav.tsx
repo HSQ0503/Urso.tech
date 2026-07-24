@@ -44,28 +44,31 @@ const LINKS: NavItem[] = [
   { href: "/CanesPressure/settings", label: "Settings", icon: Settings, exact: false },
 ];
 
-// Mobile: Sebastian's daily loop gets a tab; everything else lives in More
-// (Jobber's pattern) — five targets beat nine microscopic ones.
-const MOBILE_TABS = LINKS.filter((l) =>
-  ["Today", "Inbox", "Leads", "Schedule"].includes(l.label),
-);
-const MOBILE_MORE = LINKS.filter(
-  (l) => !MOBILE_TABS.includes(l),
-);
-
-// Desktop groups the same links so a ten-item list reads as a hierarchy — the
-// daily loop, then the work, then the money — instead of a flat wall, and the
-// grouping fills the sidebar's dead space. Settings pins to the bottom.
-const NAV_GROUPS: { label?: string; items: NavItem[] }[] = [
-  { items: LINKS.filter((l) => ["Today", "Inbox", "Leads", "Customers"].includes(l.label)) },
-  { label: "Work", items: LINKS.filter((l) => ["Estimates", "Schedule"].includes(l.label)) },
-  { label: "Money", items: LINKS.filter((l) => ["Invoices", "Expenses", "Payouts", "Insights"].includes(l.label)) },
-];
-const SETTINGS_LINK = LINKS.find((l) => l.label === "Settings")!;
-
-export function CanesNav({ mobile = false }: { mobile?: boolean }) {
+// 0015: an ops-manager session sees only the surfaces its permissions allow.
+// `allowed` lists visible labels; undefined = owner, everything shows. Purely
+// cosmetic — the real enforcement is the server-side page + action guards.
+export function CanesNav({ mobile = false, allowed }: { mobile?: boolean; allowed?: string[] }) {
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
+
+  const links = allowed ? LINKS.filter((l) => allowed.includes(l.label)) : LINKS;
+
+  // Mobile: Sebastian's daily loop gets a tab; everything else lives in More
+  // (Jobber's pattern) — five targets beat nine microscopic ones.
+  const MOBILE_TABS = links.filter((l) =>
+    ["Today", "Inbox", "Leads", "Schedule"].includes(l.label),
+  );
+  const MOBILE_MORE = links.filter((l) => !MOBILE_TABS.includes(l));
+
+  // Desktop groups the same links so a ten-item list reads as a hierarchy — the
+  // daily loop, then the work, then the money — instead of a flat wall, and the
+  // grouping fills the sidebar's dead space. Settings pins to the bottom.
+  const NAV_GROUPS: { label?: string; items: NavItem[] }[] = [
+    { items: links.filter((l) => ["Today", "Inbox", "Leads", "Customers"].includes(l.label)) },
+    { label: "Work", items: links.filter((l) => ["Estimates", "Schedule"].includes(l.label)) },
+    { label: "Money", items: links.filter((l) => ["Invoices", "Expenses", "Payouts", "Insights"].includes(l.label)) },
+  ].filter((g) => g.items.length > 0);
+  const SETTINGS_LINK = links.find((l) => l.label === "Settings") ?? null;
 
   const isActive = (href: string, exact: boolean) =>
     exact ? pathname === href : pathname.startsWith(href);
@@ -152,7 +155,7 @@ export function CanesNav({ mobile = false }: { mobile?: boolean }) {
     );
   }
 
-  const SettingsIcon = SETTINGS_LINK.icon;
+  const SettingsIcon = SETTINGS_LINK?.icon;
   return (
     <nav className="flex flex-1 flex-col gap-5">
       {NAV_GROUPS.map((group, gi) => (
@@ -166,16 +169,18 @@ export function CanesNav({ mobile = false }: { mobile?: boolean }) {
           ))}
         </div>
       ))}
-      <div className="mt-auto border-t border-[color:var(--cp-chrome-line)] pt-3">
-        <Link
-          href={SETTINGS_LINK.href}
-          className="cp-nav-link"
-          data-active={isActive(SETTINGS_LINK.href, SETTINGS_LINK.exact)}
-        >
-          <SettingsIcon size={16} strokeWidth={2} />
-          {SETTINGS_LINK.label}
-        </Link>
-      </div>
+      {SETTINGS_LINK && SettingsIcon && (
+        <div className="mt-auto border-t border-[color:var(--cp-chrome-line)] pt-3">
+          <Link
+            href={SETTINGS_LINK.href}
+            className="cp-nav-link"
+            data-active={isActive(SETTINGS_LINK.href, SETTINGS_LINK.exact)}
+          >
+            <SettingsIcon size={16} strokeWidth={2} />
+            {SETTINGS_LINK.label}
+          </Link>
+        </div>
+      )}
     </nav>
   );
 }

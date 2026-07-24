@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, ChevronLeft, ChevronRight, Mail, MessageSquare, Phone } from "lucide-react";
+import { requirePagePermission } from "@/lib/canes/access";
 import { getCustomer } from "@/lib/canes/customers";
 import { listCrews } from "@/lib/canes/estimates";
 import {
@@ -13,6 +14,7 @@ import {
   INVOICE_STATUS_LABEL,
   invoiceBalanceCents,
   JOB_STATUS_LABEL,
+  RECURRENCE_LABEL,
   SOURCE_LABEL,
   type CustomerDetail,
   type Invoice,
@@ -100,6 +102,8 @@ function HistoryRow({
   title,
   chip,
   chipClass,
+  chip2,
+  chip2Class,
   sub,
   amount,
   amountSub,
@@ -108,6 +112,8 @@ function HistoryRow({
   title: string;
   chip: string;
   chipClass: string;
+  chip2?: string;
+  chip2Class?: string;
   sub: string;
   amount: string;
   amountSub?: string;
@@ -118,6 +124,7 @@ function HistoryRow({
         <div className="flex flex-wrap items-center gap-1.5">
           <p className="truncate text-[14px] font-semibold">{title}</p>
           <span className={`cp-chip ${chipClass}`}>{chip}</span>
+          {chip2 && <span className={`cp-chip ${chip2Class ?? ""}`}>{chip2}</span>}
         </div>
         <p className="mt-0.5 truncate text-[12.5px] tabular-nums text-[var(--cp-muted)]">{sub}</p>
       </div>
@@ -143,6 +150,8 @@ function HistoryListRow({
   title,
   chip,
   chipClass,
+  chip2,
+  chip2Class,
   sub,
   amount,
   amountSub,
@@ -151,6 +160,8 @@ function HistoryListRow({
   title: string;
   chip: string;
   chipClass: string;
+  chip2?: string;
+  chip2Class?: string;
   sub: string;
   amount: string;
   amountSub?: string;
@@ -161,6 +172,7 @@ function HistoryListRow({
         <div className="flex items-center gap-1.5">
           <span className="cp-list-title truncate">{title}</span>
           <span className={`cp-chip shrink-0 ${chipClass}`}>{chip}</span>
+          {chip2 && <span className={`cp-chip shrink-0 ${chip2Class ?? ""}`}>{chip2}</span>}
         </div>
         <p className="cp-list-sub truncate tabular-nums">{sub}</p>
       </div>
@@ -188,6 +200,8 @@ type HistoryEntry = {
   title: string;
   chip: string;
   chipClass: string;
+  chip2?: string;
+  chip2Class?: string;
   sub: string;
   amount: string;
   amountSub?: string;
@@ -195,17 +209,22 @@ type HistoryEntry = {
 
 function historyEntries(detail: CustomerDetail, tab: Tab): HistoryEntry[] {
   if (tab === "jobs") {
-    return detail.jobs.map((job) => ({
-      key: job.id,
-      href: jobHref(job, detail.invoices),
-      title: job.job_name ?? "Job",
-      chip: JOB_STATUS_LABEL[job.status],
-      chipClass: JOB_CHIP[job.status],
-      sub: job.scheduled_at
-        ? `${fmtEt(job.scheduled_at)}${job.job_address ? ` · ${job.job_address}` : ""}`
-        : job.job_address ?? "Not scheduled yet",
-      amount: fmtMoney(job.total_cents),
-    }));
+    return detail.jobs.map((job) => {
+      const recurrence = job.recurrence ?? "none";
+      return {
+        key: job.id,
+        href: jobHref(job, detail.invoices),
+        title: job.job_name ?? "Job",
+        chip: JOB_STATUS_LABEL[job.status],
+        chipClass: JOB_CHIP[job.status],
+        chip2: recurrence !== "none" ? RECURRENCE_LABEL[recurrence] : undefined,
+        chip2Class: "bg-[var(--cp-good-bg)] text-[var(--cp-good)]",
+        sub: job.scheduled_at
+          ? `${fmtEt(job.scheduled_at)}${job.job_address ? ` · ${job.job_address}` : ""}`
+          : job.job_address ?? "Not scheduled yet",
+        amount: fmtMoney(job.total_cents),
+      };
+    });
   }
   if (tab === "estimates") {
     return detail.estimates.map((estimate) => ({
@@ -281,6 +300,8 @@ function WorkHistory({ detail, tab, id }: { detail: CustomerDetail; tab: Tab; id
               title={e.title}
               chip={e.chip}
               chipClass={e.chipClass}
+              chip2={e.chip2}
+              chip2Class={e.chip2Class}
               sub={e.sub}
               amount={e.amount}
               amountSub={e.amountSub}
@@ -335,6 +356,8 @@ function WorkHistoryMobile({ detail, tab, id }: { detail: CustomerDetail; tab: T
                 title={e.title}
                 chip={e.chip}
                 chipClass={e.chipClass}
+                chip2={e.chip2}
+                chip2Class={e.chip2Class}
                 sub={e.sub}
                 amount={e.amount}
                 amountSub={e.amountSub}
@@ -354,6 +377,7 @@ export default async function CustomerPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ tab?: string | string[] }>;
 }) {
+  await requirePagePermission("customers");
   const { id } = await params;
   const sp = await searchParams;
   const rawTab = Array.isArray(sp.tab) ? sp.tab[0] : sp.tab;

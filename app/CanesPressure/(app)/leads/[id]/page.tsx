@@ -17,6 +17,7 @@ import {
   Zap,
   type LucideIcon,
 } from "lucide-react";
+import { requirePagePermission } from "@/lib/canes/access";
 import { getLead, getLeadCalls, getLeadEvents, getSettings, getThreadMessages } from "@/lib/canes/data";
 import { listEstimates } from "@/lib/canes/estimates";
 import {
@@ -171,6 +172,7 @@ function NextStep({ lead }: { lead: Lead }) {
 }
 
 export default async function LeadPage({ params }: { params: Promise<{ id: string }> }) {
+  await requirePagePermission("leads");
   const { id } = await params;
   const lead = await getLead(id);
   if (!lead) notFound();

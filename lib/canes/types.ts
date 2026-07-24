@@ -125,6 +125,7 @@ export type CanesSettings = {
   invoice_terms: string;
   invoice_message: string;
   invoice_reminder_days: number[];
+  estimate_reminder_days: number[]; // follow-up texts N days after an estimate is sent
   // ── 0007 ops feedback: final-confirmation escalation + call greeting/whisper ──
   confirmation_final_template: string;
   confirmation_final_offset_hours: number;
@@ -370,6 +371,32 @@ export type JobStatus =
   | "unscheduled" | "scheduled" | "confirmed" | "in_progress"
   | "completed" | "invoiced" | "paid" | "canceled";
 
+// ── 0015: job recurrence — a maintenance-plan cadence flag. v1 derives "next
+// due" and recurring-revenue insights from it; it never auto-creates jobs.
+export type JobRecurrence =
+  | "none" | "weekly" | "biweekly" | "monthly" | "quarterly" | "semiannual" | "yearly";
+
+export const RECURRENCE_LABEL: Record<JobRecurrence, string> = {
+  none: "One-time",
+  weekly: "Weekly",
+  biweekly: "Every 2 weeks",
+  monthly: "Monthly",
+  quarterly: "Quarterly",
+  semiannual: "Every 6 months",
+  yearly: "Yearly",
+};
+
+// Days between visits, for deriving the next due date. null = not recurring.
+export const RECURRENCE_DAYS: Record<JobRecurrence, number | null> = {
+  none: null, weekly: 7, biweekly: 14, monthly: 30, quarterly: 91, semiannual: 182, yearly: 365,
+};
+
+// Visits per month, for normalizing a recurring job's value into monthly
+// recurring revenue (weekly ≈ 4.33 visits/month, quarterly = 1/3, …).
+export const RECURRENCE_PER_MONTH: Record<JobRecurrence, number> = {
+  none: 0, weekly: 4.33, biweekly: 2.17, monthly: 1, quarterly: 1 / 3, semiannual: 1 / 6, yearly: 1 / 12,
+};
+
 export type Job = {
   id: string; created_at: string; estimate_id: string | null; lead_id: string | null;
   contact_id: string | null; status: JobStatus; customer_name: string | null;
@@ -393,6 +420,8 @@ export type Job = {
   deposit_link_id?: string | null;
   deposit_link_url?: string | null;
   deposit_paid_at?: string | null;
+  // ── recurrence (0015); optional so fixtures compile ──
+  recurrence?: JobRecurrence;
 };
 
 export type Crew = {
@@ -645,6 +674,8 @@ export type InvoiceReward = {
   claimed_at: string | null;
   resolved_at: string | null;
   resolved_by: string | null;
+  // ── 0015: team member credited with earning the review; optional so fixtures compile ──
+  attributed_member_id?: string | null;
 };
 
 export const REWARD_KIND_LABEL: Record<InvoiceRewardKind, string> = {

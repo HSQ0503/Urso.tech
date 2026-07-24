@@ -1,5 +1,5 @@
 import { canesConfigured, canesDb } from "@/lib/canes/supabase";
-import { isDemo } from "@/lib/canes/data";
+import { getSettings, isDemo } from "@/lib/canes/data";
 import {
   DEMO_CALENDAR_EVENTS,
   DEMO_CATALOG,
@@ -346,15 +346,20 @@ export async function enqueueEstimateSend(estimate: Estimate): Promise<boolean> 
   return (data ?? []).length > 0;
 }
 
-// Queue the day-2 and day-5 follow-up reminders. Insert-only on dedupe_key.
+// Queue the follow-up reminders on the configured cadence (settings
+// estimate_reminder_days, default day 2 + day 5). Insert-only on dedupe_key —
+// the day number keys the stage, so editing the cadence never re-sends a
+// reminder that already fired.
 export async function enqueueEstimateReminders(estimate: Estimate): Promise<void> {
   if (!canesConfigured()) return;
   const db = canesDb();
   const now = Date.now();
-  const stages = [
-    { key: `estimate_reminder:${estimate.id}:d2`, at: now + 2 * 86_400_000 },
-    { key: `estimate_reminder:${estimate.id}:d5`, at: now + 5 * 86_400_000 },
-  ];
+  const settings = await getSettings();
+  const days = [...new Set(settings.estimate_reminder_days.filter((d) => d > 0))].sort((a, b) => a - b);
+  const stages = days.map((d) => ({
+    key: `estimate_reminder:${estimate.id}:d${d}`,
+    at: now + d * 86_400_000,
+  }));
   for (const stage of stages) {
     const { error } = await db.from("tasks").upsert(
       {

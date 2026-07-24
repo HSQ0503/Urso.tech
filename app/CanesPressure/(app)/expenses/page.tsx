@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Receipt } from "lucide-react";
+import { requireOwnerPage } from "@/lib/canes/access";
 import { listBusinessExpenses, monthlyEquivalentCents } from "@/lib/canes/overhead";
 import { listJobExpensesInRange } from "@/lib/canes/expenses";
 import { listJobs } from "@/lib/canes/estimates";
@@ -60,6 +61,7 @@ function StatTile({ label, value, sub }: { label: string; value: string; sub: st
 }
 
 export default async function ExpensesPage() {
+  await requireOwnerPage();
   const now = new Date();
   const endIso = now.toISOString();
   const startIso = new Date(now.getTime() - JOB_WINDOW_DAYS * 86_400_000).toISOString();

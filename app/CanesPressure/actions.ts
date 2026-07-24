@@ -39,6 +39,7 @@ import {
 } from "@/lib/canes/expenses";
 import { addBusinessExpenseRow, deleteBusinessExpenseRow } from "@/lib/canes/overhead";
 import { ensureContact, getCustomer } from "@/lib/canes/customers";
+import { denyUnlessPermitted } from "@/lib/canes/access";
 import { listInvoiceRewards, rewardConfigFrom, getRewardConfig, type RewardConfig } from "@/lib/canes/rewards";
 import {
   notifyEstimateSent,
@@ -70,6 +71,7 @@ import {
   type Job,
   type JobExpense,
   type JobInvoiceSummary,
+  type JobRecurrence,
   type JobStatus,
   type LeadStatus,
   type LeadSource,
@@ -106,6 +108,8 @@ export async function updateLeadFields(
   fields: { name?: string; phone?: string; email?: string; address?: string; service?: string; notes?: string; source?: LeadSource },
 ): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted("leads");
+  if (denied) return denied;
   const patch: Record<string, unknown> = { ...fields };
   if (fields.phone !== undefined) {
     const e164 = fields.phone ? toE164(fields.phone) : null;
@@ -127,6 +131,8 @@ export async function updateLeadFields(
 
 export async function setLeadStatus(leadId: string, status: LeadStatus, lostReason?: string): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted("leads");
+  if (denied) return denied;
   const patch: Record<string, unknown> = { status };
   if (status === "lost") patch.lost_reason = lostReason ?? null;
   if (status === "confirmed") patch.confirmed_at = new Date().toISOString();
@@ -144,6 +150,8 @@ export async function setLeadStatus(leadId: string, status: LeadStatus, lostReas
 // offset, then YES-handling in the SMS webhook.
 export async function setAppointment(leadId: string, appointmentIso: string): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted("leads");
+  if (denied) return denied;
   const when = new Date(appointmentIso);
   if (Number.isNaN(when.getTime())) return { ok: false, notice: "Invalid date." };
   const db = canesDb();
@@ -186,6 +194,8 @@ export async function setAppointment(leadId: string, appointmentIso: string): Pr
 
 export async function snoozeLead(leadId: string, untilIso: string): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted("leads");
+  if (denied) return denied;
   const { error } = await canesDb().from("leads").update({ snoozed_until: untilIso }).eq("id", leadId);
   if (error) return { ok: false, notice: error.message };
   await logEvent(leadId, "snooze", `Follow-up snoozed until ${fmtEt(untilIso)}`);
@@ -200,6 +210,8 @@ export async function logCallOutcome(
   detail?: string,
 ): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted("calls");
+  if (denied) return denied;
   const db = canesDb();
   const lead = await getLead(leadId);
   if (!lead) return { ok: false, notice: "Lead not found." };
@@ -306,6 +318,8 @@ export async function recordJobDeposit(
   method: PaymentMethod,
 ): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted("invoices");
+  if (denied) return denied;
   const amount = Math.round(amountCents);
   if (!Number.isFinite(amount) || amount <= 0) return { ok: false, notice: "Enter the deposit amount collected." };
   const job = await getJob(jobId);
@@ -380,6 +394,8 @@ export async function recordJobDeposit(
 // The SMS thread survives either way; tasks and timeline events cascade.
 export async function deleteLead(leadId: string): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted();
+  if (denied) return denied;
   const lead = await getLead(leadId);
   if (!lead) return { ok: false, notice: "Lead not found." };
   if (lead.opted_out) {
@@ -421,6 +437,8 @@ export async function deleteLead(leadId: string): Promise<ActionResult> {
 export async function sendMessage(peerPhone: string, body: string, leadId?: string | null): Promise<ActionResult> {
   if (!body.trim()) return { ok: false, notice: "Empty message." };
   if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted("leads");
+  if (denied) return denied;
   const res = await sendCanesSms({ to: peerPhone, body: body.trim(), leadId: leadId ?? null, automated: false });
   if (!res.ok) return { ok: false, notice: res.skipped ?? res.error ?? "Send failed." };
   if (leadId) {
@@ -437,6 +455,8 @@ export async function sendMessage(peerPhone: string, body: string, leadId?: stri
 // Send (or re-send) the confirmation text right now, outside the scheduler.
 export async function sendConfirmationNow(leadId: string): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted("leads");
+  if (denied) return denied;
   const lead = await getLead(leadId);
   if (!lead?.phone) return { ok: false, notice: "Lead has no phone number." };
   if (lead.opted_out) return { ok: false, notice: "This customer opted out of texts." };
@@ -465,6 +485,8 @@ export async function bridgeCall(
   opts?: { leadId?: string },
 ): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted("calls");
+  if (denied) return denied;
   const to = phone?.trim();
   if (!to) return { ok: false, notice: "No phone number to call." };
   const owner = process.env.CANES_OWNER_PHONE;
@@ -491,6 +513,8 @@ export async function bridgeCall(
 // Lead-scoped convenience wrapper: look the number up from the lead, then bridge.
 export async function initiateCall(leadId: string): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted("calls");
+  if (denied) return denied;
   const lead = await getLead(leadId);
   if (!lead?.phone) return { ok: false, notice: "Lead has no phone number." };
   return bridgeCall(lead.phone, { leadId });
@@ -508,6 +532,8 @@ export async function saveSettings(patch: {
   deposit_presets?: number[];
   estimate_expiry_days?: number;
   estimate_tax_rate_bps?: number;
+  estimate_reminder_days?: number[];
+  invoice_reminder_days?: number[];
   review_rewards?: {
     google_cents: number;
     facebook_cents: number;
@@ -518,6 +544,8 @@ export async function saveSettings(patch: {
   };
 }): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted();
+  if (denied) return denied;
   const db = canesDb();
   const rows = Object.entries(patch)
     .filter(([, v]) => v !== undefined)
@@ -543,6 +571,8 @@ export async function createLead(fields: {
   appointmentIso?: string;
 }): Promise<ActionResult & { existingLeadId?: string }> {
   if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted("leads");
+  if (denied) return denied;
   const e164 = toE164(fields.phone);
   if (!e164) return { ok: false, notice: "That phone number doesn't look valid." };
   const db = canesDb();
@@ -662,6 +692,8 @@ export async function createEstimateFromLead(
   leadId: string,
 ): Promise<ActionResult & { estimateId?: string }> {
   if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted("estimates");
+  if (denied) return denied;
   const lead = await getLead(leadId);
   if (!lead) return { ok: false, notice: "Lead not found." };
   return createEstimate({
@@ -726,6 +758,8 @@ export async function createEstimate(input: {
   jobName?: string;
 }): Promise<ActionResult & { estimateId?: string }> {
   if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted("estimates");
+  if (denied) return denied;
   const settings = await getSettings();
   const number = await nextEstimateNumber();
   const phone = input.customerPhone ? toE164(input.customerPhone) : null;
@@ -797,6 +831,8 @@ export async function updateEstimate(
   },
 ): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted("estimates");
+  if (denied) return denied;
   const estimate = await getEstimate(estimateId);
   if (!estimate) return { ok: false, notice: "Estimate not found." };
   // Money/terms are frozen once sent, but the contact snapshot stays editable —
@@ -872,6 +908,8 @@ export async function saveEstimateItems(
   }>,
 ): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted("estimates");
+  if (denied) return denied;
   const estimate = await getEstimate(estimateId);
   if (!estimate) return { ok: false, notice: "Estimate not found." };
   if (estimate.status !== "draft") return { ok: false, notice: "Only draft estimates can be edited." };
@@ -923,6 +961,8 @@ export async function sendEstimate(
   opts?: { channels?: { email?: boolean; text?: boolean }; toEmail?: string; toPhone?: string },
 ): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted("estimates");
+  if (denied) return denied;
   const estimate = await getEstimate(estimateId);
   if (!estimate) return { ok: false, notice: "Estimate not found." };
   // Draft + resend (sent/viewed) are both deliverable; terminal statuses aren't.
@@ -1054,6 +1094,8 @@ function sendEstimateNotice(s: {
 
 export async function voidEstimate(estimateId: string): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted("estimates");
+  if (denied) return denied;
   const estimate = await getEstimate(estimateId);
   if (!estimate) return { ok: false, notice: "Estimate not found." };
   const db = canesDb();
@@ -1092,6 +1134,8 @@ export async function voidEstimate(estimateId: string): Promise<ActionResult> {
 // tasks are canceled explicitly rather than left for the cron to reap.
 export async function deleteEstimate(estimateId: string): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted();
+  if (denied) return denied;
   const estimate = await getEstimate(estimateId);
   if (!estimate) return { ok: false, notice: "Estimate not found." };
   if (!["draft", "expired"].includes(estimate.status)) {
@@ -1141,6 +1185,8 @@ export async function deleteEstimate(estimateId: string): Promise<ActionResult> 
 // automatically (SET NULL, job-anchored) and re-point onto the next bill.
 export async function deleteInvoice(invoiceId: string): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted();
+  if (denied) return denied;
   const invoice = await getInvoice(invoiceId);
   if (!invoice) return { ok: false, notice: "Invoice not found." };
   if (invoice.status !== "draft" && invoice.status !== "void") {
@@ -1193,6 +1239,8 @@ export async function deleteInvoice(invoiceId: string): Promise<ActionResult> {
 // or money attached. Items, expenses, time entries, and media rows cascade.
 export async function deleteJob(jobId: string): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted();
+  if (denied) return denied;
   const job = await getJob(jobId);
   if (!job) return { ok: false, notice: "Job not found." };
   if (job.estimate_id) {
@@ -1241,6 +1289,8 @@ export async function deleteJob(jobId: string): Promise<ActionResult> {
 // and any linked lead survives with its consent state intact.
 export async function deleteContact(contactId: string): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted();
+  if (denied) return denied;
   const db = canesDb();
   const [est, jobs, invs] = await Promise.all([
     db.from("estimates").select("id").eq("contact_id", contactId).limit(1),
@@ -1315,6 +1365,8 @@ export async function approveEstimateInPerson(
   opts?: { depositCollected?: boolean; depositMethod?: PaymentMethod },
 ): Promise<ActionResult & { depositUrl?: string | null }> {
   if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted("estimates");
+  if (denied) return denied;
   const estimate = await getEstimate(estimateId);
   if (!estimate) return { ok: false, notice: "Estimate not found." };
   if (estimate.status === "approved") return { ok: false, notice: "This estimate is already approved." };
@@ -1630,6 +1682,8 @@ export async function upsertCatalogItem(item: {
   position?: number;
 }): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted("estimates");
+  if (denied) return denied;
   if (!item.name.trim()) return { ok: false, notice: "Name is required." };
   const db = canesDb();
   const row: Record<string, unknown> = {
@@ -1655,6 +1709,8 @@ export async function upsertCatalogItem(item: {
 
 export async function deleteCatalogItem(id: string): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted("estimates");
+  if (denied) return denied;
   // Soft-delete: catalog items may be referenced by historical estimate lines,
   // so deactivate rather than remove.
   const { error } = await canesDb().from("service_catalog").update({ active: false }).eq("id", id);
@@ -1771,6 +1827,8 @@ export async function scheduleJob(
   crewId: string | null,
 ): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted("schedule");
+  if (denied) return denied;
   const when = new Date(scheduledIso);
   if (Number.isNaN(when.getTime())) return { ok: false, notice: "Invalid date." };
   const duration = Math.max(15, Math.round(durationMinutes));
@@ -1827,6 +1885,8 @@ export async function moveJob(
   crewId?: string | null,
 ): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted("schedule");
+  if (denied) return denied;
   if (scheduledIso === null) return unscheduleJob(jobId);
   const job = await getJob(jobId);
   if (!job) return { ok: false, notice: "Job not found." };
@@ -1843,6 +1903,8 @@ export async function moveJob(
 // confirmation so the customer is never texted about a dropped slot.
 export async function unscheduleJob(jobId: string): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted("schedule");
+  if (denied) return denied;
   const job = await getJob(jobId);
   if (!job) return { ok: false, notice: "Job not found." };
   if (TERMINAL_JOB_STATUSES.includes(job.status)) {
@@ -1862,6 +1924,8 @@ export async function unscheduleJob(jobId: string): Promise<ActionResult> {
 // Assign / reassign a crew without changing the time.
 export async function assignJob(jobId: string, crewId: string | null): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted("schedule");
+  if (denied) return denied;
   const job = await getJob(jobId);
   if (!job) return { ok: false, notice: "Job not found." };
   const crews = crewId ? await listCrews() : [];
@@ -1894,6 +1958,8 @@ export async function setJobStatus(
   reason?: string,
 ): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted("schedule");
+  if (denied) return denied;
   if (status === "canceled" && !reason?.trim()) {
     return { ok: false, notice: "A reason is required to cancel a job." };
   }
@@ -1923,6 +1989,8 @@ export async function updateJobDetails(
   fields: { notes?: string; gateCode?: string; siteNotes?: string },
 ): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted("schedule");
+  if (denied) return denied;
   const job = await getJob(jobId);
   if (!job) return { ok: false, notice: "Job not found." };
   const patch: Record<string, unknown> = {};
@@ -1932,6 +2000,26 @@ export async function updateJobDetails(
   const { error } = await canesDb().from("jobs").update(patch).eq("id", jobId);
   if (error) return { ok: false, notice: error.message };
   await logJobEvent(job.lead_id, "Job details updated");
+  refresh();
+  return { ok: true };
+}
+
+// Mark a job as a repeating maintenance plan (0015). Display + insights only —
+// nothing is auto-created; the recurring section derives "next due" from this.
+export async function setJobRecurrence(
+  jobId: string,
+  recurrence: JobRecurrence,
+): Promise<ActionResult> {
+  if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted("schedule");
+  if (denied) return denied;
+  const allowed: JobRecurrence[] = ["none", "weekly", "biweekly", "monthly", "quarterly", "semiannual", "yearly"];
+  if (!allowed.includes(recurrence)) return { ok: false, notice: "Invalid cadence." };
+  const job = await getJob(jobId);
+  if (!job) return { ok: false, notice: "Job not found." };
+  const { error } = await canesDb().from("jobs").update({ recurrence }).eq("id", jobId);
+  if (error) return { ok: false, notice: error.message };
+  await logJobEvent(job.lead_id, recurrence === "none" ? "Recurrence removed" : `Set to repeat: ${recurrence}`);
   refresh();
   return { ok: true };
 }
@@ -1948,6 +2036,8 @@ export async function createCalendarEvent(input: {
   notes?: string;
 }): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted("schedule");
+  if (denied) return denied;
   const title = input.title.trim();
   if (!title) return { ok: false, notice: "A title is required." };
   const start = new Date(input.startIso);
@@ -2027,6 +2117,8 @@ async function recomputeInvoiceTotals(invoiceId: string): Promise<boolean> {
 // Mark a job in progress (the "Start job" tap). Guarded against terminal jobs.
 export async function startJob(jobId: string): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted("schedule");
+  if (denied) return denied;
   const job = await getJob(jobId);
   if (!job) return { ok: false, notice: "Job not found." };
   if (["completed", "invoiced", "paid", "canceled"].includes(job.status)) {
@@ -2044,6 +2136,8 @@ export async function startJob(jobId: string): Promise<ActionResult> {
 // reused (job_id is UNIQUE), so re-completing never mints a second bill.
 export async function completeJob(jobId: string): Promise<ActionResult & { invoiceId?: string }> {
   if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted("schedule");
+  if (denied) return denied;
   const job = await getJob(jobId);
   if (!job) return { ok: false, notice: "Job not found." };
   if (["invoiced", "paid", "canceled"].includes(job.status)) {
@@ -2088,6 +2182,8 @@ export async function completeJob(jobId: string): Promise<ActionResult & { invoi
 // payment aborts the reopen instead of being clobbered.
 export async function reopenJob(jobId: string): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted("schedule");
+  if (denied) return denied;
   const job = await getJob(jobId);
   if (!job) return { ok: false, notice: "Job not found." };
   if (job.status !== "completed") {
@@ -2192,6 +2288,8 @@ export async function createInvoiceFromJob(
   jobId: string,
 ): Promise<ActionResult & { invoiceId?: string }> {
   if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted("invoices");
+  if (denied) return denied;
   const existing = await getInvoiceByJob(jobId); // ignores void — re-bill path
   if (existing) return { ok: true, invoiceId: existing.id };
   const job = await getJob(jobId);
@@ -2327,6 +2425,8 @@ export async function updateInvoice(
   },
 ): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted("invoices");
+  if (denied) return denied;
   const invoice = await getInvoice(invoiceId);
   if (!invoice) return { ok: false, notice: "Invoice not found." };
   // Same contact-fields exception as updateEstimate: amounts freeze at send,
@@ -2370,6 +2470,8 @@ export async function sendInvoice(
   opts?: { channels?: { email?: boolean; text?: boolean }; toEmail?: string; toPhone?: string },
 ): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted("invoices");
+  if (denied) return denied;
   const invoice = await getInvoice(invoiceId);
   if (!invoice) return { ok: false, notice: "Invoice not found." };
   if (invoice.status === "paid") return { ok: false, notice: "This invoice is already paid." };
@@ -2510,6 +2612,8 @@ function sendInvoiceNotice(s: { canEmail: boolean; optedOut: boolean; textSent: 
 // taps insert exactly one ledger row. Settles the job too.
 export async function recordCashPayment(invoiceId: string, amountCents: number): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted("invoices");
+  if (denied) return denied;
   const amount = Math.round(amountCents);
   if (!Number.isFinite(amount) || amount <= 0) return { ok: false, notice: "Enter the cash amount collected." };
   const invoice = await getInvoice(invoiceId);
@@ -2600,6 +2704,8 @@ export async function recordCashPayment(invoiceId: string, amountCents: number):
 // Void an unpaid invoice — cancels pending send/reminder texts, kills the link.
 export async function voidInvoice(invoiceId: string): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted();
+  if (denied) return denied;
   const invoice = await getInvoice(invoiceId);
   if (!invoice) return { ok: false, notice: "Invoice not found." };
   if (invoice.status === "paid") return { ok: false, notice: "A paid invoice can't be voided." };
@@ -2667,6 +2773,7 @@ export async function markInvoiceViewed(token: string): Promise<ActionResult> {
 
 // Demo-safe read for the self-contained client panels (job sheet + invoice rail).
 export async function listInvoiceRewardsAction(invoiceId: string): Promise<InvoiceReward[]> {
+  if (await denyUnlessPermitted("invoices")) return [];
   return listInvoiceRewards(invoiceId);
 }
 
@@ -2678,6 +2785,7 @@ export async function getRewardConfigAction(): Promise<RewardConfig> {
 // Demo-safe, token-free invoice summary so client panels (the job sheet's
 // billing step) can refresh amounts after a reward approval changes the total.
 export async function getInvoiceSummaryAction(invoiceId: string): Promise<JobInvoiceSummary | null> {
+  if (await denyUnlessPermitted("invoices")) return null;
   const inv = await getInvoice(invoiceId);
   if (!inv) return null;
   return {
@@ -2698,6 +2806,8 @@ export async function setInvoiceRewardOffer(
   enabled: boolean,
 ): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted();
+  if (denied) return denied;
   const invoice = await getInvoice(invoiceId);
   if (!invoice) return { ok: false, notice: "Invoice not found." };
   if (invoice.status === "paid" || invoice.status === "void") {
@@ -2813,8 +2923,14 @@ export async function claimInvoiceReward(
 export async function setRewardApproval(
   rewardId: string,
   approve: boolean,
+  // 0015: team member credited with earning the review. Written as a separate
+  // metadata update after the approval CAS wins, and never fails the money
+  // path — a missing column (deploy ahead of migration) just logs.
+  attributedMemberId?: string | null,
 ): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted();
+  if (denied) return denied;
   const db = canesDb();
   const { data: rewardRow } = await db
     .from("invoice_rewards")
@@ -2869,6 +2985,16 @@ export async function setRewardApproval(
     if (invoice.lead_id) await touch(invoice.lead_id);
     refresh();
     return { ok: true, notice: "Declined — no discount applied." };
+  }
+
+  // Credit the team member who earned the review. Metadata only — a failure
+  // (e.g. the 0015 column isn't migrated yet) never blocks the discount.
+  if (attributedMemberId !== undefined) {
+    const { error: attrErr } = await db
+      .from("invoice_rewards")
+      .update({ attributed_member_id: attributedMemberId })
+      .eq("id", rewardId);
+    if (attrErr) console.error(`[canes] reward attribution failed for ${rewardId}: ${attrErr.message}`);
   }
 
   // ── Approve path ────────────────────────────────────────────────────────────
@@ -3007,6 +3133,7 @@ export async function setRewardApproval(
 // Demo-safe read: the panel fetches its own expenses without prop-threading, so
 // this stays outside the canesConfigured guard (the reader handles isDemo()).
 export async function listJobExpensesAction(jobId: string): Promise<JobExpense[]> {
+  if (await denyUnlessPermitted("invoices")) return [];
   return listJobExpenses(jobId);
 }
 
@@ -3017,6 +3144,8 @@ export async function addJobExpense(input: {
   note?: string;
 }): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted("invoices");
+  if (denied) return denied;
   const amount = Math.round(input.amountCents);
   if (!Number.isFinite(amount) || amount <= 0) return { ok: false, notice: "Enter the expense amount." };
   const category = input.category.trim();
@@ -3038,6 +3167,7 @@ export async function addJobExpense(input: {
 // ── Estimate expenses (0014) — the quote-time cost model ─────────────────────
 
 export async function listEstimateExpensesAction(estimateId: string): Promise<EstimateExpense[]> {
+  if (await denyUnlessPermitted("estimates")) return [];
   return listEstimateExpenses(estimateId);
 }
 
@@ -3048,6 +3178,8 @@ export async function addEstimateExpense(input: {
   note?: string;
 }): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted("estimates");
+  if (denied) return denied;
   const amount = Math.round(input.amountCents);
   if (!Number.isFinite(amount) || amount <= 0) return { ok: false, notice: "Enter the cost amount." };
   const category = input.category.trim();
@@ -3067,6 +3199,8 @@ export async function addEstimateExpense(input: {
 
 export async function deleteEstimateExpense(id: string): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted("estimates");
+  if (denied) return denied;
   const ok = await deleteEstimateExpenseRow(id);
   if (!ok) return { ok: false, notice: "Couldn't remove the cost. Please try again." };
   refresh();
@@ -3075,6 +3209,8 @@ export async function deleteEstimateExpense(id: string): Promise<ActionResult> {
 
 export async function deleteJobExpense(id: string): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted("invoices");
+  if (denied) return denied;
   const ok = await deleteJobExpenseRow(id);
   if (!ok) return { ok: false, notice: "Couldn't remove the expense. Please try again." };
   refresh();
@@ -3098,6 +3234,8 @@ export async function addBusinessExpense(input: {
   note?: string;
 }): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted();
+  if (denied) return denied;
   const name = input.name.trim();
   if (!name) return { ok: false, notice: "Name the expense." };
   const amount = Math.round(input.amountCents);
@@ -3119,6 +3257,8 @@ export async function addBusinessExpense(input: {
 
 export async function deleteBusinessExpense(id: string): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted();
+  if (denied) return denied;
   const ok = await deleteBusinessExpenseRow(id);
   if (!ok) return { ok: false, notice: "Couldn't remove the expense. Please try again." };
   refresh();
@@ -3134,6 +3274,8 @@ export async function addTeamMember(input: {
   crewId?: string | null;
 }): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted();
+  if (denied) return denied;
   const name = input.name.trim();
   if (!name) return { ok: false, notice: "A name is required." };
   const { error } = await canesDb().from("team_members").insert({
@@ -3165,6 +3307,8 @@ export async function updateTeamMember(
   },
 ): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted();
+  if (denied) return denied;
   const upd: Record<string, unknown> = {};
   if (patch.name !== undefined) upd.name = patch.name.trim();
   if (patch.role !== undefined) upd.role = patch.role;
@@ -3185,6 +3329,8 @@ export async function updateTeamMember(
 
 export async function removeTeamMember(id: string): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted();
+  if (denied) return denied;
   const { error } = await canesDb().from("team_members").update({ active: false }).eq("id", id);
   if (error) {
     console.error(`[canes] removeTeamMember: ${error.message}`);
@@ -3210,6 +3356,8 @@ export async function createCustomer(fields: {
   source?: LeadSource;
 }): Promise<ActionResult & { id?: string }> {
   if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted("customers");
+  if (denied) return denied;
   const name = fields.name.trim();
   if (!name) return { ok: false, notice: "A name is required." };
   const phone = fields.phone?.trim() ? toE164(fields.phone) : null;
@@ -3254,6 +3402,8 @@ export async function updateCustomer(
   fields: { name?: string; phone?: string; email?: string; notes?: string; archived?: boolean },
 ): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted("customers");
+  if (denied) return denied;
   const patch: Record<string, unknown> = { last_activity_at: new Date().toISOString() };
   if (fields.name !== undefined) patch.name = fields.name.trim() || null;
   if (fields.phone !== undefined) {
@@ -3283,6 +3433,8 @@ export async function addCustomerAddress(
   siteNotes?: string,
 ): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted("customers");
+  if (denied) return denied;
   const trimmed = line.trim();
   if (!trimmed) return { ok: false, notice: "An address is required." };
   const db = canesDb();
@@ -3302,6 +3454,8 @@ export async function addCustomerAddress(
 
 export async function setPrimaryAddress(contactId: string, addressId: string): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted("customers");
+  if (denied) return denied;
   const db = canesDb();
   // Demote-then-promote keeps exactly one primary per contact.
   const { error: demoteErr } = await db
@@ -3342,6 +3496,8 @@ export async function createManualJob(input: {
   notes?: string;
 }): Promise<ActionResult & { jobId?: string }> {
   if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted("schedule");
+  if (denied) return denied;
   const customerName = input.customerName.trim();
   if (!customerName) return { ok: false, notice: "A customer name is required." };
   const jobName = input.jobName.trim();
@@ -3445,6 +3601,8 @@ export async function createEstimateForCustomer(
   contactId: string,
 ): Promise<ActionResult & { estimateId?: string }> {
   if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted("estimates");
+  if (denied) return denied;
   const detail = await getCustomer(contactId);
   if (!detail) return { ok: false, notice: "Customer not found." };
   const { contact, addresses, lead } = detail;

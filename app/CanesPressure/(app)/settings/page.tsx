@@ -1,6 +1,8 @@
 import { getSettings, isDemo } from "@/lib/canes/data";
 import { twilioConfigured } from "@/lib/canes/supabase";
+import { requireOwnerPage } from "@/lib/canes/access";
 import { SettingsForm } from "@/app/CanesPressure/components/settings/settings-form";
+import { AutomationsPanel } from "@/app/CanesPressure/components/settings/automations-panel";
 import { TourReplayButton } from "@/app/CanesPressure/components/tour/replay-button";
 import { CrewAccountManager } from "@/app/CanesPressure/components/settings/crew-account-manager";
 import { listTechnicianAccountsForOwner } from "@/lib/canes/crew-admin";
@@ -19,6 +21,7 @@ function StatusDot({ ok }: { ok: boolean }) {
 }
 
 export default async function SettingsPage() {
+  await requireOwnerPage();
   const [settings, technicianAccounts] = await Promise.all([
     getSettings(),
     listTechnicianAccountsForOwner(),
@@ -48,6 +51,8 @@ export default async function SettingsPage() {
       </header>
 
       <SettingsForm settings={settings} />
+
+      <AutomationsPanel settings={settings} />
 
       <CrewAccountManager {...technicianAccounts} />
 
