@@ -35,6 +35,37 @@ export const hashDoc = (d: Omit<BrainDocWrite, "path" | "content_hash" | "links"
 
 export const sanitizePathPart = (s: string) => s.replace(/[\\:*?"<>|#^[\]]/g, "").replace(/\s+/g, " ").trim();
 
+type CatalogItem = { id: string; name: string };
+
+function resolveCatalogId(
+  rawValue: string,
+  items: CatalogItem[],
+  kind: "department" | "project",
+): { id: string | null } | { error: string } {
+  const value = rawValue.trim();
+  const normalized = value.toLowerCase();
+  if (
+    !value ||
+    normalized === "none" ||
+    (kind === "project" && (normalized === "company-wide" || normalized === "company wide"))
+  ) {
+    return { id: null };
+  }
+
+  const idMatch = items.find((item) => item.id.toLowerCase() === normalized);
+  if (idMatch) return { id: idMatch.id };
+
+  const nameMatches = items.filter((item) => item.name.trim().toLowerCase() === normalized);
+  if (nameMatches.length === 1) return { id: nameMatches[0].id };
+  if (nameMatches.length > 1) {
+    return { error: `Ambiguous ${kind} name "${value}". Use a slug: ${nameMatches.map((item) => item.id).join(", ")}.` };
+  }
+
+  return {
+    error: `Unknown ${kind} "${value}". Valid: ${items.map((item) => item.id).join(", ")}, or "none".`,
+  };
+}
+
 // Validate + normalize the meta fields shared by create and update.
 export async function checkMeta(
   admin: Db,
@@ -43,24 +74,22 @@ export async function checkMeta(
 ): Promise<{ error?: string; department_id?: string | null; project_id?: string | null; doc_type?: "core" | "doc" | "rule" }> {
   const out: { department_id?: string | null; project_id?: string | null; doc_type?: "core" | "doc" | "rule" } = {};
   if (fields.department !== undefined) {
-    if (fields.department === "" || fields.department === "none") out.department_id = null;
-    else {
-      const deps = await getDepartments(admin, organizationId);
-      if (!deps.some((d) => d.id === fields.department)) {
-        return { error: `Unknown department "${fields.department}". Valid: ${deps.map((d) => d.id).join(", ")}, or "none".` };
-      }
-      out.department_id = fields.department;
-    }
+    const department = resolveCatalogId(
+      fields.department,
+      await getDepartments(admin, organizationId),
+      "department",
+    );
+    if ("error" in department) return { error: department.error };
+    out.department_id = department.id;
   }
   if (fields.project !== undefined) {
-    if (fields.project === "" || fields.project === "none") out.project_id = null;
-    else {
-      const projs = await getProjects(admin, organizationId);
-      if (!projs.some((p) => p.id === fields.project)) {
-        return { error: `Unknown project "${fields.project}". Valid: ${projs.map((p) => p.id).join(", ")}, or "none".` };
-      }
-      out.project_id = fields.project;
-    }
+    const project = resolveCatalogId(
+      fields.project,
+      await getProjects(admin, organizationId),
+      "project",
+    );
+    if ("error" in project) return { error: project.error };
+    out.project_id = project.id;
   }
   if (fields.type !== undefined) {
     if (!DOC_TYPES.includes(fields.type as (typeof DOC_TYPES)[number])) {

@@ -10,6 +10,11 @@ type Proposal = {
   proposed_change: {
     title?: string;
     content?: string;
+    department?: string;
+    project?: string;
+    documentType?: "core" | "doc" | "rule";
+    visibility?: "organization" | "department" | "project" | "restricted";
+    audience?: string[];
     linkedPath?: string;
   };
   evidence: string[];
@@ -99,6 +104,35 @@ export function ProposalQueue() {
                     <span className="truncate font-mono text-[10.5px] text-[var(--ob-faint)]">{proposal.target_path}</span>
                   </div>
                   <p className="mt-2 text-[12px] leading-5 text-[var(--ob-text)]">{proposal.rationale}</p>
+                  {[
+                    ["Department", proposal.proposed_change.department],
+                    ["Project", proposal.proposed_change.project],
+                    ["Type", proposal.proposed_change.documentType],
+                    ["Visibility", proposal.proposed_change.visibility],
+                    ["Audience", proposal.proposed_change.audience?.join(", ")],
+                    ["Linked doc", proposal.proposed_change.linkedPath],
+                  ].some(([, value]) => Boolean(value)) && (
+                    <dl className="mt-3 flex flex-wrap gap-1.5">
+                      {[
+                        ["Department", proposal.proposed_change.department],
+                        ["Project", proposal.proposed_change.project],
+                        ["Type", proposal.proposed_change.documentType],
+                        ["Visibility", proposal.proposed_change.visibility],
+                        ["Audience", proposal.proposed_change.audience?.join(", ")],
+                        ["Linked doc", proposal.proposed_change.linkedPath],
+                      ]
+                        .filter((entry): entry is [string, string] => Boolean(entry[1]))
+                        .map(([label, value]) => (
+                          <div
+                            key={label}
+                            className="flex items-center gap-1 rounded-full border border-[var(--ob-border)] bg-[var(--ob-bg)] px-2.5 py-1 text-[9.5px]"
+                          >
+                            <dt className="text-[var(--ob-faint)]">{label}</dt>
+                            <dd className="font-medium text-[var(--ob-muted)]">{value}</dd>
+                          </div>
+                        ))}
+                    </dl>
+                  )}
                   {proposal.proposed_change.content && (
                     <p className="mt-2 line-clamp-3 rounded-xl bg-[var(--ob-bg)] px-3 py-2 font-mono text-[10px] leading-[1.55] text-[var(--ob-muted)]">
                       {proposal.proposed_change.content}

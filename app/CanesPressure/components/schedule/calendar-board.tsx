@@ -691,12 +691,8 @@ function MonthGrid({
                   key={job.id}
                   className="truncate rounded-[3px] border-l-2 px-1 py-0.5 text-[10.5px] leading-tight"
                   style={{
-                    // Crew colors come from the DB; the unassigned fallback
-                    // stays a token so no raw hex leaks into TSX.
-                    ["--cp-crew" as string]: job.crew?.color,
-                    borderColor: "var(--cp-crew, var(--cp-muted))",
-                    background:
-                      "color-mix(in srgb, var(--cp-crew, var(--cp-muted)) 8%, var(--cp-surface))",
+                    borderColor: "var(--cp-job)",
+                    background: "var(--cp-job-bg)",
                     outline: conflicts.has(job.id) ? "1.5px solid var(--cp-warn)" : undefined,
                     opacity: isFinishedJob(job) ? 0.66 : 1,
                   }}

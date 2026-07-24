@@ -127,6 +127,35 @@ function EstimateRow({ estimate }: { estimate: Estimate }) {
   );
 }
 
+type EstimateTotals = {
+  sent: number;
+  accepted: number;
+  declined: number;
+  awaiting: number;
+};
+
+function EstimateSummary({ totals }: { totals: EstimateTotals }) {
+  const items = [
+    { label: "Sent", detail: "Total delivered", amount: totals.sent, tone: "text-[var(--cp-ink)]" },
+    { label: "Accepted", detail: "Customer approved", amount: totals.accepted, tone: "text-[var(--cp-good)]" },
+    { label: "Declined", detail: "Customer declined", amount: totals.declined, tone: "text-[var(--cp-danger)]" },
+    { label: "Awaiting", detail: "No decision yet", amount: totals.awaiting, tone: "text-[var(--cp-warn)]" },
+  ];
+  return (
+    <div className="grid grid-cols-2 gap-2 md:grid-cols-4" aria-label="Estimate totals">
+      {items.map((item) => (
+        <div key={item.label} className="cp-card min-w-0 p-3">
+          <p className="cp-mono uppercase">{item.label}</p>
+          <p className={`mt-1 truncate text-[17px] font-semibold tabular-nums md:text-[19px] ${item.tone}`}>
+            {fmtMoney(item.amount)}
+          </p>
+          <p className="mt-0.5 truncate text-[11.5px] text-[var(--cp-faint)]">{item.detail}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default async function EstimatesPage({
   searchParams,
 }: {
@@ -144,6 +173,20 @@ export default async function EstimatesPage({
   const counts = Object.fromEntries(
     TABS.map((key) => [key, all.filter((e) => matchesTab(e, key)).length]),
   ) as Record<Tab, number>;
+  const totals: EstimateTotals = {
+    sent: all
+      .filter((estimate) => estimate.sent_at)
+      .reduce((sum, estimate) => sum + estimate.total_cents, 0),
+    accepted: all
+      .filter((estimate) => estimate.status === "approved")
+      .reduce((sum, estimate) => sum + estimate.total_cents, 0),
+    declined: all
+      .filter((estimate) => estimate.status === "declined")
+      .reduce((sum, estimate) => sum + estimate.total_cents, 0),
+    awaiting: all
+      .filter((estimate) => estimate.status === "sent" || estimate.status === "viewed")
+      .reduce((sum, estimate) => sum + estimate.total_cents, 0),
+  };
 
   const rows = [...all.filter((e) => matchesTab(e, tab))].sort((a, b) => {
     if (activeSort === "amount") return b.total_cents - a.total_cents;
@@ -170,6 +213,10 @@ export default async function EstimatesPage({
           >
             <Plus size={20} strokeWidth={2} />
           </Link>
+        </div>
+
+        <div className="mt-4">
+          <EstimateSummary totals={totals} />
         </div>
 
         <div className="cp-scroll mt-4 -mx-1 overflow-x-auto px-1">
@@ -204,7 +251,7 @@ export default async function EstimatesPage({
         </div>
       </div>
 
-      {/* ── Desktop (md+): unchanged, frozen. ── */}
+      {/* ── Desktop (md+). ── */}
       <div className="hidden md:block">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
@@ -221,7 +268,11 @@ export default async function EstimatesPage({
         </Link>
       </div>
 
-      <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+      <div className="mt-5">
+        <EstimateSummary totals={totals} />
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap gap-1">
           {TABS.map((key) => {
             const active = key === tab;

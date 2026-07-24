@@ -1,64 +1,53 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
-import { setAppointment, type ActionResult } from "@/app/CanesPressure/actions";
-import { etLocalToIso, fmtEt, fmtPhone, type Lead } from "@/lib/canes/types";
+import { useState, useTransition } from "react";
+import { createQuoteVisit, type ActionResult } from "@/app/CanesPressure/actions";
+import { etLocalToIso } from "@/lib/canes/types";
 import { SheetShell } from "./sheet-shell";
 
-// Book-quote-visit sheet — the calendar-side answer to "where do I schedule an
-// in-person quote?". Pick an open lead (website form, call-in, manual), pick a
-// time, and setAppointment books it: the visit lands on the calendar as a
-// violet Quote chip and enters the same confirmation-text automation a hot
-// lead gets from the vendor. Rebooking a lead that already has a visit moves it.
+// Calendar-side quote booking is deliberately free-entry: a quote does not
+// require an existing lead or customer. The action creates the appointment-
+// backed row the schedule already uses, and it renders as a violet Quote block.
 
 type Feedback = { ok: boolean; text: string } | null;
 
-export function BookVisitSheet({
-  leads,
-  onClose,
-}: {
-  leads: Lead[];
-  onClose: () => void;
-}) {
+export function BookVisitSheet({ onClose }: { onClose: () => void }) {
   const [isPending, startTransition] = useTransition();
   const [feedback, setFeedback] = useState<Feedback>(null);
-
-  const [query, setQuery] = useState("");
-  const [leadId, setLeadId] = useState<string | null>(null);
+  const [customerName, setCustomerName] = useState("");
+  const [jobName, setJobName] = useState("");
+  const [address, setAddress] = useState("");
   const [when, setWhen] = useState("");
   const [inPast, setInPast] = useState(false);
 
-  const matches = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return leads;
-    return leads.filter((l) =>
-      [l.name, l.phone, l.address].some((f) => f?.toLowerCase().includes(q)),
-    );
-  }, [leads, query]);
-
-  // Resolve the selection from the VISIBLE matches, not the full roster — a
-  // click, then a search that filters the pick out, must not book the hidden
-  // lead the list no longer shows.
-  const selected = leadId ? matches.find((l) => l.id === leadId) ?? null : null;
-  // A complete datetime-local value is "YYYY-MM-DDTHH:mm" — 16 chars.
   const complete = when.length >= 16;
-  const canSubmit = !!selected && complete && !inPast;
+  const canSubmit =
+    customerName.trim().length > 0 &&
+    jobName.trim().length > 0 &&
+    address.trim().length > 0 &&
+    complete &&
+    !inPast;
 
-  // Booking a past slot would arm confirmation texts for a visit that already
-  // happened. Checked in the handlers (clock reads are impure during render);
-  // the value is ET wall time via etLocalToIso.
+  // Clock reads stay in handlers instead of render. The browser value is an ET
+  // wall time and etLocalToIso makes the stored instant DST-safe.
   function isPastSlot(value: string): boolean {
     return value.length >= 16 && Date.parse(etLocalToIso(value)) < Date.now();
   }
 
-  function submit() {
-    if (!selected || isPastSlot(when)) {
+  function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!canSubmit || isPastSlot(when)) {
       setInPast(isPastSlot(when));
       return;
     }
     setFeedback(null);
     startTransition(async () => {
-      const res: ActionResult = await setAppointment(selected.id, etLocalToIso(when));
+      const res: ActionResult = await createQuoteVisit({
+        customerName,
+        jobName,
+        address,
+        appointmentIso: etLocalToIso(when),
+      });
       setFeedback(res.notice ? { ok: res.ok, text: res.notice } : null);
       if (res.ok) onClose();
     });
@@ -66,45 +55,49 @@ export function BookVisitSheet({
 
   return (
     <SheetShell title="Book quote visit" onClose={onClose}>
-      <div className="space-y-3">
+      <form className="space-y-4" onSubmit={submit}>
         <div>
-          <label className="cp-label" htmlFor="visit-lead">Lead</label>
+          <p className="cp-group-label">Client</p>
+          <label className="cp-label" htmlFor="visit-customer-name">Customer name</label>
           <input
-            id="visit-lead"
+            id="visit-customer-name"
             className="cp-input"
-            placeholder="Search name, phone, or address"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Harold Corrigan"
+            value={customerName}
+            maxLength={120}
+            autoComplete="off"
+            required
+            onChange={(event) => setCustomerName(event.target.value)}
           />
-          <div className="mt-1.5 flex max-h-56 flex-col gap-1 overflow-y-auto">
-            {matches.length === 0 ? (
-              <p className="text-[12.5px] text-[var(--cp-faint)]">
-                No open leads match. New website forms and calls land in Leads first.
-              </p>
-            ) : (
-              matches.map((l) => (
-                <button
-                  key={l.id}
-                  type="button"
-                  className="cp-slot w-full flex-col items-start gap-0.5 whitespace-normal text-left"
-                  data-selected={l.id === leadId}
-                  onClick={() => setLeadId(l.id)}
-                >
-                  <span className="w-full truncate text-[13px]">{l.name ?? "Unnamed lead"}</span>
-                  <span className="cp-slot-sub w-full truncate">
-                    {[l.phone ? fmtPhone(l.phone) : null, l.address].filter(Boolean).join(" · ") ||
-                      l.service ||
-                      "No contact details yet"}
-                  </span>
-                  {l.appointment_at && (
-                    <span className="cp-slot-sub w-full truncate">
-                      Booked {fmtEt(l.appointment_at)} — booking again moves it
-                    </span>
-                  )}
-                </button>
-              ))
-            )}
-          </div>
+        </div>
+
+        <div>
+          <label className="cp-label" htmlFor="visit-address">Client address</label>
+          <input
+            id="visit-address"
+            className="cp-input"
+            placeholder="123 Palm Beach Rd, West Palm Beach"
+            value={address}
+            maxLength={240}
+            autoComplete="street-address"
+            required
+            onChange={(event) => setAddress(event.target.value)}
+          />
+        </div>
+
+        <div className="cp-divider pt-4">
+          <p className="cp-group-label">Quote</p>
+          <label className="cp-label" htmlFor="visit-job-name">Job name</label>
+          <input
+            id="visit-job-name"
+            className="cp-input"
+            placeholder="Driveway and pool deck"
+            value={jobName}
+            maxLength={160}
+            autoComplete="off"
+            required
+            onChange={(event) => setJobName(event.target.value)}
+          />
         </div>
 
         <div>
@@ -114,9 +107,10 @@ export function BookVisitSheet({
             type="datetime-local"
             className="cp-input"
             value={when}
-            onChange={(e) => {
-              setWhen(e.target.value);
-              setInPast(isPastSlot(e.target.value));
+            required
+            onChange={(event) => {
+              setWhen(event.target.value);
+              setInPast(isPastSlot(event.target.value));
             }}
           />
           {inPast && (
@@ -127,12 +121,13 @@ export function BookVisitSheet({
         </div>
 
         <p className="text-[12px] leading-snug text-[var(--cp-faint)]">
-          Booking here puts the quote on the calendar in the quote color and arms
-          the confirmation texts automatically. Times are Eastern (ET).
+          This creates a standalone quote visit without searching existing leads
+          or clients. Times are Eastern (ET).
         </p>
 
         {feedback && (
           <p
+            aria-live="polite"
             className={`text-[12.5px] leading-snug ${
               feedback.ok ? "text-[var(--cp-good)]" : "text-[var(--cp-warn)]"
             }`}
@@ -143,12 +138,11 @@ export function BookVisitSheet({
 
         <div className="flex gap-2 pt-1">
           <button
-            type="button"
+            type="submit"
             className="cp-btn cp-btn-primary cp-btn-sm flex-1"
             disabled={!canSubmit || isPending}
-            onClick={submit}
           >
-            {isPending ? "Booking..." : selected?.appointment_at ? "Move visit" : "Book visit"}
+            {isPending ? "Booking..." : "Book quote"}
           </button>
           <button
             type="button"
@@ -159,7 +153,7 @@ export function BookVisitSheet({
             Cancel
           </button>
         </div>
-      </div>
+      </form>
     </SheetShell>
   );
 }

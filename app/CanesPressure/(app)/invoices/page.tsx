@@ -14,21 +14,19 @@ import {
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Invoices" };
 
-const TABS = ["all", "unpaid", "paid", "void"] as const;
+const TABS = ["all", "due", "paid", "void"] as const;
 type Tab = (typeof TABS)[number];
-
-const TAB_LABEL: Record<Tab, string> = { all: "All", unpaid: "Unpaid", paid: "Paid", void: "Void" };
 
 const EMPTY_COPY: Record<Tab, string> = {
   all: "No invoices yet. Complete a job on the schedule to bill it.",
-  unpaid: "Nothing outstanding — you're all caught up.",
+  due: "Nothing outstanding — you're all caught up.",
   paid: "No paid invoices yet.",
   void: "No voided invoices.",
 };
 
 function matchesTab(i: Invoice, tab: Tab): boolean {
-  if (tab === "all") return true;
-  if (tab === "unpaid") return i.status === "draft" || i.status === "sent" || i.status === "viewed";
+  if (tab === "all") return i.status !== "void";
+  if (tab === "due") return i.status !== "void" && invoiceBalanceCents(i) > 0;
   if (tab === "paid") return i.status === "paid";
   return i.status === "void";
 }
@@ -116,6 +114,65 @@ function InvoiceRow({ invoice }: { invoice: Invoice }) {
   );
 }
 
+type InvoiceTotals = {
+  all: number;
+  due: number;
+  paid: number;
+};
+
+function InvoiceSummary({
+  totals,
+  tab,
+  voidCount,
+}: {
+  totals: InvoiceTotals;
+  tab: Tab;
+  voidCount: number;
+}) {
+  const items = [
+    { key: "all" as const, label: "All", amount: totals.all, tone: "text-[var(--cp-ink)]" },
+    { key: "due" as const, label: "Due", amount: totals.due, tone: "text-[var(--cp-warn)]" },
+    { key: "paid" as const, label: "Paid", amount: totals.paid, tone: "text-[var(--cp-good)]" },
+  ];
+  return (
+    <div>
+      <div className="grid grid-cols-3 gap-2" aria-label="Invoice totals and filters">
+        {items.map((item) => {
+          const active = tab === item.key;
+          return (
+            <Link
+              key={item.key}
+              href={`/CanesPressure/invoices?status=${item.key}`}
+              className={`cp-card cp-card-hover flex min-h-[78px] min-w-0 flex-col items-center justify-center p-2 text-center ${
+                active ? "ring-1 ring-inset ring-[var(--cp-line-strong)]" : ""
+              }`}
+              aria-current={active ? "page" : undefined}
+            >
+              <span className="cp-mono uppercase">{item.label}</span>
+              <span className={`mt-1 w-full truncate text-[13px] font-semibold tabular-nums sm:text-[16px] md:text-[19px] ${item.tone}`}>
+                {fmtMoney(item.amount)}
+              </span>
+            </Link>
+          );
+        })}
+      </div>
+      {voidCount > 0 && (
+        <div className="mt-2 flex justify-end">
+          <Link
+            href="/CanesPressure/invoices?status=void"
+            className={`inline-flex min-h-8 items-center rounded-md px-2 text-[12px] font-semibold transition-colors hover:bg-[var(--cp-hover)] ${
+              tab === "void" ? "text-[var(--cp-ink)]" : "text-[var(--cp-faint)]"
+            }`}
+            aria-current={tab === "void" ? "page" : undefined}
+          >
+            Voided · {voidCount}
+          </Link>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default async function InvoicesPage({
   searchParams,
 }: {
@@ -124,16 +181,23 @@ export default async function InvoicesPage({
   await requirePagePermission("invoices");
   const { status } = await searchParams;
   const raw = Array.isArray(status) ? status[0] : status;
-  const tab: Tab = TABS.includes(raw as Tab) ? (raw as Tab) : "all";
+  const normalized = raw === "unpaid" ? "due" : raw;
+  const tab: Tab = TABS.includes(normalized as Tab) ? (normalized as Tab) : "all";
 
   const all = await listInvoices();
   const counts = Object.fromEntries(
     TABS.map((key) => [key, all.filter((i) => matchesTab(i, key)).length]),
   ) as Record<Tab, number>;
 
-  const outstanding = all
-    .filter((i) => i.status !== "void" && i.status !== "paid")
-    .reduce((sum, i) => sum + invoiceBalanceCents(i), 0);
+  const liveInvoices = all.filter((invoice) => invoice.status !== "void");
+  const totals: InvoiceTotals = {
+    all: liveInvoices.reduce((sum, invoice) => sum + invoice.total_cents, 0),
+    due: liveInvoices.reduce((sum, invoice) => sum + invoiceBalanceCents(invoice), 0),
+    paid: liveInvoices.reduce(
+      (sum, invoice) => sum + Math.min(invoice.total_cents, Math.max(0, invoice.amount_paid_cents)),
+      0,
+    ),
+  };
 
   const rows = all
     .filter((i) => matchesTab(i, tab))
@@ -141,40 +205,19 @@ export default async function InvoicesPage({
 
   return (
     <div>
-      {/* ── Mobile: iOS screen. Invoices are billed from the schedule, so the
-          header carries the outstanding total instead of a create action. ── */}
+      {/* ── Mobile: iOS screen with Markate-style monetary filters. ── */}
       <div className="md:hidden">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <h1 className="cp-ios-title">
               Invoices<span className="text-[var(--cp-brand)]">.</span>
             </h1>
-            <p className="cp-mono mt-1">{all.length} total</p>
+            <p className="cp-mono mt-1">{counts.all} total</p>
           </div>
-          {outstanding > 0 && (
-            <div className="shrink-0 text-right">
-              <p className="cp-mono">Outstanding</p>
-              <p className="text-[18px] font-semibold tabular-nums text-[var(--cp-warn)]">
-                {fmtMoney(outstanding)}
-              </p>
-            </div>
-          )}
         </div>
 
-        <div className="cp-scroll mt-4 -mx-1 overflow-x-auto px-1">
-          <div className="cp-seg cp-seg-ios w-max">
-            {TABS.map((key) => (
-              <Link
-                key={key}
-                href={`/CanesPressure/invoices?status=${key}`}
-                className="cp-seg-btn"
-                data-active={key === tab}
-              >
-                {TAB_LABEL[key]}
-                <span className="tabular-nums">{counts[key]}</span>
-              </Link>
-            ))}
-          </div>
+        <div className="mt-4">
+          <InvoiceSummary totals={totals} tab={tab} voidCount={counts.void} />
         </div>
 
         <div className="mt-4">
@@ -192,7 +235,7 @@ export default async function InvoicesPage({
         </div>
       </div>
 
-      {/* ── Desktop (md+): unchanged, frozen. ── */}
+      {/* ── Desktop (md+). ── */}
       <div className="hidden md:block">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
@@ -203,36 +246,10 @@ export default async function InvoicesPage({
             Every bill you have sent and collected. Bill a job from the schedule.
           </p>
         </div>
-        {outstanding > 0 && (
-          <div className="cp-card px-4 py-2.5 text-right">
-            <p className="cp-mono">Outstanding</p>
-            <p className="tabular-nums text-[18px] font-semibold text-[var(--cp-warn)]">
-              {fmtMoney(outstanding)}
-            </p>
-          </div>
-        )}
       </div>
 
-      <div className="mt-5 flex flex-wrap gap-1">
-        {TABS.map((key) => {
-          const active = key === tab;
-          return (
-            <Link
-              key={key}
-              href={`/CanesPressure/invoices?status=${key}`}
-              className={`inline-flex min-h-9 items-center gap-1.5 rounded-md border px-3 text-[13px] font-semibold transition-colors ${
-                active
-                  ? "border-[var(--cp-line-strong)] bg-[var(--cp-surface)] text-[var(--cp-ink)] shadow-[0_1px_2px_rgba(12,43,63,0.06)]"
-                  : "border-transparent text-[var(--cp-muted)] hover:bg-[var(--cp-hover)] hover:text-[var(--cp-ink)]"
-              }`}
-            >
-              {TAB_LABEL[key]}
-              <span className={`tabular-nums ${active ? "text-[var(--cp-muted)]" : "text-[var(--cp-faint)]"}`}>
-                {counts[key]}
-              </span>
-            </Link>
-          );
-        })}
+      <div className="mt-5">
+        <InvoiceSummary totals={totals} tab={tab} voidCount={counts.void} />
       </div>
 
       <div className="mt-4 flex flex-col gap-2">

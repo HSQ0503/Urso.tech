@@ -560,15 +560,8 @@ export function BrainConsole({
 
   const chat = useChat<BrainUIMessage>({
     transport: new DefaultChatTransport({ api: "/api/brain/chat" }),
-    onFinish: ({ message, isError }) => {
+    onFinish: () => {
       void refreshThreads();
-      if (
-        !isError &&
-        message.parts.some((part) => part.type === "data-context-receipt") &&
-        window.matchMedia("(min-width: 1280px)").matches
-      ) {
-        setReceiptOpen(true);
-      }
     },
   });
   const { messages, status, error, stop, setMessages } = chat;
@@ -819,6 +812,7 @@ export function BrainConsole({
               onClick={() => setReceiptOpen((open) => !open)}
               aria-label={receiptOpen ? "Close context receipt" : "Open context receipt"}
               aria-expanded={receiptOpen}
+              title={latestReceipt ? `View context receipt (${latestReceipt.evidence.length} sources)` : "Context receipt"}
               className={`flex min-h-11 cursor-pointer items-center gap-2 rounded-full px-3 text-[11.5px] font-medium transition-colors ${
                 receiptOpen
                   ? "bg-orange-soft text-orange"

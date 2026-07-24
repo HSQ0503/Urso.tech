@@ -192,6 +192,56 @@ export async function setAppointment(leadId: string, appointmentIso: string): Pr
   return { ok: true };
 }
 
+// Calendar-side quote booking: creates a fresh appointment from free-text
+// details instead of forcing the owner to find or create a lead first. The
+// lead row remains the schedule's source of truth for estimate visits, but a
+// phone-less standalone quote does not enqueue confirmation texts.
+export async function createQuoteVisit(input: {
+  customerName: string;
+  jobName: string;
+  address: string;
+  appointmentIso: string;
+}): Promise<ActionResult> {
+  if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted("schedule");
+  if (denied) return denied;
+
+  const customerName = input.customerName.trim();
+  const jobName = input.jobName.trim();
+  const address = input.address.trim();
+  if (!customerName) return { ok: false, notice: "Enter the customer's name." };
+  if (!jobName) return { ok: false, notice: "Enter a job name." };
+  if (!address) return { ok: false, notice: "Enter the client address." };
+  if (customerName.length > 120 || jobName.length > 160 || address.length > 240) {
+    return { ok: false, notice: "One of those details is too long." };
+  }
+
+  const when = new Date(input.appointmentIso);
+  if (Number.isNaN(when.getTime())) return { ok: false, notice: "Choose a valid visit time." };
+  if (when.getTime() < Date.now()) return { ok: false, notice: "Choose a future visit time." };
+
+  const { data, error } = await canesDb()
+    .from("leads")
+    .insert({
+      type: "hot",
+      status: "appointment_set",
+      name: customerName,
+      phone: null,
+      address,
+      service: jobName,
+      source: "other",
+      appointment_at: when.toISOString(),
+      notes: "Standalone quote visit booked from the schedule.",
+    })
+    .select("id")
+    .single();
+  if (error) return { ok: false, notice: error.message };
+
+  await logEvent(data.id, "appointment", `Standalone quote visit set for ${fmtEt(when.toISOString())}`);
+  refresh();
+  return { ok: true, notice: "Quote visit booked." };
+}
+
 export async function snoozeLead(leadId: string, untilIso: string): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
   const denied = await denyUnlessPermitted("leads");

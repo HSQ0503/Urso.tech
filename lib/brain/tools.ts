@@ -5,7 +5,7 @@ import { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { auditBrainEvent } from "./authorization";
 import type { BrainDocMeta, BrainPrincipal } from "./types";
-import { normalizeDocPath, sanitizePathPart } from "./write";
+import { checkMeta, normalizeDocPath, sanitizePathPart } from "./write";
 
 type Admin = SupabaseClient;
 
@@ -76,14 +76,22 @@ export function buildBrainTools(opts: {
           return { error: "The linked document is not in the caller's permitted catalog." };
         }
 
+        const checked = await checkMeta(
+          admin,
+          { department, project, type: documentType },
+          principal.organizationId,
+        );
+        if (checked.error) return { error: checked.error };
+
         const groundedEvidence = proposedEvidence.filter((id) => evidenceIds.has(id));
         const proposedChange = {
           title: title?.trim(),
           content: content?.trim(),
           description: description?.trim(),
-          department,
-          project,
-          documentType,
+          department:
+            checked.department_id === undefined ? undefined : checked.department_id ?? "none",
+          project: checked.project_id === undefined ? undefined : checked.project_id ?? "none",
+          documentType: checked.doc_type,
           visibility,
           audience,
           linkedPath,

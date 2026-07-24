@@ -46,6 +46,10 @@
   --cp-cold-bg: color-mix(in srgb, var(--cp-ink) 6%, transparent);
   --cp-good: #11935a;
   --cp-good-bg: color-mix(in srgb, var(--cp-good) 12%, transparent);
+  /* schedule object identity: sold jobs are always green, independent of the
+     assigned crew color; crew color stays available as secondary metadata */
+  --cp-job: #15803d;
+  --cp-job-bg: color-mix(in srgb, var(--cp-job) 11%, var(--cp-surface));
   /* quote (estimate-visit) accent — violet, deliberately outside the orange
      brand family and the cool crew palette so a quote never reads as a job */
   --cp-quote: #6d28d9;
@@ -116,6 +120,8 @@
   --cp-cold: var(--cp-muted);
   --cp-cold-bg: color-mix(in srgb, var(--cp-ink) 8%, transparent);
   --cp-good-bg: color-mix(in srgb, var(--cp-good) 13%, transparent);
+  --cp-job: var(--cp-good);
+  --cp-job-bg: color-mix(in srgb, var(--cp-job) 15%, var(--cp-surface));
   --cp-quote: #a78bfa;
   --cp-quote-bg: color-mix(in srgb, var(--cp-quote) 14%, var(--cp-surface));
   --cp-danger-bg: color-mix(in srgb, var(--cp-danger) 12%, transparent);
@@ -849,9 +855,9 @@
   overflow: hidden;
   padding: 3px 6px 3px 7px;
   border: 1px solid var(--cp-line);
-  border-left: 3px solid var(--cp-crew);
+  border-left: 3px solid var(--cp-job);
   border-radius: 4px;
-  background: color-mix(in srgb, var(--cp-crew) 12%, var(--cp-surface));
+  background: var(--cp-job-bg);
   color: var(--cp-ink);
   font-size: 11.5px;
   line-height: 1.2;
@@ -862,11 +868,11 @@
 .cp-timegrid-block:hover { border-color: var(--cp-line-strong); z-index: 3; }
 .cp-timegrid-block[data-unassigned="true"] {
   border-left-style: dashed;
-  background: var(--cp-surface);
+  background: var(--cp-job-bg);
 }
 .cp-timegrid-block[data-finished="true"] {
   opacity: 0.68;
-  background: color-mix(in srgb, var(--cp-good) 8%, var(--cp-surface));
+  background: var(--cp-job-bg);
   cursor: default;
 }
 .cp-timegrid-block-time { font-weight: 600; }

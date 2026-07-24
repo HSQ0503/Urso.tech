@@ -1,5 +1,5 @@
-import { accessAllows, requirePagePermission } from "@/lib/canes/access";
-import { isDemo, listLeads, listVisitsInRange } from "@/lib/canes/data";
+import { requirePagePermission } from "@/lib/canes/access";
+import { listVisitsInRange } from "@/lib/canes/data";
 import { listCustomerDirectory } from "@/lib/canes/customers";
 import {
   getScheduleBoard,
@@ -40,10 +40,7 @@ export default async function SchedulePage({
 }: {
   searchParams: Promise<{ start?: string; view?: string; job?: string }>;
 }) {
-  const access = await requirePagePermission("schedule");
-  // The Book-quote-visit sheet works off the lead roster — only sessions with
-  // the leads permission get it (and its PII) at all.
-  const mayBookVisits = accessAllows(access, "leads") || isDemo();
+  await requirePagePermission("schedule");
   const sp = await searchParams;
 
   // View + window start come from the URL so paging week/month/day re-fetches
@@ -58,14 +55,12 @@ export default async function SchedulePage({
   // Run the ET midnight through etLocalToIso so DST never shifts the boundary.
   const rangeStart = etLocalToIso(`${fetchYmd}T00:00`);
 
-  const [board, unscheduled, visits, openLeads, crews, events, invoiceRows, customers] = await Promise.all([
+  const [board, unscheduled, visits, crews, events, invoiceRows, customers] = await Promise.all([
     getScheduleBoard(rangeStart, days),
     getUnscheduledJobs(),
     // Visits come from the same window as the board — getAgenda only looked
     // forward from now, which dropped visits when paging to other weeks.
     listVisitsInRange(rangeStart, days),
-    // Open leads (any window) feed the Book-quote-visit sheet.
-    mayBookVisits ? listLeads({ status: "open" }) : Promise.resolve([]),
     listCrews(true),
     listCalendarEvents(rangeStart, days),
     listInvoices(),
@@ -120,7 +115,6 @@ export default async function SchedulePage({
         jobs={board}
         unscheduled={unscheduled}
         visits={visits}
-        leads={openLeads}
         crews={crews}
         customers={customers}
         events={events}

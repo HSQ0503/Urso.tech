@@ -154,7 +154,6 @@ export function ScheduleWorkspace({
   jobs,
   unscheduled,
   visits,
-  leads = [],
   crews,
   customers,
   events,
@@ -166,9 +165,6 @@ export function ScheduleWorkspace({
   jobs: JobWithItems[];
   unscheduled: JobWithItems[];
   visits: Lead[];
-  // Open leads (any window) for the Book-quote-visit sheet — `visits` only
-  // carries the booked ones inside the fetched range.
-  leads?: Lead[];
   crews: Crew[];
   customers: CustomerHit[];
   events: CalendarEvent[];
@@ -645,7 +641,7 @@ export function ScheduleWorkspace({
         />
       )}
       {createEventOpen && <CreateEventSheet crews={crews} onClose={() => setCreateEventOpen(false)} />}
-      {bookVisitOpen && <BookVisitSheet leads={leads} onClose={() => setBookVisitOpen(false)} />}
+      {bookVisitOpen && <BookVisitSheet onClose={() => setBookVisitOpen(false)} />}
       {createJobOpen && (
         <CreateJobSheet crews={crews} customers={customers} onClose={() => setCreateJobOpen(false)} />
       )}
@@ -680,7 +676,7 @@ export function ScheduleWorkspace({
               <span className="min-w-0">
                 <span className="block text-[13.5px] font-semibold">Quote visit</span>
                 <span className="block text-[12px] text-[var(--cp-muted)]">
-                  Book an in-person estimate for a lead
+                  Book an in-person estimate for any customer
                 </span>
               </span>
             </button>
@@ -770,7 +766,7 @@ function RunSheetOverlay({
 
 // ── Mobile list rows ─────────────────────────────────────────────────────────
 // iOS inset-list rows sharing one .cp-list card. The two-object discipline
-// survives via the leading marker: a solid crew dot for a job, a hollow ring
+// survives via the leading marker: a solid green square for a job, a purple ring
 // for an estimate visit, a muted square for a non-bookable calendar event.
 
 function MobileJobRow({
@@ -791,10 +787,7 @@ function MobileJobRow({
       style={{ opacity: finished ? 0.7 : 1 }}
       onClick={onOpen}
     >
-      <span
-        className="cp-crew-dot"
-        style={job.crew ? ({ ["--cp-crew"]: job.crew.color } as React.CSSProperties) : undefined}
-      />
+      <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-[2px] bg-[var(--cp-job)]" />
       <span className="min-w-0 flex-1">
         <span className="cp-list-title block truncate">
           {job.customer_name ?? "Customer"}
@@ -841,8 +834,8 @@ function MobileEventRow({ event, dow }: { event: CalendarEvent; dow: string | nu
   );
 }
 
-// An estimate visit as a list row — hollow crew marker keeps the two-object
-// discipline (jobs solid, visits hairline) inside the shared inset list.
+// An estimate visit as a list row — the hollow purple marker keeps the
+// two-object discipline (jobs solid green, visits purple) in the shared list.
 function MobileVisitRow({
   visit,
   dow,
@@ -855,7 +848,7 @@ function MobileVisitRow({
   const time = fmtEt(visit.appointment_at, { hour: "numeric", minute: "2-digit" });
   return (
     <button type="button" className="cp-list-row" onClick={onOpen}>
-      <span className="inline-block h-2 w-2 shrink-0 rounded-full border border-[var(--cp-line-strong)]" />
+      <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-full border-2 border-[var(--cp-quote)] bg-[var(--cp-quote-bg)]" />
       <span className="min-w-0 flex-1">
         <span className="cp-list-title flex items-center gap-1.5">
           <span className="truncate">{visit.name ?? "Estimate visit"}</span>
