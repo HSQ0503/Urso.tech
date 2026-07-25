@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import {
   ET,
   etLocalToIso,
@@ -519,6 +519,28 @@ function TimeGrid({
     return m >= win.start && m <= win.end ? m : null;
   }, [days, todayYmd, win.start, win.end]);
 
+  // Auto-scroll the body to the first scheduled thing (or the now line) —
+  // an evening-only day otherwise renders as a desert of empty morning hours
+  // with the actual work hidden below the 640px fold ("the schedule is out
+  // of place"). Runs per window change, never fights a user's later scroll.
+  const bodyRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = bodyRef.current;
+    if (!el) return;
+    let earliest = Infinity;
+    for (const day of days) {
+      for (const j of buckets.jobs.get(day.ymd) ?? []) {
+        if (j.scheduled_at) earliest = Math.min(earliest, etMinutesOfDay(j.scheduled_at));
+      }
+      for (const v of buckets.visits.get(day.ymd) ?? []) {
+        if (v.appointment_at) earliest = Math.min(earliest, etMinutesOfDay(v.appointment_at));
+      }
+    }
+    if (nowMinutes !== null) earliest = Math.min(earliest, nowMinutes);
+    if (!Number.isFinite(earliest)) return;
+    el.scrollTop = Math.max(0, (earliest - win.start) * PX_PER_MIN - 32);
+  }, [days, buckets, win.start, nowMinutes]);
+
   const hourLines: number[] = [];
   for (let m = Math.ceil(win.start / 60) * 60; m <= win.end; m += 60) hourLines.push(m);
 
@@ -559,7 +581,7 @@ function TimeGrid({
         </div>
       </div>
 
-      <div className="cp-timegrid-body cp-scroll">
+      <div ref={bodyRef} className="cp-timegrid-body cp-scroll">
         <div className="cp-timegrid-gutter">
           {hourLines.map((m) => (
             <span

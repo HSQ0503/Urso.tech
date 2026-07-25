@@ -1922,7 +1922,19 @@ export async function scheduleJob(
   if (crew && !pastSlot) await notifyCrewAssignment(job, crew.name, startIso);
   await logJobEvent(job.lead_id, `Scheduled ${fmtEt(startIso)} · ${crewLabel(crew)}`);
   refresh();
-  return { ok: true, notice: conflict };
+  const notices = [conflict, lateNightNotice(startIso)].filter(Boolean);
+  return { ok: true, notice: notices.length ? notices.join(" ") : undefined };
+}
+
+// An AM/PM slip is the easiest scheduling mistake to make and the hardest to
+// spot — an 11 PM job just stretches the calendar into an empty desert. Say
+// it out loud at save time.
+function lateNightNotice(startIso: string): string | undefined {
+  const hour = Number(fmtEt(startIso, { hour: "2-digit", hourCycle: "h23" }));
+  if (hour >= 21 || hour < 5) {
+    return `Heads up — that's ${fmtEt(startIso, { hour: "numeric", minute: "2-digit" })} at night. Double-check the AM/PM if you meant daytime.`;
+  }
+  return undefined;
 }
 
 // Reschedule / re-crew an already-placed job. scheduledIso === null sends it
@@ -3635,7 +3647,105 @@ export async function createManualJob(input: {
   }
   await logJobEvent(lead, `Job created manually${startIso ? ` — scheduled ${fmtEt(startIso)}` : ""}`);
   refresh();
-  return { ok: true, jobId, ...(depositNotice ? { notice: depositNotice } : {}) };
+  const notices = [depositNotice, startIso ? lateNightNotice(startIso) : undefined].filter(Boolean);
+  return { ok: true, jobId, ...(notices.length ? { notice: notices.join(" ") } : {}) };
+}
+
+// A standalone invoice with no job behind it — Sebastian's "make a new
+// invoice from the invoice section" ask (billing work that never went
+// through an estimate or the schedule). Client-first like every create flow;
+// one line item carries the amount, and the invoice behaves exactly like a
+// job-born one from here (send, cash, rewards, ledger).
+export async function createManualInvoice(input: {
+  contactId?: string;
+  customerName: string;
+  customerPhone?: string;
+  customerEmail?: string;
+  jobAddress?: string;
+  jobName: string;
+  totalCents: number;
+}): Promise<ActionResult & { invoiceId?: string }> {
+  if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted("invoices");
+  if (denied) return denied;
+  const customerName = input.customerName.trim();
+  if (!customerName) return { ok: false, notice: "A client name is required." };
+  const jobName = input.jobName.trim();
+  if (!jobName) return { ok: false, notice: "Describe what this invoice is for." };
+  const total = Math.round(input.totalCents);
+  if (!Number.isFinite(total) || total <= 0) return { ok: false, notice: "Enter a valid amount." };
+  const phone = input.customerPhone?.trim() ? toE164(input.customerPhone) : null;
+  if (input.customerPhone?.trim() && !phone) return { ok: false, notice: "That phone number doesn't look valid." };
+  const email = input.customerEmail?.trim() || null;
+  if (email && !EMAIL_RE.test(email)) return { ok: false, notice: "That email address doesn't look valid." };
+
+  const contactId = await resolveEstimateContact({
+    contactId: input.contactId,
+    name: customerName,
+    phone,
+    email,
+    address: input.jobAddress,
+  });
+
+  const settings = await getSettings();
+  const number = await nextInvoiceNumber();
+  const db = canesDb();
+  const { data, error } = await db
+    .from("invoices")
+    .insert({
+      job_id: null,
+      estimate_id: null,
+      lead_id: null,
+      contact_id: contactId,
+      number,
+      status: "draft",
+      customer_name: customerName,
+      customer_phone: phone,
+      customer_email: email,
+      job_address: input.jobAddress?.trim() || null,
+      job_name: jobName,
+      message_to_customer: settings.invoice_message,
+      terms: settings.invoice_terms,
+      tax_rate_bps: 0, // FL residential non-taxable by default
+      public_token: genInvoiceToken(),
+    })
+    .select("id")
+    .single();
+  if (error) return { ok: false, notice: error.message };
+  const invoiceId = data.id as string;
+
+  await db.from("invoice_items").insert({
+    invoice_id: invoiceId,
+    position: 0,
+    name: jobName,
+    quantity: 1,
+    unit_price_cents: total,
+    line_total_cents: total,
+  });
+
+  // Same review-reward seeding as a job-born invoice (0012) — Sebastian
+  // unchecks per invoice before sending. The tour's practice number never seeds.
+  if (phone !== PRACTICE_PHONE) {
+    const config = rewardConfigFrom(settings);
+    const offerRows = (Object.keys(config) as InvoiceRewardKind[])
+      .filter((kind) => config[kind].configured)
+      .map((kind) => ({
+        invoice_id: invoiceId,
+        kind,
+        label: config[kind].label,
+        amount_cents: config[kind].cents,
+        status: "offered",
+      }));
+    if (offerRows.length > 0) {
+      const { error: rewardErr } = await db.from("invoice_rewards").insert(offerRows);
+      if (rewardErr) console.error(`[canes] reward seed failed for ${invoiceId}: ${rewardErr.message}`);
+    }
+  }
+
+  await recomputeInvoiceTotals(invoiceId);
+  await logInvoiceEvent(null, `Invoice ${number} created manually`);
+  refresh();
+  return { ok: true, invoiceId };
 }
 
 // The lead behind a phone number, if any — manual jobs keep the lead timeline

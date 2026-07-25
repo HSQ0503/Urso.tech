@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Plus } from "lucide-react";
 import { requirePagePermission } from "@/lib/canes/access";
 import { listInvoices } from "@/lib/canes/invoices";
 import {
@@ -214,6 +214,13 @@ export default async function InvoicesPage({
             </h1>
             <p className="cp-mono mt-1">{counts.all} total</p>
           </div>
+          <Link
+            href="/CanesPressure/invoices/new"
+            className="cp-icon-btn cp-icon-btn-primary"
+            aria-label="New invoice"
+          >
+            <Plus size={20} strokeWidth={2} />
+          </Link>
         </div>
 
         <div className="mt-4">
@@ -246,6 +253,9 @@ export default async function InvoicesPage({
             Every bill you have sent and collected. Bill a job from the schedule.
           </p>
         </div>
+        <Link href="/CanesPressure/invoices/new" className="cp-btn cp-btn-primary">
+          <Plus size={16} strokeWidth={2} /> New invoice
+        </Link>
       </div>
 
       <div className="mt-5">
