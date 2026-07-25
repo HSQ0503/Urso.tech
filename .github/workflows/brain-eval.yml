@@ -1,0 +1,88 @@
+name: Urso Brain M4 regression
+
+on:
+  schedule:
+    - cron: "0 13 * * 1"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Evaluation mode
+        required: true
+        default: full
+        type: choice
+        options:
+          - retrieval
+          - full
+      answer_provider:
+        description: Answer provider
+        required: true
+        default: google
+        type: string
+      answer_model:
+        description: Answer model
+        required: true
+        default: gemini-2.5-flash
+        type: string
+      judge_provider:
+        description: Judge provider
+        required: true
+        default: openai
+        type: string
+      judge_model:
+        description: Judge model
+        required: true
+        default: gpt-5.6-luna
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: urso-brain-m4
+  cancel-in-progress: false
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      NEXT_PUBLIC_URSO_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_URSO_SUPABASE_URL }}
+      URSO_SUPABASE_SECRET_KEY: ${{ secrets.URSO_SUPABASE_SECRET_KEY }}
+      BRAIN_KEYS_SECRET: ${{ secrets.BRAIN_KEYS_SECRET }}
+      EVAL_MODE: ${{ inputs.mode || 'full' }}
+      ANSWER_PROVIDER: ${{ inputs.answer_provider || 'google' }}
+      ANSWER_MODEL: ${{ inputs.answer_model || 'gemini-2.5-flash' }}
+      JUDGE_PROVIDER: ${{ inputs.judge_provider || 'openai' }}
+      JUDGE_MODEL: ${{ inputs.judge_model || 'gpt-5.6-luna' }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run M4 evaluation
+        run: >-
+          npm run brain:eval --
+          --mode="$EVAL_MODE"
+          --provider="$ANSWER_PROVIDER"
+          --model="$ANSWER_MODEL"
+          --judge-provider="$JUDGE_PROVIDER"
+          --judge-model="$JUDGE_MODEL"
+          --concurrency=2
+
+      - name: Upload evaluation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: urso-brain-m4-${{ github.run_id }}
+          path: .brain-evals/
+          if-no-files-found: warn
+          retention-days: 90

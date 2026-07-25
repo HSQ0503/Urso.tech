@@ -74,10 +74,26 @@ function selectEvidence(
   baseline: RetrievedEvidence[],
   tokenBudget: number,
 ): RetrievedEvidence[] {
+  const diversify = (items: RetrievedEvidence[]): RetrievedEvidence[] => {
+    const firstByPath: RetrievedEvidence[] = [];
+    const remaining: RetrievedEvidence[] = [];
+    const paths = new Set<string>();
+    for (const item of items) {
+      if (paths.has(item.path)) remaining.push(item);
+      else {
+        paths.add(item.path);
+        firstByPath.push(item);
+      }
+    }
+    return [...firstByPath, ...remaining];
+  };
+  const ranked = diversify(retrieved);
+  const policy = diversify(baseline);
   const ordered = [
-    ...retrieved.slice(0, 4),
-    ...baseline,
-    ...retrieved.slice(4),
+    ...ranked.slice(0, 8),
+    ...policy.slice(0, 4),
+    ...ranked.slice(8),
+    ...policy.slice(4),
   ];
   const selected: RetrievedEvidence[] = [];
   const seen = new Set<string>();

@@ -28,20 +28,30 @@ const fail = (msg) => {
 };
 
 const token = process.env.SUPABASE_ACCESS_TOKEN;
-const supaUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const targetArg = process.argv[2];
+const isUrsoMigration = targetArg?.startsWith("supabase/urso/");
+const supaUrl = isUrsoMigration
+  ? process.env.NEXT_PUBLIC_URSO_SUPABASE_URL
+  : process.env.NEXT_PUBLIC_SUPABASE_URL;
 if (!token)
   fail(
     "Needs SUPABASE_ACCESS_TOKEN in .env.local.\n" +
       "  Create one at https://supabase.com/dashboard/account/tokens (personal access token, sbp_…)\n" +
       "  — this is NOT the service key; the service key can't run DDL.",
   );
-if (!supaUrl) fail("Needs NEXT_PUBLIC_SUPABASE_URL in .env.local.");
+if (!supaUrl) {
+  fail(
+    isUrsoMigration
+      ? "Needs NEXT_PUBLIC_URSO_SUPABASE_URL in .env.local."
+      : "Needs NEXT_PUBLIC_SUPABASE_URL in .env.local.",
+  );
+}
 
 // Project ref = the subdomain of the Supabase URL (https://<ref>.supabase.co).
 const ref = new URL(supaUrl).hostname.split(".")[0];
 
 // Resolve the migration file from a number ("0020"), a filename, or a path.
-const which = process.argv[2];
+const which = targetArg;
 if (!which) fail("Usage: node scripts/apply-migration.mjs <number|filename|path>   e.g. 0020");
 
 const migDir = new URL("../supabase/migrations/", import.meta.url);

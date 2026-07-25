@@ -57,16 +57,76 @@ const authorityFor = (doc: {
 }): "governing" | "reference" =>
   doc.doc_type === "rule" || isDecisionDocument(doc) ? "governing" : "reference";
 
+const STOP_WORDS = new Set([
+  "about",
+  "after",
+  "again",
+  "also",
+  "and",
+  "are",
+  "associated",
+  "before",
+  "can",
+  "could",
+  "does",
+  "for",
+  "from",
+  "have",
+  "how",
+  "into",
+  "just",
+  "like",
+  "may",
+  "need",
+  "not",
+  "our",
+  "should",
+  "that",
+  "the",
+  "their",
+  "then",
+  "this",
+  "what",
+  "when",
+  "where",
+  "which",
+  "why",
+  "with",
+  "would",
+  "you",
+]);
+
 const termsOf = (query: string): string[] =>
-  [...new Set(query.toLowerCase().match(/[a-z0-9][a-z0-9'-]{2,}/g) ?? [])].slice(0, 24);
+  [
+    ...new Set(
+      (query.toLowerCase().match(/[a-z0-9][a-z0-9'-]{2,}/g) ?? []).filter(
+        (term) => !STOP_WORDS.has(term),
+      ),
+    ),
+  ].slice(0, 24);
 
 const excerpt = (value: string, max = 900): string => {
   const clean = value.replace(/\s+/g, " ").trim();
   return clean.length > max ? `${clean.slice(0, max - 1)}…` : clean;
 };
 
+function diversifyEvidence(items: RetrievedEvidence[]): RetrievedEvidence[] {
+  const firstByDocument: RetrievedEvidence[] = [];
+  const remaining: RetrievedEvidence[] = [];
+  const paths = new Set<string>();
+  for (const item of items) {
+    if (paths.has(item.path)) remaining.push(item);
+    else {
+      paths.add(item.path);
+      firstByDocument.push(item);
+    }
+  }
+  return [...firstByDocument, ...remaining];
+}
+
 const scoreText = (
   queryTerms: string[],
+  termWeights: Map<string, number>,
   doc: { title: string; description: string; content: string; project_id: string | null; doc_type: string },
   projectId: string | null,
 ): number => {
@@ -74,11 +134,15 @@ const scoreText = (
   const description = doc.description.toLowerCase();
   const content = doc.content.toLowerCase();
   const termScore = queryTerms.reduce(
-    (score, term) =>
-      score +
-      (title.includes(term) ? 5 : 0) +
-      (description.includes(term) ? 2.5 : 0) +
-      Math.min(3, content.split(term).length - 1) * 0.7,
+    (score, term) => {
+      const weight = termWeights.get(term) ?? 1;
+      return (
+        score +
+        (title.includes(term) ? 6 * weight : 0) +
+        (description.includes(term) ? 3 * weight : 0) +
+        Math.min(3, content.split(term).length - 1) * 0.8 * weight
+      );
+    },
     0,
   );
   const scopeBoost = projectId && doc.project_id === projectId ? 2.5 : 0;
@@ -130,6 +194,16 @@ async function fallbackLexicalSearch(
   if (error) throw new Error(`lexical fallback failed: ${error.message}`);
 
   const queryTerms = termsOf(query);
+  const termWeights = new Map(
+    queryTerms.map((term) => {
+      const documentFrequency = (data ?? []).filter((row) =>
+        `${row.title} ${row.description} ${row.content}`.toLowerCase().includes(term),
+      ).length;
+      const inverseFrequency = 1 + Math.log(((data?.length ?? 0) + 1) / (documentFrequency + 1));
+      const identifierBoost = term.length >= 10 && /[a-z].*\d|\d.*[a-z]/.test(term) ? 12 : 0;
+      return [term, inverseFrequency + identifierBoost];
+    }),
+  );
   const candidates: RetrievedEvidence[] = [];
   let searchedChunks = 0;
 
@@ -150,17 +224,18 @@ async function fallbackLexicalSearch(
       continue;
     }
 
-    const docScore = scoreText(queryTerms, doc, projectId);
+    const docScore = scoreText(queryTerms, termWeights, doc, projectId);
     const chunks = chunkMarkdown(doc.content);
     searchedChunks += chunks.length;
     for (const chunk of chunks) {
       const chunkScore = scoreText(
         queryTerms,
+        termWeights,
         { ...doc, title: `${doc.title} ${chunk.heading}`, content: chunk.content },
         projectId,
       );
       if (chunkScore <= 0 && doc.doc_type === "doc") continue;
-      const score = Math.max(docScore, chunkScore);
+      const score = Math.max(chunkScore, docScore * 0.15);
       candidates.push({
         id: "",
         docId: doc.id,
@@ -189,7 +264,11 @@ async function fallbackLexicalSearch(
   }
 
   candidates.sort((a, b) => b.fusedScore - a.fusedScore || a.path.localeCompare(b.path));
-  return { mode: candidates.length ? "lexical" : "none", searchedChunks, evidence: candidates.slice(0, limit) };
+  return {
+    mode: candidates.length ? "lexical" : "none",
+    searchedChunks,
+    evidence: diversifyEvidence(candidates).slice(0, limit),
+  };
 }
 
 export async function searchAuthorizedKnowledge(opts: {
@@ -204,8 +283,7 @@ export async function searchAuthorizedKnowledge(opts: {
   const { admin, principal, authorizedDocs, query, projectId, openAiKey } = opts;
   const limit = opts.limit ?? 24;
   const embedding = await queryEmbedding(openAiKey, query);
-  const authorizedIds = authorizedDocs.map((doc) => doc.id).filter((id): id is string => Boolean(id));
-  const [{ data, error }, keywordDocsResult] = await Promise.all([
+  const [{ data, error }, lexicalFallback] = await Promise.all([
     admin.rpc("brain_authorized_hybrid_search", {
       p_organization_id: principal.organizationId,
       p_user_id: principal.userId,
@@ -215,34 +293,19 @@ export async function searchAuthorizedKnowledge(opts: {
       p_query_embedding: embedding,
       p_limit: limit,
     }),
-    query.trim() && authorizedIds.length
-      ? admin
-          .from("brain_docs")
-          .select("id")
-          .eq("organization_id", principal.organizationId)
-          .in("id", authorizedIds)
-          .textSearch("search_document", query, { config: "english", type: "websearch" })
-          .is("deleted_at", null)
-          .limit(10)
-      : Promise.resolve({ data: [], error: null }),
+    fallbackLexicalSearch(
+      admin,
+      authorizedDocs,
+      query,
+      projectId,
+      principal.departmentId,
+      Math.min(limit, 12),
+    ),
   ]);
 
   if (!error && data?.length) {
     const rows = data as SearchRow[];
-    const keywordIds = new Set(
-      ((keywordDocsResult.data ?? []) as { id: string }[]).map((row) => row.id),
-    );
-    const keywordFallback = keywordIds.size
-      ? await fallbackLexicalSearch(
-          admin,
-          authorizedDocs.filter((doc) => doc.id && keywordIds.has(doc.id)),
-          query,
-          projectId,
-          principal.departmentId,
-          8,
-        )
-      : { mode: "none" as const, searchedChunks: 0, evidence: [] };
-    const evidence: RetrievedEvidence[] = rows.map((row) => ({
+    const rpcEvidence: RetrievedEvidence[] = rows.map((row) => ({
       id: "",
       docId: row.doc_id,
       chunkId: row.chunk_id,
@@ -259,22 +322,25 @@ export async function searchAuthorizedKnowledge(opts: {
       fusedScore: row.fused_score,
       tokenCount: row.token_count,
     }));
-    const seen = new Set(evidence.map((item) => `${item.path}\0${item.heading}\0${item.excerpt}`));
-    for (const item of keywordFallback.evidence) {
-      const key = `${item.path}\0${item.heading}\0${item.excerpt}`;
-      if (!seen.has(key)) evidence.push(item);
-    }
+    const evidence = embedding
+      ? [
+          ...rpcEvidence.slice(0, 6),
+          ...lexicalFallback.evidence.slice(0, 8),
+          ...rpcEvidence.slice(6),
+          ...lexicalFallback.evidence.slice(8),
+        ]
+      : [...lexicalFallback.evidence, ...rpcEvidence];
     return {
       mode: embedding && rows.some((row) => row.semantic_score > 0) ? "hybrid" : "lexical",
       searchedChunks:
         Number(rows[0].candidate_count ?? rows.length) +
-        keywordFallback.searchedChunks,
-      evidence: evidence.slice(0, limit),
+        lexicalFallback.searchedChunks,
+      evidence: diversifyEvidence(evidence).slice(0, limit),
     };
   }
 
   if (error) console.error("[brain] hybrid RPC unavailable; using lexical fallback:", error.message);
-  return fallbackLexicalSearch(admin, authorizedDocs, query, projectId, principal.departmentId, limit);
+  return lexicalFallback;
 }
 
 export async function loadBaselineKnowledge(opts: {
