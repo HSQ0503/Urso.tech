@@ -1,13 +1,13 @@
-// The vault graph — Obsidian's graph view, in the brain. Server assembles
-// nodes + edges from brain_docs.links; the client canvas does the physics. It
-// fills the pane the way Obsidian's does, with the legend floating over it.
+// The knowledge map groups authorized sources by company layer, project, and
+// department. Wikilinks remain the relationship source, but the presentation
+// is deterministic so the same knowledge always appears in the same place.
 
 import { redirect } from "next/navigation";
 import { getBrainUser } from "@/lib/brain/access";
 import { getAuthorizedDocManifest, resolveBrainPrincipal } from "@/lib/brain/authorization";
 import { ursoDbSafe } from "@/lib/brain/supabase";
-import { getGraph, getProjects } from "@/lib/brain/db";
-import { GraphLegend, GraphView, type GraphNode } from "@/components/brain/graph-view";
+import { getDepartments, getGraph, getProjects } from "@/lib/brain/db";
+import { GraphView, type GraphNode } from "@/components/brain/graph-view";
 
 export default async function BrainGraphPage() {
   const user = await getBrainUser();
@@ -17,19 +17,28 @@ export default async function BrainGraphPage() {
   const principal = await resolveBrainPrincipal(admin, user);
   if (!principal) redirect("/brain");
 
-  const [allDocs, manifest, projects] = await Promise.all([
+  const [allDocs, manifest, projects, departments] = await Promise.all([
     getGraph(admin, principal.organizationId).catch(() => []),
     getAuthorizedDocManifest(admin, principal, null).catch(() => []),
     getProjects(admin, principal.organizationId).catch(() => []),
+    getDepartments(admin, principal.organizationId).catch(() => []),
   ]);
   const permittedPaths = new Set(manifest.map((doc) => doc.path));
   const docs = allDocs.filter((doc) => permittedPaths.has(doc.path));
+  const projectNames = new Map(projects.map((project) => [project.id, project.name]));
+  const departmentNames = new Map(
+    departments.map((department) => [department.id, department.name]),
+  );
 
   const nodes: GraphNode[] = docs.map((d) => ({
     path: d.path,
     title: d.title,
     project: d.project_id,
+    projectName: d.project_id ? (projectNames.get(d.project_id) ?? d.project_id) : null,
     department: d.department_id,
+    departmentName: d.department_id
+      ? (departmentNames.get(d.department_id) ?? d.department_id)
+      : null,
     type: d.doc_type,
     origin: d.origin,
   }));
@@ -57,18 +66,5 @@ export default async function BrainGraphPage() {
     );
   }
 
-  return (
-    <>
-      <div className="relative min-h-0 flex-1">
-        <GraphView nodes={nodes} edges={edges} />
-        <div className="pointer-events-none absolute bottom-3 left-4 right-4">
-          <GraphLegend projects={projects.map((p) => ({ id: p.id, name: p.name }))} />
-        </div>
-      </div>
-      <div className="ob-status">
-        <span>{nodes.length} docs</span>
-        <span>{edges.length} connections</span>
-      </div>
-    </>
-  );
+  return <GraphView nodes={nodes} edges={edges} />;
 }

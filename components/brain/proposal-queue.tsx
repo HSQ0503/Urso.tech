@@ -69,7 +69,7 @@ export function ProposalQueue() {
 
   if (loading) {
     return (
-      <div className="flex items-center gap-2 rounded-2xl bg-[var(--ob-bg-alt)] p-4 text-[12px] text-[var(--ob-muted)]">
+      <div className="flex items-center gap-2 rounded-[6px] bg-[var(--ob-bg-alt)] p-4 text-[12px] text-[var(--ob-muted)]">
         <LoaderCircle className="size-3.5 animate-spin" />
         Loading the review queue…
       </div>
@@ -79,7 +79,7 @@ export function ProposalQueue() {
   return (
     <div>
       {proposals.length === 0 ? (
-        <div className="rounded-2xl border border-[var(--ob-border)] bg-[var(--ob-bg-alt)] p-5">
+        <div className="rounded-[6px] border border-[var(--ob-border)] bg-[var(--ob-bg-alt)] p-5">
           <div className="flex items-center gap-2 text-[12.5px] font-medium text-[var(--ob-text)]">
             <Check className="size-4 text-orange" />
             Review queue is clear
@@ -91,9 +91,9 @@ export function ProposalQueue() {
       ) : (
         <ul className="space-y-2">
           {proposals.map((proposal) => (
-            <li key={proposal.id} className="rounded-2xl border border-[var(--ob-border)] bg-[var(--ob-bg-alt)] p-4">
+            <li key={proposal.id} className="rounded-[6px] border border-[var(--ob-border)] bg-[var(--ob-bg-alt)] p-4">
               <div className="flex items-start gap-3">
-                <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-orange-soft text-orange">
+                <span className="grid size-9 shrink-0 place-items-center rounded-[5px] bg-orange-soft text-orange">
                   <FileDiff className="size-4" />
                 </span>
                 <div className="min-w-0 flex-1">
@@ -134,7 +134,7 @@ export function ProposalQueue() {
                     </dl>
                   )}
                   {proposal.proposed_change.content && (
-                    <p className="mt-2 line-clamp-3 rounded-xl bg-[var(--ob-bg)] px-3 py-2 font-mono text-[10px] leading-[1.55] text-[var(--ob-muted)]">
+                    <p className="mt-2 line-clamp-3 rounded-[5px] bg-[var(--ob-bg)] px-3 py-2 font-mono text-[10px] leading-[1.55] text-[var(--ob-muted)]">
                       {proposal.proposed_change.content}
                     </p>
                   )}

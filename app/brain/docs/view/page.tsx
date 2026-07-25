@@ -1,7 +1,6 @@
-// A single vault doc in Obsidian's reading view: inline title, the note bounded
-// to the reading measure, a backlinks pane underneath, and a status bar with the
-// counts. The path travels as a query param (vault paths contain spaces and
-// slashes).
+// A single knowledge document with a focused reading measure, backlinks, and
+// source metadata. The path travels as a query param because source paths may
+// contain spaces and slashes.
 
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -33,18 +32,17 @@ export default async function BrainDocViewPage({ searchParams }: { searchParams:
     return (
       <div className="ob-content">
         <div className="ob-note">
-          <p className="text-[15px] text-[var(--ob-muted)]">That doc isn&rsquo;t in the vault.</p>
+          <p className="text-[15px] text-[var(--ob-muted)]">That document isn&rsquo;t available in your knowledge scope.</p>
           <Link href="/brain/docs" className="mt-3 inline-block text-[14px] text-[var(--ob-accent)] hover:underline">
-            ← Back to the vault
+            ← Back to knowledge
           </Link>
         </div>
       </div>
     );
   }
 
-  // Every live doc is a wikilink target, so [[links]] inside the body resolve
-  // the same way they do in Obsidian — including to docs this one doesn't
-  // already list in its `links` column.
+  // Every live document is a wikilink target, including documents this source
+  // does not already list in its resolved `links` column.
   const [manifest, allTargets, allBacklinks] = await Promise.all([
     getAuthorizedDocManifest(admin, principal, doc.project_id).catch(() => []),
     listLinkTargets(admin, principal.organizationId).catch(() => []),
