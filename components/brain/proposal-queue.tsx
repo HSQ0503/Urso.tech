@@ -16,6 +16,11 @@ type Proposal = {
     visibility?: "organization" | "department" | "project" | "restricted";
     audience?: string[];
     linkedPath?: string;
+    relatedEdits?: {
+      targetPath: string;
+      baseVersion: number;
+      replacements: { find: string; replace: string }[];
+    }[];
   };
   evidence: string[];
   rationale: string;
@@ -137,6 +142,25 @@ export function ProposalQueue() {
                     <p className="mt-2 line-clamp-3 rounded-[5px] bg-[var(--ob-bg)] px-3 py-2 font-mono text-[10px] leading-[1.55] text-[var(--ob-muted)]">
                       {proposal.proposed_change.content}
                     </p>
+                  )}
+                  {Boolean(proposal.proposed_change.relatedEdits?.length) && (
+                    <div className="mt-3 rounded-[5px] border border-[var(--ob-border)] bg-[var(--ob-bg)] p-3">
+                      <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--ob-muted)]">
+                        Corpus impact · {proposal.proposed_change.relatedEdits?.length} related document
+                        {proposal.proposed_change.relatedEdits?.length === 1 ? "" : "s"}
+                      </div>
+                      <ul className="mt-2 space-y-1.5">
+                        {proposal.proposed_change.relatedEdits?.map((edit) => (
+                          <li key={edit.targetPath} className="flex min-w-0 items-center justify-between gap-3 text-[10px]">
+                            <span className="truncate font-mono text-[var(--ob-muted)]">{edit.targetPath}</span>
+                            <span className="shrink-0 text-[var(--ob-faint)]">
+                              v{edit.baseVersion} · {edit.replacements.length} edit
+                              {edit.replacements.length === 1 ? "" : "s"}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
                   )}
                   <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                     <span className="text-[10px] text-[var(--ob-faint)]">

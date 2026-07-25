@@ -32,6 +32,7 @@ export type BrainDocMeta = {
   project_id: string | null;
   doc_type: "core" | "doc" | "rule";
   audience: string[];
+  tags: string[];
   visibility?: BrainVisibility;
   current_version?: number;
   review_due_at?: string | null;
@@ -66,6 +67,8 @@ export type BrainContextEvidence = {
   id: string;
   path: string;
   title: string;
+  documentType: "core" | "doc" | "rule";
+  authority: "governing" | "reference";
   heading: string;
   excerpt: string;
   version: number;

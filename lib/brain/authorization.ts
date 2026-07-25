@@ -117,7 +117,7 @@ export async function getAuthorizedDocManifest(
     admin
       .from("brain_docs")
       .select(
-        "id, organization_id, path, title, description, department_id, project_id, doc_type, audience, visibility, current_version, review_due_at",
+        "id, organization_id, path, title, description, department_id, project_id, doc_type, audience, tags, visibility, current_version, review_due_at",
       )
       .eq("organization_id", principal.organizationId)
       .is("deleted_at", null)

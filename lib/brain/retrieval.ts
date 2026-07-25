@@ -45,6 +45,18 @@ export type RetrievalResult = {
   evidence: RetrievedEvidence[];
 };
 
+const isDecisionDocument = (doc: { title: string; path: string }): boolean =>
+  /^decision\b/i.test(doc.title.trim()) ||
+  /\bdecision\b/i.test(doc.title) ||
+  /(?:^|\/)Decision\s+[—-]/i.test(doc.path);
+
+const authorityFor = (doc: {
+  title: string;
+  path: string;
+  doc_type: "core" | "doc" | "rule";
+}): "governing" | "reference" =>
+  doc.doc_type === "rule" || isDecisionDocument(doc) ? "governing" : "reference";
+
 const termsOf = (query: string): string[] =>
   [...new Set(query.toLowerCase().match(/[a-z0-9][a-z0-9'-]{2,}/g) ?? [])].slice(0, 24);
 
@@ -155,6 +167,8 @@ async function fallbackLexicalSearch(
         chunkId: null,
         path: doc.path,
         title: doc.title,
+        documentType: doc.doc_type,
+        authority: authorityFor(doc),
         heading: chunk.heading,
         excerpt: excerpt(chunk.content),
         version: doc.current_version ?? 1,
@@ -234,6 +248,8 @@ export async function searchAuthorizedKnowledge(opts: {
       chunkId: row.chunk_id,
       path: row.path,
       title: row.title,
+      documentType: row.doc_type,
+      authority: authorityFor(row),
       heading: row.heading,
       excerpt: excerpt(row.content),
       version: row.version,
@@ -272,6 +288,7 @@ export async function loadBaselineKnowledge(opts: {
   const baseline = opts.authorizedDocs.filter(
     (doc) =>
       doc.doc_type === "core" ||
+      isDecisionDocument(doc) ||
       (doc.doc_type === "rule" &&
         (doc.audience.includes("all") || doc.audience.includes(opts.principal.departmentId))),
   );
@@ -282,7 +299,7 @@ export async function loadBaselineKnowledge(opts: {
     opts.query,
     opts.projectId,
     opts.principal.departmentId,
-    opts.limit ?? 6,
+    opts.limit ?? 10,
   );
   return result.evidence;
 }
@@ -292,14 +309,17 @@ export async function indexBrainDocuments(opts: {
   organizationId: string;
   openAiKey: string | null;
   force?: boolean;
+  paths?: string[];
 }): Promise<{ documents: number; chunks: number; embedded: number }> {
-  const { admin, organizationId, openAiKey, force = false } = opts;
-  const { data, error } = await admin
+  const { admin, organizationId, openAiKey, force = false, paths } = opts;
+  let sourceQuery = admin
     .from("brain_docs")
     .select("id, path, title, content, current_version")
     .eq("organization_id", organizationId)
     .is("deleted_at", null)
     .order("path");
+  if (paths?.length) sourceQuery = sourceQuery.in("path", [...new Set(paths)]);
+  const { data, error } = await sourceQuery;
   if (error) throw new Error(`index source read failed: ${error.message}`);
 
   const docs = (data ?? []) as {
@@ -346,18 +366,25 @@ export async function indexBrainDocuments(opts: {
 
   let embedded = 0;
   if (openAiKey && rows.length) {
-    const openai = createOpenAI({ apiKey: openAiKey });
-    for (let start = 0; start < rows.length; start += 64) {
-      const batch = rows.slice(start, start + 64);
-      const result = await embedMany({
-        model: openai.embeddingModel("text-embedding-3-small"),
-        values: batch.map((row) => `${row.metadata.title}\n${row.heading}\n${row.content}`),
-        maxParallelCalls: 4,
-      });
-      result.embeddings.forEach((value, index) => {
-        batch[index].embedding = value;
-        embedded += 1;
-      });
+    try {
+      const openai = createOpenAI({ apiKey: openAiKey });
+      for (let start = 0; start < rows.length; start += 64) {
+        const batch = rows.slice(start, start + 64);
+        const result = await embedMany({
+          model: openai.embeddingModel("text-embedding-3-small"),
+          values: batch.map((row) => `${row.metadata.title}\n${row.heading}\n${row.content}`),
+          maxParallelCalls: 4,
+        });
+        result.embeddings.forEach((value, index) => {
+          batch[index].embedding = value;
+          embedded += 1;
+        });
+      }
+    } catch (error) {
+      console.error(
+        "[brain] document embedding failed; writing lexical index:",
+        error instanceof Error ? error.message : error,
+      );
     }
   }
 

@@ -7,13 +7,27 @@ import {
 } from "@/lib/brain/authorization";
 import {
   getDocByPath,
+  getOrgKey,
   insertBrainDoc,
   softDeleteBrainDoc,
   updateBrainDoc,
   type BrainDocWrite,
 } from "@/lib/brain/db";
+import { indexBrainDocuments } from "@/lib/brain/retrieval";
 import { ursoDbSafe, URSO_DB_MISSING } from "@/lib/brain/supabase";
+import type { BrainDoc } from "@/lib/brain/types";
 import { checkMeta, hashDoc, linksFor, sanitizePathPart } from "@/lib/brain/write";
+
+type ExactReplacement = {
+  find: string;
+  replace: string;
+};
+
+type RelatedEdit = {
+  targetPath: string;
+  baseVersion: number;
+  replacements: ExactReplacement[];
+};
 
 type ProposalChange = {
   title?: string;
@@ -25,6 +39,8 @@ type ProposalChange = {
   visibility?: "organization" | "department" | "project" | "restricted";
   audience?: string[];
   linkedPath?: string;
+  relatedEdits?: RelatedEdit[];
+  targetBaseVersion?: number;
 };
 
 type ProposalRow = {
@@ -38,6 +54,20 @@ type ProposalRow = {
   proposed_by: string;
   created_at: string;
 };
+
+type PreparedRelatedEdit = {
+  doc: BrainDoc;
+  baseVersion: number;
+  content: string;
+};
+
+type ApplyResult = {
+  changedPaths: string[];
+  indexPaths: string[];
+};
+
+const occurrences = (content: string, value: string): number =>
+  value ? content.split(value).length - 1 : 0;
 
 async function stewardAccess() {
   const user = await getBrainUser();
@@ -65,13 +95,84 @@ export async function GET() {
   return Response.json({ proposals: data ?? [] });
 }
 
+async function prepareRelatedEdits(
+  proposal: ProposalRow,
+  auth: Exclude<Awaited<ReturnType<typeof stewardAccess>>, { error: Response }>,
+): Promise<PreparedRelatedEdit[]> {
+  const edits = proposal.proposed_change.relatedEdits ?? [];
+  const seen = new Set<string>();
+  const prepared: PreparedRelatedEdit[] = [];
+
+  for (const edit of edits) {
+    if (edit.targetPath === proposal.target_path) {
+      throw new Error("A related edit cannot target the proposal's primary document.");
+    }
+    if (seen.has(edit.targetPath)) throw new Error(`Duplicate related edit target: ${edit.targetPath}`);
+    seen.add(edit.targetPath);
+
+    const doc = await getAuthorizedBrainDoc(auth.admin, auth.principal, edit.targetPath);
+    if (!doc) throw new Error(`Related edit target is no longer available: ${edit.targetPath}`);
+    if (doc.current_version !== edit.baseVersion) {
+      throw new Error(`${edit.targetPath} changed after this proposal was created. Re-inspect and propose again.`);
+    }
+
+    let content = doc.content;
+    for (const replacement of edit.replacements) {
+      if (!replacement.find || occurrences(content, replacement.find) !== 1) {
+        throw new Error(`The exact text to replace in ${edit.targetPath} is no longer unique.`);
+      }
+      content = content.replace(replacement.find, replacement.replace);
+    }
+    if (content === doc.content) throw new Error(`The related edit for ${edit.targetPath} makes no change.`);
+    prepared.push({ doc, baseVersion: edit.baseVersion, content });
+  }
+
+  return prepared;
+}
+
+async function applyPreparedRelatedEdits(
+  prepared: PreparedRelatedEdit[],
+  auth: Exclude<Awaited<ReturnType<typeof stewardAccess>>, { error: Response }>,
+): Promise<string[]> {
+  const changedPaths: string[] = [];
+  for (const item of prepared) {
+    const { doc, content, baseVersion } = item;
+    const links = await linksFor(auth.admin, content, auth.principal.organizationId);
+    const content_hash = hashDoc({
+      title: doc.title,
+      description: doc.description,
+      department_id: doc.department_id,
+      project_id: doc.project_id,
+      doc_type: doc.doc_type,
+      audience: doc.audience,
+      tags: doc.tags,
+      visibility: doc.visibility,
+      content,
+    });
+    const updated = await updateBrainDoc(
+      auth.admin,
+      doc.path,
+      { content, links, content_hash },
+      auth.principal.email,
+      auth.principal.organizationId,
+      baseVersion,
+    );
+    if (!updated) {
+      throw new Error(`${doc.path} changed while this proposal was being applied. Review the affected documents.`);
+    }
+    changedPaths.push(doc.path);
+  }
+  return changedPaths;
+}
+
 async function applyProposal(
   proposal: ProposalRow,
   auth: Exclude<Awaited<ReturnType<typeof stewardAccess>>, { error: Response }>,
-): Promise<void> {
+): Promise<ApplyResult> {
   const { admin, principal } = auth;
   const change = proposal.proposed_change;
   const organizationId = principal.organizationId;
+  const preparedRelatedEdits = await prepareRelatedEdits(proposal, auth);
   const existing =
     proposal.operation === "create"
       ? null
@@ -79,6 +180,13 @@ async function applyProposal(
 
   if (proposal.operation !== "create" && !existing) {
     throw new Error("The target document is no longer available to this steward.");
+  }
+  if (
+    existing &&
+    change.targetBaseVersion !== undefined &&
+    existing.current_version !== change.targetBaseVersion
+  ) {
+    throw new Error("The primary document changed after this proposal was created. Re-inspect and propose again.");
   }
 
   if (proposal.operation === "create") {
@@ -110,46 +218,59 @@ async function applyProposal(
     };
     row.content_hash = hashDoc(row);
     await insertBrainDoc(admin, row, principal.email, organizationId);
-    return;
+    const relatedPaths = await applyPreparedRelatedEdits(preparedRelatedEdits, auth);
+    return {
+      changedPaths: [proposal.target_path, ...relatedPaths],
+      indexPaths: [proposal.target_path, ...relatedPaths],
+    };
   }
 
   if (!existing) throw new Error("Target document missing.");
   if (proposal.operation === "delete") {
     const deleted = await softDeleteBrainDoc(admin, existing.path, principal.email, organizationId);
     if (!deleted) throw new Error("The target document was already deleted.");
-    return;
+    const relatedPaths = await applyPreparedRelatedEdits(preparedRelatedEdits, auth);
+    return { changedPaths: [existing.path, ...relatedPaths], indexPaths: relatedPaths };
   }
 
   if (proposal.operation === "link") {
     const linkedPath = change.linkedPath;
     const linked = linkedPath ? await getAuthorizedBrainDoc(admin, principal, linkedPath) : null;
     if (!linked) throw new Error("The linked document is no longer available.");
-    if (existing.links.includes(linked.path)) return;
+    if (existing.links.includes(linked.path) && !preparedRelatedEdits.length) {
+      return { changedPaths: [], indexPaths: [] };
+    }
     const linkLine = `- [[${linked.title}]]`;
-    const content = /^##\s+Related\s*$/m.test(existing.content)
-      ? existing.content.replace(/^(##\s+Related\s*)$/m, `$1\n${linkLine}`)
-      : `${existing.content.trimEnd()}\n\n## Related\n${linkLine}\n`;
-    const links = await linksFor(admin, content, organizationId);
-    const content_hash = hashDoc({
-      title: existing.title,
-      description: existing.description,
-      department_id: existing.department_id,
-      project_id: existing.project_id,
-      doc_type: existing.doc_type,
-      audience: existing.audience,
-      tags: [],
-      visibility: existing.visibility,
-      content,
-    });
-    const updated = await updateBrainDoc(
-      admin,
-      existing.path,
-      { content, links, content_hash },
-      principal.email,
-      organizationId,
-    );
-    if (!updated) throw new Error("The link update did not apply.");
-    return;
+    if (!existing.links.includes(linked.path)) {
+      const content = /^##\s+Related\s*$/m.test(existing.content)
+        ? existing.content.replace(/^(##\s+Related\s*)$/m, `$1\n${linkLine}`)
+        : `${existing.content.trimEnd()}\n\n## Related\n${linkLine}\n`;
+      const links = await linksFor(admin, content, organizationId);
+      const content_hash = hashDoc({
+        title: existing.title,
+        description: existing.description,
+        department_id: existing.department_id,
+        project_id: existing.project_id,
+        doc_type: existing.doc_type,
+        audience: existing.audience,
+        tags: existing.tags,
+        visibility: existing.visibility,
+        content,
+      });
+      const updated = await updateBrainDoc(
+        admin,
+        existing.path,
+        { content, links, content_hash },
+        principal.email,
+        organizationId,
+      );
+      if (!updated) throw new Error("The link update did not apply.");
+    }
+    const relatedPaths = await applyPreparedRelatedEdits(preparedRelatedEdits, auth);
+    return {
+      changedPaths: [existing.path, ...relatedPaths],
+      indexPaths: [existing.path, ...relatedPaths],
+    };
   }
 
   const content = change.content?.trim();
@@ -167,7 +288,7 @@ async function applyProposal(
     project_id: checked.project_id !== undefined ? checked.project_id : existing.project_id,
     doc_type: checked.doc_type ?? existing.doc_type,
     audience: change.audience ?? existing.audience,
-    tags: [],
+    tags: existing.tags,
     links: await linksFor(admin, content, organizationId),
     content,
     content_hash: "",
@@ -176,6 +297,11 @@ async function applyProposal(
   next.content_hash = hashDoc(next);
   const updated = await updateBrainDoc(admin, existing.path, next, principal.email, organizationId);
   if (!updated) throw new Error("The proposed update did not apply.");
+  const relatedPaths = await applyPreparedRelatedEdits(preparedRelatedEdits, auth);
+  return {
+    changedPaths: [existing.path, ...relatedPaths],
+    indexPaths: [existing.path, ...relatedPaths],
+  };
 }
 
 export async function PATCH(req: Request) {
@@ -228,7 +354,7 @@ export async function PATCH(req: Request) {
   if (!claimed) return Response.json({ error: "Proposal is no longer pending." }, { status: 409 });
 
   try {
-    await applyProposal(claimed as ProposalRow, auth);
+    const applied = await applyProposal(claimed as ProposalRow, auth);
     const { error } = await auth.admin
       .from("brain_knowledge_proposals")
       .update({
@@ -243,8 +369,41 @@ export async function PATCH(req: Request) {
     await auditBrainEvent(auth.admin, auth.principal, "knowledge.approved", "knowledge_proposal", body.id, {
       operation: (claimed as ProposalRow).operation,
       targetPath: (claimed as ProposalRow).target_path,
+      affectedPaths: applied.changedPaths,
     });
-    return Response.json({ ok: true, status: "approved" });
+
+    let indexing: "complete" | "deferred" = "complete";
+    let indexedChunks = 0;
+    if (applied.indexPaths.length) {
+      try {
+        const openAiKey = await getOrgKey(
+          auth.admin,
+          "openai",
+          auth.principal.organizationId,
+        ).catch(() => null);
+        const indexed = await indexBrainDocuments({
+          admin: auth.admin,
+          organizationId: auth.principal.organizationId,
+          openAiKey,
+          paths: applied.indexPaths,
+        });
+        indexedChunks = indexed.chunks;
+      } catch (indexError) {
+        indexing = "deferred";
+        console.error(
+          "[brain] approved knowledge could not be indexed immediately:",
+          indexError instanceof Error ? indexError.message : indexError,
+        );
+      }
+    }
+
+    return Response.json({
+      ok: true,
+      status: "approved",
+      affectedPaths: applied.changedPaths,
+      indexing,
+      indexedChunks,
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     await auth.admin
