@@ -20,9 +20,10 @@ import { getBrainUser } from "@/lib/brain/access";
 import {
   canEditBrainTruth,
   getAuthorizedDocManifest,
+  getAuthorizedProjects,
   resolveBrainPrincipal,
 } from "@/lib/brain/authorization";
-import { getDepartments, getOrgKeyStatus, getProfile, getProjects } from "@/lib/brain/db";
+import { getDepartments, getOrgKeyStatus, getProfile } from "@/lib/brain/db";
 import { ursoDbSafe } from "@/lib/brain/supabase";
 import type { BrainDocMeta, BrainThreadSummary } from "@/lib/brain/types";
 
@@ -123,7 +124,7 @@ export default async function BrainHomePage() {
 
   const steward = canEditBrainTruth(principal);
   const [projects, keyStatus, companyManifest, recentThreads, pendingProposals, overdueReviews] = await Promise.all([
-    getProjects(admin, principal.organizationId).catch(() => []),
+    getAuthorizedProjects(admin, principal).catch(() => []),
     getOrgKeyStatus(admin, principal.organizationId).catch(() => []),
     getAuthorizedDocManifest(admin, principal, null).catch(() => []),
     getRecentThreads(admin, principal.organizationId, principal.userId),
@@ -134,15 +135,18 @@ export default async function BrainHomePage() {
   const projectManifests = await Promise.all(
     projects.map(async (project) => ({
       project,
-      docs: (await getAuthorizedDocManifest(admin, principal, project.id).catch(() => [])).filter(
-        (doc) => doc.project_id === project.id,
-      ),
+      docs: (await getAuthorizedDocManifest(admin, principal, project.id).catch(() => []))
+        .filter((doc) => doc.project_id === project.id)
+        .map((doc) => ({ ...doc, access_project_id: project.id })),
     })),
   );
 
   const department = departments.find((item) => item.id === principal.departmentId);
   const departmentName = department?.name ?? principal.departmentId;
   const projectNames = new Map(projects.map((project) => [project.id, project.name]));
+  const permittedRecentThreads = recentThreads.filter(
+    (thread) => !thread.project_id || projectNames.has(thread.project_id),
+  );
   const departmentKnowledge = companyManifest
     .filter(
       (doc) =>
@@ -289,9 +293,9 @@ export default async function BrainHomePage() {
             href="/brain/chat"
             hrefLabel="Open chat"
           />
-          {recentThreads.length > 0 ? (
+          {permittedRecentThreads.length > 0 ? (
             <div className="sana-conversation-list">
-              {recentThreads.map((thread) => (
+              {permittedRecentThreads.map((thread) => (
                 <div key={thread.id} className="sana-conversation-row">
                   <span className="ob-document-icon">
                     <MessageSquareText className="size-5" />

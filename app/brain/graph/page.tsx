@@ -4,9 +4,9 @@
 
 import { redirect } from "next/navigation";
 import { getBrainUser } from "@/lib/brain/access";
-import { getAuthorizedDocManifest, resolveBrainPrincipal } from "@/lib/brain/authorization";
+import { getAuthorizedKnowledgeCatalog, resolveBrainPrincipal } from "@/lib/brain/authorization";
 import { ursoDbSafe } from "@/lib/brain/supabase";
-import { getDepartments, getGraph, getProjects } from "@/lib/brain/db";
+import { getDepartments, getGraph } from "@/lib/brain/db";
 import { GraphView, type GraphNode } from "@/components/brain/graph-view";
 
 export default async function BrainGraphPage() {
@@ -17,14 +17,17 @@ export default async function BrainGraphPage() {
   const principal = await resolveBrainPrincipal(admin, user);
   if (!principal) redirect("/brain");
 
-  const [allDocs, manifest, projects, departments] = await Promise.all([
+  const [allDocs, catalog, departments] = await Promise.all([
     getGraph(admin, principal.organizationId).catch(() => []),
-    getAuthorizedDocManifest(admin, principal, null).catch(() => []),
-    getProjects(admin, principal.organizationId).catch(() => []),
+    getAuthorizedKnowledgeCatalog(admin, principal).catch(() => ({ docs: [], projects: [] })),
     getDepartments(admin, principal.organizationId).catch(() => []),
   ]);
-  const permittedPaths = new Set(manifest.map((doc) => doc.path));
+  const permittedPaths = new Set(catalog.docs.map((doc) => doc.path));
   const docs = allDocs.filter((doc) => permittedPaths.has(doc.path));
+  const accessProjectByPath = new Map(
+    catalog.docs.map((doc) => [doc.path, doc.access_project_id ?? null]),
+  );
+  const projects = catalog.projects;
   const projectNames = new Map(projects.map((project) => [project.id, project.name]));
   const departmentNames = new Map(
     departments.map((department) => [department.id, department.name]),
@@ -41,6 +44,7 @@ export default async function BrainGraphPage() {
       : null,
     type: d.doc_type,
     origin: d.origin,
+    accessProjectId: accessProjectByPath.get(d.path) ?? null,
   }));
   const indexByPath = new Map(nodes.map((n, i) => [n.path, i]));
   const edges: [number, number][] = [];

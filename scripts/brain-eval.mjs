@@ -82,6 +82,7 @@ const startedAt = new Date();
 let nextServer = null;
 let nextServerLogs = "";
 let distDir = null;
+let originalTsconfig = null;
 let fixtures = null;
 let persistenceAvailable = false;
 let runPersisted = false;
@@ -194,6 +195,29 @@ async function createFixtures(cases) {
   }));
   const { error: membershipError } = await db.from("brain_memberships").insert(membershipRows);
   if (membershipError) throw new Error(`fixture memberships: ${membershipError.message}`);
+  const projectMembershipRows = cases
+    .filter((item) => item.projectId)
+    .map((item) => ({
+      organization_id: organizationId,
+      project_id: item.projectId,
+      user_id: userIds[personaKey(item.persona)],
+      active: true,
+    }))
+    .filter(
+      (row, index, rows) =>
+        rows.findIndex(
+          (candidate) =>
+            candidate.project_id === row.project_id && candidate.user_id === row.user_id,
+        ) === index,
+    );
+  if (projectMembershipRows.length) {
+    const { error: projectMembershipError } = await db
+      .from("brain_project_memberships")
+      .insert(projectMembershipRows);
+    if (projectMembershipError) {
+      throw new Error(`fixture project memberships: ${projectMembershipError.message}`);
+    }
+  }
 
   const definitions = [
     {
@@ -327,6 +351,7 @@ async function getOpenPort() {
 async function startEvalServer() {
   const port = await getOpenPort();
   distDir = ".brain-eval-next";
+  originalTsconfig = await readFile(resolve(root, "tsconfig.json"), "utf8");
   nextServer = spawn(
     process.execPath,
     ["node_modules/next/dist/bin/next", "dev", "-H", "127.0.0.1", "-p", String(port)],
@@ -381,6 +406,10 @@ async function stopEvalServer() {
   }
   if (distDir === ".brain-eval-next") {
     await rm(resolve(root, distDir), { recursive: true, force: true });
+  }
+  if (originalTsconfig !== null) {
+    await writeFile(resolve(root, "tsconfig.json"), originalTsconfig, "utf8");
+    originalTsconfig = null;
   }
 }
 

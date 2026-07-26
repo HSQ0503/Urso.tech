@@ -1,8 +1,8 @@
-// Brain profile: who this user is inside the company (department + title).
-// Self-serve — switching your department is also how a demo persona is played.
+// Brain profile: self-managed display details within organization-provisioned
+// membership and department boundaries.
 
 import { getBrainUser } from "@/lib/brain/access";
-import { resolveBrainPrincipal } from "@/lib/brain/authorization";
+import { getBrainMembership } from "@/lib/brain/authorization";
 import { ursoDbSafe, URSO_DB_MISSING } from "@/lib/brain/supabase";
 import { getDepartments, getProfile, upsertProfile } from "@/lib/brain/db";
 
@@ -24,23 +24,19 @@ export async function POST(req: Request) {
   const admin = ursoDbSafe();
   if (!admin) return Response.json({ error: URSO_DB_MISSING }, { status: 503 });
 
-  const departments = await getDepartments(admin);
+  const [departments, membership] = await Promise.all([
+    getDepartments(admin),
+    getBrainMembership(admin, user.id).catch(() => null),
+  ]);
+  if (!membership?.active || !membership.department_id) {
+    return Response.json({ error: "An active organization membership with an assigned department is required." }, { status: 403 });
+  }
   const departmentId = (body.departmentId ?? "").trim();
-  if (!departments.some((d) => d.id === departmentId)) {
-    return Response.json({ error: "unknown department" }, { status: 400 });
+  if (departmentId !== membership.department_id) {
+    return Response.json({ error: "Your department is assigned by your organization and cannot be changed here." }, { status: 403 });
   }
-  const current = await getProfile(admin, user.id);
-  const principal = current ? await resolveBrainPrincipal(admin, user) : null;
-  if (current && !principal) {
-    return Response.json({ error: "Your organization membership is inactive." }, { status: 403 });
-  }
-  if (
-    current &&
-    current.department_id !== departmentId &&
-    principal?.role !== "org_admin" &&
-    principal?.role !== "knowledge_steward"
-  ) {
-    return Response.json({ error: "Only an admin or knowledge steward can change department identity." }, { status: 403 });
+  if (!departments.some((department) => department.id === membership.department_id)) {
+    return Response.json({ error: "Your assigned department is no longer available." }, { status: 403 });
   }
 
   const profile = {

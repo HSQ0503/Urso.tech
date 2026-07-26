@@ -5,6 +5,18 @@
 
 export type LinkTarget = { path: string; title: string };
 
+export function brainDocHref(path: string, projectId?: string | null): string {
+  const params = new URLSearchParams({ path });
+  if (projectId) params.set("project", projectId);
+  return `/brain/docs/view?${params.toString()}`;
+}
+
+export function brainDocEditHref(path: string, projectId?: string | null): string {
+  const params = new URLSearchParams({ path });
+  if (projectId) params.set("project", projectId);
+  return `/brain/docs/edit?${params.toString()}`;
+}
+
 // [[Title]] and [[Title|alias]] → "Title". Ignores ![[embeds]].
 export function extractWikilinks(content: string): string[] {
   const out: string[] = [];

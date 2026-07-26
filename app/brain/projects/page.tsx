@@ -15,8 +15,12 @@ import {
   WorkspacePage,
 } from "@/components/brain/workspace-ui";
 import { getBrainUser } from "@/lib/brain/access";
-import { getAuthorizedDocManifest, resolveBrainPrincipal } from "@/lib/brain/authorization";
-import { getDepartments, getProfile, getProjects } from "@/lib/brain/db";
+import {
+  getAuthorizedDocManifest,
+  getAuthorizedProjects,
+  resolveBrainPrincipal,
+} from "@/lib/brain/authorization";
+import { getDepartments, getProfile } from "@/lib/brain/db";
 import { ursoDbSafe } from "@/lib/brain/supabase";
 
 export default async function BrainProjectsPage() {
@@ -48,7 +52,7 @@ export default async function BrainProjectsPage() {
     );
   }
 
-  const projects = await getProjects(admin, principal.organizationId).catch(() => []);
+  const projects = await getAuthorizedProjects(admin, principal).catch(() => []);
   const projectWorkspaces = await Promise.all(
     projects.map(async (project) => ({
       project,
@@ -157,7 +161,7 @@ export default async function BrainProjectsPage() {
                           <p>No department ownership recorded.</p>
                         )}
                       </div>
-                      <Link href="/brain/chat" className="ob-btn">
+                      <Link href={`/brain/chat?project=${encodeURIComponent(project.id)}`} className="ob-btn">
                         Ask Brain
                         <ArrowRight className="size-3.5 text-orange" />
                       </Link>
@@ -174,6 +178,7 @@ export default async function BrainProjectsPage() {
                             <DocumentRow
                               key={doc.path}
                               doc={doc}
+                              projectId={project.id}
                               context={
                                 doc.department_id
                                   ? (departmentNames.get(doc.department_id) ?? "Department")

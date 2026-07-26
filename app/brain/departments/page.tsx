@@ -15,8 +15,8 @@ import {
   WorkspacePage,
 } from "@/components/brain/workspace-ui";
 import { getBrainUser } from "@/lib/brain/access";
-import { getAuthorizedDocManifest, resolveBrainPrincipal } from "@/lib/brain/authorization";
-import { getDepartments, getProfile, getProjects } from "@/lib/brain/db";
+import { getAuthorizedKnowledgeCatalog, resolveBrainPrincipal } from "@/lib/brain/authorization";
+import { getDepartments, getProfile } from "@/lib/brain/db";
 import { ursoDbSafe } from "@/lib/brain/supabase";
 
 export default async function BrainDepartmentsPage() {
@@ -48,16 +48,12 @@ export default async function BrainDepartmentsPage() {
     );
   }
 
-  const [projects, companyManifest] = await Promise.all([
-    getProjects(admin, principal.organizationId).catch(() => []),
-    getAuthorizedDocManifest(admin, principal, null).catch(() => []),
-  ]);
-  const projectManifests = await Promise.all(
-    projects.map((project) => getAuthorizedDocManifest(admin, principal, project.id).catch(() => [])),
-  );
-  const authorizedDocs = [...companyManifest, ...projectManifests.flat()].filter(
-    (doc, index, docs) => docs.findIndex((candidate) => candidate.path === doc.path) === index,
-  );
+  const catalog = await getAuthorizedKnowledgeCatalog(admin, principal).catch(() => ({
+    docs: [],
+    projects: [],
+  }));
+  const projects = catalog.projects;
+  const authorizedDocs = catalog.docs;
   const projectNames = new Map(projects.map((project) => [project.id, project.name]));
   const totalOwnedDocs = authorizedDocs.filter((doc) => doc.department_id).length;
   const totalRules = authorizedDocs.filter((doc) => doc.doc_type === "rule").length;

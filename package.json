@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "brain:acceptance": "node scripts/brain-acceptance.mjs",
+    "brain:acceptance:m5": "node scripts/brain-m5-acceptance.mjs",
     "brain:eval": "node scripts/brain-eval.mjs",
     "brain:eval:full": "node scripts/brain-eval.mjs --mode=full"
   },

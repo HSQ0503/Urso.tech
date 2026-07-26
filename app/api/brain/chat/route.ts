@@ -8,9 +8,13 @@ import {
   type UIMessage,
 } from "ai";
 import { getBrainUser } from "@/lib/brain/access";
-import { resolveBrainPrincipal } from "@/lib/brain/authorization";
+import {
+  canAccessBrainProject,
+  getAuthorizedProjects,
+  resolveBrainPrincipal,
+} from "@/lib/brain/authorization";
 import { compileBrainContext } from "@/lib/brain/context-compiler";
-import { getDepartments, getOrgKey, getProjects } from "@/lib/brain/db";
+import { getDepartments, getOrgKey } from "@/lib/brain/db";
 import { buildBrainTools } from "@/lib/brain/tools";
 import {
   brainModel,
@@ -94,15 +98,35 @@ export async function POST(req: Request) {
 
   const [departments, projects] = await Promise.all([
     getDepartments(admin, principal.organizationId),
-    getProjects(admin, principal.organizationId),
+    getAuthorizedProjects(admin, principal),
   ]);
   const department = departments.find((item) => item.id === principal.departmentId);
   if (!department) return Response.json({ error: "membership department is invalid" }, { status: 403 });
-  const activeProject = projects.find((item) => item.id === body.projectId) ?? null;
-
   const ownedThread = body.threadId
     ? await getOwnedBrainThread(admin, principal.userId, body.threadId, principal.organizationId)
     : null;
+  if (body.threadId && !ownedThread) {
+    return Response.json({ error: "conversation not found" }, { status: 404 });
+  }
+  const requestedProjectId = body.projectId?.trim() || null;
+  const threadProjectId = ownedThread?.project_id ?? null;
+  if (ownedThread && body.projectId !== undefined && requestedProjectId !== threadProjectId) {
+    return Response.json(
+      { error: "Project scope is fixed for this conversation. Start a new conversation to change it." },
+      { status: 409 },
+    );
+  }
+  const effectiveProjectId = ownedThread ? threadProjectId : requestedProjectId;
+  if (
+    effectiveProjectId &&
+    !(await canAccessBrainProject(admin, principal, effectiveProjectId).catch(() => false))
+  ) {
+    return Response.json({ error: "project access required" }, { status: 403 });
+  }
+  const activeProject = projects.find((item) => item.id === effectiveProjectId) ?? null;
+  if (effectiveProjectId && !activeProject) {
+    return Response.json({ error: "project access required" }, { status: 403 });
+  }
   const ownedThreadId = ownedThread?.id ?? null;
 
   let embeddingKey: string | null = provider === "openai" ? apiKey : null;
@@ -114,20 +138,30 @@ export async function POST(req: Request) {
     }
   }
 
-  const compiled = await compileBrainContext({
-    admin,
-    principal,
-    department,
-    activeProject,
-    messages: body.messages,
-    threadId: ownedThreadId,
-    embeddingKey,
-  });
+  let compiled: Awaited<ReturnType<typeof compileBrainContext>>;
+  try {
+    compiled = await compileBrainContext({
+      admin,
+      principal,
+      department,
+      activeProject,
+      messages: body.messages,
+      threadId: ownedThreadId,
+      embeddingKey,
+    });
+  } catch (error) {
+    console.error("[brain] context compilation failed:", error instanceof Error ? error.message : error);
+    return Response.json(
+      { error: "The Brain could not create a durable Context Receipt. No answer was generated." },
+      { status: 503 },
+    );
+  }
   const tools = buildBrainTools({
     admin,
     principal,
     authorizedDocs: compiled.authorizedDocs,
-    evidenceIds: compiled.receipt.evidence.map((item) => item.id),
+    contextEvidence: compiled.receipt.evidence,
+    projectId: activeProject?.id ?? null,
   });
 
   if (BRAIN_DEBUG) {

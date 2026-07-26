@@ -1,0 +1,81 @@
+{
+  "suiteId": "urso-brain-m5-temporal",
+  "version": 1,
+  "description": "Deterministic acceptance contract for governed temporal claims, authorization, provenance, conflicts, and atomic review operations.",
+  "referenceTime": "2026-06-15T12:00:00.000Z",
+  "historicalTime": "2026-04-15T12:00:00.000Z",
+  "futureTime": "2026-08-15T12:00:00.000Z",
+  "thresholds": {
+    "casePassRate": 1,
+    "authorizationLeakageFailures": 0,
+    "acceptedClaimsWithoutEvidence": 0,
+    "unauditedLifecycleChanges": 0
+  },
+  "cases": [
+    {
+      "id": "current-excludes-superseded",
+      "category": "temporal",
+      "description": "A current query returns the accepted replacement and not the claim it superseded."
+    },
+    {
+      "id": "historical-as-of",
+      "category": "temporal",
+      "description": "A historical query returns the claim valid at that instant and not its later replacement."
+    },
+    {
+      "id": "future-effective",
+      "category": "temporal",
+      "description": "A future-effective claim is scheduled rather than current and becomes selectable at its effective time."
+    },
+    {
+      "id": "retired-history-preserved",
+      "category": "temporal",
+      "description": "A retired claim is absent from current truth but remains available for a date inside its validity interval."
+    },
+    {
+      "id": "unresolved-is-not-a-commitment",
+      "category": "resolution",
+      "description": "An unresolved claim remains explicitly unresolved and cannot be represented as accepted truth."
+    },
+    {
+      "id": "visible-contested-conflict",
+      "category": "conflicts",
+      "description": "Contradictory accepted claims visible to the caller produce an open conflict with authorized provenance."
+    },
+    {
+      "id": "source-version-provenance",
+      "category": "provenance",
+      "description": "Every accepted fixture claim resolves to an exact readable document version and excerpt."
+    },
+    {
+      "id": "project-claim-isolation",
+      "category": "security",
+      "description": "Project claims require active project membership and the matching active project scope."
+    },
+    {
+      "id": "restricted-claim-isolation",
+      "category": "security",
+      "description": "Restricted claims inherit source-document authorization and remain invisible without a readable source."
+    },
+    {
+      "id": "hidden-conflict-does-not-leak",
+      "category": "security",
+      "description": "A caller cannot infer a conflict when the contradictory claim or its evidence is not authorized."
+    },
+    {
+      "id": "proposal-apply-is-atomic-and-audited",
+      "category": "governance",
+      "description": "Applying a valid claim proposal creates the lifecycle transition, relationship, evidence, and audit event atomically."
+    },
+    {
+      "id": "invalid-proposal-rolls-back",
+      "category": "governance",
+      "description": "A proposal with an invalid expected predecessor cannot partially mutate claim, relation, conflict, or audit state."
+    },
+    {
+      "id": "proposal-rejection-is-audited",
+      "category": "governance",
+      "description": "Rejecting a pending claim proposal records terminal review state and its audit event without changing truth."
+    }
+  ]
+}

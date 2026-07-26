@@ -26,6 +26,7 @@ import {
   X,
 } from "lucide-react";
 import type { BrainRole } from "@/lib/brain/types";
+import { brainDocHref } from "@/lib/brain/links";
 import { FileTree, type VaultFile } from "./file-tree";
 import { SignOutButton } from "./sign-out";
 
@@ -250,7 +251,7 @@ function GraphShell({
           files={files}
           activePath={docPath}
           collapseSignal={collapseSignal}
-          onOpenFile={(file) => router.push(`/brain/docs/view?path=${encodeURIComponent(file.path)}`)}
+          onOpenFile={(file) => router.push(brainDocHref(file.path, file.projectId))}
         />
         <div className="ob-vault">
           <span className="ob-vault-name">Urso Brain</span>

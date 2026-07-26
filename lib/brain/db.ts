@@ -73,18 +73,6 @@ export async function upsertProfile(
       { onConflict: "organization_id,user_id" },
     );
   if (error) throw new Error(`profile save failed: ${error.message}`);
-
-  const { error: membershipError } = await admin.from("brain_memberships").upsert(
-    {
-      organization_id: organizationId,
-      user_id: profile.user_id,
-      department_id: profile.department_id,
-      active: true,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "organization_id,user_id", ignoreDuplicates: false },
-  );
-  if (membershipError) throw new Error(`membership save failed: ${membershipError.message}`);
 }
 
 // Organization-scoped metadata catalog. Never pass this unfiltered to a model;

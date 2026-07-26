@@ -6,7 +6,7 @@ import type { Metadata } from "next";
 import { getBrainUser } from "@/lib/brain/access";
 import {
   canEditBrainTruth,
-  getAuthorizedDocManifest,
+  getAuthorizedKnowledgeCatalog,
   resolveBrainPrincipal,
 } from "@/lib/brain/authorization";
 import { ursoDbSafe } from "@/lib/brain/supabase";
@@ -24,9 +24,15 @@ export default async function BrainLayout({ children }: { children: React.ReactN
   const user = await getBrainUser();
   const admin = user ? ursoDbSafe() : null;
   const principal = admin && user ? await resolveBrainPrincipal(admin, user).catch(() => null) : null;
-  const manifest =
-    admin && principal ? await getAuthorizedDocManifest(admin, principal, null).catch(() => []) : [];
-  const files = manifest.map((d) => ({ path: d.path, title: d.title }));
+  const catalog =
+    admin && principal
+      ? await getAuthorizedKnowledgeCatalog(admin, principal).catch(() => ({ docs: [], projects: [] }))
+      : { docs: [], projects: [] };
+  const files = catalog.docs.map((doc) => ({
+    path: doc.path,
+    title: doc.title,
+    projectId: doc.access_project_id,
+  }));
 
   return (
     <div className="theme-scope">

@@ -1,5 +1,5 @@
-// Brain settings: your profile (department/title — switching department is how
-// a demo persona is played) + the org's BYO provider keys + vault sync status.
+// Brain settings: personal profile details plus organization infrastructure for
+// authorized stewards. Department access is provisioned outside this form.
 
 import { redirect } from "next/navigation";
 import { getBrainUser } from "@/lib/brain/access";
@@ -14,6 +14,7 @@ import { OnboardingForm } from "@/components/brain/onboarding-form";
 import { KeysManager } from "@/components/brain/keys-manager";
 import { BrainIndexManager } from "@/components/brain/index-manager";
 import { ProposalQueue } from "@/components/brain/proposal-queue";
+import { TemporalReviewQueue } from "@/components/brain/temporal-review-queue";
 import { WorkspacePage } from "@/components/brain/workspace-ui";
 
 export default async function BrainSettingsPage() {
@@ -51,19 +52,17 @@ export default async function BrainSettingsPage() {
           </p>
           <h2 className="mt-1.5 text-[14px] font-semibold">Your profile</h2>
           <p className="mt-1 text-[12px] leading-5 text-[var(--ob-muted)]">
-            {canEditBrainTruth(principal)
-              ? "The Brain loads context for your assigned department. As a steward, you may switch it for controlled demos."
-              : "Your department identity is assigned by an administrator and controls which context the Brain may retrieve."}
+            Your department identity is assigned by an administrator and controls which context the Brain may retrieve.
           </p>
           <div className="mt-4">
             <OnboardingForm
               departments={departments}
               initialName={profile.name}
-              initialDepartmentId={profile.department_id}
+              initialDepartmentId={principal.departmentId}
               initialTitle={profile.title}
               submitLabel="Save profile"
               redirectTo={null}
-              departmentLocked={!canEditBrainTruth(principal)}
+              departmentLocked
             />
           </div>
         </section>
@@ -97,6 +96,21 @@ export default async function BrainSettingsPage() {
             </p>
             <div className="mt-4">
               <ProposalQueue />
+            </div>
+          </section>
+        )}
+
+        {canEditBrainTruth(principal) && (
+          <section className="sana-settings-section">
+            <p className="font-mono text-[8.5px] font-medium uppercase tracking-[0.11em] text-ink-dimmer">
+              Temporal truth
+            </p>
+            <h2 className="mt-1.5 text-[14px] font-semibold">Claims and conflicts</h2>
+            <p className="mt-1 text-[12px] leading-5 text-[var(--ob-muted)]">
+              Review effective dates, supersession, unresolved facts, and contradictions before they change current truth.
+            </p>
+            <div className="mt-4">
+              <TemporalReviewQueue />
             </div>
           </section>
         )}

@@ -7,6 +7,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { BrainDocMeta } from "@/lib/brain/types";
+import { brainDocHref } from "@/lib/brain/links";
 
 export function BrainAccessNotice({
   title,
@@ -165,13 +166,15 @@ const typeLabel: Record<BrainDocMeta["doc_type"], string> = {
 export function DocumentRow({
   doc,
   context,
+  projectId,
 }: {
   doc: BrainDocMeta;
   context?: string;
+  projectId?: string | null;
 }) {
   return (
     <Link
-      href={`/brain/docs/view?path=${encodeURIComponent(doc.path)}`}
+      href={brainDocHref(doc.path, projectId ?? doc.access_project_id)}
       className="ob-document-row group"
     >
       <span className="ob-document-icon">

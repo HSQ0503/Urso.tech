@@ -2,7 +2,11 @@
 // service-role client (ownership enforced in code).
 
 import { getBrainUser } from "@/lib/brain/access";
-import { resolveBrainPrincipal } from "@/lib/brain/authorization";
+import {
+  canAccessBrainProject,
+  getAuthorizedProjects,
+  resolveBrainPrincipal,
+} from "@/lib/brain/authorization";
 import { ursoDbSafe, URSO_DB_MISSING } from "@/lib/brain/supabase";
 
 export async function GET() {
@@ -13,16 +17,23 @@ export async function GET() {
   if (!admin) return Response.json({ error: URSO_DB_MISSING }, { status: 503 });
   const principal = await resolveBrainPrincipal(admin, user);
   if (!principal) return Response.json({ error: "active brain membership required" }, { status: 403 });
-  const { data, error } = await admin
-    .from("brain_threads")
-    .select("id, title, project_id, model, updated_at")
-    .eq("organization_id", principal.organizationId)
-    .eq("user_id", user.id)
-    .order("updated_at", { ascending: false })
-    .limit(50);
+  const [{ data, error }, projects] = await Promise.all([
+    admin
+      .from("brain_threads")
+      .select("id, title, project_id, model, updated_at")
+      .eq("organization_id", principal.organizationId)
+      .eq("user_id", user.id)
+      .order("updated_at", { ascending: false })
+      .limit(50),
+    getAuthorizedProjects(admin, principal),
+  ]);
   if (error) return Response.json({ error: error.message }, { status: 500 });
+  const permittedProjectIds = new Set(projects.map((project) => project.id));
+  const threads = (data ?? []).filter(
+    (thread) => !thread.project_id || permittedProjectIds.has(thread.project_id),
+  );
 
-  return Response.json({ threads: data ?? [] });
+  return Response.json({ threads });
 }
 
 export async function POST(req: Request) {
@@ -34,12 +45,19 @@ export async function POST(req: Request) {
   if (!admin) return Response.json({ error: URSO_DB_MISSING }, { status: 503 });
   const principal = await resolveBrainPrincipal(admin, user);
   if (!principal) return Response.json({ error: "active brain membership required" }, { status: 403 });
+  const projectId = body.projectId?.trim() || null;
+  if (
+    projectId &&
+    !(await canAccessBrainProject(admin, principal, projectId).catch(() => false))
+  ) {
+    return Response.json({ error: "project access required" }, { status: 403 });
+  }
   const { data, error } = await admin
     .from("brain_threads")
     .insert({
       organization_id: principal.organizationId,
       user_id: user.id,
-      project_id: body.projectId ?? null,
+      project_id: projectId,
     })
     .select("id, title, project_id, model, updated_at")
     .single();

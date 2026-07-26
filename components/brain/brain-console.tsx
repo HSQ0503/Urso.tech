@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import { RichText } from "@/components/dashboard/rich-text";
 import { BRAIN_PROVIDERS } from "@/lib/brain/catalog";
+import { brainDocHref } from "@/lib/brain/links";
 import type { BrainContextReceipt, BrainProvider, BrainUIData } from "@/lib/brain/types";
 
 type ThreadSummary = { id: string; title: string; project_id: string | null; model: string; updated_at: string };
@@ -41,7 +42,7 @@ type BrainUIMessage = UIMessage<unknown, BrainUIData>;
 // Tool-activity chips: show WHAT the brain actually touched (real doc titles,
 // search queries), and mark writes distinctly so edits are never invisible.
 type ToolPart = { type: string; text?: string; input?: unknown; output?: unknown };
-const WRITE_TOOLS = new Set(["propose_knowledge_update"]);
+const WRITE_TOOLS = new Set(["propose_knowledge_update", "propose_claim_change"]);
 
 function toolChips(parts: ToolPart[]): { label: string; write: boolean }[] {
   const chips: { label: string; write: boolean }[] = [];
@@ -63,6 +64,7 @@ function toolChips(parts: ToolPart[]): { label: string; write: boolean }[] {
       case "link_docs": label = "connected docs"; break;
       case "delete_doc": label = `deleted · ${baseName(str(input.path)) ?? "doc"}`; break;
       case "propose_knowledge_update": label = `proposed · ${baseName(str(output.targetPath) ?? str(input.targetPath)) ?? "knowledge"}`; break;
+      case "propose_claim_change": label = `proposed · ${str(input.predicateId) ?? "temporal claim"}`; break;
       default: label = name.replace(/_/g, " ");
     }
     if (label.length > 44) label = `${label.slice(0, 43)}…`;
@@ -152,6 +154,12 @@ function ContextReceiptPanel({
   receipt: BrainContextReceipt | null;
   onClose: () => void;
 }) {
+  const structuredConflicts =
+    receipt?.conflictAnalysis.status === "performed"
+      ? receipt.conflictAnalysis.conflicts
+      : [];
+  const legacyConflictCount = receipt?.conflicts?.length ?? 0;
+
   return (
     <aside
       aria-label="Context receipt"
@@ -207,6 +215,15 @@ function ContextReceiptPanel({
                 ["Role", receipt.scope.role.replaceAll("_", " ")],
                 ["Project", receipt.scope.project?.name ?? "Company-wide"],
                 ["Catalog", `${receipt.authorization.permittedEvidenceCount} permitted`],
+                ["Effective date", receipt.temporal?.queryTime.effectiveAt ?? "Not recorded"],
+                [
+                  "Truth mode",
+                  receipt.temporal?.queryTime.mode === "as_of"
+                    ? "As of"
+                    : receipt.temporal
+                      ? "Current"
+                      : "Legacy receipt",
+                ],
               ].map(([label, value]) => (
                 <div key={label} className="min-w-0 rounded-[4px] border border-[var(--brain-border)] bg-[var(--brain-soft)] px-3 py-2.5">
                   <div className="text-[10px] text-[var(--brain-muted)]">{label}</div>
@@ -248,13 +265,16 @@ function ContextReceiptPanel({
           <section className="mt-5">
             <div className="flex items-center justify-between px-1">
               <h2 className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-[var(--brain-muted)]">Evidence</h2>
-              <span className="text-[10px] text-[var(--brain-muted)]">{receipt.evidence.length} chunks</span>
+              <span className="text-[10px] text-[var(--brain-muted)]">{receipt.evidence.length} sources</span>
             </div>
             <ol className="mt-2 space-y-2">
               {receipt.evidence.map((item) => (
                 <li key={item.id}>
                   <Link
-                    href={`/brain/docs/view?path=${encodeURIComponent(item.path)}`}
+                    href={brainDocHref(
+                      item.path,
+                      item.accessProjectId ?? receipt.scope.project?.id,
+                    )}
                     className="group block rounded-[5px] border border-[var(--brain-border)] bg-[var(--brain-soft)] p-3 transition-[border-color,background-color] hover:border-orange/30 hover:bg-[var(--brain-soft-hover)]"
                   >
                     <div className="flex items-start gap-2.5">
@@ -274,6 +294,32 @@ function ContextReceiptPanel({
                       {item.excerpt}
                     </p>
                     <div className="mt-2 flex flex-wrap gap-1">
+                      {item.claim && (
+                        <>
+                          <span className="rounded-full border border-orange/25 bg-orange-soft px-2 py-0.5 text-[9px] font-medium capitalize text-orange">
+                            {item.claim.temporalStatus}
+                          </span>
+                          {item.claim.lifecycle !== "active" && (
+                            <span className="rounded-full bg-[var(--brain-canvas)] px-2 py-0.5 text-[9px] capitalize text-[var(--brain-muted)]">
+                              {item.claim.lifecycle}
+                            </span>
+                          )}
+                          {item.claim.resolution !== "accepted" && (
+                            <span className="rounded-full border border-orange/25 bg-orange-soft px-2 py-0.5 text-[9px] font-medium capitalize text-orange">
+                              {item.claim.resolution}
+                            </span>
+                          )}
+                          <span className="rounded-full bg-[var(--brain-canvas)] px-2 py-0.5 text-[9px] text-[var(--brain-muted)]">
+                            {item.claim.validFrom ?? "open start"} → {item.claim.validUntil ?? "open end"}
+                          </span>
+                          {(item.claim.supersedes.length > 0 ||
+                            item.claim.supersededBy.length > 0) && (
+                            <span className="rounded-full bg-[var(--brain-canvas)] px-2 py-0.5 text-[9px] text-[var(--brain-muted)]">
+                              lineage {item.claim.supersedes.length + item.claim.supersededBy.length}
+                            </span>
+                          )}
+                        </>
+                      )}
                       {item.reasons.slice(0, 3).map((reason) => (
                         <span key={reason} className="rounded-full bg-[var(--brain-canvas)] px-2 py-0.5 text-[9px] text-[var(--brain-muted)]">
                           {reason}
@@ -292,10 +338,26 @@ function ContextReceiptPanel({
               Resolution
             </div>
             <p className="mt-2 text-[11px] leading-5 text-[var(--brain-muted-strong)]">
-              {receipt.conflicts.length
-                ? `${receipt.conflicts.length} conflict${receipt.conflicts.length === 1 ? "" : "s"} flagged.`
-                : "Current document versions selected. No version conflicts detected."}
+              {receipt.conflictAnalysis.message}
             </p>
+            {structuredConflicts.map((conflict) => (
+              <div
+                key={conflict.id}
+                className="mt-2 rounded-[4px] border border-orange/25 bg-orange-soft px-3 py-2.5"
+              >
+                <p className="text-[10.5px] font-medium text-orange">
+                  {conflict.subjectLabel} · {conflict.predicateLabel}
+                </p>
+                <p className="mt-1 text-[10.5px] leading-5 text-[var(--brain-muted-strong)]">
+                  {conflict.message}
+                </p>
+              </div>
+            ))}
+            {receipt.conflictAnalysis.status === "not_performed" && legacyConflictCount > 0 && (
+              <p className="mt-1 text-[11px] leading-5 text-orange">
+                {legacyConflictCount} legacy conflict{legacyConflictCount === 1 ? "" : "s"} flagged.
+              </p>
+            )}
             {receipt.missing.map((item) => (
               <p key={item} className="mt-1 text-[11px] leading-5 text-orange">{item}</p>
             ))}
@@ -519,6 +581,7 @@ export function BrainConsole({
   availableProviders,
   initialProvider,
   initialModel,
+  initialProjectId,
 }: {
   departmentId: string;
   departmentName: string;
@@ -526,6 +589,7 @@ export function BrainConsole({
   availableProviders: BrainProvider[]; // providers with an org key stored
   initialProvider: BrainProvider | null;
   initialModel: string | null;
+  initialProjectId: string | null;
 }) {
   const [input, setInput] = useState("");
   const [railOpen, setRailOpen] = useState(false);
@@ -534,7 +598,7 @@ export function BrainConsole({
   const [threads, setThreads] = useState<ThreadSummary[]>([]);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [hydrating, setHydrating] = useState(true);
-  const [projectId, setProjectId] = useState<string>("");
+  const [projectId, setProjectId] = useState<string>(initialProjectId ?? "");
   const [provider, setProvider] = useState<BrainProvider | null>(initialProvider);
   const [modelId, setModelId] = useState<string | null>(initialModel);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -577,6 +641,10 @@ export function BrainConsole({
       } catch { /* start fresh */ }
       if (cancelled) return;
       setThreads(list);
+      if (initialProjectId) {
+        setHydrating(false);
+        return;
+      }
       if (!list.length) { setHydrating(false); return; }
       // The rail is clickable while this hydrate is in flight — take a seq so a
       // user click on another thread invalidates this fetch's right to write.
@@ -590,7 +658,7 @@ export function BrainConsole({
       if (!cancelled && seq === hydrateSeq.current) setHydrating(false);
     })();
     return () => { cancelled = true; };
-  }, [setMessages]);
+  }, [initialProjectId, setMessages]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -762,7 +830,9 @@ export function BrainConsole({
                 aria-label="Project"
                 value={projectId}
                 onChange={(e) => setProjectId(e.target.value)}
-                className={`${selectCls} w-[154px] sm:w-[180px]`}
+                className={`${selectCls} w-[154px] disabled:cursor-not-allowed disabled:opacity-60 sm:w-[180px]`}
+                disabled={activeThreadId !== null}
+                title={activeThreadId ? "Project scope is fixed for this conversation. Start a new chat to change it." : undefined}
               >
                 <option value="">Company-wide</option>
                 {projects.map((p) => (

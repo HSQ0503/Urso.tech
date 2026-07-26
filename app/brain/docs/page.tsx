@@ -11,11 +11,11 @@ import {
 import { getBrainUser } from "@/lib/brain/access";
 import {
   canEditBrainTruth,
-  getAuthorizedDocManifest,
+  getAuthorizedKnowledgeCatalog,
   resolveBrainPrincipal,
 } from "@/lib/brain/authorization";
 import { ursoDbSafe } from "@/lib/brain/supabase";
-import { getDepartments, getProjects } from "@/lib/brain/db";
+import { getDepartments } from "@/lib/brain/db";
 import { KnowledgeBrowser, type KnowledgeSectionData } from "@/components/brain/knowledge-browser";
 
 export default async function BrainDocsPage() {
@@ -38,11 +38,12 @@ export default async function BrainDocsPage() {
       </BrainAccessNotice>
     );
   }
-  const [manifest, projects, departments] = await Promise.all([
-    getAuthorizedDocManifest(admin, principal, null).catch(() => []),
-    getProjects(admin, principal.organizationId).catch(() => []),
+  const [catalog, departments] = await Promise.all([
+    getAuthorizedKnowledgeCatalog(admin, principal).catch(() => ({ docs: [], projects: [] })),
     getDepartments(admin, principal.organizationId).catch(() => []),
   ]);
+  const manifest = catalog.docs;
+  const projects = catalog.projects;
 
   const core = manifest.filter((d) => d.doc_type === "core");
   const rules = manifest.filter((d) => d.doc_type === "rule");

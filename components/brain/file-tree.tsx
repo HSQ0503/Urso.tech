@@ -9,7 +9,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronRight } from "lucide-react";
 
-export type VaultFile = { path: string; title: string };
+export type VaultFile = { path: string; title: string; projectId?: string | null };
 
 type Node = {
   name: string;

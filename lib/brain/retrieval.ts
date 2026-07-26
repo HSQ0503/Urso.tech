@@ -309,7 +309,7 @@ async function fallbackLexicalSearch(
 
   const { data, error } = await admin
     .from("brain_docs")
-    .select("id, path, title, description, department_id, project_id, doc_type, audience, content, current_version")
+    .select("id, path, title, description, department_id, project_id, doc_type, audience, visibility, content, current_version")
     .in("id", ids)
     .is("deleted_at", null);
   if (error) throw new Error(`lexical fallback failed: ${error.message}`);
@@ -340,6 +340,7 @@ async function fallbackLexicalSearch(
       project_id: string | null;
       doc_type: "core" | "doc" | "rule";
       audience: string[];
+      visibility: "organization" | "department" | "project" | "restricted";
       content: string;
       current_version: number;
     };
@@ -372,6 +373,8 @@ async function fallbackLexicalSearch(
       const score = Math.max(chunkScore, docScore * 0.15);
       candidates.push({
         id: "",
+        sourceKind: "document_chunk",
+        accessProjectId: doc.visibility === "project" ? projectId : null,
         docId: doc.id,
         chunkId: null,
         path: doc.path,
@@ -453,6 +456,8 @@ export async function searchAuthorizedKnowledge(opts: {
       const rows = (data ?? []) as SearchRow[];
       const rpcEvidence: RetrievedEvidence[] = rows.map((row) => ({
         id: "",
+        sourceKind: "document_chunk",
+        accessProjectId: row.visibility === "project" ? projectId : null,
         docId: row.doc_id,
         chunkId: row.chunk_id,
         path: row.path,

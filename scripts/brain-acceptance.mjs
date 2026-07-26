@@ -142,6 +142,17 @@ async function runAuthorizationFixtures() {
       },
     ]);
     if (membershipError) throw new Error(`fixture memberships: ${membershipError.message}`);
+    const { error: projectMembershipError } = await db
+      .from("brain_project_memberships")
+      .insert({
+        organization_id: organizationId,
+        project_id: projectId,
+        user_id: userIds.member,
+        active: true,
+      });
+    if (projectMembershipError) {
+      throw new Error(`fixture project membership: ${projectMembershipError.message}`);
+    }
 
     const probe = `acceptanceprobe${shortRunId}`;
     const definitions = [
@@ -229,9 +240,12 @@ async function runAuthorizationFixtures() {
       [userIds.outsider, "organization", null, true],
       [userIds.outsider, "member-department", null, false],
       [userIds.outsider, "outsider-department", null, true],
+      [userIds.outsider, "project", projectId, false],
       [userIds.outsider, "restricted", null, false],
       [userIds.inactive, "organization", null, false],
       [userIds.steward, "restricted", null, true],
+      [userIds.steward, "project", null, false],
+      [userIds.steward, "project", projectId, true],
     ];
     for (const [userId, docKey, activeProjectId, expected] of policyCases) {
       const actual = await readCanAccess(userId, docByKey[docKey].id, activeProjectId);
@@ -311,6 +325,7 @@ async function audit() {
     departments,
     projects,
     memberships,
+    projectMemberships,
     docs,
     versions,
     chunks,
@@ -323,6 +338,9 @@ async function audit() {
     selectAll("brain_departments", "id", (query) => query.eq("organization_id", organizationId)),
     selectAll("brain_projects", "id,status", (query) => query.eq("organization_id", organizationId)),
     selectAll("brain_memberships", "user_id,role,department_id,active", (query) =>
+      query.eq("organization_id", organizationId),
+    ),
+    selectAll("brain_project_memberships", "project_id,user_id,active", (query) =>
       query.eq("organization_id", organizationId),
     ),
     selectAll(
@@ -350,6 +368,7 @@ async function audit() {
 
   const liveDocs = docs.filter((doc) => !doc.deleted_at);
   const activeMemberships = memberships.filter((membership) => membership.active);
+  const activeProjectMemberships = projectMemberships.filter((membership) => membership.active);
   const currentVersionKeys = new Set(liveDocs.map((doc) => `${doc.id}:${doc.current_version}`));
   const versionKeys = new Set(versions.map((version) => `${version.doc_id}:${version.version}`));
   const currentChunks = chunks.filter((chunk) => currentVersionKeys.has(`${chunk.doc_id}:${chunk.version}`));
@@ -390,6 +409,15 @@ async function audit() {
     "Active memberships",
     `${activeMemberships.length} active membership${activeMemberships.length === 1 ? "" : "s"} found.`,
     "Provision at least one active organization membership.",
+  );
+  record(
+    "M1",
+    activeProjectMemberships.length > 0 ? "pass" : "warn",
+    "Explicit project membership",
+    activeProjectMemberships.length > 0
+      ? `${activeProjectMemberships.length} active user-to-project assignment${activeProjectMemberships.length === 1 ? "" : "s"} found.`
+      : "No active user-to-project assignments exist; only admins and knowledge stewards can enter project scope.",
+    "Assign regular users to projects through brain_project_memberships.",
   );
   const nonStewardRoles = activeMemberships.filter(
     (membership) => membership.role === "member" || membership.role === "viewer",
@@ -516,11 +544,19 @@ async function audit() {
 
   const latestRun = contextRuns[0] ?? null;
   const latestReceipt = latestRun?.receipt;
+  const conflictAnalysisValid =
+    latestReceipt?.conflictAnalysis?.status === "not_performed"
+      ? typeof latestReceipt.conflictAnalysis.message === "string"
+      : latestReceipt?.conflictAnalysis?.status === "performed" &&
+        typeof latestReceipt.conflictAnalysis.effectiveAt === "string" &&
+        Number.isInteger(latestReceipt.conflictAnalysis.checkedClaimCount) &&
+        Array.isArray(latestReceipt.conflictAnalysis.conflicts);
   const receiptShapeValid = Boolean(
     latestReceipt?.runId &&
       latestReceipt?.scope &&
       latestReceipt?.authorization &&
       latestReceipt?.retrieval &&
+      conflictAnalysisValid &&
       Array.isArray(latestReceipt?.evidence),
   );
   record(
@@ -535,7 +571,7 @@ async function audit() {
     receiptShapeValid ? "pass" : "fail",
     "Context Receipt integrity",
     receiptShapeValid
-      ? `Latest receipt selected ${latestReceipt.retrieval.selectedChunks} chunks from ${latestReceipt.authorization.permittedEvidenceCount} permitted documents.`
+      ? `Latest receipt selected ${latestReceipt.retrieval.selectedChunks} sources from ${latestReceipt.authorization.permittedEvidenceCount} permitted documents; conflict analysis ${latestReceipt.conflictAnalysis.status}.`
       : "No structurally valid production Context Receipt exists yet.",
     "Run a chat and inspect the emitted Context Receipt panel.",
   );

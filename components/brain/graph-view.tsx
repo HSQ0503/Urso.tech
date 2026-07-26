@@ -14,6 +14,7 @@ import {
   ZoomOut,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { brainDocHref } from "@/lib/brain/links";
 import {
   useCallback,
   useEffect,
@@ -33,6 +34,7 @@ export type GraphNode = {
   departmentName: string | null;
   type: "core" | "doc" | "rule";
   origin: "vault" | "brain";
+  accessProjectId: string | null;
 };
 
 type GroupKind = "core" | "rule" | "project" | "department" | "shared";
@@ -598,7 +600,7 @@ export function GraphView({ nodes, edges }: { nodes: GraphNode[]; edges: [number
                       onPointerDown={(event) => event.stopPropagation()}
                       onClick={() => setSelected(mapNode.index)}
                       onDoubleClick={() =>
-                        router.push(`/brain/docs/view?path=${encodeURIComponent(node.path)}`)
+                        router.push(brainDocHref(node.path, node.accessProjectId))
                       }
                       onPointerEnter={() => setHovered(mapNode.index)}
                       onPointerLeave={() => setHovered(null)}
@@ -729,7 +731,7 @@ export function GraphView({ nodes, edges }: { nodes: GraphNode[]; edges: [number
                 type="button"
                 className="kg-open-source"
                 onClick={() =>
-                  router.push(`/brain/docs/view?path=${encodeURIComponent(selectedNode.path)}`)
+                  router.push(brainDocHref(selectedNode.path, selectedNode.accessProjectId))
                 }
               >
                 Open source

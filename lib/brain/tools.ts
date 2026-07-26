@@ -3,9 +3,8 @@ import "server-only";
 import { tool } from "ai";
 import { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { auditBrainEvent } from "./authorization";
 import { getDepartments, getDocByPath } from "./db";
-import type { BrainDocMeta, BrainPrincipal } from "./types";
+import type { BrainContextEvidence, BrainDocMeta, BrainPrincipal } from "./types";
 import { checkMeta, normalizeDocPath, sanitizePathPart } from "./write";
 
 type Admin = SupabaseClient;
@@ -55,10 +54,12 @@ export function buildBrainTools(opts: {
   admin: Admin;
   principal: BrainPrincipal;
   authorizedDocs: BrainDocMeta[];
-  evidenceIds: string[];
+  contextEvidence: BrainContextEvidence[];
+  projectId: string | null;
 }) {
   const { admin, principal, authorizedDocs } = opts;
-  const evidenceIds = new Set(opts.evidenceIds);
+  const evidenceIds = new Set(opts.contextEvidence.map((item) => item.id));
+  const contextEvidence = new Map(opts.contextEvidence.map((item) => [item.id, item]));
 
   return {
     inspect_knowledge_impact: tool({
@@ -264,12 +265,6 @@ export function buildBrainTools(opts: {
         if (error) return { error: `Could not queue the proposal: ${error.message}` };
 
         const proposalId = (data as { id: string }).id;
-        await auditBrainEvent(admin, principal, "knowledge.proposed", "knowledge_proposal", proposalId, {
-          operation,
-          targetPath: path,
-          evidenceIds: groundedEvidence,
-          affectedPaths: relatedEdits.map((edit) => edit.targetPath),
-        });
 
         return {
           proposalId,
@@ -277,6 +272,205 @@ export function buildBrainTools(opts: {
           targetPath: path,
           affectedDocuments: relatedEdits.length + 1,
           note: "Queued for a knowledge steward. Company truth has not changed.",
+        };
+      },
+    }),
+    propose_claim_change: tool({
+      description:
+        "Queue a governed temporal fact change for steward review. Use this only when the user explicitly asks to save or correct a durable atomic fact whose effective date, supersession, retirement, or unresolved state matters. It never changes current truth directly.",
+      inputSchema: z.object({
+        operation: z.enum(["assert", "supersede", "retire", "mark_unresolved"]),
+        subjectKey: z
+          .string()
+          .min(3)
+          .max(180)
+          .optional()
+          .describe("Existing entity canonical key; required for assert"),
+        predicateId: z
+          .string()
+          .min(2)
+          .max(100)
+          .optional()
+          .describe("Existing controlled predicate ID; required for assert"),
+        targetClaimId: z
+          .string()
+          .uuid()
+          .optional()
+          .describe("Existing authorized claim to supersede, retire, or mark unresolved"),
+        objectType: z.enum(["text", "number", "boolean", "date", "entity"]).optional(),
+        objectValue: z.union([z.string(), z.number(), z.boolean()]).optional(),
+        objectEntityId: z.string().uuid().optional(),
+        resolution: z.enum(["accepted", "unresolved", "contested"]).default("accepted"),
+        validFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+        validUntil: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+        evidenceIds: z
+          .array(z.string())
+          .max(12)
+          .default([])
+          .describe("Context Receipt E# entries that directly support the fact"),
+        rationale: z.string().min(4).max(800),
+      }),
+      execute: async ({
+        operation,
+        subjectKey,
+        predicateId,
+        targetClaimId,
+        objectType,
+        objectValue,
+        objectEntityId,
+        resolution,
+        validFrom,
+        validUntil,
+        evidenceIds: proposedEvidenceIds,
+        rationale,
+      }) => {
+        if (operation === "assert" && (!subjectKey || !predicateId || !objectType)) {
+          return { error: "An assertion needs an existing subject key, predicate, and object type." };
+        }
+        if (operation !== "assert" && !targetClaimId) {
+          return { error: `${operation} requires a target claim ID.` };
+        }
+        if (operation === "supersede" && (!objectType || !validFrom)) {
+          return { error: "A supersession needs a replacement object type and effective date." };
+        }
+        if (
+          (operation === "assert" || operation === "supersede") &&
+          objectType === "entity" &&
+          !objectEntityId
+        ) {
+          return { error: "An entity-valued claim needs an object entity ID." };
+        }
+        if (
+          (operation === "assert" || operation === "supersede") &&
+          objectType !== "entity" &&
+          objectValue === undefined
+        ) {
+          return { error: "The proposed claim is missing its value." };
+        }
+
+        let target:
+          | {
+              id: string;
+              project_id: string | null;
+              updated_at: string;
+            }
+          | null = null;
+        if (targetClaimId) {
+          const { data, error } = await admin
+            .from("brain_claims")
+            .select("id, project_id, updated_at")
+            .eq("organization_id", principal.organizationId)
+            .eq("id", targetClaimId)
+            .maybeSingle();
+          if (error || !data) return { error: "That target claim is not available." };
+          const claimProjectId = data.project_id as string | null;
+          if (claimProjectId !== opts.projectId) {
+            return { error: "That claim is outside the active project scope." };
+          }
+          const { data: readable, error: readableError } = await admin.rpc(
+            "brain_can_read_claim",
+            {
+              p_organization_id: principal.organizationId,
+              p_user_id: principal.userId,
+              p_claim_id: targetClaimId,
+              p_project_id: opts.projectId,
+            },
+          );
+          if (readableError || readable !== true) {
+            return { error: "That target claim is not in the caller's permitted truth scope." };
+          }
+          target = {
+            id: String(data.id),
+            project_id: claimProjectId,
+            updated_at: String(data.updated_at),
+          };
+        }
+
+        let subject:
+          | { id: string; project_id: string | null }
+          | null = null;
+        if (subjectKey) {
+          const { data, error } = await admin
+            .from("brain_entities")
+            .select("id, project_id")
+            .eq("organization_id", principal.organizationId)
+            .eq("canonical_key", subjectKey)
+            .maybeSingle();
+          if (error || !data) return { error: "That subject entity is not registered." };
+          if ((data.project_id as string | null) !== opts.projectId) {
+            return { error: "That subject entity is outside the active project scope." };
+          }
+          subject = {
+            id: String(data.id),
+            project_id: data.project_id as string | null,
+          };
+        }
+        if (predicateId) {
+          const { data, error } = await admin
+            .from("brain_predicates")
+            .select("id, object_type")
+            .eq("organization_id", principal.organizationId)
+            .eq("id", predicateId)
+            .maybeSingle();
+          if (error || !data) return { error: "That controlled predicate is not registered." };
+          if (objectType && data.object_type !== objectType) {
+            return { error: `Predicate ${predicateId} requires ${data.object_type} values.` };
+          }
+        }
+
+        const grounded = proposedEvidenceIds.flatMap((id) => {
+          const item = contextEvidence.get(id);
+          const doc = item
+            ? authorizedDocs.find((candidate) => candidate.path === item.path)
+            : null;
+          if (!item || !doc?.id) return [];
+          return [{
+            doc_id: doc.id,
+            doc_version: item.version,
+            evidence_role: "authoritative",
+            excerpt: item.excerpt.replace(/…$/, "").trim(),
+          }];
+        });
+        if (
+          (operation === "assert" || operation === "supersede") &&
+          resolution === "accepted" &&
+          grounded.length === 0
+        ) {
+          return { error: "Accepted claims require at least one grounded Context Receipt source." };
+        }
+
+        const proposedClaim = {
+          subject_entity_id: subject?.id,
+          predicate_id: predicateId,
+          object_type: objectType,
+          object_value: objectType === "entity" ? undefined : objectValue,
+          object_entity_id: objectType === "entity" ? objectEntityId : undefined,
+          resolution,
+          valid_from: validFrom,
+          valid_until: validUntil,
+          project_id: subject?.project_id ?? target?.project_id ?? opts.projectId,
+          expected_target_updated_at: target?.updated_at,
+        };
+        const { data, error } = await admin
+          .from("brain_claim_proposals")
+          .insert({
+            organization_id: principal.organizationId,
+            operation,
+            target_claim_id: target?.id ?? null,
+            proposed_claim: proposedClaim,
+            evidence: grounded,
+            rationale: rationale.trim(),
+            proposed_by: principal.userId,
+          })
+          .select("id")
+          .single();
+        if (error) return { error: `Could not queue the claim proposal: ${error.message}` };
+
+        return {
+          proposalId: String(data.id),
+          status: "pending",
+          operation,
+          note: "Queued for a knowledge steward. Current truth has not changed.",
         };
       },
     }),

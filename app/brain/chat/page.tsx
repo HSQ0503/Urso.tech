@@ -1,12 +1,16 @@
 import { redirect } from "next/navigation";
 import { BrainConsole } from "@/components/brain/brain-console";
 import { getBrainUser } from "@/lib/brain/access";
-import { resolveBrainPrincipal } from "@/lib/brain/authorization";
+import { getAuthorizedProjects, resolveBrainPrincipal } from "@/lib/brain/authorization";
 import { BRAIN_PROVIDERS } from "@/lib/brain/catalog";
-import { getDepartments, getOrgKeyStatus, getProfile, getProjects } from "@/lib/brain/db";
+import { getDepartments, getOrgKeyStatus, getProfile } from "@/lib/brain/db";
 import { ursoDbSafe } from "@/lib/brain/supabase";
 
-export default async function BrainChatPage() {
+export default async function BrainChatPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ project?: string }>;
+}) {
   const user = await getBrainUser();
   if (!user) redirect("/brain/login");
 
@@ -21,7 +25,7 @@ export default async function BrainChatPage() {
   const [projects, keyStatus] =
     admin && principal
       ? await Promise.all([
-          getProjects(admin, principal.organizationId).catch(() => []),
+          getAuthorizedProjects(admin, principal).catch(() => []),
           getOrgKeyStatus(admin, principal.organizationId).catch(() => []),
         ])
       : ([[], []] as const);
@@ -34,6 +38,10 @@ export default async function BrainChatPage() {
   const available = keyStatus.map((key) => key.provider);
   const initialProvider = available[0] ?? null;
   const initialModel = initialProvider ? BRAIN_PROVIDERS[initialProvider].defaultModel : null;
+  const requestedProjectId = (await searchParams).project;
+  const initialProjectId = projects.some((project) => project.id === requestedProjectId)
+    ? (requestedProjectId ?? null)
+    : null;
 
   return (
     <div className="min-h-0 flex-1 overflow-hidden">
@@ -44,6 +52,7 @@ export default async function BrainChatPage() {
         availableProviders={available}
         initialProvider={initialProvider}
         initialModel={initialModel}
+        initialProjectId={initialProjectId}
       />
     </div>
   );

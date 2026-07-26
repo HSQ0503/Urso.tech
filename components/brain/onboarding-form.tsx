@@ -1,8 +1,8 @@
 "use client";
 
 // Brain profile form — used both for first-run onboarding (/brain/welcome) and
-// editing on /brain/settings. Switching department here is also how a demo
-// persona is played ("now I'm the marketing person").
+// editing on /brain/settings. Department is organization-provisioned and is
+// displayed here as locked identity context.
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -33,6 +33,9 @@ export function OnboardingForm({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const visibleDepartments = departmentLocked
+    ? departments.filter((department) => department.id === departmentId)
+    : departments;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -77,7 +80,7 @@ export function OnboardingForm({
       <div>
         <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-dimmer">Department</span>
         <div className="mt-1.5 grid gap-2 sm:grid-cols-2">
-          {departments.map((d) => {
+          {visibleDepartments.map((d) => {
             const active = d.id === departmentId;
             return (
               <button
