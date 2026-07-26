@@ -66,7 +66,7 @@ export function chunkMarkdown(
   let current = "";
   let currentHeading = "";
 
-  const push = () => {
+  const push = (retainOverlap: boolean) => {
     const content = current.trim();
     if (!content) return;
     chunks.push({
@@ -75,18 +75,23 @@ export function chunkMarkdown(
       content,
       tokenCount: estimateTokens(content),
     });
-    current = content.slice(Math.max(0, content.length - overlapCharacters));
+    current = retainOverlap
+      ? content.slice(Math.max(0, content.length - overlapCharacters))
+      : "";
+    if (!current) currentHeading = "";
   };
 
   for (const block of blocks) {
     for (const part of splitLargeBlock(block.text, maxCharacters)) {
       const prefixed = block.heading ? `${block.heading}\n${part}` : part;
-      if (current && current.length + prefixed.length + 2 > maxCharacters) push();
-      currentHeading = block.heading || currentHeading;
+      const sectionHeading = block.heading.split(" › ").slice(0, 2).join(" › ");
+      if (current && sectionHeading && sectionHeading !== currentHeading) push(false);
+      if (current && current.length + prefixed.length + 2 > maxCharacters) push(true);
+      if (!currentHeading) currentHeading = sectionHeading;
       current = current ? `${current}\n\n${prefixed}` : prefixed;
     }
   }
-  push();
+  push(false);
 
   return chunks.length
     ? chunks

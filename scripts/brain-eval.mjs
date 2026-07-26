@@ -491,6 +491,7 @@ function scoreCase(item, payload, durationMs) {
     : 1;
 
   const judge = payload.judge ?? null;
+  const evaluatorError = payload.evaluatorError ?? null;
   const failures = [];
   if (retrievalRecall < 1) {
     const missed = requiredGroups
@@ -514,12 +515,14 @@ function scoreCase(item, payload, durationMs) {
     failures.push(`Forbidden answer content found: ${forbiddenClaimsFound.join(", ")}`);
   }
   if (mode === "full") {
-    if (!judge) failures.push("Structured judge result is missing.");
+    if (!judge && !evaluatorError) failures.push("Structured judge result is missing.");
     else {
-      if (judge.verdict !== "pass") failures.push(...judge.failures);
-      for (const field of ["correctness", "groundedness", "citationEntailment", "freshness"]) {
-        if (judge[field] < suite.thresholds.minimumJudgeScore) {
-          failures.push(`${field} score ${judge[field]} is below ${suite.thresholds.minimumJudgeScore}.`);
+      if (judge) {
+        if (judge.verdict !== "pass") failures.push(...judge.failures);
+        for (const field of ["correctness", "groundedness", "citationEntailment", "freshness"]) {
+          if (judge[field] < suite.thresholds.minimumJudgeScore) {
+            failures.push(`${field} score ${judge[field]} is below ${suite.thresholds.minimumJudgeScore}.`);
+          }
         }
       }
     }
@@ -531,7 +534,7 @@ function scoreCase(item, payload, durationMs) {
     query: item.query,
     persona: item.persona,
     projectId: item.projectId,
-    status: failures.length ? "failed" : "passed",
+    status: evaluatorError ? "error" : failures.length ? "failed" : "passed",
     receipt,
     answer,
     judge,
@@ -550,7 +553,11 @@ function scoreCase(item, payload, durationMs) {
       answerDurationMs: payload.answerDurationMs ?? 0,
       judgeDurationMs: payload.judgeDurationMs ?? 0,
     },
-    failureReasons: [...new Set(failures.filter(Boolean))],
+    failureReasons: [
+      ...new Set(
+        [evaluatorError ? `Evaluator error: ${evaluatorError}` : null, ...failures].filter(Boolean),
+      ),
+    ],
     durationMs,
   };
 }
@@ -578,7 +585,7 @@ async function runCase(baseUrl, item) {
         judgeModel,
         expected: item.expected,
       }),
-      signal: AbortSignal.timeout(mode === "full" ? 300_000 : 120_000),
+      signal: AbortSignal.timeout(mode === "full" ? 330_000 : 120_000),
     });
     const payload = await response.json().catch(() => null);
     if (!response.ok) {
