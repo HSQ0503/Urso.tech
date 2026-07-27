@@ -11,6 +11,7 @@ import Link from "next/link";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import {
+  ArrowUp,
   Check,
   ChevronDown,
   Copy,
@@ -31,6 +32,7 @@ import {
 } from "lucide-react";
 import { RichText } from "@/components/dashboard/rich-text";
 import { BRAIN_PROVIDERS } from "@/lib/brain/catalog";
+import { brainDocHref } from "@/lib/brain/links";
 import type { BrainContextReceipt, BrainProvider, BrainUIData } from "@/lib/brain/types";
 
 type ThreadSummary = { id: string; title: string; project_id: string | null; model: string; updated_at: string };
@@ -40,7 +42,7 @@ type BrainUIMessage = UIMessage<unknown, BrainUIData>;
 // Tool-activity chips: show WHAT the brain actually touched (real doc titles,
 // search queries), and mark writes distinctly so edits are never invisible.
 type ToolPart = { type: string; text?: string; input?: unknown; output?: unknown };
-const WRITE_TOOLS = new Set(["propose_knowledge_update"]);
+const WRITE_TOOLS = new Set(["propose_knowledge_update", "propose_claim_change"]);
 
 function toolChips(parts: ToolPart[]): { label: string; write: boolean }[] {
   const chips: { label: string; write: boolean }[] = [];
@@ -55,13 +57,14 @@ function toolChips(parts: ToolPart[]): { label: string; write: boolean }[] {
     let label: string;
     switch (name) {
       case "fetch_doc": label = `read · ${str(output.title) ?? baseName(str(input.path)) ?? "doc"}`; break;
-      case "search_docs": label = `searched · ${str(input.query) ?? "vault"}`; break;
+      case "search_docs": label = `searched · ${str(input.query) ?? "knowledge"}`; break;
       case "list_docs": label = "listed docs"; break;
       case "create_doc": label = `created · ${baseName(str(output.created)) ?? str(input.title) ?? "doc"}`; break;
       case "update_doc": label = `updated · ${baseName(str(input.path)) ?? "doc"}`; break;
       case "link_docs": label = "connected docs"; break;
       case "delete_doc": label = `deleted · ${baseName(str(input.path)) ?? "doc"}`; break;
       case "propose_knowledge_update": label = `proposed · ${baseName(str(output.targetPath) ?? str(input.targetPath)) ?? "knowledge"}`; break;
+      case "propose_claim_change": label = `proposed · ${str(input.predicateId) ?? "temporal claim"}`; break;
       default: label = name.replace(/_/g, " ");
     }
     if (label.length > 44) label = `${label.slice(0, 43)}…`;
@@ -109,7 +112,7 @@ const SUGGESTIONS: Record<string, string[]> = {
   exec: [
     "Where does every client engagement stand right now?",
     "What's blocked and waiting on whom, across all projects?",
-    "What should we build or sell next, based on the vault?",
+    "What should we build or sell next, based on company knowledge?",
   ],
 };
 
@@ -151,10 +154,16 @@ function ContextReceiptPanel({
   receipt: BrainContextReceipt | null;
   onClose: () => void;
 }) {
+  const structuredConflicts =
+    receipt?.conflictAnalysis.status === "performed"
+      ? receipt.conflictAnalysis.conflicts
+      : [];
+  const legacyConflictCount = receipt?.conflicts?.length ?? 0;
+
   return (
     <aside
       aria-label="Context receipt"
-      className="absolute inset-y-0 right-0 z-30 flex w-[min(370px,calc(100%-12px))] flex-col border-l border-[var(--brain-border)] bg-[color-mix(in_srgb,var(--brain-rail)_96%,transparent)] shadow-[-18px_0_60px_rgba(0,0,0,0.3)] backdrop-blur-xl"
+      className="absolute inset-y-0 right-0 z-30 flex w-[min(380px,calc(100%-12px))] flex-col border-l border-[var(--brain-border)] bg-[color-mix(in_srgb,var(--brain-rail)_96%,transparent)] shadow-[-18px_0_60px_rgba(0,0,0,0.3)] backdrop-blur-xl"
     >
       <header className="flex min-h-[72px] shrink-0 items-center justify-between border-b border-[var(--brain-border)] px-5">
         <div>
@@ -170,7 +179,7 @@ function ContextReceiptPanel({
           type="button"
           onClick={onClose}
           aria-label="Close context receipt"
-          className="grid size-11 cursor-pointer place-items-center rounded-full text-[var(--brain-muted)] transition-colors hover:bg-[var(--brain-soft)] hover:text-[var(--brain-text)]"
+          className="grid size-11 cursor-pointer place-items-center rounded-[5px] text-[var(--brain-muted)] transition-colors hover:bg-[var(--brain-soft)] hover:text-[var(--brain-text)]"
         >
           <X className="size-4" />
         </button>
@@ -178,7 +187,7 @@ function ContextReceiptPanel({
 
       {!receipt ? (
         <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-8 text-center">
-          <span className="grid size-12 place-items-center rounded-2xl bg-orange-soft text-orange">
+          <span className="grid size-12 place-items-center rounded-[5px] bg-orange-soft text-orange">
             <PanelRight className="size-5" />
           </span>
           <h2 className="mt-5 text-[15px] font-medium">Evidence will appear here</h2>
@@ -188,7 +197,7 @@ function ContextReceiptPanel({
         </div>
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4">
-          <div className="rounded-2xl border border-orange/20 bg-orange-wash p-4">
+          <div className="rounded-[5px] border border-orange/20 bg-orange-wash p-4">
             <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-orange">
               <LockKeyhole className="size-3.5" />
               Authorization passed
@@ -206,8 +215,17 @@ function ContextReceiptPanel({
                 ["Role", receipt.scope.role.replaceAll("_", " ")],
                 ["Project", receipt.scope.project?.name ?? "Company-wide"],
                 ["Catalog", `${receipt.authorization.permittedEvidenceCount} permitted`],
+                ["Effective date", receipt.temporal?.queryTime.effectiveAt ?? "Not recorded"],
+                [
+                  "Truth mode",
+                  receipt.temporal?.queryTime.mode === "as_of"
+                    ? "As of"
+                    : receipt.temporal
+                      ? "Current"
+                      : "Legacy receipt",
+                ],
               ].map(([label, value]) => (
-                <div key={label} className="min-w-0 rounded-xl bg-[var(--brain-soft)] px-3 py-2.5">
+                <div key={label} className="min-w-0 rounded-[4px] border border-[var(--brain-border)] bg-[var(--brain-soft)] px-3 py-2.5">
                   <div className="text-[10px] text-[var(--brain-muted)]">{label}</div>
                   <div className="mt-1 truncate text-[11.5px] font-medium capitalize text-[var(--brain-text)]" title={value}>
                     {value}
@@ -219,14 +237,14 @@ function ContextReceiptPanel({
 
           <section className="mt-5">
             <h2 className="px-1 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-[var(--brain-muted)]">Retrieval</h2>
-            <div className="mt-2 grid grid-cols-4 gap-1.5 rounded-2xl bg-[var(--brain-soft)] p-2">
+            <div className="mt-2 grid grid-cols-4 gap-1.5 rounded-[5px] border border-[var(--brain-border)] bg-[var(--brain-soft)] p-2">
               {[
                 [receipt.retrieval.mode, "mode"],
                 [String(receipt.retrieval.selectedChunks), "loaded"],
                 [compactNumber(receipt.retrieval.estimatedTokens), "tokens"],
                 [`${receipt.retrieval.latencyMs}ms`, "latency"],
               ].map(([value, label]) => (
-                <div key={label} className="min-w-0 rounded-xl px-1 py-2 text-center">
+                <div key={label} className="min-w-0 rounded-[3px] px-1 py-2 text-center">
                   <div className="truncate text-[11.5px] font-semibold capitalize text-[var(--brain-text)]">{value}</div>
                   <div className="mt-1 text-[9.5px] text-[var(--brain-muted)]">{label}</div>
                 </div>
@@ -247,17 +265,20 @@ function ContextReceiptPanel({
           <section className="mt-5">
             <div className="flex items-center justify-between px-1">
               <h2 className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-[var(--brain-muted)]">Evidence</h2>
-              <span className="text-[10px] text-[var(--brain-muted)]">{receipt.evidence.length} chunks</span>
+              <span className="text-[10px] text-[var(--brain-muted)]">{receipt.evidence.length} sources</span>
             </div>
             <ol className="mt-2 space-y-2">
               {receipt.evidence.map((item) => (
                 <li key={item.id}>
                   <Link
-                    href={`/brain/docs/view?path=${encodeURIComponent(item.path)}`}
-                    className="group block rounded-2xl border border-transparent bg-[var(--brain-soft)] p-3 transition-[border-color,background-color] hover:border-orange/20 hover:bg-[var(--brain-soft-hover)]"
+                    href={brainDocHref(
+                      item.path,
+                      item.accessProjectId ?? receipt.scope.project?.id,
+                    )}
+                    className="group block rounded-[5px] border border-[var(--brain-border)] bg-[var(--brain-soft)] p-3 transition-[border-color,background-color] hover:border-orange/30 hover:bg-[var(--brain-soft-hover)]"
                   >
                     <div className="flex items-start gap-2.5">
-                      <span className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-lg bg-[var(--brain-canvas)] text-[10px] font-semibold text-orange">
+                      <span className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-[3px] bg-[var(--brain-canvas)] text-[10px] font-semibold text-orange">
                         {item.id}
                       </span>
                       <div className="min-w-0 flex-1">
@@ -273,6 +294,32 @@ function ContextReceiptPanel({
                       {item.excerpt}
                     </p>
                     <div className="mt-2 flex flex-wrap gap-1">
+                      {item.claim && (
+                        <>
+                          <span className="rounded-full border border-orange/25 bg-orange-soft px-2 py-0.5 text-[9px] font-medium capitalize text-orange">
+                            {item.claim.temporalStatus}
+                          </span>
+                          {item.claim.lifecycle !== "active" && (
+                            <span className="rounded-full bg-[var(--brain-canvas)] px-2 py-0.5 text-[9px] capitalize text-[var(--brain-muted)]">
+                              {item.claim.lifecycle}
+                            </span>
+                          )}
+                          {item.claim.resolution !== "accepted" && (
+                            <span className="rounded-full border border-orange/25 bg-orange-soft px-2 py-0.5 text-[9px] font-medium capitalize text-orange">
+                              {item.claim.resolution}
+                            </span>
+                          )}
+                          <span className="rounded-full bg-[var(--brain-canvas)] px-2 py-0.5 text-[9px] text-[var(--brain-muted)]">
+                            {item.claim.validFrom ?? "open start"} → {item.claim.validUntil ?? "open end"}
+                          </span>
+                          {(item.claim.supersedes.length > 0 ||
+                            item.claim.supersededBy.length > 0) && (
+                            <span className="rounded-full bg-[var(--brain-canvas)] px-2 py-0.5 text-[9px] text-[var(--brain-muted)]">
+                              lineage {item.claim.supersedes.length + item.claim.supersededBy.length}
+                            </span>
+                          )}
+                        </>
+                      )}
                       {item.reasons.slice(0, 3).map((reason) => (
                         <span key={reason} className="rounded-full bg-[var(--brain-canvas)] px-2 py-0.5 text-[9px] text-[var(--brain-muted)]">
                           {reason}
@@ -285,16 +332,32 @@ function ContextReceiptPanel({
             </ol>
           </section>
 
-          <section className="mt-5 rounded-2xl bg-[var(--brain-soft)] p-3.5">
+          <section className="mt-5 rounded-[5px] border border-[var(--brain-border)] bg-[var(--brain-soft)] p-3.5">
             <div className="flex items-center gap-2 text-[10.5px] font-semibold uppercase tracking-[0.1em] text-[var(--brain-muted)]">
               <Database className="size-3.5" />
               Resolution
             </div>
             <p className="mt-2 text-[11px] leading-5 text-[var(--brain-muted-strong)]">
-              {receipt.conflicts.length
-                ? `${receipt.conflicts.length} conflict${receipt.conflicts.length === 1 ? "" : "s"} flagged.`
-                : "Current document versions selected. No version conflicts detected."}
+              {receipt.conflictAnalysis.message}
             </p>
+            {structuredConflicts.map((conflict) => (
+              <div
+                key={conflict.id}
+                className="mt-2 rounded-[4px] border border-orange/25 bg-orange-soft px-3 py-2.5"
+              >
+                <p className="text-[10.5px] font-medium text-orange">
+                  {conflict.subjectLabel} · {conflict.predicateLabel}
+                </p>
+                <p className="mt-1 text-[10.5px] leading-5 text-[var(--brain-muted-strong)]">
+                  {conflict.message}
+                </p>
+              </div>
+            ))}
+            {receipt.conflictAnalysis.status === "not_performed" && legacyConflictCount > 0 && (
+              <p className="mt-1 text-[11px] leading-5 text-orange">
+                {legacyConflictCount} legacy conflict{legacyConflictCount === 1 ? "" : "s"} flagged.
+              </p>
+            )}
             {receipt.missing.map((item) => (
               <p key={item} className="mt-1 text-[11px] leading-5 text-orange">{item}</p>
             ))}
@@ -318,7 +381,7 @@ function Message({ role, parts, live = false }: { role: string; parts: { type: s
     const isLong = text.length > 520;
     return (
       <div className="tip-in flex justify-end">
-        <div className="max-w-[88%] rounded-[22px] bg-[var(--brain-user)] px-4 py-3 text-[15px] leading-[1.65] text-[var(--brain-text)] sm:max-w-[72%] sm:px-5">
+        <div className="max-w-[88%] rounded-[8px] border border-[var(--brain-border)] bg-[var(--brain-user)] px-4 py-3 text-[15px] leading-[1.65] text-[var(--brain-text)] sm:max-w-[72%] sm:px-5">
           <p className={`whitespace-pre-wrap ${isLong && !expanded ? "line-clamp-6" : ""}`}>{text}</p>
           {isLong && (
             <button
@@ -355,7 +418,7 @@ function Message({ role, parts, live = false }: { role: string; parts: { type: s
         {text ? (
           <RichText text={text} className="max-w-[72ch] text-[15px] text-[var(--brain-text)] sm:text-[15.5px]" />
         ) : chips.length > 0 && live ? (
-          <ThinkingLabel label="working in the vault" />
+          <ThinkingLabel label="working through company knowledge" />
         ) : chips.length > 0 ? (
           <span className="text-[13px] italic text-[var(--brain-muted)]">No written answer was saved for this turn.</span>
         ) : null}
@@ -370,7 +433,7 @@ function Message({ role, parts, live = false }: { role: string; parts: { type: s
               }}
               aria-label={copied ? "Copied response" : "Copy response"}
               title={copied ? "Copied" : "Copy response"}
-              className="grid size-11 cursor-pointer place-items-center rounded-full text-[var(--brain-muted)] transition-colors hover:bg-[var(--brain-soft)] hover:text-[var(--brain-text)]"
+              className="grid size-11 cursor-pointer place-items-center rounded-[5px] text-[var(--brain-muted)] transition-colors hover:bg-[var(--brain-soft)] hover:text-[var(--brain-text)]"
             >
               {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
             </button>
@@ -381,31 +444,31 @@ function Message({ role, parts, live = false }: { role: string; parts: { type: s
   );
 }
 
-function EmptyState({ firstName, departmentId, departmentName, onPick, busy }: { firstName: string; departmentId: string; departmentName: string; onPick: (t: string) => void; busy: boolean }) {
+function EmptyState({ departmentId, departmentName, onPick, busy }: { departmentId: string; departmentName: string; onPick: (t: string) => void; busy: boolean }) {
   const suggestions = SUGGESTIONS[departmentId] ?? SUGGESTIONS.default;
   return (
-    <div className="mx-auto flex h-full w-full max-w-[820px] flex-col justify-center py-8 sm:py-12">
-      <div className="mb-8 sm:mb-10">
-        <Spark className="mb-5 size-8 text-orange" />
-        <h2 className="text-[32px] font-medium leading-[1.12] tracking-[-0.035em] sm:text-[42px]">
-          <span className="text-orange">Good to see you, {firstName}.</span>
-          <span className="mt-1 block text-[var(--brain-muted)]">What should we work on?</span>
-        </h2>
-        <p className="mt-4 max-w-[620px] text-[14px] leading-6 text-[var(--brain-muted)] sm:text-[15px]">
-          Ask about {departmentName.toLowerCase()}, a project, contract, rule, or anything already saved in the company vault.
+    <div className="mx-auto flex h-full w-full max-w-[680px] flex-col justify-center py-8 sm:py-12">
+      <div className="mb-5">
+        <div className="flex items-center gap-2.5">
+          <Spark className="size-[18px] text-orange" />
+          <h2 className="text-[19px] font-medium tracking-[-0.02em]">Ask Urso Brain</h2>
+        </div>
+        <p className="mt-2 max-w-[600px] text-[13px] leading-5 text-[var(--brain-muted)]">
+          Search {departmentName.toLowerCase()}, active projects, standing rules, and the rest of your permitted knowledge.
         </p>
       </div>
-      <div>
-        <div className="grid gap-2.5 sm:grid-cols-3">
+      <div className="border-t border-[var(--brain-border)] pt-1">
+        <div>
           {suggestions.map((s) => (
             <button
               key={s}
               onClick={() => onPick(s)}
               disabled={busy}
-              className="group flex min-h-[88px] cursor-pointer flex-col items-start justify-between gap-4 rounded-[18px] bg-[var(--brain-soft)] p-4 text-left text-[13.5px] leading-5 text-[var(--brain-text)] transition-colors hover:bg-[var(--brain-soft-hover)] disabled:cursor-default disabled:opacity-50"
+              className="group flex min-h-11 w-full cursor-pointer items-center gap-3 rounded px-2.5 text-left text-[12.5px] leading-5 text-[var(--brain-muted-strong)] transition-colors hover:bg-[var(--brain-soft-hover)] hover:text-[var(--brain-text)] disabled:cursor-default disabled:opacity-50"
             >
-              <span>{s}</span>
-              <span className="self-end text-[var(--brain-muted)] transition-colors group-hover:text-orange"><Spark /></span>
+              <span className="size-1.5 shrink-0 rounded-full bg-[var(--brain-border-strong)] transition-colors group-hover:bg-orange" />
+              <span className="min-w-0 flex-1">{s}</span>
+              <ArrowUp className="size-3.5 rotate-45 text-[var(--brain-muted)] opacity-0 transition-opacity group-hover:opacity-100" />
             </button>
           ))}
         </div>
@@ -435,13 +498,13 @@ function ThreadRow({ thread, projectName, active, onOpen, onDelete, onRename }: 
           if (e.key === "Enter") e.currentTarget.blur();
           if (e.key === "Escape") { setVal(thread.title); setEditing(false); }
         }}
-        className="min-h-11 w-full rounded-xl border border-orange/45 bg-[var(--brain-canvas)] px-3 py-2 text-[13px] text-[var(--brain-text)] outline-none"
+        className="min-h-11 w-full rounded-[5px] border border-orange/45 bg-[var(--brain-canvas)] px-3 py-2 text-[13px] text-[var(--brain-text)] outline-none"
       />
     );
   }
 
   return (
-    <div className={`group flex min-h-12 items-center gap-1 rounded-full pl-3.5 pr-1 text-[13px] transition-colors duration-200 ${active ? "bg-[var(--brain-selected)] text-[var(--brain-text)]" : "text-[var(--brain-muted-strong)] hover:bg-[var(--brain-soft-hover)] hover:text-[var(--brain-text)]"}`}>
+    <div className={`group flex min-h-12 items-center gap-1 rounded-[5px] border pl-3.5 pr-1 text-[13px] transition-colors duration-200 ${active ? "border-orange/20 bg-[var(--brain-selected)] text-[var(--brain-text)]" : "border-transparent text-[var(--brain-muted-strong)] hover:border-[var(--brain-border)] hover:bg-[var(--brain-soft-hover)] hover:text-[var(--brain-text)]"}`}>
       <button onClick={onOpen} onDoubleClick={startEdit} className="min-w-0 flex-1 cursor-pointer py-2 text-left" title={`${thread.title} (double-click to rename)`}>
         <span className="block truncate leading-tight">{thread.title}</span>
         <span className="mt-1 block truncate text-[10px] text-[var(--brain-muted)]">
@@ -452,7 +515,7 @@ function ThreadRow({ thread, projectName, active, onOpen, onDelete, onRename }: 
         onClick={onDelete}
         aria-label="Delete conversation"
         title="Delete conversation"
-        className="grid size-11 shrink-0 cursor-pointer place-items-center rounded-full text-[var(--brain-muted)] opacity-0 transition-[color,background-color,opacity] hover:bg-[var(--brain-soft)] hover:text-orange focus:opacity-100 group-hover:opacity-100"
+        className="grid size-11 shrink-0 cursor-pointer place-items-center rounded-[4px] text-[var(--brain-muted)] opacity-0 transition-[color,background-color,opacity] hover:bg-[var(--brain-soft)] hover:text-orange focus:opacity-100 group-hover:opacity-100"
       >
         <Trash2 className="size-4" />
       </button>
@@ -467,12 +530,12 @@ function ThreadRail({
   onDelete: (id: string) => void; onRename: (id: string, title: string) => void; busy: boolean; className?: string;
 }) {
   return (
-    <aside className={`w-[272px] shrink-0 flex-col bg-[var(--brain-rail)] ${className}`}>
+    <aside className={`w-[236px] shrink-0 flex-col border-r border-[var(--brain-border)] bg-[var(--brain-rail)] ${className}`}>
       <div className="px-3 pb-3 pt-4">
         <button
           onClick={onNew}
           disabled={busy}
-          className="flex min-h-11 w-full cursor-pointer items-center gap-3 rounded-full px-4 text-[13.5px] font-medium text-[var(--brain-text)] transition-colors hover:bg-[var(--brain-soft-hover)] disabled:cursor-default disabled:opacity-50"
+          className="flex min-h-11 w-full cursor-pointer items-center gap-3 rounded-[5px] border border-[var(--brain-border)] px-4 text-[13.5px] font-medium text-[var(--brain-text)] transition-colors hover:border-[var(--brain-border-strong)] hover:bg-[var(--brain-soft-hover)] disabled:cursor-default disabled:opacity-50"
         >
           <PenLine className="size-[18px]" />
           New chat
@@ -509,24 +572,24 @@ function ThreadRail({
 }
 
 const selectCls =
-  "h-11 cursor-pointer appearance-none rounded-full border-0 bg-[var(--brain-soft)] py-0 pl-4 pr-11 text-left text-[12px] font-medium leading-none text-[var(--brain-muted-strong)] transition-colors hover:bg-[var(--brain-soft-hover)] focus:ring-2 focus:ring-orange/35";
+  "h-11 cursor-pointer appearance-none rounded-[5px] border border-[var(--brain-border)] bg-[var(--brain-soft)] py-0 pl-3.5 pr-10 text-left text-[12px] font-medium leading-none text-[var(--brain-muted-strong)] transition-colors hover:border-[var(--brain-border-strong)] hover:bg-[var(--brain-soft-hover)] focus:ring-2 focus:ring-orange/35";
 
 export function BrainConsole({
-  userName,
   departmentId,
   departmentName,
   projects,
   availableProviders,
   initialProvider,
   initialModel,
+  initialProjectId,
 }: {
-  userName: string;
   departmentId: string;
   departmentName: string;
   projects: ProjectOption[];
   availableProviders: BrainProvider[]; // providers with an org key stored
   initialProvider: BrainProvider | null;
   initialModel: string | null;
+  initialProjectId: string | null;
 }) {
   const [input, setInput] = useState("");
   const [railOpen, setRailOpen] = useState(false);
@@ -535,7 +598,7 @@ export function BrainConsole({
   const [threads, setThreads] = useState<ThreadSummary[]>([]);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [hydrating, setHydrating] = useState(true);
-  const [projectId, setProjectId] = useState<string>("");
+  const [projectId, setProjectId] = useState<string>(initialProjectId ?? "");
   const [provider, setProvider] = useState<BrainProvider | null>(initialProvider);
   const [modelId, setModelId] = useState<string | null>(initialModel);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -578,6 +641,10 @@ export function BrainConsole({
       } catch { /* start fresh */ }
       if (cancelled) return;
       setThreads(list);
+      if (initialProjectId) {
+        setHydrating(false);
+        return;
+      }
       if (!list.length) { setHydrating(false); return; }
       // The rail is clickable while this hydrate is in flight — take a seq so a
       // user click on another thread invalidates this fetch's right to write.
@@ -591,7 +658,7 @@ export function BrainConsole({
       if (!cancelled && seq === hydrateSeq.current) setHydrating(false);
     })();
     return () => { cancelled = true; };
-  }, [setMessages]);
+  }, [initialProjectId, setMessages]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -690,7 +757,6 @@ export function BrainConsole({
     }
   }, [activeThreadId, busy, chat, modelId, projectId, provider]);
 
-  const firstName = userName.split(" ")[0] || "there";
   const noKeys = availableProviders.length === 0;
   const projectNames = useMemo(() => Object.fromEntries(projects.map((p) => [p.id, p.name])), [projects]);
   const activeThread = threads.find((thread) => thread.id === activeThreadId);
@@ -724,19 +790,8 @@ export function BrainConsole({
     // `relative` anchors the mobile thread-rail overlay (absolute inset-0) to
     // THIS panel — without it the drawer positions against the viewport.
     <div className="brain-chat relative flex h-full min-h-0 overflow-hidden bg-[var(--brain-canvas)] text-[var(--brain-text)]">
-      <ThreadRail
-        className="hidden md:flex"
-        threads={threads}
-        projectNames={projectNames}
-        activeThreadId={activeThreadId}
-        onOpen={openThread}
-        onNew={newThread}
-        onDelete={deleteThread}
-        onRename={renameThread}
-        busy={busy}
-      />
       {railOpen && (
-        <div className="absolute inset-0 z-20 flex md:hidden">
+        <div className="absolute inset-0 z-20 flex">
           <ThreadRail
             className="flex max-w-[86%] shadow-2xl"
             threads={threads}
@@ -753,12 +808,12 @@ export function BrainConsole({
       )}
 
       <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
-        <header className="flex min-h-[72px] shrink-0 items-center justify-between gap-3 px-3 sm:px-5">
+        <header className="flex min-h-[72px] shrink-0 items-center justify-between gap-3 border-b border-[var(--brain-border)] px-3 sm:px-5">
           <div className="flex min-w-0 items-center gap-2.5">
             <button
               onClick={() => setRailOpen(true)}
               aria-label="Conversations"
-              className="grid size-11 shrink-0 cursor-pointer place-items-center rounded-full text-[var(--brain-muted-strong)] transition-colors hover:bg-[var(--brain-soft)] hover:text-[var(--brain-text)] md:hidden"
+              className="grid size-11 shrink-0 cursor-pointer place-items-center rounded-full text-[var(--brain-muted-strong)] transition-colors hover:bg-[var(--brain-soft)] hover:text-[var(--brain-text)]"
             >
               <Menu className="size-5" />
             </button>
@@ -775,7 +830,9 @@ export function BrainConsole({
                 aria-label="Project"
                 value={projectId}
                 onChange={(e) => setProjectId(e.target.value)}
-                className={`${selectCls} w-[154px] sm:w-[180px]`}
+                className={`${selectCls} w-[154px] disabled:cursor-not-allowed disabled:opacity-60 sm:w-[180px]`}
+                disabled={activeThreadId !== null}
+                title={activeThreadId ? "Project scope is fixed for this conversation. Start a new chat to change it." : undefined}
               >
                 <option value="">Company-wide</option>
                 {projects.map((p) => (
@@ -813,10 +870,10 @@ export function BrainConsole({
               aria-label={receiptOpen ? "Close context receipt" : "Open context receipt"}
               aria-expanded={receiptOpen}
               title={latestReceipt ? `View context receipt (${latestReceipt.evidence.length} sources)` : "Context receipt"}
-              className={`flex min-h-11 cursor-pointer items-center gap-2 rounded-full px-3 text-[11.5px] font-medium transition-colors ${
+              className={`flex min-h-11 cursor-pointer items-center gap-2 rounded-[5px] border px-3 text-[11.5px] font-medium transition-colors ${
                 receiptOpen
-                  ? "bg-orange-soft text-orange"
-                  : "text-[var(--brain-muted-strong)] hover:bg-[var(--brain-soft)] hover:text-[var(--brain-text)]"
+                  ? "border-orange/25 bg-orange-soft text-orange"
+                  : "border-transparent text-[var(--brain-muted-strong)] hover:border-[var(--brain-border)] hover:bg-[var(--brain-soft)] hover:text-[var(--brain-text)]"
               }`}
             >
               <ShieldCheck className="size-[17px]" />
@@ -826,7 +883,7 @@ export function BrainConsole({
               onClick={() => setExpanded((e) => !e)}
               aria-label={expanded ? "Exit full screen" : "Full screen"}
               title={expanded ? "Exit full screen (Esc)" : "Full screen"}
-              className="grid size-11 shrink-0 cursor-pointer place-items-center rounded-full text-[var(--brain-muted-strong)] transition-colors duration-200 hover:bg-[var(--brain-soft)] hover:text-[var(--brain-text)]"
+              className="grid size-11 shrink-0 cursor-pointer place-items-center rounded-[5px] text-[var(--brain-muted-strong)] transition-colors duration-200 hover:bg-[var(--brain-soft)] hover:text-[var(--brain-text)]"
             >
               {expanded ? <Minimize2 className="size-[18px]" /> : <Maximize2 className="size-[18px]" />}
             </button>
@@ -834,7 +891,7 @@ export function BrainConsole({
         </header>
 
         {noKeys && (
-          <div className="mx-4 rounded-xl bg-orange-wash px-4 py-3 text-[12.5px] text-[var(--brain-muted-strong)] md:mx-6">
+          <div className="mx-4 rounded-[5px] border border-orange/20 bg-orange-wash px-4 py-3 text-[12.5px] text-[var(--brain-muted-strong)] md:mx-6">
             No provider keys are configured yet — add your org&rsquo;s API keys in{" "}
             <Link href="/brain/settings" className="text-orange underline underline-offset-2">settings</Link> to start chatting.
           </div>
@@ -845,7 +902,7 @@ export function BrainConsole({
           <div className="mx-auto h-full w-full max-w-[860px]">
             {hydrating ? (
               <div aria-hidden className="space-y-9 py-3">
-                <div className="flex justify-end"><div className="skeleton-shimmer h-12 w-1/2 max-w-[360px] rounded-[22px]" /></div>
+                <div className="flex justify-end"><div className="skeleton-shimmer h-12 w-1/2 max-w-[360px] rounded-[8px]" /></div>
                 <div className="flex gap-4">
                   <div className="skeleton-shimmer size-8 shrink-0 rounded-full" />
                   <div className="min-w-0 flex-1 space-y-2 pt-1">
@@ -855,7 +912,7 @@ export function BrainConsole({
                 </div>
               </div>
             ) : messages.length === 0 ? (
-              <EmptyState firstName={firstName} departmentId={departmentId} departmentName={departmentName} onPick={send} busy={busy || noKeys} />
+              <EmptyState departmentId={departmentId} departmentName={departmentName} onPick={send} busy={busy || noKeys} />
             ) : (
               <div className="space-y-9 pb-4">
                 {messages.map((m, i) => (
@@ -870,7 +927,7 @@ export function BrainConsole({
               </div>
             )}
             {error && (
-              <p role="alert" className="mt-4 rounded-xl bg-orange-soft px-4 py-3 text-[13px] leading-[1.5] text-[var(--brain-muted-strong)]">
+              <p role="alert" className="mt-4 rounded-[5px] border border-orange/20 bg-orange-soft px-4 py-3 text-[13px] leading-[1.5] text-[var(--brain-muted-strong)]">
                 {errorText(error.message)}
               </p>
             )}
@@ -882,7 +939,7 @@ export function BrainConsole({
           <div className="mx-auto w-full max-w-[860px]">
             <form
               onSubmit={(e) => { e.preventDefault(); void send(input); }}
-              className="flex min-h-[64px] items-end gap-2 rounded-[28px] border border-[var(--brain-border)] bg-[var(--brain-composer)] px-3 py-2.5 shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition-[border-color,box-shadow] focus-within:border-orange/50 focus-within:ring-2 focus-within:ring-orange/20 sm:px-4"
+              className="flex min-h-[64px] items-end gap-2 rounded-[8px] border border-[var(--brain-border)] bg-[var(--brain-composer)] px-3 py-2.5 shadow-[0_10px_36px_-24px_rgba(0,0,0,0.7)] transition-[border-color,box-shadow] focus-within:border-orange/50 focus-within:ring-2 focus-within:ring-orange/20 sm:px-4"
             >
               <textarea
                 ref={taRef}
@@ -906,7 +963,7 @@ export function BrainConsole({
                   type="button"
                   onClick={() => stop()}
                   aria-label="Stop"
-                  className="dash-press grid size-11 shrink-0 cursor-pointer place-items-center rounded-full bg-[var(--brain-soft)] text-[var(--brain-text)] transition-colors hover:bg-[var(--brain-soft-hover)]"
+                  className="dash-press grid size-11 shrink-0 cursor-pointer place-items-center rounded-[5px] bg-[var(--brain-soft)] text-[var(--brain-text)] transition-colors hover:bg-[var(--brain-soft-hover)]"
                 >
                   <Square className="size-4 fill-current" />
                 </button>
@@ -915,7 +972,7 @@ export function BrainConsole({
                   type="submit"
                   disabled={!input.trim() || noKeys}
                   aria-label="Send"
-                  className="dash-press grid size-11 shrink-0 cursor-pointer place-items-center rounded-full bg-orange text-white transition-[background-color,opacity] hover:bg-[#e84900] disabled:cursor-default disabled:bg-[var(--brain-soft)] disabled:text-[var(--brain-muted)]"
+                  className="dash-press grid size-11 shrink-0 cursor-pointer place-items-center rounded-[5px] bg-orange text-[var(--brain-accent-contrast)] transition-[background-color,opacity] hover:bg-[var(--ob-accent-hover)] disabled:cursor-default disabled:bg-[var(--brain-soft)] disabled:text-[var(--brain-muted)]"
                 >
                   <Send className="size-[18px]" />
                 </button>

@@ -11,8 +11,13 @@ import {
 import { ursoDbSafe } from "@/lib/brain/supabase";
 import { getDepartments, getProjects } from "@/lib/brain/db";
 import { DocEditor } from "@/components/brain/doc-editor";
+import { brainDocHref } from "@/lib/brain/links";
 
-export default async function BrainDocEditPage({ searchParams }: { searchParams: Promise<{ path?: string }> }) {
+export default async function BrainDocEditPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ path?: string; project?: string }>;
+}) {
   const user = await getBrainUser();
   if (!user) redirect("/brain/login");
   const admin = ursoDbSafe();
@@ -20,9 +25,12 @@ export default async function BrainDocEditPage({ searchParams }: { searchParams:
   const principal = await resolveBrainPrincipal(admin, user);
   if (!principal || !canEditBrainTruth(principal)) redirect("/brain/docs");
 
-  const { path } = await searchParams;
+  const { path, project } = await searchParams;
+  const projectId = project?.trim() || null;
   const [doc, departments, projects] = await Promise.all([
-    path ? getAuthorizedBrainDoc(admin, principal, path).catch(() => null) : Promise.resolve(null),
+    path
+      ? getAuthorizedBrainDoc(admin, principal, path, projectId).catch(() => null)
+      : Promise.resolve(null),
     getDepartments(admin, principal.organizationId).catch(() => []),
     getProjects(admin, principal.organizationId).catch(() => []),
   ]);
@@ -32,7 +40,7 @@ export default async function BrainDocEditPage({ searchParams }: { searchParams:
     <div className="ob-content">
       <div className="ob-wide !max-w-[760px]">
         <Link
-          href={`/brain/docs/view?path=${encodeURIComponent(doc.path)}`}
+          href={brainDocHref(doc.path, projectId)}
           className="text-[13px] text-[var(--ob-accent)] hover:underline"
         >
           ← Back to doc
@@ -49,12 +57,14 @@ export default async function BrainDocEditPage({ searchParams }: { searchParams:
           mode="edit"
           departments={departments}
           projects={projects}
+          scopeProjectId={projectId}
           initial={{
             path: doc.path,
             title: doc.title,
             description: doc.description,
             department: doc.department_id ?? "",
             project: doc.project_id ?? "",
+            visibility: doc.visibility ?? "organization",
             type: doc.doc_type,
             audience: doc.audience.join(", "),
             content: doc.content,

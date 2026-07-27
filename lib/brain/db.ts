@@ -20,7 +20,7 @@ import {
 type Admin = SupabaseClient;
 
 const DOC_META_COLS =
-  "id, organization_id, path, title, description, department_id, project_id, doc_type, audience, visibility, current_version, review_due_at";
+  "id, organization_id, path, title, description, department_id, project_id, doc_type, audience, tags, visibility, current_version, review_due_at";
 
 export async function getDepartments(
   admin: Admin,
@@ -73,18 +73,6 @@ export async function upsertProfile(
       { onConflict: "organization_id,user_id" },
     );
   if (error) throw new Error(`profile save failed: ${error.message}`);
-
-  const { error: membershipError } = await admin.from("brain_memberships").upsert(
-    {
-      organization_id: organizationId,
-      user_id: profile.user_id,
-      department_id: profile.department_id,
-      active: true,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "organization_id,user_id", ignoreDuplicates: false },
-  );
-  if (membershipError) throw new Error(`membership save failed: ${membershipError.message}`);
 }
 
 // Organization-scoped metadata catalog. Never pass this unfiltered to a model;
@@ -272,14 +260,16 @@ export async function updateBrainDoc(
   patch: Partial<BrainDocWrite>,
   by: string,
   organizationId = DEFAULT_BRAIN_ORGANIZATION_ID,
+  expectedVersion?: number,
 ): Promise<boolean> {
-  const { data, error } = await admin
+  let query = admin
     .from("brain_docs")
     .update({ ...patch, origin: "brain", updated_by: by, synced_at: new Date().toISOString() })
     .eq("organization_id", organizationId)
     .eq("path", path)
-    .is("deleted_at", null)
-    .select("path");
+    .is("deleted_at", null);
+  if (expectedVersion !== undefined) query = query.eq("current_version", expectedVersion);
+  const { data, error } = await query.select("path");
   if (error) throw new Error(`update failed: ${error.message}`);
   return (data ?? []).length > 0;
 }

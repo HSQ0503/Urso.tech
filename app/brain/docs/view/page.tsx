@@ -1,7 +1,6 @@
-// A single vault doc in Obsidian's reading view: inline title, the note bounded
-// to the reading measure, a backlinks pane underneath, and a status bar with the
-// counts. The path travels as a query param (vault paths contain spaces and
-// slashes).
+// A single knowledge document with a focused reading measure, backlinks, and
+// source metadata. The path travels as a query param because source paths may
+// contain spaces and slashes.
 
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -10,51 +9,121 @@ import { getBrainUser } from "@/lib/brain/access";
 import {
   canEditBrainTruth,
   getAuthorizedBrainDoc,
-  getAuthorizedDocManifest,
+  getAuthorizedKnowledgeCatalog,
   resolveBrainPrincipal,
 } from "@/lib/brain/authorization";
 import { ursoDbSafe } from "@/lib/brain/supabase";
 import { getBacklinks, listLinkTargets } from "@/lib/brain/db";
 import { VaultMarkdown, countWords } from "@/components/brain/markdown";
+import {
+  TemporalClaimsPanel,
+  type AuthorizedTemporalClaim,
+} from "@/components/brain/temporal-claims-panel";
+import { brainDocEditHref, brainDocHref } from "@/lib/brain/links";
+import { getAuthorizedClaimsForDoc } from "@/lib/brain/temporal";
 
-export default async function BrainDocViewPage({ searchParams }: { searchParams: Promise<{ path?: string }> }) {
+export default async function BrainDocViewPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ path?: string; project?: string; asOf?: string }>;
+}) {
   const user = await getBrainUser();
   if (!user) redirect("/brain/login");
 
-  const { path } = await searchParams;
+  const { path, project, asOf } = await searchParams;
+  const projectId = project?.trim() || null;
+  const requestedAsOf = /^\d{4}-\d{2}-\d{2}$/.test(asOf ?? "") ? asOf! : null;
+  const effectiveAt =
+    requestedAsOf ??
+    new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
   const admin = ursoDbSafe();
   const principal = admin ? await resolveBrainPrincipal(admin, user).catch(() => null) : null;
   const doc =
     path && admin && principal
-      ? await getAuthorizedBrainDoc(admin, principal, path).catch(() => null)
+      ? await getAuthorizedBrainDoc(admin, principal, path, projectId).catch(() => null)
       : null;
 
   if (!doc || !admin || !principal) {
     return (
       <div className="ob-content">
         <div className="ob-note">
-          <p className="text-[15px] text-[var(--ob-muted)]">That doc isn&rsquo;t in the vault.</p>
+          <p className="text-[15px] text-[var(--ob-muted)]">That document isn&rsquo;t available in your knowledge scope.</p>
           <Link href="/brain/docs" className="mt-3 inline-block text-[14px] text-[var(--ob-accent)] hover:underline">
-            ← Back to the vault
+            ← Back to knowledge
           </Link>
         </div>
       </div>
     );
   }
 
-  // Every live doc is a wikilink target, so [[links]] inside the body resolve
-  // the same way they do in Obsidian — including to docs this one doesn't
-  // already list in its `links` column.
-  const [manifest, allTargets, allBacklinks] = await Promise.all([
-    getAuthorizedDocManifest(admin, principal, doc.project_id).catch(() => []),
+  // Every live document is a wikilink target, including documents this source
+  // does not already list in its resolved `links` column.
+  const [catalog, allTargets, allBacklinks, temporalResults] = await Promise.all([
+    getAuthorizedKnowledgeCatalog(admin, principal).catch(() => ({ docs: [], projects: [] })),
     listLinkTargets(admin, principal.organizationId).catch(() => []),
     getBacklinks(admin, doc.path, principal.organizationId).catch(() => []),
+    doc.id
+      ? getAuthorizedClaimsForDoc({
+          admin,
+          principal,
+          docId: doc.id,
+          projectId,
+          effectiveAt,
+          includeHistory: Boolean(requestedAsOf),
+        }).catch(() => [])
+      : Promise.resolve([]),
   ]);
-  const permittedPaths = new Set(manifest.map((item) => item.path));
-  const targets = allTargets.filter((item) => permittedPaths.has(item.path));
-  const backlinks = allBacklinks.filter((item) => permittedPaths.has(item.path));
+  const permittedByPath = new Map(catalog.docs.map((item) => [item.path, item]));
+  const targets = allTargets
+    .filter((item) => permittedByPath.has(item.path))
+    .map((item) => ({
+      ...item,
+      projectId: permittedByPath.get(item.path)?.access_project_id,
+    }));
+  const backlinks = allBacklinks
+    .filter((item) => permittedByPath.has(item.path))
+    .map((item) => ({
+      ...item,
+      projectId: permittedByPath.get(item.path)?.access_project_id,
+    }));
 
   const words = countWords(doc.content);
+  const claims: AuthorizedTemporalClaim[] = temporalResults.flatMap((result) => {
+    const source =
+      result.evidence.find((item) => item.docId === doc.id) ?? result.evidence[0];
+    if (!source) return [];
+    const openConflict = result.conflicts.find((item) => item.status === "open");
+    return [{
+      id: result.claim.id,
+      subjectLabel: result.claim.subject.label,
+      predicateLabel: result.claim.predicate.label,
+      objectValue: result.claim.object.value,
+      objectLabel: result.claim.object.label,
+      objectType: result.claim.object.type,
+      lifecycle: result.claim.lifecycle,
+      resolution: result.claim.resolution,
+      temporalStatus: result.claim.temporalStatus,
+      validFrom: result.claim.validFrom,
+      validUntil: result.claim.validUntil,
+      projectId: result.projectId,
+      source: {
+        path: source.path,
+        title: source.title,
+        version: source.version,
+        excerpt: source.excerpt,
+      },
+      supersedes: result.claim.supersedes.map((id) => ({ id })),
+      supersededBy: result.claim.supersededBy.map((id) => ({ id })),
+      conflict: openConflict
+        ? {
+            id: openConflict.id,
+            status: openConflict.status,
+            message: openConflict.message,
+            otherClaimIds: openConflict.claimIds.filter((id) => id !== result.claim.id),
+          }
+        : null,
+    }];
+  });
 
   return (
     <>
@@ -64,7 +133,7 @@ export default async function BrainDocViewPage({ searchParams }: { searchParams:
             <h1 className="ob-title">{doc.title}</h1>
             {canEditBrainTruth(principal) && (
               <Link
-                href={`/brain/docs/edit?path=${encodeURIComponent(doc.path)}`}
+                href={brainDocEditHref(doc.path, projectId)}
                 className="ob-icon-btn mt-2 shrink-0"
                 title="Edit"
               >
@@ -76,6 +145,14 @@ export default async function BrainDocViewPage({ searchParams }: { searchParams:
             <p className="mb-5 text-[15px] leading-[1.55] text-[var(--ob-muted)]">{doc.description}</p>
           )}
 
+          <TemporalClaimsPanel
+            claims={claims}
+            path={doc.path}
+            projectId={projectId}
+            asOf={requestedAsOf}
+            defaultDate={effectiveAt}
+          />
+
           <VaultMarkdown content={doc.content} targets={targets} />
 
           {backlinks.length > 0 && (
@@ -84,7 +161,7 @@ export default async function BrainDocViewPage({ searchParams }: { searchParams:
                 {backlinks.length} linked mention{backlinks.length === 1 ? "" : "s"}
               </div>
               {backlinks.map((b) => (
-                <Link key={b.path} href={`/brain/docs/view?path=${encodeURIComponent(b.path)}`} className="ob-pane-link">
+                <Link key={b.path} href={brainDocHref(b.path, b.projectId)} className="ob-pane-link">
                   {b.title}
                 </Link>
               ))}

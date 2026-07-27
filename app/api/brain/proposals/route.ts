@@ -1,19 +1,29 @@
 import { getBrainUser } from "@/lib/brain/access";
 import {
-  auditBrainEvent,
   canEditBrainTruth,
   getAuthorizedBrainDoc,
   resolveBrainPrincipal,
 } from "@/lib/brain/authorization";
 import {
   getDocByPath,
-  insertBrainDoc,
-  softDeleteBrainDoc,
-  updateBrainDoc,
+  getOrgKey,
   type BrainDocWrite,
 } from "@/lib/brain/db";
+import { indexBrainDocuments } from "@/lib/brain/retrieval";
 import { ursoDbSafe, URSO_DB_MISSING } from "@/lib/brain/supabase";
+import type { BrainDoc } from "@/lib/brain/types";
 import { checkMeta, hashDoc, linksFor, sanitizePathPart } from "@/lib/brain/write";
+
+type ExactReplacement = {
+  find: string;
+  replace: string;
+};
+
+type RelatedEdit = {
+  targetPath: string;
+  baseVersion: number;
+  replacements: ExactReplacement[];
+};
 
 type ProposalChange = {
   title?: string;
@@ -25,6 +35,8 @@ type ProposalChange = {
   visibility?: "organization" | "department" | "project" | "restricted";
   audience?: string[];
   linkedPath?: string;
+  relatedEdits?: RelatedEdit[];
+  targetBaseVersion?: number;
 };
 
 type ProposalRow = {
@@ -39,6 +51,31 @@ type ProposalRow = {
   created_at: string;
 };
 
+type PreparedRelatedEdit = {
+  doc: BrainDoc;
+  baseVersion: number;
+  content: string;
+};
+
+type ApplyResult = {
+  changedPaths: string[];
+  indexPaths: string[];
+};
+
+type ProposalMutationDocument = Omit<BrainDocWrite, "path"> & {
+  visibility: NonNullable<BrainDocWrite["visibility"]>;
+};
+
+type ProposalMutation = {
+  operation: "create" | "update" | "delete";
+  path: string;
+  expectedVersion?: number;
+  document?: ProposalMutationDocument;
+};
+
+const occurrences = (content: string, value: string): number =>
+  value ? content.split(value).length - 1 : 0;
+
 async function stewardAccess() {
   const user = await getBrainUser();
   if (!user) return { error: Response.json({ error: "unauthorized" }, { status: 401 }) };
@@ -49,6 +86,17 @@ async function stewardAccess() {
     return { error: Response.json({ error: "knowledge steward access required" }, { status: 403 }) };
   }
   return { admin, principal };
+}
+
+async function getStewardDocument(
+  auth: Exclude<Awaited<ReturnType<typeof stewardAccess>>, { error: Response }>,
+  path: string,
+): Promise<BrainDoc | null> {
+  const doc = await getDocByPath(auth.admin, path, auth.principal.organizationId);
+  if (!doc) return null;
+  const projectScope = doc.visibility === "project" ? doc.project_id : null;
+  if (doc.visibility === "project" && !projectScope) return null;
+  return getAuthorizedBrainDoc(auth.admin, auth.principal, path, projectScope);
 }
 
 export async function GET() {
@@ -65,21 +113,104 @@ export async function GET() {
   return Response.json({ proposals: data ?? [] });
 }
 
-async function applyProposal(
+async function prepareRelatedEdits(
   proposal: ProposalRow,
   auth: Exclude<Awaited<ReturnType<typeof stewardAccess>>, { error: Response }>,
-): Promise<void> {
+): Promise<PreparedRelatedEdit[]> {
+  const edits = proposal.proposed_change.relatedEdits ?? [];
+  const seen = new Set<string>();
+  const prepared: PreparedRelatedEdit[] = [];
+
+  for (const edit of edits) {
+    if (edit.targetPath === proposal.target_path) {
+      throw new Error("A related edit cannot target the proposal's primary document.");
+    }
+    if (seen.has(edit.targetPath)) throw new Error(`Duplicate related edit target: ${edit.targetPath}`);
+    seen.add(edit.targetPath);
+
+    const doc = await getStewardDocument(auth, edit.targetPath);
+    if (!doc) throw new Error(`Related edit target is no longer available: ${edit.targetPath}`);
+    if (doc.current_version !== edit.baseVersion) {
+      throw new Error(`${edit.targetPath} changed after this proposal was created. Re-inspect and propose again.`);
+    }
+
+    let content = doc.content;
+    for (const replacement of edit.replacements) {
+      if (!replacement.find || occurrences(content, replacement.find) !== 1) {
+        throw new Error(`The exact text to replace in ${edit.targetPath} is no longer unique.`);
+      }
+      content = content.replace(replacement.find, replacement.replace);
+    }
+    if (content === doc.content) throw new Error(`The related edit for ${edit.targetPath} makes no change.`);
+    prepared.push({ doc, baseVersion: edit.baseVersion, content });
+  }
+
+  return prepared;
+}
+
+async function prepareRelatedMutations(
+  prepared: PreparedRelatedEdit[],
+  auth: Exclude<Awaited<ReturnType<typeof stewardAccess>>, { error: Response }>,
+): Promise<ProposalMutation[]> {
+  return Promise.all(prepared.map(async (item) => {
+    const { doc, content, baseVersion } = item;
+    const links = await linksFor(auth.admin, content, auth.principal.organizationId);
+    const content_hash = hashDoc({
+      title: doc.title,
+      description: doc.description,
+      department_id: doc.department_id,
+      project_id: doc.project_id,
+      doc_type: doc.doc_type,
+      audience: doc.audience,
+      tags: doc.tags,
+      visibility: doc.visibility,
+      content,
+    });
+    return {
+      operation: "update" as const,
+      path: doc.path,
+      expectedVersion: baseVersion,
+      document: {
+        title: doc.title,
+        description: doc.description,
+        department_id: doc.department_id,
+        project_id: doc.project_id,
+        doc_type: doc.doc_type,
+        audience: doc.audience,
+        tags: doc.tags,
+        links,
+        content,
+        content_hash,
+        visibility: doc.visibility ?? "organization",
+      },
+    };
+  }));
+}
+
+async function prepareProposalMutations(
+  proposal: ProposalRow,
+  auth: Exclude<Awaited<ReturnType<typeof stewardAccess>>, { error: Response }>,
+): Promise<ProposalMutation[]> {
   const { admin, principal } = auth;
   const change = proposal.proposed_change;
   const organizationId = principal.organizationId;
+  const preparedRelatedEdits = await prepareRelatedEdits(proposal, auth);
   const existing =
     proposal.operation === "create"
       ? null
-      : await getAuthorizedBrainDoc(admin, principal, proposal.target_path);
+      : await getStewardDocument(auth, proposal.target_path);
 
   if (proposal.operation !== "create" && !existing) {
     throw new Error("The target document is no longer available to this steward.");
   }
+  if (
+    existing &&
+    change.targetBaseVersion !== undefined &&
+    existing.current_version !== change.targetBaseVersion
+  ) {
+    throw new Error("The primary document changed after this proposal was created. Re-inspect and propose again.");
+  }
+  const relatedMutations = await prepareRelatedMutations(preparedRelatedEdits, auth);
 
   if (proposal.operation === "create") {
     if (await getDocByPath(admin, proposal.target_path, organizationId)) {
@@ -94,8 +225,7 @@ async function applyProposal(
       organizationId,
     );
     if (checked.error) throw new Error(checked.error);
-    const row: BrainDocWrite = {
-      path: proposal.target_path,
+    const row: ProposalMutationDocument = {
       title,
       description: change.description?.trim().slice(0, 200) ?? "",
       department_id: checked.department_id ?? null,
@@ -108,48 +238,57 @@ async function applyProposal(
       content_hash: "",
       visibility: change.visibility ?? "organization",
     };
+    if (row.visibility === "project" && !row.project_id) {
+      throw new Error("A project-only document must be assigned to an active project.");
+    }
     row.content_hash = hashDoc(row);
-    await insertBrainDoc(admin, row, principal.email, organizationId);
-    return;
+    return [{ operation: "create", path: proposal.target_path, document: row }, ...relatedMutations];
   }
 
   if (!existing) throw new Error("Target document missing.");
   if (proposal.operation === "delete") {
-    const deleted = await softDeleteBrainDoc(admin, existing.path, principal.email, organizationId);
-    if (!deleted) throw new Error("The target document was already deleted.");
-    return;
+    return [
+      { operation: "delete", path: existing.path, expectedVersion: existing.current_version },
+      ...relatedMutations,
+    ];
   }
 
   if (proposal.operation === "link") {
     const linkedPath = change.linkedPath;
-    const linked = linkedPath ? await getAuthorizedBrainDoc(admin, principal, linkedPath) : null;
+    const linked = linkedPath ? await getStewardDocument(auth, linkedPath) : null;
     if (!linked) throw new Error("The linked document is no longer available.");
-    if (existing.links.includes(linked.path)) return;
+    if (existing.links.includes(linked.path) && !preparedRelatedEdits.length) {
+      return [];
+    }
+    if (existing.links.includes(linked.path)) return relatedMutations;
+
     const linkLine = `- [[${linked.title}]]`;
     const content = /^##\s+Related\s*$/m.test(existing.content)
       ? existing.content.replace(/^(##\s+Related\s*)$/m, `$1\n${linkLine}`)
       : `${existing.content.trimEnd()}\n\n## Related\n${linkLine}\n`;
-    const links = await linksFor(admin, content, organizationId);
-    const content_hash = hashDoc({
-      title: existing.title,
-      description: existing.description,
-      department_id: existing.department_id,
-      project_id: existing.project_id,
-      doc_type: existing.doc_type,
-      audience: existing.audience,
-      tags: [],
-      visibility: existing.visibility,
-      content,
-    });
-    const updated = await updateBrainDoc(
-      admin,
-      existing.path,
-      { content, links, content_hash },
-      principal.email,
-      organizationId,
-    );
-    if (!updated) throw new Error("The link update did not apply.");
-    return;
+    const document: ProposalMutationDocument = {
+        title: existing.title,
+        description: existing.description,
+        department_id: existing.department_id,
+        project_id: existing.project_id,
+        doc_type: existing.doc_type,
+        audience: existing.audience,
+        tags: existing.tags,
+        visibility: existing.visibility ?? "organization",
+        content,
+        links: await linksFor(admin, content, organizationId),
+        content_hash: "",
+    };
+    document.content_hash = hashDoc(document);
+    return [
+      {
+        operation: "update",
+        path: existing.path,
+        expectedVersion: existing.current_version,
+        document,
+      },
+      ...relatedMutations,
+    ];
   }
 
   const content = change.content?.trim();
@@ -160,22 +299,54 @@ async function applyProposal(
     organizationId,
   );
   if (checked.error) throw new Error(checked.error);
-  const next: Omit<BrainDocWrite, "path"> = {
+  const next: ProposalMutationDocument = {
     title: change.title ? sanitizePathPart(change.title) : existing.title,
     description: change.description !== undefined ? change.description.trim().slice(0, 200) : existing.description,
     department_id: checked.department_id !== undefined ? checked.department_id : existing.department_id,
     project_id: checked.project_id !== undefined ? checked.project_id : existing.project_id,
     doc_type: checked.doc_type ?? existing.doc_type,
     audience: change.audience ?? existing.audience,
-    tags: [],
+    tags: existing.tags,
     links: await linksFor(admin, content, organizationId),
     content,
     content_hash: "",
-    visibility: change.visibility ?? existing.visibility,
+    visibility: change.visibility ?? existing.visibility ?? "organization",
   };
+  if (next.visibility === "project" && !next.project_id) {
+    throw new Error("A project-only document must be assigned to an active project.");
+  }
   next.content_hash = hashDoc(next);
-  const updated = await updateBrainDoc(admin, existing.path, next, principal.email, organizationId);
-  if (!updated) throw new Error("The proposed update did not apply.");
+  return [
+    {
+      operation: "update",
+      path: existing.path,
+      expectedVersion: existing.current_version,
+      document: next,
+    },
+    ...relatedMutations,
+  ];
+}
+
+async function applyProposal(
+  proposal: ProposalRow,
+  note: string,
+  auth: Exclude<Awaited<ReturnType<typeof stewardAccess>>, { error: Response }>,
+): Promise<ApplyResult> {
+  const mutations = await prepareProposalMutations(proposal, auth);
+  const { data, error } = await auth.admin.rpc("brain_apply_knowledge_proposal", {
+    p_organization_id: auth.principal.organizationId,
+    p_proposal_id: proposal.id,
+    p_reviewer_user_id: auth.principal.userId,
+    p_reviewer_email: auth.principal.email,
+    p_review_note: note,
+    p_changes: mutations,
+  });
+  if (error) throw new Error(error.message);
+  const result = data as ApplyResult | null;
+  return {
+    changedPaths: result?.changedPaths ?? [],
+    indexPaths: result?.indexPaths ?? [],
+  };
 }
 
 export async function PATCH(req: Request) {
@@ -190,75 +361,66 @@ export async function PATCH(req: Request) {
     return Response.json({ error: "id and decision are required" }, { status: 400 });
   }
 
+  const note = body.note?.trim().slice(0, 800) ?? "";
   if (body.decision === "reject") {
-    const { data, error } = await auth.admin
-      .from("brain_knowledge_proposals")
-      .update({
-        status: "rejected",
-        reviewed_by: auth.principal.userId,
-        reviewed_at: new Date().toISOString(),
-        review_note: body.note?.trim().slice(0, 800) ?? "",
-        updated_at: new Date().toISOString(),
-      })
-      .eq("organization_id", auth.principal.organizationId)
-      .eq("id", body.id)
-      .eq("status", "pending")
-      .select("id")
-      .maybeSingle();
+    const { data, error } = await auth.admin.rpc("brain_reject_knowledge_proposal", {
+      p_organization_id: auth.principal.organizationId,
+      p_proposal_id: body.id,
+      p_reviewer_user_id: auth.principal.userId,
+      p_review_note: note,
+    });
     if (error) return Response.json({ error: error.message }, { status: 500 });
     if (!data) return Response.json({ error: "Proposal is no longer pending." }, { status: 409 });
-    await auditBrainEvent(auth.admin, auth.principal, "knowledge.rejected", "knowledge_proposal", body.id);
     return Response.json({ ok: true, status: "rejected" });
   }
 
-  const { data: claimed, error: claimError } = await auth.admin
+  const { data: proposal, error: proposalError } = await auth.admin
     .from("brain_knowledge_proposals")
-    .update({
-      status: "applying",
-      reviewed_by: auth.principal.userId,
-      reviewed_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    })
+    .select("id, operation, target_path, proposed_change, evidence, rationale, status, proposed_by, created_at")
     .eq("organization_id", auth.principal.organizationId)
     .eq("id", body.id)
     .eq("status", "pending")
-    .select("id, operation, target_path, proposed_change, evidence, rationale, status, proposed_by, created_at")
     .maybeSingle();
-  if (claimError) return Response.json({ error: claimError.message }, { status: 500 });
-  if (!claimed) return Response.json({ error: "Proposal is no longer pending." }, { status: 409 });
+  if (proposalError) return Response.json({ error: proposalError.message }, { status: 500 });
+  if (!proposal) return Response.json({ error: "Proposal is no longer pending." }, { status: 409 });
 
   try {
-    await applyProposal(claimed as ProposalRow, auth);
-    const { error } = await auth.admin
-      .from("brain_knowledge_proposals")
-      .update({
-        status: "approved",
-        review_note: body.note?.trim().slice(0, 800) ?? "",
-        updated_at: new Date().toISOString(),
-      })
-      .eq("organization_id", auth.principal.organizationId)
-      .eq("id", body.id)
-      .eq("status", "applying");
-    if (error) throw new Error(error.message);
-    await auditBrainEvent(auth.admin, auth.principal, "knowledge.approved", "knowledge_proposal", body.id, {
-      operation: (claimed as ProposalRow).operation,
-      targetPath: (claimed as ProposalRow).target_path,
+    const applied = await applyProposal(proposal as ProposalRow, note, auth);
+
+    let indexing: "complete" | "deferred" = "complete";
+    let indexedChunks = 0;
+    if (applied.indexPaths.length) {
+      try {
+        const openAiKey = await getOrgKey(
+          auth.admin,
+          "openai",
+          auth.principal.organizationId,
+        ).catch(() => null);
+        const indexed = await indexBrainDocuments({
+          admin: auth.admin,
+          organizationId: auth.principal.organizationId,
+          openAiKey,
+          paths: applied.indexPaths,
+        });
+        indexedChunks = indexed.chunks;
+      } catch (indexError) {
+        indexing = "deferred";
+        console.error(
+          "[brain] approved knowledge could not be indexed immediately:",
+          indexError instanceof Error ? indexError.message : indexError,
+        );
+      }
+    }
+
+    return Response.json({
+      ok: true,
+      status: "approved",
+      affectedPaths: applied.changedPaths,
+      indexing,
+      indexedChunks,
     });
-    return Response.json({ ok: true, status: "approved" });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    await auth.admin
-      .from("brain_knowledge_proposals")
-      .update({
-        status: "pending",
-        reviewed_by: null,
-        reviewed_at: null,
-        review_note: `Last apply failed: ${message}`.slice(0, 800),
-        updated_at: new Date().toISOString(),
-      })
-      .eq("organization_id", auth.principal.organizationId)
-      .eq("id", body.id)
-      .eq("status", "applying");
     return Response.json({ error: message }, { status: 409 });
   }
 }

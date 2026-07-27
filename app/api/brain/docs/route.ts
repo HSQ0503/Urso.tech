@@ -5,7 +5,6 @@
 
 import { getBrainUser } from "@/lib/brain/access";
 import {
-  auditBrainEvent,
   canEditBrainTruth,
   getAuthorizedBrainDoc,
   resolveBrainPrincipal,
@@ -21,6 +20,7 @@ type Body = {
   description?: string;
   department?: string;
   project?: string;
+  accessProjectId?: string | null;
   type?: string;
   audience?: string[];
 };
@@ -71,7 +71,6 @@ export async function POST(req: Request) {
   row.content_hash = hashDoc(row);
   try {
     await insertBrainDoc(admin, row, user.email, principal.organizationId);
-    await auditBrainEvent(admin, principal, "document.created", "document", row.path);
   } catch (e) {
     return Response.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
   }
@@ -90,7 +89,8 @@ export async function PATCH(req: Request) {
 
   const body = (await req.json().catch(() => ({}))) as Body;
   if (!body.path) return Response.json({ error: "path required" }, { status: 400 });
-  const existing = await getAuthorizedBrainDoc(admin, principal, body.path);
+  const accessProjectId = body.accessProjectId?.trim() || null;
+  const existing = await getAuthorizedBrainDoc(admin, principal, body.path, accessProjectId);
   if (!existing) return Response.json({ error: "No doc at that path." }, { status: 404 });
 
   const checked = await checkMeta(
@@ -115,11 +115,13 @@ export async function PATCH(req: Request) {
     content_hash: "",
     visibility: existing.visibility,
   };
+  if (next.visibility === "project" && !next.project_id) {
+    return Response.json({ error: "Project-only documents must remain assigned to a project." }, { status: 400 });
+  }
   next.content_hash = hashDoc(next);
   try {
     const ok = await updateBrainDoc(admin, body.path, next, user.email, principal.organizationId);
     if (!ok) return Response.json({ error: "Update didn't apply — the doc may have just been deleted." }, { status: 409 });
-    await auditBrainEvent(admin, principal, "document.updated", "document", body.path);
   } catch (e) {
     return Response.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
   }
@@ -136,14 +138,21 @@ export async function DELETE(req: Request) {
     return Response.json({ error: "knowledge steward access required" }, { status: 403 });
   }
 
-  const body = (await req.json().catch(() => ({}))) as { path?: string };
+  const body = (await req.json().catch(() => ({}))) as {
+    path?: string;
+    accessProjectId?: string | null;
+  };
   if (!body.path) return Response.json({ error: "path required" }, { status: 400 });
   try {
-    const existing = await getAuthorizedBrainDoc(admin, principal, body.path);
+    const existing = await getAuthorizedBrainDoc(
+      admin,
+      principal,
+      body.path,
+      body.accessProjectId?.trim() || null,
+    );
     if (!existing) return Response.json({ error: "No live doc at that path." }, { status: 404 });
     const ok = await softDeleteBrainDoc(admin, body.path, user.email, principal.organizationId);
     if (!ok) return Response.json({ error: "No live doc at that path." }, { status: 404 });
-    await auditBrainEvent(admin, principal, "document.deleted", "document", body.path);
   } catch (e) {
     return Response.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
   }

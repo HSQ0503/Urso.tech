@@ -1,5 +1,5 @@
 import { getBrainUser } from "@/lib/brain/access";
-import { auditBrainEvent, canEditBrainTruth, resolveBrainPrincipal } from "@/lib/brain/authorization";
+import { canEditBrainTruth, resolveBrainPrincipal } from "@/lib/brain/authorization";
 import { encryptApiKey } from "@/lib/brain/crypto";
 import { getOrgKeyStatus } from "@/lib/brain/db";
 import { isBrainProvider } from "@/lib/brain/models";
@@ -42,19 +42,15 @@ export async function POST(req: Request) {
     return Response.json({ error: error instanceof Error ? error.message : String(error) }, { status: 503 });
   }
 
-  const { error } = await auth.admin.from("brain_org_keys").upsert(
-    {
-      organization_id: auth.principal.organizationId,
-      provider,
-      key_ciphertext: ciphertext,
-      key_last4: key.slice(-4),
-      updated_by: auth.principal.email,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "organization_id,provider" },
-  );
+  const { error } = await auth.admin.rpc("brain_save_org_key", {
+    p_organization_id: auth.principal.organizationId,
+    p_actor_user_id: auth.principal.userId,
+    p_actor_email: auth.principal.email,
+    p_provider: provider,
+    p_key_ciphertext: ciphertext,
+    p_key_last4: key.slice(-4),
+  });
   if (error) return Response.json({ error: error.message }, { status: 500 });
-  await auditBrainEvent(auth.admin, auth.principal, "provider_key.saved", "provider_key", provider);
   return Response.json({ ok: true, provider, last4: key.slice(-4) });
 }
 
@@ -66,12 +62,12 @@ export async function DELETE(req: Request) {
   const provider = body.provider ?? "";
   if (!isBrainProvider(provider)) return Response.json({ error: "unknown provider" }, { status: 400 });
 
-  const { error } = await auth.admin
-    .from("brain_org_keys")
-    .delete()
-    .eq("organization_id", auth.principal.organizationId)
-    .eq("provider", provider);
+  const { data, error } = await auth.admin.rpc("brain_delete_org_key", {
+    p_organization_id: auth.principal.organizationId,
+    p_actor_user_id: auth.principal.userId,
+    p_provider: provider,
+  });
   if (error) return Response.json({ error: error.message }, { status: 500 });
-  await auditBrainEvent(auth.admin, auth.principal, "provider_key.deleted", "provider_key", provider);
+  if (!data) return Response.json({ error: "provider key not found" }, { status: 404 });
   return Response.json({ ok: true });
 }

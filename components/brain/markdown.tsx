@@ -8,26 +8,25 @@
 
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { brainDocHref } from "@/lib/brain/links";
 
-export type LinkTarget = { path: string; title: string };
-
-const docHref = (path: string) => `/brain/docs/view?path=${encodeURIComponent(path)}`;
+export type LinkTarget = { path: string; title: string; projectId?: string | null };
 
 // Same resolution order as resolveLinks(): exact title, then filename stem,
 // then the last segment of a path-style link.
 function makeResolver(targets: LinkTarget[]) {
-  const byTitle = new Map<string, string>();
-  const byStem = new Map<string, string>();
+  const byTitle = new Map<string, LinkTarget>();
+  const byStem = new Map<string, LinkTarget>();
   const norm = (s: string) => s.toLowerCase().trim();
   const stemOf = (p: string) => norm((p.split("/").pop() ?? p).replace(/\.md$/i, ""));
   for (const t of targets) {
-    if (!byTitle.has(norm(t.title))) byTitle.set(norm(t.title), t.path);
-    if (!byStem.has(stemOf(t.path))) byStem.set(stemOf(t.path), t.path);
+    if (!byTitle.has(norm(t.title))) byTitle.set(norm(t.title), t);
+    if (!byStem.has(stemOf(t.path))) byStem.set(stemOf(t.path), t);
   }
   return (name: string) => byTitle.get(norm(name)) ?? byStem.get(norm(name)) ?? byStem.get(stemOf(name)) ?? null;
 }
 
-type Resolver = (name: string) => string | null;
+type Resolver = (name: string) => LinkTarget | null;
 
 // Inline pass: [[wikilink]] / [[link|alias]], [text](url), **bold**, *italic*,
 // `code`. Wikilinks are matched first so their inner text is never chewed up by
@@ -47,7 +46,7 @@ function inline(text: string, resolve: Resolver, key: string): ReactNode[] {
       const target = resolve(name);
       out.push(
         target ? (
-          <Link key={`${key}-w${i}`} href={docHref(target)}>
+          <Link key={`${key}-w${i}`} href={brainDocHref(target.path, target.projectId)}>
             {label}
           </Link>
         ) : (

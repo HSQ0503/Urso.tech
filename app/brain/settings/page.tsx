@@ -1,5 +1,5 @@
-// Brain settings: your profile (department/title — switching department is how
-// a demo persona is played) + the org's BYO provider keys + vault sync status.
+// Brain settings: personal profile details plus organization infrastructure for
+// authorized stewards. Department access is provisioned outside this form.
 
 import { redirect } from "next/navigation";
 import { getBrainUser } from "@/lib/brain/access";
@@ -14,6 +14,8 @@ import { OnboardingForm } from "@/components/brain/onboarding-form";
 import { KeysManager } from "@/components/brain/keys-manager";
 import { BrainIndexManager } from "@/components/brain/index-manager";
 import { ProposalQueue } from "@/components/brain/proposal-queue";
+import { TemporalReviewQueue } from "@/components/brain/temporal-review-queue";
+import { WorkspacePage } from "@/components/brain/workspace-ui";
 
 export default async function BrainSettingsPage() {
   const user = await getBrainUser();
@@ -38,34 +40,40 @@ export default async function BrainSettingsPage() {
   const core = manifest.filter((d) => d.doc_type === "core").length;
 
   return (
-    <div className="ob-content">
-      <div className="ob-wide !max-w-[720px]">
-        <h1 className="ob-title !text-[1.7em]">Settings</h1>
-
-        <section className="mt-8">
-          <h2 className="text-[15px] font-semibold text-[var(--ob-text)]">Your profile</h2>
-          <p className="mt-1 text-[13.5px] leading-[1.55] text-[var(--ob-muted)]">
-            {canEditBrainTruth(principal)
-              ? "The Brain loads context for your assigned department. As a steward, you may switch it for controlled demos."
-              : "Your department identity is assigned by an administrator and controls which context the Brain may retrieve."}
+    <WorkspacePage
+      eyebrow={canEditBrainTruth(principal) ? "Administration" : "Account"}
+      title="Brain settings"
+      description="Manage your identity context and, when authorized, the organization’s knowledge infrastructure."
+    >
+      <div className="sana-settings">
+        <section className="sana-settings-section">
+          <p className="font-mono text-[8.5px] font-medium uppercase tracking-[0.11em] text-ink-dimmer">
+            Identity context
+          </p>
+          <h2 className="mt-1.5 text-[14px] font-semibold">Your profile</h2>
+          <p className="mt-1 text-[12px] leading-5 text-[var(--ob-muted)]">
+            Your department identity is assigned by an administrator and controls which context the Brain may retrieve.
           </p>
           <div className="mt-4">
             <OnboardingForm
               departments={departments}
               initialName={profile.name}
-              initialDepartmentId={profile.department_id}
+              initialDepartmentId={principal.departmentId}
               initialTitle={profile.title}
               submitLabel="Save profile"
               redirectTo={null}
-              departmentLocked={!canEditBrainTruth(principal)}
+              departmentLocked
             />
           </div>
         </section>
 
         {canEditBrainTruth(principal) && (
-          <section className="mt-8 border-t border-[var(--ob-border)] pt-8">
-            <h2 className="text-[15px] font-semibold text-[var(--ob-text)]">Org API keys</h2>
-            <p className="mt-1 text-[13.5px] leading-[1.55] text-[var(--ob-muted)]">
+          <section className="sana-settings-section">
+            <p className="font-mono text-[8.5px] font-medium uppercase tracking-[0.11em] text-ink-dimmer">
+              Model infrastructure
+            </p>
+            <h2 className="mt-1.5 text-[14px] font-semibold">Organization API keys</h2>
+            <p className="mt-1 text-[12px] leading-5 text-[var(--ob-muted)]">
               Bring-your-own keys: one per provider, org-wide. Everyone&rsquo;s chats route through these.
             </p>
             <div className="mt-4">
@@ -78,9 +86,12 @@ export default async function BrainSettingsPage() {
         )}
 
         {canEditBrainTruth(principal) && (
-          <section className="mt-8 border-t border-[var(--ob-border)] pt-8">
-            <h2 className="text-[15px] font-semibold text-[var(--ob-text)]">Knowledge proposals</h2>
-            <p className="mt-1 text-[13.5px] leading-[1.55] text-[var(--ob-muted)]">
+          <section className="sana-settings-section">
+            <p className="font-mono text-[8.5px] font-medium uppercase tracking-[0.11em] text-ink-dimmer">
+              Governed changes
+            </p>
+            <h2 className="mt-1.5 text-[14px] font-semibold">Knowledge proposals</h2>
+            <p className="mt-1 text-[12px] leading-5 text-[var(--ob-muted)]">
               Review AI-suggested changes before they become a new immutable document version.
             </p>
             <div className="mt-4">
@@ -89,15 +100,33 @@ export default async function BrainSettingsPage() {
           </section>
         )}
 
-        <section className="mt-8 border-t border-[var(--ob-border)] pt-8">
-          <h2 className="text-[15px] font-semibold text-[var(--ob-text)]">Vault sync</h2>
-          <p className="mt-1 text-[13.5px] leading-[1.55] text-[var(--ob-muted)]">
+        {canEditBrainTruth(principal) && (
+          <section className="sana-settings-section">
+            <p className="font-mono text-[8.5px] font-medium uppercase tracking-[0.11em] text-ink-dimmer">
+              Temporal truth
+            </p>
+            <h2 className="mt-1.5 text-[14px] font-semibold">Claims and conflicts</h2>
+            <p className="mt-1 text-[12px] leading-5 text-[var(--ob-muted)]">
+              Review effective dates, supersession, unresolved facts, and contradictions before they change current truth.
+            </p>
+            <div className="mt-4">
+              <TemporalReviewQueue />
+            </div>
+          </section>
+        )}
+
+        <section className="sana-settings-section">
+          <p className="font-mono text-[8.5px] font-medium uppercase tracking-[0.11em] text-ink-dimmer">
+            Source ownership
+          </p>
+          <h2 className="mt-1.5 text-[14px] font-semibold">Vault sync</h2>
+          <p className="mt-1 text-[12px] leading-5 text-[var(--ob-muted)]">
             {manifest.length === 0
               ? "No docs synced yet — run node scripts/brain-sync.mjs after applying the migration."
               : `${manifest.length} docs synced (${core} core · ${rules} standing rules). Re-run node scripts/brain-sync.mjs whenever the vault changes.`}
           </p>
         </section>
       </div>
-    </div>
+    </WorkspacePage>
   );
 }

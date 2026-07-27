@@ -1,99 +1,179 @@
 "use client";
 
-// The Obsidian shell. Structure, left to right, exactly as Obsidian lays it out:
-//
-//   ribbon      44px icon rail — the app's verbs
-//   sidebar     pane tabs, explorer actions, the vault file tree, vault footer
-//   resizer     drag handle
-//   main        tab bar → view header (nav + breadcrumbs) → scrolling content
-//
-// Tabs are real: opening a doc adds one, closing falls back to its neighbour.
-// They live in component state, which survives navigation because this shell is
-// mounted by the layout and only the children below it re-render.
-
-import { useCallback, useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  ArrowLeft,
-  ArrowRight,
-  Bookmark,
+  BookOpenText,
+  BriefcaseBusiness,
+  Building2,
   ChevronsDownUp,
   CircleHelp,
   FilePlus,
   Files,
-  FileText,
+  Folder,
   FolderPlus,
+  Home,
   LogOut,
+  Menu,
   MessageSquare,
   Network,
   Plus,
   Search,
   Settings,
+  ShieldCheck,
   X,
 } from "lucide-react";
+import type { BrainRole } from "@/lib/brain/types";
+import { brainDocHref } from "@/lib/brain/links";
 import { FileTree, type VaultFile } from "./file-tree";
 import { SignOutButton } from "./sign-out";
 
-type Tab = { href: string; label: string; kind: "doc" | "view" };
+const BARE_ROUTES = ["/brain/login", "/brain/welcome"];
 
-const BARE = ["/brain/login", "/brain/welcome"];
+const primaryNavigation = [
+  { href: "/brain/chat", label: "New chat", icon: Plus },
+  { href: "/brain", label: "Home", icon: Home },
+  { href: "/brain/projects", label: "Projects", icon: BriefcaseBusiness },
+  { href: "/brain/departments", label: "Departments", icon: Building2 },
+  { href: "/brain/docs", label: "Knowledge", icon: Search },
+  { href: "/brain/graph", label: "Knowledge map", icon: Network },
+] as const;
 
-export function BrainShell({
+function isActiveRoute(pathname: string, href: string) {
+  if (href === "/brain") return pathname === href;
+  if (href === "/brain/docs") return pathname.startsWith("/brain/docs");
+  return pathname === href;
+}
+
+function roleLabel(role: BrainRole | null) {
+  if (!role) return "Governed access";
+  return role.replaceAll("_", " ");
+}
+
+function SanaSidebar({
   files,
-  children,
+  pathname,
+  role,
   canEdit,
+  onNavigate,
 }: {
   files: VaultFile[];
-  children: React.ReactNode;
+  pathname: string;
+  role: BrainRole | null;
   canEdit: boolean;
+  onNavigate?: () => void;
 }) {
-  const pathname = usePathname();
-  const search = useSearchParams();
-  const router = useRouter();
-  const docPath = search.get("path");
-
-  const href = docPath ? `${pathname}?path=${encodeURIComponent(docPath)}` : pathname;
-
-  // What the current route is called, for the tab and the breadcrumb tail.
-  const titleOf = useCallback(
-    (p: string) => files.find((f) => f.path === p)?.title ?? (p.split("/").pop() ?? p).replace(/\.md$/i, ""),
+  const folders = useMemo(
+    () =>
+      Array.from(new Set(files.map((file) => file.path.split("/")[0]).filter(Boolean))).slice(0, 5),
     [files],
   );
-  let label = "Urso Brain";
-  let kind: Tab["kind"] = "view";
-  if (pathname === "/brain") label = "Chat";
-  else if (pathname === "/brain/graph") label = "Graph view";
-  else if (pathname === "/brain/docs") label = "Vault";
-  else if (pathname === "/brain/docs/new") label = "New doc";
-  else if (pathname === "/brain/settings") label = "Settings";
-  else if (pathname === "/brain/docs/view" && docPath) {
-    label = titleOf(docPath);
-    kind = "doc";
-  } else if (pathname === "/brain/docs/edit" && docPath) {
-    label = `${titleOf(docPath)} — editing`;
-    kind = "doc";
-  }
 
-  const [tabs, setTabs] = useState<Tab[]>([]);
-  const [sidebar, setSidebar] = useState(250);
+  return (
+    <>
+      <div className="sana-brand-row">
+        <Link href="/brain" className="sana-brand" onClick={onNavigate}>
+          <Image
+            src="/brand/urso-mark-gradient.png"
+            alt=""
+            width={30}
+            height={30}
+            className="sana-brand-mark"
+          />
+          <span>Urso Brain</span>
+        </Link>
+      </div>
+
+      <nav className="sana-nav" aria-label="Brain workspace">
+        {primaryNavigation.map(({ href, label, icon: Icon }) => (
+          <Link
+            key={href}
+            href={href}
+            onClick={onNavigate}
+            className={`sana-nav-link ${isActiveRoute(pathname, href) ? "is-active" : ""}`}
+          >
+            <Icon size={18} strokeWidth={1.8} />
+            <span>{label}</span>
+          </Link>
+        ))}
+      </nav>
+
+      <div className="sana-folder-section">
+        <p className="sana-side-label">Knowledge spaces</p>
+        <div className="sana-folder-list">
+          {folders.map((folder) => (
+            <Link
+              key={folder}
+              href="/brain/docs"
+              onClick={onNavigate}
+              className="sana-folder-link"
+              title={folder}
+            >
+              <Folder size={17} strokeWidth={1.7} />
+              <span>{folder.replace(/^\d+\s*-\s*/, "")}</span>
+            </Link>
+          ))}
+        </div>
+        <Link href="/brain/docs" onClick={onNavigate} className="sana-folder-link sana-view-all">
+          <span aria-hidden>•••</span>
+          <span>View all</span>
+        </Link>
+      </div>
+
+      <div className="sana-sidebar-bottom">
+        <div className="sana-scope-card">
+          <span className="sana-scope-icon">
+            <ShieldCheck size={18} />
+          </span>
+          <p>{files.length} permitted sources</p>
+          <span>Company knowledge in your current scope</span>
+          <Link href="/brain/docs" onClick={onNavigate}>
+            Open knowledge
+          </Link>
+        </div>
+
+        {canEdit && (
+          <Link href="/brain/docs/new" onClick={onNavigate} className="sana-footer-link">
+            <FilePlus size={17} />
+            <span>New knowledge</span>
+          </Link>
+        )}
+        <Link href="/brain/settings" onClick={onNavigate} className="sana-footer-link">
+          <Settings size={17} />
+          <span>Settings</span>
+          <span className="sana-footer-meta">{roleLabel(role)}</span>
+        </Link>
+        <SignOutButton className="sana-footer-link sana-signout">
+          <LogOut size={17} />
+          <span>Sign out</span>
+        </SignOutButton>
+      </div>
+    </>
+  );
+}
+
+function GraphShell({
+  files,
+  canEdit,
+  children,
+}: {
+  files: VaultFile[];
+  canEdit: boolean;
+  children: React.ReactNode;
+}) {
+  const router = useRouter();
+  const search = useSearchParams();
+  const docPath = search.get("path");
+  const [sidebarWidth, setSidebarWidth] = useState(284);
   const [collapseSignal, setCollapseSignal] = useState(0);
   const dragging = useRef(false);
 
-  // Adjusting state during render (guarded on the route actually changing) is
-  // React's own answer here — an effect would render the new route with a stale
-  // tab strip first, then render again.
-  const [seenHref, setSeenHref] = useState<string | null>(null);
-  if (seenHref !== href && !BARE.includes(pathname)) {
-    setSeenHref(href);
-    setTabs((prev) => (prev.some((t) => t.href === href) ? prev : [...prev, { href, label, kind }]));
-  }
-
-  // Sidebar drag-resize.
   useEffect(() => {
-    const move = (e: PointerEvent) => {
+    const move = (event: PointerEvent) => {
       if (!dragging.current) return;
-      setSidebar(Math.min(480, Math.max(180, e.clientX - 44)));
+      setSidebarWidth(Math.min(480, Math.max(220, event.clientX - 48)));
     };
     const up = () => {
       dragging.current = false;
@@ -108,62 +188,49 @@ export function BrainShell({
     };
   }, []);
 
-  // Sign-in and onboarding have no vault to browse — they render bare.
-  if (BARE.includes(pathname)) {
-    return <div className="ob-app grid place-items-center">{children}</div>;
-  }
-
-  const closeTab = (h: string) => {
-    const idx = tabs.findIndex((t) => t.href === h);
-    const next = tabs.filter((t) => t.href !== h);
-    setTabs(next);
-    if (h === href) router.push(next[Math.min(idx, next.length - 1)]?.href ?? "/brain");
-  };
-
-  const crumbs = kind === "doc" && docPath ? docPath.replace(/\.md$/i, "").split("/") : [label];
-
   return (
-    <div className="ob-app">
-      <nav className="ob-ribbon">
-        <Link href="/brain" className={`ob-rib-btn ${pathname === "/brain" ? "is-active" : ""}`} title="Chat">
+    <div className="ob-app graph-shell">
+      <a href="#brain-main-content" className="brain-skip-link">
+        Skip to knowledge map
+      </a>
+      <nav className="ob-ribbon graph-ribbon" aria-label="Brain navigation">
+        <Link href="/brain" className="ob-rib-btn" title="Home">
+          <Home size={17} />
+        </Link>
+        <Link href="/brain/chat" className="ob-rib-btn" title="Ask Brain">
           <MessageSquare size={17} />
         </Link>
-        <Link href="/brain/graph" className={`ob-rib-btn ${pathname === "/brain/graph" ? "is-active" : ""}`} title="Graph view">
+        <Link href="/brain/projects" className="ob-rib-btn" title="Projects">
+          <BriefcaseBusiness size={17} />
+        </Link>
+        <Link href="/brain/docs" className="ob-rib-btn" title="Knowledge">
+          <BookOpenText size={17} />
+        </Link>
+        <Link href="/brain/graph" className="ob-rib-btn is-active" title="Knowledge map">
           <Network size={17} />
         </Link>
-        <Link href="/brain/docs" className={`ob-rib-btn ${pathname === "/brain/docs" ? "is-active" : ""}`} title="Vault">
-          <Files size={17} />
-        </Link>
-        {canEdit && (
-          <Link href="/brain/docs/new" className={`ob-rib-btn ${pathname === "/brain/docs/new" ? "is-active" : ""}`} title="New doc">
-            <FilePlus size={17} />
-          </Link>
-        )}
         <div className="flex-1" />
-        <Link href="/brain/settings" className={`ob-rib-btn ${pathname === "/brain/settings" ? "is-active" : ""}`} title="Settings">
+        <Link href="/brain/settings" className="ob-rib-btn" title="Settings">
           <Settings size={17} />
         </Link>
-        <SignOutButton className="ob-rib-btn">
-          <LogOut size={17} />
-        </SignOutButton>
       </nav>
 
-      <aside className="ob-sidebar" style={{ width: sidebar }}>
+      <aside className="ob-sidebar graph-explorer" style={{ width: sidebarWidth }}>
         <div className="ob-side-head">
-          <span className="ob-side-tab is-active" title="Files">
+          <span className="ob-side-tab is-active" title="Vault files">
             <Files size={16} />
           </span>
-          <Link href="/brain/docs" className="ob-side-tab" title="Search the vault">
+          <Link href="/brain/docs" className="ob-side-tab" title="Search knowledge">
             <Search size={16} />
           </Link>
-          <Link href="/brain/graph" className="ob-side-tab" title="Graph view">
-            <Bookmark size={16} />
+          <Link href="/brain/graph" className="ob-side-tab" title="Knowledge map">
+            <Network size={16} />
           </Link>
         </div>
         <div className="ob-nav-actions">
           {canEdit && (
             <>
-              <Link href="/brain/docs/new" className="ob-nav-btn" title="New doc">
+              <Link href="/brain/docs/new" className="ob-nav-btn" title="New knowledge">
                 <FilePlus size={15} />
               </Link>
               <Link href="/brain/docs/new" className="ob-nav-btn" title="New folder">
@@ -171,7 +238,12 @@ export function BrainShell({
               </Link>
             </>
           )}
-          <button type="button" className="ob-nav-btn" title="Collapse all" onClick={() => setCollapseSignal((n) => n + 1)}>
+          <button
+            type="button"
+            className="ob-nav-btn"
+            title="Collapse all"
+            onClick={() => setCollapseSignal((value) => value + 1)}
+          >
             <ChevronsDownUp size={15} />
           </button>
         </div>
@@ -179,7 +251,7 @@ export function BrainShell({
           files={files}
           activePath={docPath}
           collapseSignal={collapseSignal}
-          onOpenFile={(f) => router.push(`/brain/docs/view?path=${encodeURIComponent(f.path)}`)}
+          onOpenFile={(file) => router.push(brainDocHref(file.path, file.projectId))}
         />
         <div className="ob-vault">
           <span className="ob-vault-name">Urso Brain</span>
@@ -201,44 +273,82 @@ export function BrainShell({
         }}
       />
 
-      <main className="ob-main">
-        <div className="ob-tabbar">
-          {tabs.map((t) => (
-            <div key={t.href} className={`ob-tab ${t.href === href ? "is-active" : ""}`}>
-              <Link href={t.href} className="flex min-w-0 items-center gap-2">
-                {t.kind === "doc" ? <FileText size={14} /> : <MessageSquare size={14} />}
-                <span className="ob-tab-label">{t.label}</span>
-              </Link>
-              <button type="button" className="ob-tab-x" onClick={() => closeTab(t.href)} aria-label={`Close ${t.label}`}>
-                <X size={13} />
-              </button>
-            </div>
-          ))}
-          {canEdit && (
-            <Link href="/brain/docs/new" className="ob-tab-new" title="New doc">
-              <Plus size={16} />
-            </Link>
-          )}
-        </div>
+      <main id="brain-main-content" className="ob-main" tabIndex={-1}>
+        {children}
+      </main>
+    </div>
+  );
+}
 
-        <div className="ob-viewhead">
-          <button type="button" className="ob-icon-btn" onClick={() => router.back()} aria-label="Back">
-            <ArrowLeft size={16} />
-          </button>
-          <button type="button" className="ob-icon-btn" onClick={() => router.forward()} aria-label="Forward">
-            <ArrowRight size={16} />
-          </button>
-          <div className="ob-crumbs">
-            {crumbs.map((c, i) => (
-              <span key={i}>
-                {i > 0 && <span className="ob-crumb-sep">/</span>}
-                <span className={i === crumbs.length - 1 ? "ob-crumb-cur" : undefined}>{c}</span>
-              </span>
-            ))}
-          </div>
-          <div className="w-[52px]" />
-        </div>
+export function BrainShell({
+  files,
+  children,
+  canEdit,
+  role,
+}: {
+  files: VaultFile[];
+  children: React.ReactNode;
+  canEdit: boolean;
+  role: BrainRole | null;
+}) {
+  const pathname = usePathname();
+  const [mobileOpen, setMobileOpen] = useState(false);
 
+  if (BARE_ROUTES.includes(pathname)) {
+    return <div className="ob-app grid place-items-center">{children}</div>;
+  }
+
+  if (pathname === "/brain/graph") {
+    return (
+      <GraphShell files={files} canEdit={canEdit}>
+        {children}
+      </GraphShell>
+    );
+  }
+
+  return (
+    <div className="ob-app sana-shell">
+      <a href="#brain-main-content" className="brain-skip-link">
+        Skip to workspace
+      </a>
+
+      <aside className="sana-sidebar">
+        <SanaSidebar files={files} pathname={pathname} role={role} canEdit={canEdit} />
+      </aside>
+
+      <div
+        className={`sana-mobile-overlay ${mobileOpen ? "is-open" : ""}`}
+        onClick={() => setMobileOpen(false)}
+        aria-hidden={!mobileOpen}
+      />
+      <aside className={`sana-mobile-drawer ${mobileOpen ? "is-open" : ""}`}>
+        <button
+          type="button"
+          className="sana-drawer-close"
+          onClick={() => setMobileOpen(false)}
+          aria-label="Close navigation"
+        >
+          <X size={20} />
+        </button>
+        <SanaSidebar
+          files={files}
+          pathname={pathname}
+          role={role}
+          canEdit={canEdit}
+          onNavigate={() => setMobileOpen(false)}
+        />
+      </aside>
+
+      <main id="brain-main-content" className="sana-main" tabIndex={-1}>
+        <header className="sana-mobile-header">
+          <Link href="/brain" className="sana-mobile-brand">
+            <Image src="/brand/urso-mark-gradient.png" alt="" width={27} height={27} />
+            <span>Urso Brain</span>
+          </Link>
+          <button type="button" onClick={() => setMobileOpen(true)} aria-label="Open navigation">
+            <Menu size={21} />
+          </button>
+        </header>
         {children}
       </main>
     </div>

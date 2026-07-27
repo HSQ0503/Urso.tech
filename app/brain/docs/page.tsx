@@ -1,55 +1,49 @@
-// Vault browser — the synced docs grouped the way the company is organized.
-// The sidebar tree is the folder view; this is the semantic view (core, rules,
-// departments, projects), which the folder structure alone can't express.
+// Authorized knowledge library grouped by company layer, owner, and project.
 
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { FileText, Plus } from "lucide-react";
+import { FilePlus2, Library } from "lucide-react";
+import {
+  BrainAccessNotice,
+  EmptyKnowledge,
+  WorkspacePage,
+} from "@/components/brain/workspace-ui";
 import { getBrainUser } from "@/lib/brain/access";
 import {
   canEditBrainTruth,
-  getAuthorizedDocManifest,
+  getAuthorizedKnowledgeCatalog,
   resolveBrainPrincipal,
 } from "@/lib/brain/authorization";
 import { ursoDbSafe } from "@/lib/brain/supabase";
-import { getDepartments, getProjects } from "@/lib/brain/db";
-import type { BrainDocMeta } from "@/lib/brain/types";
-
-function DocRow({ doc }: { doc: BrainDocMeta }) {
-  return (
-    <Link href={`/brain/docs/view?path=${encodeURIComponent(doc.path)}`} className="ob-row group !py-[7px]">
-      <FileText size={14} className="shrink-0 text-[var(--ob-faint)]" />
-      <span className="ob-row-label !text-[13.5px]">{doc.title}</span>
-      {doc.description && (
-        <span className="ml-2 min-w-0 flex-1 truncate text-[12.5px] text-[var(--ob-faint)]">{doc.description}</span>
-      )}
-    </Link>
-  );
-}
-
-function Section({ title, docs }: { title: string; docs: BrainDocMeta[] }) {
-  if (!docs.length) return null;
-  return (
-    <section className="mb-7">
-      <h2 className="mb-1.5 px-1.5 text-[12.5px] font-semibold text-[var(--ob-muted)]">{title}</h2>
-      <div>{docs.map((d) => <DocRow key={d.path} doc={d} />)}</div>
-    </section>
-  );
-}
+import { getDepartments } from "@/lib/brain/db";
+import { KnowledgeBrowser, type KnowledgeSectionData } from "@/components/brain/knowledge-browser";
 
 export default async function BrainDocsPage() {
   const user = await getBrainUser();
   if (!user) redirect("/brain/login");
 
   const admin = ursoDbSafe();
-  if (!admin) redirect("/brain");
+  if (!admin) {
+    return (
+      <BrainAccessNotice title="The knowledge library isn’t available yet">
+        Finish the Brain database setup and sync the canonical vault to make approved knowledge available.
+      </BrainAccessNotice>
+    );
+  }
   const principal = await resolveBrainPrincipal(admin, user);
-  if (!principal) redirect("/brain");
-  const [manifest, projects, departments] = await Promise.all([
-    getAuthorizedDocManifest(admin, principal, null).catch(() => []),
-    getProjects(admin, principal.organizationId).catch(() => []),
+  if (!principal) {
+    return (
+      <BrainAccessNotice title="Brain access is inactive">
+        An active organization membership is required to browse company knowledge.
+      </BrainAccessNotice>
+    );
+  }
+  const [catalog, departments] = await Promise.all([
+    getAuthorizedKnowledgeCatalog(admin, principal).catch(() => ({ docs: [], projects: [] })),
     getDepartments(admin, principal.organizationId).catch(() => []),
   ]);
+  const manifest = catalog.docs;
+  const projects = catalog.projects;
 
   const core = manifest.filter((d) => d.doc_type === "core");
   const rules = manifest.filter((d) => d.doc_type === "rule");
@@ -63,47 +57,74 @@ export default async function BrainDocsPage() {
   const unfiled = rest.filter(
     (d) => !(d.project_id ? projIds.has(d.project_id) : d.department_id ? depIds.has(d.department_id) : true),
   );
+  const sections: KnowledgeSectionData[] = [
+    {
+      title: "Company core",
+      description: "Strategy, operating model, and shared truth for the whole organization.",
+      docs: core,
+    },
+    {
+      title: "Standing rules",
+      description: "Policies and controls that apply across departments and project work.",
+      docs: rules,
+    },
+    ...departments.map((department) => ({
+      title: department.name,
+      description: department.blurb || "Department-owned playbooks and operating knowledge.",
+      docs: rest.filter((doc) => doc.department_id === department.id && !doc.project_id),
+    })),
+    ...projects.map((project) => ({
+      title: project.name,
+      description: project.blurb || "Knowledge applied to this active project.",
+      docs: rest.filter((doc) => doc.project_id === project.id),
+    })),
+    {
+      title: "Company-wide knowledge",
+      description: "Shared references without a specific department or project owner.",
+      docs: unassigned,
+    },
+    {
+      title: "Needs classification",
+      description: "Authorized knowledge whose department or project is no longer in the active catalog.",
+      docs: unfiled,
+    },
+  ];
 
   return (
-    <>
-      <div className="ob-content">
-        <div className="ob-wide !max-w-[820px]">
-          <div className="mb-7 flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h1 className="ob-title !text-[1.7em]">The vault</h1>
-              <p className="mt-1 text-[14px] text-[var(--ob-muted)]">
-                {manifest.length === 0
-                  ? "Nothing synced yet — run node scripts/brain-sync.mjs."
-                  : `${manifest.length} permitted docs. This is everything the Brain may load for you.`}
-              </p>
-            </div>
-            {canEditBrainTruth(principal) && (
-              <Link href="/brain/docs/new" className="ob-btn ob-btn-cta">
-                <Plus size={14} />
-                New doc
-              </Link>
-            )}
-          </div>
-
-          <Section title="Company core — always in context" docs={core} />
-          <Section title="Standing rules" docs={rules} />
-          {departments.map((dep) => (
-            <Section
-              key={dep.id}
-              title={dep.name}
-              docs={rest.filter((d) => d.department_id === dep.id && !d.project_id)}
-            />
-          ))}
-          {projects.map((p) => (
-            <Section key={p.id} title={p.name} docs={rest.filter((d) => d.project_id === p.id)} />
-          ))}
-          <Section title="Company-wide" docs={unassigned} />
-          <Section title="Archived / unfiled projects" docs={unfiled} />
+    <WorkspacePage
+      eyebrow="Authorized sources"
+      title="Knowledge library"
+      description={
+        manifest.length === 0
+          ? "Approved company knowledge will appear here after the canonical sources are synced."
+          : `${manifest.length} documents are available in your current permission scope.`
+      }
+      action={
+        canEditBrainTruth(principal) ? (
+          <Link
+            href="/brain/docs/new"
+            className="ob-btn ob-btn-cta self-start"
+          >
+            <FilePlus2 className="size-4" />
+            New knowledge
+          </Link>
+        ) : undefined
+      }
+    >
+      {manifest.length === 0 ? (
+        <div className="pt-8">
+          <EmptyKnowledge
+            title="No authorized knowledge yet"
+            description="Approved documents will appear here when they are available to your role and scope."
+          />
         </div>
-      </div>
-      <div className="ob-status">
-        <span>{manifest.length} docs</span>
-      </div>
-    </>
+      ) : (
+        <KnowledgeBrowser sections={sections} />
+      )}
+      <p className="flex items-center gap-2 pt-8 text-[11px] text-ink-dimmer">
+        <Library className="size-3.5" />
+        The Brain can retrieve only the sources permitted in this library and the active project scope.
+      </p>
+    </WorkspacePage>
   );
 }

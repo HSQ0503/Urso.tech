@@ -11,7 +11,7 @@
 // Soft-deleted docs (deleted_at) are skipped and reported — the disk file, if
 // any, is never touched.
 //
-//   Run:  node scripts/brain-sync.mjs [--prune] [--export] [--dry]
+//   Run:  node scripts/brain-sync.mjs [--prune] [--export] [--dry] [--path-prefix="07 - Urso Brain"]
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
@@ -40,6 +40,12 @@ const supabase = createClient(url, key, { auth: { persistSession: false } });
 const PRUNE = process.argv.includes("--prune");
 const EXPORT = process.argv.includes("--export");
 const DRY = process.argv.includes("--dry");
+const pathPrefixArg = process.argv.find((value) => value.startsWith("--path-prefix="));
+const PATH_PREFIX = pathPrefixArg
+  ? pathPrefixArg.slice("--path-prefix=".length).replace(/^\/+|\/+$/g, "")
+  : null;
+const inScope = (path) =>
+  !PATH_PREFIX || path === PATH_PREFIX || path.startsWith(`${PATH_PREFIX}/`);
 
 const config = JSON.parse(readFileSync(new URL("./brain-sync.config.json", import.meta.url), "utf8"));
 const VAULT = config.vaultRoot;
@@ -281,6 +287,7 @@ if (readErr) {
   process.exit(1);
 }
 const db = new Map((existing ?? []).map((r) => [r.path, r]));
+const scopedDisk = [...disk.values()].filter((row) => inScope(row.path));
 
 // Link targets: everything that will exist after this sync — all disk docs plus
 // live brain-origin DB docs (AI-created, possibly not on disk yet).
@@ -296,17 +303,25 @@ for (const row of disk.values()) row.links = resolve(extractWikilinks(row.conten
 const toUpsert = [];
 const diverged = []; // on disk, but the brain's copy is newer (origin='brain')
 const deletedInBrain = []; // on disk, but soft-deleted in the brain
-for (const row of disk.values()) {
+for (const row of scopedDisk) {
   const cur = db.get(row.path);
   if (!cur) { toUpsert.push(row); continue; }
   if (cur.deleted_at) { deletedInBrain.push(row.path); continue; }
   if (cur.origin === "brain") { diverged.push(row.path); continue; }
   if (cur.content_hash !== row.content_hash || !sameSet(cur.links ?? [], row.links)) toUpsert.push(row);
 }
-const gone = (existing ?? []).filter((r) => r.origin === "vault" && !r.deleted_at && !disk.has(r.path)).map((r) => r.path);
-const brainDocs = (existing ?? []).filter((r) => r.origin === "brain" && !r.deleted_at);
+const gone = (existing ?? [])
+  .filter((r) => inScope(r.path) && r.origin === "vault" && !r.deleted_at && !disk.has(r.path))
+  .map((r) => r.path);
+const brainDocs = (existing ?? []).filter(
+  (r) => inScope(r.path) && r.origin === "brain" && !r.deleted_at,
+);
 
-console.log(`\n${disk.size} docs on disk · ${toUpsert.length} new/changed · ${diverged.length} brain-newer · ${brainDocs.length} brain-origin in DB · ${gone.length} vault docs missing on disk`);
+console.log(
+  `\n${scopedDisk.length} docs in scope${PATH_PREFIX ? ` (${PATH_PREFIX})` : ""} · ` +
+    `${toUpsert.length} new/changed · ${diverged.length} brain-newer · ` +
+    `${brainDocs.length} brain-origin in DB · ${gone.length} vault docs missing on disk`,
+);
 if (DRY) {
   for (const d of toUpsert) console.log(`  ~ ${d.path}`);
   for (const p of diverged) console.log(`  ⚠ diverged (brain newer): ${p}`);

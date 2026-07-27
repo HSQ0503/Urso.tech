@@ -6,6 +6,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { brainDocHref } from "@/lib/brain/links";
 
 type Option = { id: string; name: string };
 
@@ -13,17 +14,20 @@ export function DocEditor({
   mode,
   departments,
   projects,
+  scopeProjectId = null,
   initial,
 }: {
   mode: "create" | "edit";
   departments: Option[];
   projects: Option[];
+  scopeProjectId?: string | null;
   initial?: {
     path: string;
     title: string;
     description: string;
     department: string;
     project: string;
+    visibility: "organization" | "department" | "project" | "restricted";
     type: string;
     audience: string;
     content: string;
@@ -51,6 +55,7 @@ export function DocEditor({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           path: initial?.path,
+          accessProjectId: scopeProjectId,
           title,
           description,
           department: department || "none",
@@ -65,7 +70,8 @@ export function DocEditor({
         setError(data.error ?? "Save failed — try again.");
         return;
       }
-      router.push(`/brain/docs/view?path=${encodeURIComponent(data.path ?? initial?.path ?? "")}`);
+      const nextScope = initial?.visibility === "project" ? project || null : scopeProjectId;
+      router.push(brainDocHref(data.path ?? initial?.path ?? "", nextScope));
       router.refresh();
     } catch {
       setError("Save failed — try again.");
@@ -83,7 +89,7 @@ export function DocEditor({
       const r = await fetch("/api/brain/docs", {
         method: "DELETE",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ path: initial.path }),
+        body: JSON.stringify({ path: initial.path, accessProjectId: scopeProjectId }),
       });
       if (!r.ok) {
         setError(((await r.json().catch(() => null)) as { error?: string } | null)?.error ?? "Delete failed.");

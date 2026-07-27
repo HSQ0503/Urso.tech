@@ -2,7 +2,7 @@
 // handler verifies the thread belongs to the signed-in user first.
 
 import { getBrainUser } from "@/lib/brain/access";
-import { resolveBrainPrincipal } from "@/lib/brain/authorization";
+import { canAccessBrainProject, resolveBrainPrincipal } from "@/lib/brain/authorization";
 import { ursoDbSafe, URSO_DB_MISSING } from "@/lib/brain/supabase";
 import { getOwnedBrainThread } from "@/lib/brain/threads";
 
@@ -19,6 +19,12 @@ export async function GET(_req: Request, { params }: Ctx) {
   if (!principal) return Response.json({ error: "active brain membership required" }, { status: 403 });
   const owned = await getOwnedBrainThread(admin, user.id, id, principal.organizationId);
   if (!owned) return Response.json({ error: "not found" }, { status: 404 });
+  if (
+    owned.project_id &&
+    !(await canAccessBrainProject(admin, principal, owned.project_id).catch(() => false))
+  ) {
+    return Response.json({ error: "project access required" }, { status: 403 });
+  }
 
   const { data, error } = await admin
     .from("brain_messages")

@@ -32,9 +32,13 @@ export type BrainDocMeta = {
   project_id: string | null;
   doc_type: "core" | "doc" | "rule";
   audience: string[];
+  tags: string[];
   visibility?: BrainVisibility;
   current_version?: number;
   review_due_at?: string | null;
+  // The project scope that made this document readable. Null means the
+  // document is readable without activating a project.
+  access_project_id?: string | null;
 };
 
 export type BrainDoc = BrainDocMeta & {
@@ -62,10 +66,36 @@ export type BrainPrincipal = {
 
 export type BrainRetrievalMode = "hybrid" | "lexical" | "none";
 
+export type BrainClaimLifecycle = "active" | "superseded" | "retired";
+export type BrainClaimResolution = "accepted" | "unresolved" | "contested";
+export type BrainClaimTemporalStatus = "current" | "historical" | "future";
+
+export type BrainContextClaim = {
+  id: string;
+  subject: { id: string; label: string };
+  predicate: { id: string; label: string };
+  object: {
+    type: "text" | "number" | "boolean" | "date" | "entity";
+    value: string;
+    label?: string;
+  };
+  lifecycle: BrainClaimLifecycle;
+  resolution: BrainClaimResolution;
+  validFrom: string | null;
+  validUntil: string | null;
+  temporalStatus: BrainClaimTemporalStatus;
+  supersedes: string[];
+  supersededBy: string[];
+};
+
 export type BrainContextEvidence = {
   id: string;
+  sourceKind: "document_chunk" | "temporal_claim";
+  accessProjectId: string | null;
   path: string;
   title: string;
+  documentType: "core" | "doc" | "rule";
+  authority: "governing" | "reference";
   heading: string;
   excerpt: string;
   version: number;
@@ -73,6 +103,16 @@ export type BrainContextEvidence = {
   lexicalScore: number;
   semanticScore: number;
   fusedScore: number;
+  claim?: BrainContextClaim;
+};
+
+export type BrainContextConflict = {
+  id: string;
+  subjectLabel: string;
+  predicateLabel: string;
+  status: "open" | "resolved" | "dismissed";
+  claimIds: string[];
+  message: string;
 };
 
 export type BrainContextReceipt = {
@@ -91,7 +131,7 @@ export type BrainContextReceipt = {
     tokenBudget: number;
   };
   authorization: {
-    policy: "membership + document visibility + ACL";
+    policy: "organization membership + explicit project membership + document visibility + ACL";
     permittedEvidenceCount: number;
   };
   retrieval: {
@@ -102,7 +142,32 @@ export type BrainContextReceipt = {
     latencyMs: number;
   };
   evidence: BrainContextEvidence[];
-  conflicts: string[];
+  temporal?: {
+    queryTime: {
+      mode: "current" | "as_of";
+      effectiveAt: string;
+      source: "default_today" | "explicit";
+    };
+    checkedClaimCount: number;
+    selectedClaimCount: number;
+    claims: BrainContextClaim[];
+  };
+  conflictAnalysis:
+    | {
+        status: "not_performed";
+        message: string;
+      }
+    | {
+        status: "performed";
+        effectiveAt: string;
+        checkedClaimCount: number;
+        conflicts: BrainContextConflict[];
+        message: string;
+      };
+  // Pre-M5 receipts stored conflicts as strings. New receipts keep structured
+  // conflicts inside conflictAnalysis so authorization-sensitive counts cannot
+  // be confused with the historical placeholder.
+  conflicts?: string[];
   missing: string[];
 };
 

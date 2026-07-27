@@ -35,10 +35,10 @@ export function BrainIndexManager() {
   };
 
   return (
-    <div className="rounded-2xl border border-[var(--ob-border)] bg-[var(--ob-bg-alt)] p-4">
+    <div className="rounded-[6px] border border-[var(--ob-border)] bg-[var(--ob-bg-alt)] p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <span className="grid size-10 place-items-center rounded-xl bg-orange-soft text-orange">
+          <span className="grid size-10 place-items-center rounded-[5px] bg-orange-soft text-orange">
             <Database className="size-4" />
           </span>
           <div>

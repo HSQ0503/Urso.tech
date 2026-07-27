@@ -6,6 +6,7 @@ import {
   type BrainDocMeta,
   type BrainPrincipal,
   type BrainProfile,
+  type BrainProject,
   type BrainRole,
   type BrainVisibility,
 } from "./types";
@@ -20,6 +21,21 @@ type MembershipRow = {
   department_id: string | null;
   active: boolean;
 };
+
+export async function getBrainMembership(
+  admin: Admin,
+  userId: string,
+  organizationId = DEFAULT_BRAIN_ORGANIZATION_ID,
+): Promise<MembershipRow | null> {
+  const { data, error } = await admin
+    .from("brain_memberships")
+    .select("organization_id, user_id, role, department_id, active")
+    .eq("organization_id", organizationId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw new Error(`membership lookup failed: ${error.message}`);
+  return (data as MembershipRow | null) ?? null;
+}
 
 type AclRow = {
   doc_id: string;
@@ -94,13 +110,17 @@ export function canReadBrainDoc(
   projectId: string | null,
   acl: AclRow[] = [],
 ): boolean {
+  const visibility: BrainVisibility = doc.visibility ?? "organization";
+  // Elevated roles may enter any active project, but project-only truth must
+  // still stay out of company-wide context.
+  if (visibility === "project") {
+    return Boolean(projectId && doc.project_id === projectId);
+  }
   if (principal.role === "org_admin" || principal.role === "knowledge_steward") return true;
   if (hasAcl(principal, doc.id, projectId, acl, ["read", "edit", "approve"])) return true;
 
-  const visibility: BrainVisibility = doc.visibility ?? "organization";
   if (visibility === "organization") return true;
   if (visibility === "department") return doc.department_id === principal.departmentId;
-  if (visibility === "project") return Boolean(projectId && doc.project_id === projectId);
   return false;
 }
 
@@ -108,16 +128,57 @@ export function canEditBrainTruth(principal: BrainPrincipal): boolean {
   return principal.role === "org_admin" || principal.role === "knowledge_steward";
 }
 
+export async function canAccessBrainProject(
+  admin: Admin,
+  principal: BrainPrincipal,
+  projectId: string,
+): Promise<boolean> {
+  const { data, error } = await admin.rpc("brain_user_can_access_project", {
+    p_organization_id: principal.organizationId,
+    p_user_id: principal.userId,
+    p_project_id: projectId,
+  });
+  if (error) throw new Error(`project authorization failed: ${error.message}`);
+  return data === true;
+}
+
+export async function getAuthorizedProjects(
+  admin: Admin,
+  principal: BrainPrincipal,
+): Promise<BrainProject[]> {
+  const { data: projects, error: projectsError } = await admin
+    .from("brain_projects")
+    .select("id, name, blurb, status")
+    .eq("organization_id", principal.organizationId)
+    .eq("status", "active")
+    .order("sort");
+  if (projectsError) throw new Error(`project catalog failed: ${projectsError.message}`);
+
+  const activeProjects = (projects ?? []) as BrainProject[];
+  if (canEditBrainTruth(principal) || !activeProjects.length) return activeProjects;
+
+  const { data: memberships, error: membershipsError } = await admin
+    .from("brain_project_memberships")
+    .select("project_id")
+    .eq("organization_id", principal.organizationId)
+    .eq("user_id", principal.userId)
+    .eq("active", true);
+  if (membershipsError) throw new Error(`project memberships failed: ${membershipsError.message}`);
+  const permitted = new Set((memberships ?? []).map((item) => item.project_id as string));
+  return activeProjects.filter((project) => permitted.has(project.id));
+}
+
 export async function getAuthorizedDocManifest(
   admin: Admin,
   principal: BrainPrincipal,
   projectId: string | null,
 ): Promise<BrainDocMeta[]> {
+  if (projectId && !(await canAccessBrainProject(admin, principal, projectId))) return [];
   const [{ data: docs, error }, { data: acl }] = await Promise.all([
     admin
       .from("brain_docs")
       .select(
-        "id, organization_id, path, title, description, department_id, project_id, doc_type, audience, visibility, current_version, review_due_at",
+        "id, organization_id, path, title, description, department_id, project_id, doc_type, audience, tags, visibility, current_version, review_due_at",
       )
       .eq("organization_id", principal.organizationId)
       .is("deleted_at", null)
@@ -132,6 +193,32 @@ export async function getAuthorizedDocManifest(
   return ((docs ?? []) as BrainDocMeta[]).filter((doc) =>
     canReadBrainDoc(principal, doc, projectId, (acl ?? []) as AclRow[]),
   );
+}
+
+export async function getAuthorizedKnowledgeCatalog(
+  admin: Admin,
+  principal: BrainPrincipal,
+): Promise<{ docs: BrainDocMeta[]; projects: BrainProject[] }> {
+  const projects = await getAuthorizedProjects(admin, principal);
+  const manifests = await Promise.all([
+    getAuthorizedDocManifest(admin, principal, null),
+    ...projects.map((project) => getAuthorizedDocManifest(admin, principal, project.id)),
+  ]);
+  const byPath = new Map<string, BrainDocMeta>();
+
+  manifests.forEach((manifest, index) => {
+    const accessProjectId = index === 0 ? null : projects[index - 1].id;
+    for (const doc of manifest) {
+      if (!byPath.has(doc.path)) {
+        byPath.set(doc.path, { ...doc, access_project_id: accessProjectId });
+      }
+    }
+  });
+
+  return {
+    docs: [...byPath.values()].sort((left, right) => left.path.localeCompare(right.path)),
+    projects,
+  };
 }
 
 export async function getAuthorizedBrainDoc(
@@ -161,5 +248,5 @@ export async function auditBrainEvent(
     resource_id: resourceId,
     metadata,
   });
-  if (error) console.error("[brain] audit write failed:", error.message);
+  if (error) throw new Error(`audit write failed: ${error.message}`);
 }

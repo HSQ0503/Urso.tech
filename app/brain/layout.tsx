@@ -1,16 +1,12 @@
 // Urso Brain shell — its own product surface on its OWN Supabase project
 // (Urso HQ; see lib/brain/supabase.ts). Access = signed in to that project.
-//
-// The chrome is Obsidian's (components/brain/shell.tsx): the brain IS a vault,
-// so it wears a vault's UI rather than the dashboard's. This layout's only job
-// is to hand the shell the file list for its explorer.
 
 import { Suspense } from "react";
 import type { Metadata } from "next";
 import { getBrainUser } from "@/lib/brain/access";
 import {
   canEditBrainTruth,
-  getAuthorizedDocManifest,
+  getAuthorizedKnowledgeCatalog,
   resolveBrainPrincipal,
 } from "@/lib/brain/authorization";
 import { ursoDbSafe } from "@/lib/brain/supabase";
@@ -28,16 +24,26 @@ export default async function BrainLayout({ children }: { children: React.ReactN
   const user = await getBrainUser();
   const admin = user ? ursoDbSafe() : null;
   const principal = admin && user ? await resolveBrainPrincipal(admin, user).catch(() => null) : null;
-  const manifest =
-    admin && principal ? await getAuthorizedDocManifest(admin, principal, null).catch(() => []) : [];
-  const files = manifest.map((d) => ({ path: d.path, title: d.title }));
+  const catalog =
+    admin && principal
+      ? await getAuthorizedKnowledgeCatalog(admin, principal).catch(() => ({ docs: [], projects: [] }))
+      : { docs: [], projects: [] };
+  const files = catalog.docs.map((doc) => ({
+    path: doc.path,
+    title: doc.title,
+    projectId: doc.access_project_id,
+  }));
 
   return (
     <div className="theme-scope">
-      {/* The shell reads ?path= to know which doc is open, and Next requires a
-          boundary around useSearchParams. */}
+      {/* The graph explorer reads ?path= to know which doc is open, and Next
+          requires a boundary around useSearchParams. */}
       <Suspense fallback={<div className="ob-app" />}>
-        <BrainShell files={files} canEdit={principal ? canEditBrainTruth(principal) : false}>
+        <BrainShell
+          files={files}
+          canEdit={principal ? canEditBrainTruth(principal) : false}
+          role={principal?.role ?? null}
+        >
           {children}
         </BrainShell>
       </Suspense>
