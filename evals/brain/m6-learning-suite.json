@@ -11,6 +11,11 @@
   },
   "cases": [
     {
+      "id": "openai-strict-schema-compatible",
+      "category": "model-contract",
+      "description": "The extraction response schema satisfies OpenAI strict structured-output requirements."
+    },
+    {
       "id": "safe-mode-defaults-off",
       "category": "policy",
       "description": "Missing or invalid learning configuration resolves to off and invokes neither extraction nor persistence."

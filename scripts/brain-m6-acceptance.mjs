@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 
 import { readFileSync } from "node:fs";
+import { z } from "zod";
 import {
   analyzeBrainGarden,
+  brainLearningExtractionSchema,
   parseLearningExtraction,
   resolveBrainLearningPolicy,
   reviewBrainConversation,
@@ -38,6 +40,34 @@ function record(caseId, status, detail) {
   results.push({ ...definition, status, detail });
 }
 
+function assertOpenAiStrictObjects(schema, path = "$") {
+  if (!schema || typeof schema !== "object") return;
+  if (Array.isArray(schema)) {
+    schema.forEach((item, index) =>
+      assertOpenAiStrictObjects(item, `${path}[${index}]`),
+    );
+    return;
+  }
+  if (schema.type === "object" || schema.properties) {
+    const propertyNames = Object.keys(schema.properties ?? {});
+    assert(
+      Array.isArray(schema.required),
+      `${path} must declare a required array.`,
+    );
+    assert(
+      propertyNames.every((name) => schema.required.includes(name)),
+      `${path} must require every declared property.`,
+    );
+    assert(
+      schema.additionalProperties === false,
+      `${path} must reject additional properties.`,
+    );
+  }
+  for (const [key, value] of Object.entries(schema)) {
+    assertOpenAiStrictObjects(value, `${path}.${key}`);
+  }
+}
+
 async function evaluate(caseId, test) {
   try {
     record(caseId, "pass", await test());
@@ -49,6 +79,12 @@ async function evaluate(caseId, test) {
     );
   }
 }
+
+await evaluate("openai-strict-schema-compatible", async () => {
+  const jsonSchema = z.toJSONSchema(brainLearningExtractionSchema);
+  assertOpenAiStrictObjects(jsonSchema);
+  return "Every structured-output object requires all properties and rejects extras.";
+});
 
 function evidence({
   id,

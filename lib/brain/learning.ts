@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { z } from "zod";
 import type {
   BrainContextEvidence,
   BrainContextReceipt,
@@ -208,6 +209,49 @@ export type BrainConversationLearningInput = {
   provider?: string | null;
   model?: string | null;
 };
+
+const brainLearningObjectSchema = z
+  .object({
+    type: z.enum(["text", "number", "boolean", "date", "entity"]),
+    value: z.union([z.string(), z.number(), z.boolean()]),
+    entityId: z.string().nullable(),
+  })
+  .nullable();
+
+const brainLearningCandidateSchema = z.object({
+  type: z.enum([
+    "new_claim",
+    "update_claim",
+    "retire_claim",
+    "resolve_conflict",
+    "stale_document",
+    "missing_knowledge",
+    "document_patch",
+  ]),
+  action: z.enum(["create", "update", "supersede", "retire", "investigate"]),
+  projectId: z.string().nullable(),
+  departmentId: z.string().nullable(),
+  subjectEntityId: z.string().nullable(),
+  predicateId: z.string().nullable(),
+  targetClaimId: z.string().nullable(),
+  conflictId: z.string().nullable(),
+  targetDocumentPath: z.string().nullable(),
+  object: brainLearningObjectSchema,
+  validFrom: z.string().nullable(),
+  validUntil: z.string().nullable(),
+  evidenceIds: z.array(z.string()).max(12),
+  confidence: z.number().min(0).max(1),
+  rationale: z.string().min(1).max(1_200),
+  automationKind: z
+    .enum(["metadata_review_due", "derived_summary_refresh"])
+    .nullable(),
+});
+
+// OpenAI strict structured outputs reject optional object properties. Every
+// property is required here; nullable values represent fields that do not apply.
+export const brainLearningExtractionSchema = z.object({
+  candidates: z.array(brainLearningCandidateSchema).max(20),
+});
 
 export type BrainLearningExtractor = (input: {
   prompt: string;
@@ -614,7 +658,7 @@ DON'T:
 
 EXAMPLES:
 Good:
-{"candidates":[{"type":"update_claim","action":"supersede","subjectEntityId":"entity-1","predicateId":"integration-status","targetClaimId":"claim-1","object":{"type":"text","value":"out_of_scope"},"validFrom":"2026-07-24","evidenceIds":["E1"],"confidence":0.98,"rationale":"E1 explicitly supersedes the prior integration status."}]}
+{"candidates":[{"type":"update_claim","action":"supersede","projectId":null,"departmentId":null,"subjectEntityId":"11111111-1111-4111-8111-111111111111","predicateId":"integration-status","targetClaimId":"22222222-2222-4222-8222-222222222222","conflictId":null,"targetDocumentPath":null,"object":{"type":"text","value":"out_of_scope","entityId":null},"validFrom":"2026-07-24","validUntil":null,"evidenceIds":["E1"],"confidence":0.98,"rationale":"E1 explicitly supersedes the prior integration status.","automationKind":null}]}
 
 Good when the assistant states an unsupported fact:
 {"candidates":[]}

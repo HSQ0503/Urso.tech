@@ -2,8 +2,8 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { generateText, Output, type LanguageModel } from "ai";
-import { z } from "zod";
 import {
+  brainLearningExtractionSchema,
   reviewBrainConversation,
   type BrainLearningExtractor,
   type BrainLearningPolicy,
@@ -47,61 +47,13 @@ export type BrainLearningRunSummary = {
   error?: string;
 };
 
-const learningObjectSchema = z
-  .object({
-    type: z.enum(["text", "number", "boolean", "date", "entity"]),
-    value: z.union([z.string(), z.number(), z.boolean()]),
-    entityId: z.string().optional().nullable(),
-  })
-  .optional()
-  .nullable();
-
-const learningCandidateSchema = z.object({
-  type: z.enum([
-    "new_claim",
-    "update_claim",
-    "retire_claim",
-    "resolve_conflict",
-    "stale_document",
-    "missing_knowledge",
-    "document_patch",
-  ]),
-  action: z.enum(["create", "update", "supersede", "retire", "investigate"]),
-  projectId: z.string().optional().nullable(),
-  departmentId: z.string().optional().nullable(),
-  subjectEntityId: z.string().optional().nullable(),
-  predicateId: z.string().optional().nullable(),
-  targetClaimId: z.string().optional().nullable(),
-  conflictId: z.string().optional().nullable(),
-  targetDocumentPath: z.string().optional().nullable(),
-  object: learningObjectSchema,
-  validFrom: z.string().optional().nullable(),
-  validUntil: z.string().optional().nullable(),
-  evidenceIds: z.array(z.string()).max(12),
-  evidenceRoles: z
-    .record(
-      z.string(),
-      z.enum(["supporting", "contradicting", "superseding"]),
-    )
-    .optional(),
-  confidence: z.number().min(0).max(1),
-  rationale: z.string().min(1).max(1_200),
-  automationKind: z
-    .enum(["metadata_review_due", "derived_summary_refresh"])
-    .optional(),
-});
-
-const learningExtractionSchema = z.object({
-  candidates: z.array(learningCandidateSchema).max(20),
-});
-
 export function createModelLearningExtractor(
   model: LanguageModel,
 ): BrainLearningExtractor {
   return async ({ prompt }) => {
     const result = await generateText({
       model,
-      output: Output.object({ schema: learningExtractionSchema }),
+      output: Output.object({ schema: brainLearningExtractionSchema }),
       prompt,
     });
     return result.output;
