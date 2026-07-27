@@ -57,7 +57,7 @@ const DEFAULT_SETTINGS: CanesSettings = {
   estimate_expiry_days: 28,
   estimate_tax_rate_bps: 0,
   job_confirmation_template:
-    "Hi{name}, this is Canes Pressure Washing confirming your appointment {when} at {address}. Reply YES to confirm. Reply STOP to opt out.",
+    "Hi{name}, this is Canes Pressure Washing confirming your appointment {when} at {address}. Reply YES to confirm your appointment time, or reply here to reschedule. Reply STOP to opt out.",
   job_confirmation_offset_hours: 24,
   invoice_terms:
     "Payment is due upon receipt. Thank you for your business. Canes Pressure Washing is not responsible for pre-existing damage, loose or failing surfaces, or oxidation revealed by cleaning.",
@@ -66,8 +66,11 @@ const DEFAULT_SETTINGS: CanesSettings = {
   invoice_reminder_days: [3, 7],
   estimate_reminder_days: [2, 5],
   confirmation_final_offset_hours: 2,
+  // A2P: no keyword gates this. Any reply confirms — asking for a specific
+  // word reads as YES/NO-conditioned service to a 10DLC reviewer (ticket
+  // #28001908), and the slot warning is scheduling practice, not consent.
   confirmation_final_template:
-    "Hi{name}, we still need a YES to confirm your Canes Pressure Washing appointment {when} at {address}. If we do not hear back we will have to release the slot. Just reply with a day and time that works (tomorrow or the day after is perfect) and we will lock it in. Reply STOP to opt out.",
+    "Hi{name}, we have not heard back about your Canes Pressure Washing appointment {when} at {address}. Just reply here to let us know it still works, or send a day and time that suits you better and we will lock it in. If we do not hear from you we may offer the slot to another customer. Reply STOP to opt out.",
   confirmation_auto_release: false,
   call_greeting_enabled: true,
   call_greeting_text:

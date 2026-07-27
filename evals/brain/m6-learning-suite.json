@@ -1,0 +1,154 @@
+{
+  "suiteId": "urso-brain-m6-controlled-learning",
+  "version": 1,
+  "description": "Deterministic acceptance contract for evidence-only controlled learning, exact scope and provenance, safe feature modes, routing, idempotency, and gardener findings.",
+  "thresholds": {
+    "casePassRate": 1,
+    "authorizationLeakageFailures": 0,
+    "unsupportedCandidates": 0,
+    "directTruthWrites": 0,
+    "unversionedEvidence": 0
+  },
+  "cases": [
+    {
+      "id": "safe-mode-defaults-off",
+      "category": "policy",
+      "description": "Missing or invalid learning configuration resolves to off and invokes neither extraction nor persistence."
+    },
+    {
+      "id": "structured-output-optional-shape",
+      "category": "extraction",
+      "description": "The structured model output accepts a minimal valid candidate without requiring unrelated nullable fields."
+    },
+    {
+      "id": "shadow-detects-without-publishing",
+      "category": "governance",
+      "description": "Shadow mode persists an evidence-backed detected candidate without applying or publishing truth."
+    },
+    {
+      "id": "review-mode-detects-for-stewards",
+      "category": "governance",
+      "description": "Review mode exposes a detected candidate to stewards while reserving queue and proposal transitions for governed review."
+    },
+    {
+      "id": "unsupported-model-prose-rejected",
+      "category": "grounding",
+      "description": "A claim stated only by the assistant is rejected when the cited evidence does not entail its value."
+    },
+    {
+      "id": "negated-value-rejected",
+      "category": "grounding",
+      "description": "A negated mention cannot establish the opposite positive claim."
+    },
+    {
+      "id": "numeric-token-boundary-required",
+      "category": "grounding",
+      "description": "Numeric entailment matches normalized whole tokens rather than substrings."
+    },
+    {
+      "id": "unknown-evidence-rejected",
+      "category": "provenance",
+      "description": "A candidate cannot cite an E# entry outside its exact Context Receipt."
+    },
+    {
+      "id": "prompt-injection-is-not-learning",
+      "category": "security",
+      "description": "Instruction-like evidence cannot establish a learned claim even when it contains the proposed value."
+    },
+    {
+      "id": "prompt-injection-variant-is-not-learning",
+      "category": "security",
+      "description": "Paraphrased attempts to override rules and emit candidates remain untrusted evidence."
+    },
+    {
+      "id": "scope-broadening-rejected",
+      "category": "security",
+      "description": "A candidate cannot broaden or switch the project or department scope of its source receipt."
+    },
+    {
+      "id": "project-scope-preserved",
+      "category": "security",
+      "description": "An accepted candidate inherits the source receipt's exact project and department."
+    },
+    {
+      "id": "secret-like-data-rejected",
+      "category": "security",
+      "description": "Credentials and secret-like values never become learning candidates."
+    },
+    {
+      "id": "github-token-rejected",
+      "category": "security",
+      "description": "Common provider token signatures such as GitHub personal access tokens never enter candidate storage."
+    },
+    {
+      "id": "transient-metric-rejected",
+      "category": "grounding",
+      "description": "Live and short-lived metric snapshots are not promoted to durable truth."
+    },
+    {
+      "id": "durable-target-allowed",
+      "category": "grounding",
+      "description": "An explicitly documented numeric target remains eligible as durable evidence."
+    },
+    {
+      "id": "dedupe-is-idempotent",
+      "category": "idempotency",
+      "description": "Equivalent candidates and repeated source scans produce stable keys and a single candidate."
+    },
+    {
+      "id": "unknown-claim-target-rejected",
+      "category": "governance",
+      "description": "A lifecycle change cannot target a claim absent from cited authorized evidence."
+    },
+    {
+      "id": "unknown-conflict-target-rejected",
+      "category": "governance",
+      "description": "Conflict learning cannot reference a conflict absent from the authorized receipt."
+    },
+    {
+      "id": "malformed-uuid-is-rejected-before-persistence",
+      "category": "validation",
+      "description": "Malformed UUID-backed entity, claim, conflict, or entity-object IDs are rejected per candidate before persistence."
+    },
+    {
+      "id": "critical-routing-prefers-admin",
+      "category": "routing",
+      "description": "Critical project-scoped learning routes to an active project-member organization admin."
+    },
+    {
+      "id": "automation-is-allowlisted",
+      "category": "automation",
+      "description": "Only low-risk allowlisted maintenance is auto-eligible; material truth changes remain review-only."
+    },
+    {
+      "id": "document-maintenance-target-is-cited",
+      "category": "security",
+      "description": "A document-maintenance candidate can target only a path present in its exact cited evidence."
+    },
+    {
+      "id": "gardener-detects-maintenance",
+      "category": "gardener",
+      "description": "The gardener deterministically detects stale documents, superseded references, weak provenance, aged conflicts, and repeated gaps."
+    },
+    {
+      "id": "failed-run-is-observable",
+      "category": "observability",
+      "description": "Extraction failure best-effort persists a failed learning run with a bounded failure code and message."
+    },
+    {
+      "id": "failed-attempt-remains-retryable",
+      "category": "idempotency",
+      "description": "A failed source review is observable and idempotent without blocking a later successful retry."
+    },
+    {
+      "id": "evidence-keeps-exact-version",
+      "category": "provenance",
+      "description": "Every accepted candidate preserves its receipt E# identifier and exact source version."
+    },
+    {
+      "id": "missing-knowledge-needs-real-gap",
+      "category": "grounding",
+      "description": "Evidence-free missing-knowledge learning is allowed only when the source receipt records an actual gap."
+    }
+  ]
+}

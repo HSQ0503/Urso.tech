@@ -15,6 +15,7 @@ import {
   Folder,
   FolderPlus,
   Home,
+  Inbox,
   LogOut,
   Menu,
   MessageSquare,
@@ -41,10 +42,14 @@ const primaryNavigation = [
   { href: "/brain/graph", label: "Knowledge map", icon: Network },
 ] as const;
 
+const stewardNavigation = [
+  { href: "/brain/learning", label: "Learning inbox", icon: Inbox },
+] as const;
+
 function isActiveRoute(pathname: string, href: string) {
   if (href === "/brain") return pathname === href;
   if (href === "/brain/docs") return pathname.startsWith("/brain/docs");
-  return pathname === href;
+  return pathname === href || pathname.startsWith(`${href}/`);
 }
 
 function roleLabel(role: BrainRole | null) {
@@ -87,7 +92,7 @@ function SanaSidebar({
       </div>
 
       <nav className="sana-nav" aria-label="Brain workspace">
-        {primaryNavigation.map(({ href, label, icon: Icon }) => (
+        {[...primaryNavigation, ...(canEdit ? stewardNavigation : [])].map(({ href, label, icon: Icon }) => (
           <Link
             key={href}
             href={href}
