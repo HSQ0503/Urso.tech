@@ -40,7 +40,22 @@ const arg = (name, fallback) =>
   args.find((a) => a.startsWith(`--${name}=`))?.split("=").slice(1).join("=") || fallback;
 
 const BASE = arg("base", "http://localhost:3220").replace(/\/$/, "");
-const SECRET = arg("secret", process.env.URSO_AUTH_SECRET || "preview-only-secret-not-used-anywhere-real");
+
+// The admin-surface checks need tokens the TARGET deployment will actually
+// verify, which means its own URSO_AUTH_SECRET. Locally that is the known
+// preview value from the "canes-api" launch config. Against production we do
+// not have it, and a token signed with the wrong key is indistinguishable from
+// a token that is simply invalid — the server answers 401 either way, which is
+// correct behaviour, not a defect.
+//
+// So those checks are SKIPPED unless the secret was supplied explicitly. A
+// suite that reports ten red failures every time it runs against prod teaches
+// people to ignore it, which costs more than the checks are worth.
+const explicitSecret = args.some((a) => a.startsWith("--secret=")) || Boolean(process.env.URSO_AUTH_SECRET);
+const PREVIEW_SECRET = "preview-only-secret-not-used-anywhere-real";
+const SECRET = arg("secret", process.env.URSO_AUTH_SECRET || PREVIEW_SECRET);
+const isLocal = /localhost|127\.0\.0\.1/.test(BASE);
+const canMintAdmin = explicitSecret || isLocal;
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const V1_DIR = join(ROOT, "app/api/v1");
 
@@ -187,13 +202,19 @@ for (const route of routes) {
 
     // A valid ADMIN token on a crew endpoint must be refused: admins have no
     // crew identity. 403 (authenticated, wrong surface), never 200.
-    if (route.isCrew) {
+    if (route.isCrew && canMintAdmin) {
       const res = await hit(route.path, method, ADMIN_TOKEN);
       const ok = res.status === 403;
       record(
         ok ? "pass" : "fail",
         `${label} — admin bearer refused on crew surface`,
         ok ? "403" : `expected 403, got ${res.status} ${JSON.stringify(res.body)}`,
+      );
+    } else if (route.isCrew) {
+      record(
+        "skip",
+        `${label} — admin bearer refused on crew surface`,
+        "needs this deployment's URSO_AUTH_SECRET; pass --secret=… to enable",
       );
     }
   }
@@ -203,6 +224,7 @@ for (const route of routes) {
 
 const failed = checks.filter((c) => c.status === "fail");
 const passed = checks.filter((c) => c.status === "pass");
+const skipped = checks.filter((c) => c.status === "skip");
 
 if (jsonOutput) {
   console.log(JSON.stringify({ base: BASE, demo: DEMO, routes: routes.length, checks }, null, 2));
@@ -212,8 +234,13 @@ if (jsonOutput) {
   for (const route of routes) console.log(`  · ${route.methods.join("/")} ${route.path.replace(NONEXISTENT, ":id")}`);
   console.log("");
   for (const c of failed) console.log(`  FAIL  ${c.name} — ${c.detail}`);
+  if (skipped.length > 0) {
+    console.log(`  ${skipped.length} check(s) skipped — ${skipped[0].detail}`);
+  }
   if (failed.length === 0) console.log("  all checks passed");
-  console.log(`\n${passed.length} passed, ${failed.length} failed\n`);
+  console.log(
+    `\n${passed.length} passed, ${failed.length} failed${skipped.length ? `, ${skipped.length} skipped` : ""}\n`,
+  );
 }
 
 process.exit(failed.length > 0 ? 1 : 0);
