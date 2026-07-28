@@ -1,0 +1,39 @@
+{
+  "expo": {
+    "name": "Urso",
+    "slug": "urso",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "scheme": "urso",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "ws.urso.app",
+      "infoPlist": {
+        "NSFaceIDUsageDescription": "Unlock Urso with Face ID instead of re-entering your PIN.",
+        "NSCameraUsageDescription": "Take before and after photos of a job.",
+        "NSPhotoLibraryUsageDescription": "Attach existing photos to a job."
+      }
+    },
+    "android": {
+      "package": "ws.urso.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#070707",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "plugins": [
+      "expo-router",
+      "expo-status-bar",
+      "expo-secure-store",
+      "expo-local-authentication"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
