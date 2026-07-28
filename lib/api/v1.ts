@@ -1,0 +1,226 @@
+import { randomUUID } from "node:crypto";
+import { NextResponse, type NextRequest } from "next/server";
+import { createClient } from "@supabase/supabase-js";
+import { readMobileToken, type AdminScope } from "@/lib/urso-auth";
+import { technicianActorFromAuthUserId } from "@/lib/canes/crew-auth";
+import { getCanesAuthServerEnv } from "@/lib/canes/crew-auth-client";
+import { accessAllows, type ConsoleAccess } from "@/lib/canes/access";
+import { isDemo } from "@/lib/canes/data";
+import type { CrewPermissionKey, TechnicianActor } from "@/lib/canes/crew-types";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// /api/v1 — the JSON layer the Expo app talks to (Phase 6).
+//
+// The web app calls lib/canes/* directly (server components) and mutates
+// through server actions. React Native can do neither, so this layer gives the
+// SAME domain functions an HTTP face. It adds no business logic of its own:
+// authenticate → authorize with the existing access.ts rules → call the
+// existing function → wrap the result.
+//
+// Three invariants, in order of importance:
+//
+//   1. NEVER widen a permission to make mobile easier. Every authorization
+//      decision routes through the same access.ts predicates the web uses.
+//      If an action refuses on web it must refuse here.
+//   2. Authentication is cryptographic on every request. There is no ambient
+//      session, no trusted header, no client-supplied identity.
+//   3. Errors never leak driver text. A caller gets a stable notice plus a
+//      request id; the real message goes to the server log.
+//
+// The response envelope is deliberately identical to the ActionResult shape
+// every server action already returns ({ ok, notice? }), so the mobile client
+// has ONE result type for reads and writes alike.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const API_VERSION = "1";
+
+const VERSION_HEADER = { "X-Urso-Api-Version": API_VERSION } as const;
+
+export type ApiActor =
+  | { kind: "admin"; email: string; scope: AdminScope }
+  | { kind: "technician"; actor: TechnicianActor };
+
+// ── Response envelope ────────────────────────────────────────────────────────
+
+export function apiOk<T>(data: T, status = 200): NextResponse {
+  return NextResponse.json({ ok: true, data }, { status, headers: VERSION_HEADER });
+}
+
+export function apiFail(notice: string, status: number): NextResponse {
+  return NextResponse.json({ ok: false, notice }, { status, headers: VERSION_HEADER });
+}
+
+// A domain ActionResult passed straight through. `ok:false` from an action is a
+// business refusal ("This job just changed"), not a transport error — it maps to
+// 409 so the client can distinguish it from 401/403 and simply show the notice.
+export function apiResult(
+  result: { ok: boolean; notice?: string } & Record<string, unknown>,
+): NextResponse {
+  if (result.ok) {
+    const { ok: _ok, notice: _notice, ...rest } = result;
+    return apiOk(rest);
+  }
+  return apiFail(result.notice ?? "That didn't go through — try again.", 409);
+}
+
+// ── Authentication ───────────────────────────────────────────────────────────
+
+// Verify a Canes Supabase access token and return its auth user id.
+// supabase-js validates the JWT against the project's auth server, so a
+// revoked or expired session fails here rather than resolving to a stale user.
+async function verifyCrewAccessToken(token: string): Promise<string | null> {
+  let url: string;
+  let key: string;
+  try {
+    ({ url, key } = getCanesAuthServerEnv());
+  } catch {
+    return null; // Canes auth unconfigured — treat as unauthenticated.
+  }
+  const client = createClient(url, key, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  try {
+    const {
+      data: { user },
+      error,
+    } = await client.auth.getUser(token);
+    if (error || !user) return null;
+    return user.id;
+  } catch {
+    // An attacker-supplied string is not a server error. supabase-js can throw
+    // on a malformed JWT (and on a transient network fault); either way the
+    // caller is unauthenticated, so this must surface as 401 and never as 500.
+    return null;
+  }
+}
+
+function bearerFrom(req: NextRequest): string | null {
+  const raw = req.headers.get("authorization");
+  if (!raw) return null;
+  const [scheme, ...rest] = raw.trim().split(/\s+/);
+  if (scheme.toLowerCase() !== "bearer") return null;
+  const token = rest.join("");
+  return token.length > 0 ? token : null;
+}
+
+// Resolve the caller. Admin is tried first because it is a local HMAC check
+// with no network round-trip; a Supabase JWT simply fails that signature check
+// and falls through. Both paths are cryptographically verified, so the order is
+// a performance choice, not a security one.
+export async function authenticate(req: NextRequest): Promise<ApiActor | null> {
+  const token = bearerFrom(req);
+  if (!token) return null;
+
+  let admin: { email: string; scope: AdminScope } | null = null;
+  try {
+    admin = readMobileToken(token);
+  } catch (e) {
+    // readMobileToken throws only when URSO_AUTH_SECRET is missing in
+    // production — a real misconfiguration, logged loudly here. It must NOT
+    // take crew access down with it: technicians authenticate against Supabase
+    // and never touch this secret. Admins simply cannot authenticate (there is
+    // no key to verify with), which is the correct fail-closed outcome.
+    console.error(
+      `[api/v1] admin token verification unavailable: ${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
+  if (admin) return { kind: "admin", email: admin.email, scope: admin.scope };
+
+  const authUserId = await verifyCrewAccessToken(token);
+  if (!authUserId) return null;
+
+  // Re-resolves role, permissions and crew scoping from the database on every
+  // request — the same body the web cookie path uses, so deactivating an
+  // account or moving a technician between crews takes effect immediately.
+  const actor = await technicianActorFromAuthUserId(authUserId);
+  return actor ? { kind: "technician", actor } : null;
+}
+
+// ── Authorization ────────────────────────────────────────────────────────────
+
+// Map a bearer actor onto the ConsoleAccess shape access.ts already reasons
+// about, so the pure accessAllows() predicate is shared rather than reimplemented.
+export function consoleAccessFor(actor: ApiActor): ConsoleAccess {
+  if (actor.kind === "admin") return { kind: "owner", email: actor.email };
+  if (actor.actor.role === "ops_manager") return { kind: "ops", actor: actor.actor };
+  return { kind: "none" };
+}
+
+// Mirrors denyUnlessPermitted() in lib/canes/access.ts, including its
+// technician fallback (a technician with a flag turned on may use that scoped
+// capability). Returns null when allowed, or the response to return.
+export function denyUnlessApiPermitted(
+  actor: ApiActor,
+  key?: CrewPermissionKey,
+): NextResponse | null {
+  const access = consoleAccessFor(actor);
+  if (access.kind === "owner") return null;
+  if (key && access.kind === "ops") {
+    return access.actor.permissions[key]
+      ? null
+      : apiFail("Your account doesn't have permission for this — ask the owner.", 403);
+  }
+  if (key && actor.kind === "technician" && actor.actor.permissions[key]) return null;
+  if (!key) {
+    // Owner-only endpoint (money pages): no flag can open it.
+    return apiFail("This is owner-only.", 403);
+  }
+  return apiFail("You don't have permission for this — ask the owner.", 403);
+}
+
+// Owner-only, matching requireOwnerPage(): insights, payouts, expenses, settings.
+export function denyUnlessOwner(actor: ApiActor): NextResponse | null {
+  return actor.kind === "admin" ? null : apiFail("This is owner-only.", 403);
+}
+
+// Technician-surface endpoints. An ops manager is also a crew account and keeps
+// its crew scoping, so it passes; a pure admin has no crew identity and must use
+// the owner endpoints instead.
+export function requireTechnician(actor: ApiActor): TechnicianActor | NextResponse {
+  if (actor.kind !== "technician") {
+    return apiFail("This endpoint is for crew accounts.", 403);
+  }
+  return actor.actor;
+}
+
+export { accessAllows };
+
+// ── Handler wrapper ──────────────────────────────────────────────────────────
+
+export type ApiHandler<P = Record<string, string>> = (ctx: {
+  req: NextRequest;
+  actor: ApiActor;
+  params: P;
+}) => Promise<NextResponse>;
+
+// Wraps every /api/v1 route: demo gate → authenticate → handler → error net.
+//
+// Demo deployments return 503 rather than serving fixtures. The web app
+// deliberately serves fixtures when CANES_DEMO=1, but a mobile client has no
+// visible "demo" affordance and a technician looking at seeded jobs in a real
+// yard is a genuinely bad failure. Fail closed and say why.
+export function apiRoute<P extends Record<string, string> = Record<string, string>>(
+  handler: ApiHandler<P>,
+) {
+  return async (
+    req: NextRequest,
+    ctx: { params: Promise<P> } = { params: Promise.resolve({} as P) },
+  ): Promise<NextResponse> => {
+    if (isDemo()) {
+      return apiFail("This deployment is in demo mode — the mobile API is disabled.", 503);
+    }
+    try {
+      const actor = await authenticate(req);
+      if (!actor) return apiFail("Sign in again.", 401);
+      const params = await ctx.params;
+      return await handler({ req, actor, params });
+    } catch (e) {
+      // Never surface driver text: a Postgres or Supabase message can name
+      // tables, columns and constraints. Log it, hand back an id.
+      const id = randomUUID().slice(0, 8);
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error(`[api/v1 ${id}] ${req.method} ${req.nextUrl.pathname} — ${msg}`);
+      return apiFail(`Something went wrong. Reference ${id}.`, 500);
+    }
+  };
+}

@@ -32,12 +32,26 @@ export const getTechnicianActor = cache(async (): Promise<TechnicianActor | null
     data: { user },
   } = await auth.auth.getUser();
   if (!user) return null;
+  return technicianActorFromAuthUserId(user.id);
+});
 
+// Resolve the actor from an ALREADY-AUTHENTICATED Supabase auth user id.
+// Extracted verbatim from getTechnicianActor so the cookie path (web) and the
+// bearer path (mobile API, Phase 6) share one authorization body — a permission
+// or crew-scoping rule can never drift between the two surfaces.
+//
+// SECURITY: callers must have verified the user id cryptographically. The web
+// path gets it from the session cookie via @supabase/ssr; the API path verifies
+// the access token with supabase.auth.getUser(token). Never pass a user id that
+// came from a request body or header.
+export async function technicianActorFromAuthUserId(
+  authUserId: string,
+): Promise<TechnicianActor | null> {
   const db = canesDb();
   const { data: rawAccount } = await db
     .from("crew_accounts")
     .select("*")
-    .eq("auth_user_id", user.id)
+    .eq("auth_user_id", authUserId)
     .maybeSingle();
   const account = rawAccount as AccountRow | null;
   if (!account?.active) return null;
@@ -75,7 +89,7 @@ export const getTechnicianActor = cache(async (): Promise<TechnicianActor | null
   return {
     kind: "technician",
     accountId: account.id,
-    authUserId: user.id,
+    authUserId,
     teamMemberId: member.id,
     email: account.email,
     name: member.name,
@@ -85,7 +99,7 @@ export const getTechnicianActor = cache(async (): Promise<TechnicianActor | null
     crewIds: crews.map((crew) => crew.id),
     crewNames: crews.map((crew) => crew.name),
   };
-});
+}
 
 export async function requireTechnicianActor(): Promise<TechnicianActor> {
   const actor = await getTechnicianActor();

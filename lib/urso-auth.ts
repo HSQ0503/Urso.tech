@@ -194,6 +194,42 @@ export async function clearAdminSession(): Promise<void> {
   store.delete(COOKIE.session);
 }
 
+// ── Mobile bearer token (Phase 6) ────────────────────────────────────────────
+//
+// The Expo app cannot use the httpOnly session cookie, so an admin gets the
+// same signed payload back in the response body and stores it in the Keychain
+// (expo-secure-store), sending it as `Authorization: Bearer <token>`.
+//
+// It is a DISTINCT kind ("mobile"), so a stolen web session cookie is not a
+// usable API token and vice versa — decode() rejects any payload whose `k`
+// doesn't match, and revoking one family never silently keeps the other alive.
+//
+// TTL is longer than the web session because re-authenticating on a phone is
+// expensive (magic link → mail app → universal link). The Face ID / PIN relock
+// is what guards an idle device; this token guards the transport.
+//
+// Same limitation as the web session, stated plainly: these are stateless
+// signed tokens with no server-side revocation list. Removing an admin from
+// ADMINS invalidates them immediately (decode() re-checks membership on every
+// call, and scope below is re-derived live, never trusted from the payload),
+// but an extracted token cannot be individually revoked before it expires.
+// Rotating URSO_AUTH_SECRET invalidates every outstanding token at once.
+const MOBILE_TTL_MS = 90 * 24 * 60 * 60 * 1000;
+
+export function makeMobileToken(email: string): string {
+  return encode({ email: email.trim().toLowerCase(), exp: Date.now() + MOBILE_TTL_MS, k: "mobile" });
+}
+
+export function readMobileToken(token: string): { email: string; scope: AdminScope } | null {
+  const p = decode<{ email: string }>(token, "mobile");
+  if (!p) return null;
+  // Re-derive scope from the live ADMINS map, exactly as getAdminSession does —
+  // never read it off the token, so a scope change takes effect on the next
+  // request instead of after the 90-day expiry.
+  const admin = getAdmin(p.email);
+  return admin ? { email: p.email, scope: admin.scope } : null;
+}
+
 // ── Pending (post-magic-link, awaiting the first-device passcode) ─────────────
 
 export async function setPending(email: string): Promise<void> {
