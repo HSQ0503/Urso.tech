@@ -1,9 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import { readMobileToken, type AdminScope } from "@/lib/urso-auth";
-import { technicianActorFromAuthUserId } from "@/lib/canes/crew-auth";
-import { getCanesAuthServerEnv } from "@/lib/canes/crew-auth-client";
+import { technicianActorFromAuthUserId, verifyCrewAccessToken } from "@/lib/canes/crew-auth";
 import { accessAllows, type ConsoleAccess } from "@/lib/canes/access";
 import { isDemo } from "@/lib/canes/data";
 import type { CrewPermissionKey, TechnicianActor } from "@/lib/canes/crew-types";
@@ -57,42 +55,18 @@ export function apiResult(
   result: { ok: boolean; notice?: string } & Record<string, unknown>,
 ): NextResponse {
   if (result.ok) {
-    const { ok: _ok, notice: _notice, ...rest } = result;
-    return apiOk(rest);
+    // Strip the envelope keys; anything else the action returned (invoiceId,
+    // grant, …) becomes the payload.
+    const data: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(result)) {
+      if (key !== "ok" && key !== "notice") data[key] = value;
+    }
+    return apiOk(data);
   }
   return apiFail(result.notice ?? "That didn't go through — try again.", 409);
 }
 
 // ── Authentication ───────────────────────────────────────────────────────────
-
-// Verify a Canes Supabase access token and return its auth user id.
-// supabase-js validates the JWT against the project's auth server, so a
-// revoked or expired session fails here rather than resolving to a stale user.
-async function verifyCrewAccessToken(token: string): Promise<string | null> {
-  let url: string;
-  let key: string;
-  try {
-    ({ url, key } = getCanesAuthServerEnv());
-  } catch {
-    return null; // Canes auth unconfigured — treat as unauthenticated.
-  }
-  const client = createClient(url, key, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-  try {
-    const {
-      data: { user },
-      error,
-    } = await client.auth.getUser(token);
-    if (error || !user) return null;
-    return user.id;
-  } catch {
-    // An attacker-supplied string is not a server error. supabase-js can throw
-    // on a malformed JWT (and on a transient network fault); either way the
-    // caller is unauthenticated, so this must surface as 401 and never as 500.
-    return null;
-  }
-}
 
 function bearerFrom(req: NextRequest): string | null {
   const raw = req.headers.get("authorization");
@@ -193,6 +167,13 @@ export type ApiHandler<P = Record<string, string>> = (ctx: {
   params: P;
 }) => Promise<NextResponse>;
 
+export type CrewHandler<P = Record<string, string>> = (ctx: {
+  req: NextRequest;
+  actor: ApiActor;
+  technician: TechnicianActor;
+  params: P;
+}) => Promise<NextResponse>;
+
 // Wraps every /api/v1 route: demo gate → authenticate → handler → error net.
 //
 // Demo deployments return 503 rather than serving fixtures. The web app
@@ -215,6 +196,14 @@ export function apiRoute<P extends Record<string, string> = Record<string, strin
       const params = await ctx.params;
       return await handler({ req, actor, params });
     } catch (e) {
+      // Crew server actions call requireTechnicianActor(), which redirect()s
+      // when identity is missing. In a route handler that throws NEXT_REDIRECT.
+      // The wrapper already authenticated, so reaching this means the session
+      // died mid-request — an auth failure, not a server fault.
+      if (e && typeof e === "object" && "digest" in e && typeof e.digest === "string"
+          && e.digest.startsWith("NEXT_REDIRECT")) {
+        return apiFail("Sign in again.", 401);
+      }
       // Never surface driver text: a Postgres or Supabase message can name
       // tables, columns and constraints. Log it, hand back an id.
       const id = randomUUID().slice(0, 8);
@@ -223,4 +212,26 @@ export function apiRoute<P extends Record<string, string> = Record<string, strin
       return apiFail(`Something went wrong. Reference ${id}.`, 500);
     }
   };
+}
+
+// Technician-surface routes. Asserts crew identity BEFORE the handler runs,
+// which fixes two things the acceptance suite caught:
+//
+//   1. Routes that delegate straight to a crew server action used to answer 401
+//      for an authenticated admin, because the action re-resolved identity
+//      internally, found no technician and redirect()ed. 401 tells the app "your
+//      session died, sign in again" — which would drop a perfectly good owner
+//      session. An authenticated caller on the wrong surface is 403.
+//   2. Routes that parse a body used to answer 422 ("Send a JSON body") before
+//      deciding whether the caller may call them at all. Authorization must
+//      precede request-shape validation, or the endpoint describes itself to
+//      someone who was never allowed to reach it.
+export function crewRoute<P extends Record<string, string> = Record<string, string>>(
+  handler: CrewHandler<P>,
+) {
+  return apiRoute<P>(async ({ req, actor, params }) => {
+    const technician = requireTechnician(actor);
+    if (technician instanceof Response) return technician;
+    return handler({ req, actor, technician, params });
+  });
 }

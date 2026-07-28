@@ -1,7 +1,9 @@
 import { cache } from "react";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { createClient } from "@supabase/supabase-js";
 import { canesDb } from "@/lib/canes/supabase";
-import { createCanesAuthClient } from "@/lib/canes/crew-auth-client";
+import { createCanesAuthClient, getCanesAuthServerEnv } from "@/lib/canes/crew-auth-client";
 import { resolvePermissions } from "@/lib/canes/crew-types";
 import type { CrewAccountRole, CrewPermissions, TechnicianActor } from "@/lib/canes/crew-types";
 
@@ -26,13 +28,68 @@ type TeamMemberRow = {
   active: boolean;
 };
 
+// Verify a Canes Supabase access token and return its auth user id.
+// supabase-js validates the JWT against the project's auth server, so a revoked
+// or expired session fails here instead of resolving to a stale user.
+//
+// A malformed token is an UNAUTHENTICATED caller, never a server error: every
+// failure path returns null so callers surface 401 rather than 500.
+export async function verifyCrewAccessToken(token: string): Promise<string | null> {
+  let url: string;
+  let key: string;
+  try {
+    ({ url, key } = getCanesAuthServerEnv());
+  } catch {
+    return null; // Canes auth unconfigured.
+  }
+  try {
+    const client = createClient(url, key, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    const {
+      data: { user },
+      error,
+    } = await client.auth.getUser(token);
+    if (error || !user) return null;
+    return user.id;
+  } catch {
+    return null;
+  }
+}
+
+function bearerToken(raw: string | null): string | null {
+  if (!raw) return null;
+  const [scheme, ...rest] = raw.trim().split(/\s+/);
+  if (scheme.toLowerCase() !== "bearer") return null;
+  const token = rest.join("");
+  return token.length > 0 ? token : null;
+}
+
 export const getTechnicianActor = cache(async (): Promise<TechnicianActor | null> => {
   const auth = await createCanesAuthClient();
   const {
     data: { user },
   } = await auth.auth.getUser();
-  if (!user) return null;
-  return technicianActorFromAuthUserId(user.id);
+  if (user) return technicianActorFromAuthUserId(user.id);
+
+  // Phase 6 — bearer fallback for the Expo app. The mobile client holds a
+  // Supabase session in the Keychain and sends it as an Authorization header
+  // because React Native has no cookie jar tied to this origin.
+  //
+  // This is the ONE change point that makes every existing crew server action
+  // callable over /api/v1 without touching the actions themselves — they all
+  // start with requireTechnicianActor(), so the identity resolves here and the
+  // job-scoping, permission and claim logic below is shared verbatim between
+  // web and mobile. Duplicating those 9 actions for the API would have been the
+  // alternative, and they would have drifted.
+  //
+  // The cookie is checked FIRST, so browser behaviour is unchanged. Bearer
+  // tokens are not sent automatically by browsers, so this path adds no CSRF
+  // surface; a caller presenting one is authenticating as themselves.
+  const token = bearerToken((await headers()).get("authorization"));
+  if (!token) return null;
+  const authUserId = await verifyCrewAccessToken(token);
+  return authUserId ? technicianActorFromAuthUserId(authUserId) : null;
 });
 
 // Resolve the actor from an ALREADY-AUTHENTICATED Supabase auth user id.

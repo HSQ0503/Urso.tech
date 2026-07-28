@@ -1,4 +1,4 @@
-import { apiOk, apiRoute, requireTechnician } from "@/lib/api/v1";
+import { apiOk, crewRoute } from "@/lib/api/v1";
 
 // GET /api/v1/canes/crew/me — the authenticated technician's identity, crew
 // scoping and permission flags. The app calls this once on launch to decide
@@ -7,10 +7,7 @@ import { apiOk, apiRoute, requireTechnician } from "@/lib/api/v1";
 
 export const dynamic = "force-dynamic";
 
-export const GET = apiRoute(async ({ actor }) => {
-  const technician = requireTechnician(actor);
-  if (technician instanceof Response) return technician;
-
+export const GET = crewRoute(async ({ technician }) => {
   return apiOk({
     accountId: technician.accountId,
     teamMemberId: technician.teamMemberId,
