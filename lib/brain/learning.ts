@@ -1199,7 +1199,14 @@ export function analyzeBrainGarden(input: {
   ): void => {
     findings.push({
       ...finding,
-      dedupeKey: hash(stableJson(finding)),
+      dedupeKey: hash(
+        stableJson({
+          type: finding.type,
+          departmentId: finding.departmentId,
+          projectId: finding.projectId,
+          subjectId: finding.subjectId,
+        }),
+      ),
     });
   };
 
@@ -1275,7 +1282,10 @@ export function analyzeBrainGarden(input: {
   return findings.sort(
     (left, right) =>
       left.type.localeCompare(right.type) ||
-      left.subjectId.localeCompare(right.subjectId),
+      (left.departmentId ?? "").localeCompare(right.departmentId ?? "") ||
+      (left.projectId ?? "").localeCompare(right.projectId ?? "") ||
+      left.subjectId.localeCompare(right.subjectId) ||
+      left.dedupeKey.localeCompare(right.dedupeKey),
   );
 }
 

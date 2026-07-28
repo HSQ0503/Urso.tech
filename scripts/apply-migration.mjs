@@ -30,9 +30,14 @@ const fail = (msg) => {
 const token = process.env.SUPABASE_ACCESS_TOKEN;
 const targetArg = process.argv[2];
 const isUrsoMigration = targetArg?.startsWith("supabase/urso/");
+// Canes runs on its OWN Supabase project. Without this branch a
+// supabase/canes/* path would silently apply to the Woof Gang database.
+const isCanesMigration = targetArg?.startsWith("supabase/canes/");
 const supaUrl = isUrsoMigration
   ? process.env.NEXT_PUBLIC_URSO_SUPABASE_URL
-  : process.env.NEXT_PUBLIC_SUPABASE_URL;
+  : isCanesMigration
+    ? process.env.NEXT_PUBLIC_CANES_SUPABASE_URL
+    : process.env.NEXT_PUBLIC_SUPABASE_URL;
 if (!token)
   fail(
     "Needs SUPABASE_ACCESS_TOKEN in .env.local.\n" +
@@ -43,7 +48,9 @@ if (!supaUrl) {
   fail(
     isUrsoMigration
       ? "Needs NEXT_PUBLIC_URSO_SUPABASE_URL in .env.local."
-      : "Needs NEXT_PUBLIC_SUPABASE_URL in .env.local.",
+      : isCanesMigration
+        ? "Needs NEXT_PUBLIC_CANES_SUPABASE_URL in .env.local."
+        : "Needs NEXT_PUBLIC_SUPABASE_URL in .env.local.",
   );
 }
 

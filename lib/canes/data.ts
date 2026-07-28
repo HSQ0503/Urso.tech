@@ -77,6 +77,7 @@ const DEFAULT_SETTINGS: CanesSettings = {
     "Thank you for calling Canes Pressure Washing. Please hold while we connect you.",
   call_whisper_enabled: true,
   call_ivr_enabled: false,
+  margin_share_categories: ["Materials"],
   expense_categories: ["Materials", "Gas / travel", "Dump fee", "Subcontractor", "Equipment", "Other"],
   review_rewards: {
     google_cents: 1500,
@@ -127,6 +128,7 @@ export async function getSettings(): Promise<CanesSettings> {
     call_whisper_enabled: Boolean(map.call_whisper_enabled ?? DEFAULT_SETTINGS.call_whisper_enabled),
     call_ivr_enabled: Boolean(map.call_ivr_enabled ?? DEFAULT_SETTINGS.call_ivr_enabled),
     expense_categories: map.expense_categories ?? DEFAULT_SETTINGS.expense_categories,
+    margin_share_categories: map.margin_share_categories ?? DEFAULT_SETTINGS.margin_share_categories,
     review_rewards: { ...DEFAULT_SETTINGS.review_rewards, ...(map.review_rewards ?? {}) },
   };
 }

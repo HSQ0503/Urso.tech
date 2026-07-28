@@ -44,5 +44,21 @@
   },
   "overrides": {
     "react-is": "^19.0.0"
-  }
+  },
+  "description": "This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).",
+  "main": "index.js",
+  "directories": {
+    "lib": "lib"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/HSQ0503/Urso.tech.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/HSQ0503/Urso.tech/issues"
+  },
+  "homepage": "https://github.com/HSQ0503/Urso.tech#readme"
 }

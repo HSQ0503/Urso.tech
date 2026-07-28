@@ -848,6 +848,364 @@ await evaluate("gardener-detects-maintenance", async () => {
   return "Gardener produced five scoped, deduplicable maintenance findings.";
 });
 
+await evaluate("gardener-threshold-boundaries", async () => {
+  const findings = analyzeBrainGarden({
+    today: "2026-07-27",
+    conflictAgeDays: 14,
+    unansweredThreshold: 3,
+    documents: [
+      {
+        id: "doc-overdue",
+        path: "Overdue.md",
+        title: "Overdue",
+        departmentId: "software",
+        projectId: "woof-gang",
+        currentVersion: 1,
+        reviewDueAt: "2026-07-26T23:59:59.000Z",
+        derivedFromClaimIds: [],
+      },
+      {
+        id: "doc-due-today",
+        path: "Due today.md",
+        title: "Due today",
+        departmentId: "software",
+        projectId: "woof-gang",
+        currentVersion: 1,
+        reviewDueAt: "2026-07-27T00:00:00.000Z",
+        derivedFromClaimIds: [],
+      },
+    ],
+    claims: [],
+    conflicts: [
+      {
+        id: "conflict-at-cutoff",
+        departmentId: "software",
+        projectId: "woof-gang",
+        status: "open",
+        openedAt: "2026-07-13T00:00:00.000Z",
+        claimIds: [],
+      },
+      {
+        id: "conflict-after-cutoff",
+        departmentId: "software",
+        projectId: "woof-gang",
+        status: "open",
+        openedAt: "2026-07-13T00:00:00.001Z",
+        claimIds: [],
+      },
+    ],
+    unansweredQuestions: [
+      {
+        normalizedQuestion: "threshold included",
+        departmentId: "software",
+        projectId: "woof-gang",
+        occurrenceCount: 3,
+        contextRunIds: ["run-1", "run-2", "run-3"],
+      },
+      {
+        normalizedQuestion: "below threshold",
+        departmentId: "software",
+        projectId: "woof-gang",
+        occurrenceCount: 2,
+        contextRunIds: ["run-1", "run-2"],
+      },
+    ],
+  });
+  assert(
+    findings.some(
+      (item) =>
+        item.type === "stale_document" && item.subjectId === "doc-overdue",
+    ),
+    "A document due before today was not stale.",
+  );
+  assert(
+    !findings.some((item) => item.subjectId === "doc-due-today"),
+    "A document due today was marked stale.",
+  );
+  assert(
+    findings.some(
+      (item) =>
+        item.type === "unresolved_conflict" &&
+        item.subjectId === "conflict-at-cutoff",
+    ),
+    "A conflict exactly at the age cutoff was excluded.",
+  );
+  assert(
+    !findings.some((item) => item.subjectId === "conflict-after-cutoff"),
+    "A conflict newer than the age cutoff was included.",
+  );
+  const missingFindings = findings.filter(
+    (item) => item.type === "missing_knowledge",
+  );
+  assert(
+    missingFindings.length === 1,
+    "The repeated-gap threshold did not include exactly its boundary.",
+  );
+  return "Gardener boundaries are overdue < today, conflict age >= cutoff, and gap count >= threshold.";
+});
+
+await evaluate("gardener-excludes-ineligible-inputs", async () => {
+  const findings = analyzeBrainGarden({
+    today: "2026-07-27",
+    documents: [
+      {
+        id: "doc-current",
+        path: "Current.md",
+        title: "Current",
+        departmentId: "software",
+        projectId: "woof-gang",
+        currentVersion: 2,
+        reviewDueAt: null,
+        derivedFromClaimIds: ["claim-active"],
+      },
+      {
+        id: "doc-future",
+        path: "Future.md",
+        title: "Future",
+        departmentId: "software",
+        projectId: "woof-gang",
+        currentVersion: 1,
+        reviewDueAt: "2026-08-01",
+        derivedFromClaimIds: [],
+      },
+    ],
+    claims: [
+      {
+        id: "claim-active",
+        departmentId: "software",
+        projectId: "woof-gang",
+        lifecycle: "active",
+        resolution: "accepted",
+        evidenceDocumentIds: ["doc-current"],
+      },
+      {
+        id: "claim-unaccepted",
+        departmentId: "software",
+        projectId: "woof-gang",
+        lifecycle: "active",
+        resolution: "unresolved",
+        evidenceDocumentIds: [],
+      },
+    ],
+    conflicts: [
+      {
+        id: "conflict-resolved",
+        departmentId: "software",
+        projectId: "woof-gang",
+        status: "resolved",
+        openedAt: "2026-01-01T00:00:00.000Z",
+        claimIds: [],
+      },
+      {
+        id: "conflict-dismissed",
+        departmentId: "software",
+        projectId: "woof-gang",
+        status: "dismissed",
+        openedAt: "2026-01-01T00:00:00.000Z",
+        claimIds: [],
+      },
+    ],
+    unansweredQuestions: [
+      {
+        normalizedQuestion: "rare gap",
+        departmentId: "software",
+        projectId: "woof-gang",
+        occurrenceCount: 2,
+        contextRunIds: ["run-1", "run-2"],
+      },
+    ],
+  });
+  assert(
+    findings.length === 0,
+    `Ineligible inputs produced ${findings.length} gardener findings.`,
+  );
+  return "Current, evidenced, resolved, dismissed, and below-threshold inputs produced no findings.";
+});
+
+await evaluate("gardener-order-is-deterministic", async () => {
+  const input = {
+    today: "2026-07-27",
+    documents: [
+      {
+        id: "shared-doc",
+        path: "Exec.md",
+        title: "Exec copy",
+        departmentId: "exec",
+        projectId: null,
+        currentVersion: 1,
+        reviewDueAt: "2026-07-01",
+        derivedFromClaimIds: [],
+      },
+      {
+        id: "shared-doc",
+        path: "Software.md",
+        title: "Software copy",
+        departmentId: "software",
+        projectId: "woof-gang",
+        currentVersion: 1,
+        reviewDueAt: "2026-07-01",
+        derivedFromClaimIds: [],
+      },
+    ],
+    claims: [
+      {
+        id: "claim-z",
+        departmentId: "software",
+        projectId: "woof-gang",
+        lifecycle: "active",
+        resolution: "accepted",
+        evidenceDocumentIds: [],
+      },
+      {
+        id: "claim-a",
+        departmentId: "exec",
+        projectId: null,
+        lifecycle: "active",
+        resolution: "accepted",
+        evidenceDocumentIds: [],
+      },
+    ],
+    conflicts: [],
+    unansweredQuestions: [],
+  };
+  const forward = analyzeBrainGarden(input);
+  const reversed = analyzeBrainGarden({
+    ...input,
+    documents: [...input.documents].reverse(),
+    claims: [...input.claims].reverse(),
+  });
+  assert(
+    JSON.stringify(forward) === JSON.stringify(reversed),
+    "Gardener output order changed when source rows were reversed.",
+  );
+  return "Finding order remained stable across equivalent reversed inputs.";
+});
+
+await evaluate("gardener-identity-is-stable-and-scoped", async () => {
+  const analyzeGap = (
+    occurrenceCount,
+    departmentId = "software",
+    projectId = "woof-gang",
+  ) =>
+    analyzeBrainGarden({
+      today: "2026-07-27",
+      documents: [],
+      claims: [],
+      conflicts: [],
+      unansweredQuestions: [
+        {
+          normalizedQuestion: "what is the renewal policy?",
+          departmentId,
+          projectId,
+          occurrenceCount,
+          contextRunIds: Array.from(
+            { length: occurrenceCount },
+            (_, index) => `run-${index + 1}`,
+          ),
+        },
+      ],
+    })[0];
+  const first = analyzeGap(3);
+  const repeated = analyzeGap(7);
+  const otherDepartment = analyzeGap(7, "exec", "woof-gang");
+  const otherProject = analyzeGap(7, "software", "canes");
+  assert(first && repeated && otherDepartment && otherProject, "Gap fixtures did not produce findings.");
+  assert(
+    first.message !== repeated.message,
+    "Mutable occurrence count did not change the finding message fixture.",
+  );
+  assert(
+    first.dedupeKey === repeated.dedupeKey,
+    "Mutable occurrence count changed gardener identity.",
+  );
+  assert(
+    first.dedupeKey !== otherDepartment.dedupeKey,
+    "Department scope was absent from gardener identity.",
+  );
+  assert(
+    first.dedupeKey !== otherProject.dedupeKey,
+    "Project scope was absent from gardener identity.",
+  );
+
+  const sameSubjectDifferentTypes = analyzeBrainGarden({
+    today: "2026-07-27",
+    documents: [
+      {
+        id: "same-subject",
+        path: "Same.md",
+        title: "Same",
+        departmentId: "software",
+        projectId: "woof-gang",
+        currentVersion: 2,
+        reviewDueAt: "2026-07-01",
+        derivedFromClaimIds: ["claim-superseded"],
+      },
+    ],
+    claims: [
+      {
+        id: "claim-superseded",
+        departmentId: "software",
+        projectId: "woof-gang",
+        lifecycle: "superseded",
+        resolution: "accepted",
+        evidenceDocumentIds: ["same-subject"],
+      },
+    ],
+    conflicts: [],
+    unansweredQuestions: [],
+  });
+  assert(
+    sameSubjectDifferentTypes.length === 2 &&
+      sameSubjectDifferentTypes[0].dedupeKey !==
+        sameSubjectDifferentTypes[1].dedupeKey,
+    "Finding type was absent from gardener identity.",
+  );
+  return "Finding identity ignored mutable counts while preserving type and exact scope.";
+});
+
+await evaluate("gardener-findings-are-observation-only", async () => {
+  const input = {
+    today: "2026-07-27",
+    documents: [
+      {
+        id: "doc-observation",
+        path: "Observation.md",
+        title: "Observation",
+        departmentId: "software",
+        projectId: "woof-gang",
+        currentVersion: 1,
+        reviewDueAt: "2026-07-01",
+        derivedFromClaimIds: [],
+      },
+    ],
+    claims: [],
+    conflicts: [],
+    unansweredQuestions: [],
+  };
+  const before = JSON.stringify(input);
+  const findings = analyzeBrainGarden(input);
+  const allowedKeys = [
+    "dedupeKey",
+    "departmentId",
+    "message",
+    "projectId",
+    "risk",
+    "subjectId",
+    "type",
+  ];
+  assert(findings.length === 1, "Observation fixture did not produce one finding.");
+  assert(JSON.stringify(input) === before, "Gardener analysis mutated its source input.");
+  assert(
+    findings.every(
+      (finding) =>
+        JSON.stringify(Object.keys(finding).sort()) ===
+        JSON.stringify(allowedKeys),
+    ),
+    "Gardener finding exposed mutation, proposal, or automation fields.",
+  );
+  return "Gardener analysis stayed pure and returned observation-only fields.";
+});
+
 await evaluate("failed-run-is-observable", async () => {
   const writes = [];
   const result = await reviewBrainConversation({
@@ -935,6 +1293,47 @@ await evaluate("missing-knowledge-needs-real-gap", async () => {
   assert(withGap.candidates.length === 1, "Recorded receipt gap was rejected.");
   return "Evidence-free gap learning required an explicit receipt failure.";
 });
+
+const declaredCaseIds = suite.cases.map((item) => item.id);
+const executedCaseIds = results.map((item) => item.id);
+const duplicateIds = (ids) =>
+  [...new Set(ids.filter((id, index) => ids.indexOf(id) !== index))].sort();
+const duplicateDefinitions = duplicateIds(declaredCaseIds);
+const duplicateExecutions = duplicateIds(executedCaseIds);
+const missingExecutions = declaredCaseIds.filter(
+  (id) => !executedCaseIds.includes(id),
+);
+const undeclaredExecutions = executedCaseIds.filter(
+  (id) => !declaredCaseIds.includes(id),
+);
+if (
+  duplicateDefinitions.length ||
+  duplicateExecutions.length ||
+  missingExecutions.length ||
+  undeclaredExecutions.length ||
+  declaredCaseIds.length !== executedCaseIds.length
+) {
+  throw new Error(
+    [
+      "M6 suite case coverage mismatch.",
+      duplicateDefinitions.length
+        ? `Duplicate definitions: ${duplicateDefinitions.join(", ")}.`
+        : "",
+      duplicateExecutions.length
+        ? `Duplicate executions: ${duplicateExecutions.join(", ")}.`
+        : "",
+      missingExecutions.length
+        ? `Missing executions: ${missingExecutions.join(", ")}.`
+        : "",
+      undeclaredExecutions.length
+        ? `Undeclared executions: ${undeclaredExecutions.join(", ")}.`
+        : "",
+      `Declared ${declaredCaseIds.length}; executed ${executedCaseIds.length}.`,
+    ]
+      .filter(Boolean)
+      .join(" "),
+  );
+}
 
 const failed = results.filter((item) => item.status === "fail");
 const summary = {

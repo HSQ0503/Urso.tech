@@ -17,26 +17,54 @@ import { WaitTimer } from "@/app/CanesPressure/components/leads/wait-timer";
 
 export const dynamic = "force-dynamic";
 
-const FILTERS = ["all", "open", "hot", "cold", "won", "lost"] as const;
+// Sebastian, July 2026: "it just looks like a big headache... maybe change the
+// names of those top sections so it's more organized... website submissions,
+// lead generation... then the same thing but post contacted."
+//
+// So the tabs are now the two questions he actually asks the list — HAVE I
+// CALLED THEM YET, and WHERE DID THEY COME FROM — instead of hot/cold, which
+// mixed urgency in with lifecycle. Hot/Cold survives as a badge on the row,
+// which is what it always really was.
+const FILTERS = ["all", "new", "working", "won", "lost"] as const;
 type Filter = (typeof FILTERS)[number];
 
 const TAB_LABEL: Record<Filter, string> = {
   all: "All",
-  open: "Open",
-  hot: "Hot",
-  cold: "Cold",
+  new: "Needs first call",
+  working: "Working",
   won: "Won",
   lost: "Lost",
 };
 
 const EMPTY_COPY: Record<Filter, string> = {
   all: "No leads yet. Add the first one with the button above.",
-  open: "No open leads right now.",
-  hot: "No hot leads waiting. Hot leads arrive with an appointment already set.",
-  cold: "No cold leads to call. New virtual quotes will land here.",
+  new: "Nobody is waiting on a first call. New requests land here the moment they arrive.",
+  working: "Nothing in progress. Leads move here once you have made contact.",
   won: "No won jobs on the board yet.",
   lost: "No lost leads.",
 };
+
+// The source subheadings, in the order Sebastian named them.
+const GROUPS = [
+  { key: "website", label: "Website submissions", sources: ["website"] },
+  { key: "vendor", label: "Lead generation", sources: ["lead_vendor", "meta_ads"] },
+  { key: "referral", label: "Referrals & signs", sources: ["referral", "yard_sign", "door_hanger", "other"] },
+] as const;
+
+// Cold leads that have never been contacted are the speed-to-lead money metric,
+// so they float above the source groups regardless of where they came from.
+const needsCall = (l: Lead) => l.type === "cold" && l.status === "new" && !l.opted_out;
+
+function groupBySource(rows: Lead[]): { label: string; leads: Lead[] }[] {
+  const urgent = rows.filter(needsCall);
+  const rest = rows.filter((l) => !needsCall(l));
+  const out: { label: string; leads: Lead[] }[] = [];
+  for (const g of GROUPS) {
+    const leads = rest.filter((l) => (g.sources as readonly string[]).includes(l.source));
+    if (leads.length) out.push({ label: g.label, leads });
+  }
+  return urgent.length ? [{ label: "__urgent", leads: urgent }, ...out] : out;
+}
 
 function TypeBadge({ type }: { type: LeadType }) {
   return type === "hot" ? (
@@ -117,7 +145,7 @@ export default async function LeadsPage({
   await requirePagePermission("leads");
   const { f } = await searchParams;
   const raw = Array.isArray(f) ? f[0] : f;
-  const filter: Filter = FILTERS.includes(raw as Filter) ? (raw as Filter) : "open";
+  const filter: Filter = FILTERS.includes(raw as Filter) ? (raw as Filter) : "new";
 
   // One fetch covers the rows and every tab count. The subsets mirror the
   // listLeads filter mapping: open/hot/cold exclude won and lost.
@@ -125,19 +153,13 @@ export default async function LeadsPage({
   const open = all.filter((l) => l.status !== "won" && l.status !== "lost");
   const subsets: Record<Filter, Lead[]> = {
     all,
-    open,
-    hot: open.filter((l) => l.type === "hot"),
-    cold: open.filter((l) => l.type === "cold"),
+    new: open.filter((l) => l.status === "new"),
+    working: open.filter((l) => l.status !== "new"),
     won: all.filter((l) => l.status === "won"),
     lost: all.filter((l) => l.status === "lost"),
   };
   const rows = subsets[filter];
-
-  // Urgency is a red group header above plain cards (the Jobber "Overdue"
-  // move), not a colored card edge.
-  const needsCall = (l: Lead) => l.type === "cold" && l.status === "new" && !l.opted_out;
-  const callNow = rows.filter(needsCall);
-  const rest = rows.filter((l) => !needsCall(l));
+  const groups = groupBySource(rows);
 
   return (
     <div>
@@ -179,28 +201,20 @@ export default async function LeadsPage({
             </div>
           ) : (
             <div className="space-y-5">
-              {callNow.length > 0 && (
-                <div>
-                  <p className="cp-list-header text-[var(--cp-danger)]">Call these now · {callNow.length}</p>
+              {groups.map((g) => (
+                <div key={g.label}>
+                  <p
+                    className={`cp-list-header ${g.label === "__urgent" ? "text-[var(--cp-danger)]" : ""}`}
+                  >
+                    {g.label === "__urgent" ? "Call these now" : g.label} · {g.leads.length}
+                  </p>
                   <div className="cp-list">
-                    {callNow.map((lead) => (
+                    {g.leads.map((lead) => (
                       <MobileLeadRow key={lead.id} lead={lead} />
                     ))}
                   </div>
                 </div>
-              )}
-              {rest.length > 0 && (
-                <div>
-                  {callNow.length > 0 && (
-                    <p className="cp-list-header">Everything else · {rest.length}</p>
-                  )}
-                  <div className="cp-list">
-                    {rest.map((lead) => (
-                      <MobileLeadRow key={lead.id} lead={lead} />
-                    ))}
-                  </div>
-                </div>
-              )}
+              ))}
             </div>
           )}
         </div>
@@ -249,26 +263,18 @@ export default async function LeadsPage({
           </div>
         ) : (
           <>
-            {callNow.length > 0 && (
-              <>
-                <p className="cp-group-label cp-group-danger pt-1">
-                  Call these now — {callNow.length}
+            {groups.map((g, i) => (
+              <div key={g.label} className="contents">
+                <p
+                  className={`cp-group-label ${g.label === "__urgent" ? "cp-group-danger" : ""} ${i === 0 ? "pt-1" : "pt-3"}`}
+                >
+                  {g.label === "__urgent" ? "Call these now" : g.label} — {g.leads.length}
                 </p>
-                {callNow.map((lead) => (
+                {g.leads.map((lead) => (
                   <LeadRow key={lead.id} lead={lead} />
                 ))}
-              </>
-            )}
-            {rest.length > 0 && (
-              <>
-                {callNow.length > 0 && (
-                  <p className="cp-group-label pt-3">Everything else — {rest.length}</p>
-                )}
-                {rest.map((lead) => (
-                  <LeadRow key={lead.id} lead={lead} />
-                ))}
-              </>
-            )}
+              </div>
+            ))}
           </>
         )}
       </div>

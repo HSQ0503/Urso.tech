@@ -82,6 +82,36 @@ type LearningRunRow = {
   completed_at: string | null;
 };
 
+type GardenerFindingRow = {
+  id: string;
+  finding_type:
+    | "stale_document"
+    | "superseded_reference"
+    | "unresolved_conflict"
+    | "weak_provenance"
+    | "missing_knowledge";
+  risk: BrainLearningRisk;
+  department_id: string | null;
+  project_id: string | null;
+  subject_kind: "document" | "claim" | "conflict" | "question";
+  subject_key: string;
+  title: string;
+  message: string;
+  state: "open" | "resolved";
+  occurrence_count: number;
+  first_detected_at: string;
+  last_detected_at: string;
+  resolved_at: string | null;
+  last_detected_run_id: string;
+};
+
+type GardenerObservationRow = {
+  run_id: string;
+  finding_id: string;
+  source_snapshot: Record<string, unknown>;
+  observed_at: string;
+};
+
 type LearningPolicyRow = {
   mode: BrainLearningMode;
   policy_version: string;
@@ -173,6 +203,8 @@ export async function GET() {
     batchesResult,
     batchCandidatesResult,
     runsResult,
+    gardenerFindingsResult,
+    gardenerObservationsResult,
     departmentsResult,
     projectsResult,
   ] = await Promise.all([
@@ -208,6 +240,20 @@ export async function GET() {
       .order("started_at", { ascending: false })
       .limit(100),
     auth.admin
+      .from("brain_gardener_findings")
+      .select(
+        "id, finding_type, risk, department_id, project_id, subject_kind, subject_key, title, message, state, occurrence_count, first_detected_at, last_detected_at, resolved_at, last_detected_run_id",
+      )
+      .eq("organization_id", organizationId)
+      .order("last_detected_at", { ascending: false })
+      .limit(300),
+    auth.admin
+      .from("brain_gardener_observations")
+      .select("run_id, finding_id, source_snapshot, observed_at")
+      .eq("organization_id", organizationId)
+      .order("observed_at", { ascending: false })
+      .limit(500),
+    auth.admin
       .from("brain_departments")
       .select("id, name")
       .eq("organization_id", organizationId),
@@ -223,6 +269,8 @@ export async function GET() {
     batchesResult.error,
     batchCandidatesResult.error,
     runsResult.error,
+    gardenerFindingsResult.error,
+    gardenerObservationsResult.error,
     departmentsResult.error,
     projectsResult.error,
   ].find(Boolean);
@@ -411,7 +459,71 @@ export async function GET() {
       completedAt: run.completed_at,
     }));
 
-  return Response.json({ mode, candidates, batches, runs, metrics });
+  const latestObservationByFinding = new Map<string, GardenerObservationRow>();
+  for (const observation of (gardenerObservationsResult.data ?? []) as GardenerObservationRow[]) {
+    if (!latestObservationByFinding.has(observation.finding_id)) {
+      latestObservationByFinding.set(observation.finding_id, observation);
+    }
+  }
+  const gardenerFindings = ((gardenerFindingsResult.data ?? []) as GardenerFindingRow[])
+    .filter((finding) => learningPrincipalCanReview(auth.principal, finding.department_id))
+    .map((finding) => {
+      const observation = latestObservationByFinding.get(finding.id);
+      const rawSources = Array.isArray(observation?.source_snapshot?.sources)
+        ? observation.source_snapshot.sources
+        : [];
+      const sources = rawSources.flatMap((value) => {
+        if (!value || typeof value !== "object") return [];
+        const source = value as Record<string, unknown>;
+        if (
+          typeof source.kind !== "string" ||
+          typeof source.sourceId !== "string"
+        ) {
+          return [];
+        }
+        return [{
+          kind: source.kind,
+          sourceId: source.sourceId,
+          sourceVersion:
+            typeof source.sourceVersion === "number"
+              ? source.sourceVersion
+              : null,
+        }];
+      });
+      return {
+        id: finding.id,
+        findingType: finding.finding_type,
+        risk: finding.risk,
+        departmentId: finding.department_id,
+        departmentName: finding.department_id
+          ? departments.get(finding.department_id) ?? null
+          : null,
+        projectId: finding.project_id,
+        projectName: finding.project_id
+          ? projects.get(finding.project_id) ?? null
+          : null,
+        subjectKind: finding.subject_kind,
+        subjectKey: finding.subject_key,
+        title: finding.title,
+        message: finding.message,
+        state: finding.state,
+        occurrenceCount: finding.occurrence_count,
+        firstDetectedAt: finding.first_detected_at,
+        lastDetectedAt: finding.last_detected_at,
+        resolvedAt: finding.resolved_at,
+        lastRunId: finding.last_detected_run_id,
+        sources,
+      };
+    });
+
+  return Response.json({
+    mode,
+    candidates,
+    batches,
+    runs,
+    gardenerFindings,
+    metrics,
+  });
 }
 
 export async function PATCH(request: Request) {

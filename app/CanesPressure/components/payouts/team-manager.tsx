@@ -20,13 +20,15 @@ import {
 
 const COMP_TYPE_LABEL: Record<CompType, string> = {
   profit_split: "Profit split (owner / partner)",
-  profit_share: "Profit share (ops manager)",
+  profit_share: "Profit share (% of company profit)",
+  job_margin_share: "Job margin share (% after job materials)",
   hourly: "Hourly",
   none: "Not paid here",
 };
 
 const initials = (name: string) => (name.trim().split(/\s+/)[0] || "?").slice(0, 2).toUpperCase();
-const usesPercent = (t: CompType) => t === "profit_split" || t === "profit_share";
+const usesPercent = (t: CompType) =>
+  t === "profit_split" || t === "profit_share" || t === "job_margin_share";
 
 // "$20", "20.00" → integer cents. NaN → 0.
 function toCents(raw: string): number {
@@ -38,6 +40,10 @@ function compSummary(m: TeamMember, crews: Crew[]): string {
   const pct = Number((m.comp_bps / 100).toFixed(2));
   if (m.comp_type === "profit_split") return `${pct}% profit split`;
   if (m.comp_type === "profit_share") return `${pct}% of gross profit`;
+  if (m.comp_type === "job_margin_share") {
+    const crew = crews.find((c) => c.id === m.crew_id);
+    return `${pct}% of job margin after materials${crew ? ` · ${crew.name}` : ""}`;
+  }
   if (m.comp_type === "hourly") {
     const crew = crews.find((c) => c.id === m.crew_id);
     return `${fmtMoney(m.hourly_cents)}/hr${crew ? ` · ${crew.name}` : ""}`;
@@ -209,7 +215,7 @@ function MemberForm({
       compType,
       compBps: usesPercent(compType) ? Math.round(Number(pct) * 100) : 0,
       hourlyCents: compType === "hourly" ? toCents(rate) : 0,
-      crewId: compType === "hourly" ? crewId || null : null,
+      crewId: compType === "hourly" || compType === "job_margin_share" ? crewId || null : null,
     };
     setNotice("");
     startTransition(async () => {
@@ -297,16 +303,28 @@ function MemberForm({
                 />
               </div>
             </div>
-            <div>
-              <label className="cp-label" htmlFor="tm-crew">Crew</label>
-              <select id="tm-crew" className="cp-select" value={crewId} onChange={(e) => setCrewId(e.target.value)}>
-                <option value="">No crew</option>
-                {crews.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-            </div>
           </>
+        )}
+
+        {(compType === "hourly" || compType === "job_margin_share") && (
+          <div>
+            <label className="cp-label" htmlFor="tm-crew">Crew</label>
+            <select id="tm-crew" className="cp-select" value={crewId} onChange={(e) => setCrewId(e.target.value)}>
+              <option value="">{compType === "job_margin_share" ? "Every crew" : "No crew"}</option>
+              {crews.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {compType === "job_margin_share" && (
+          <p className="text-[12.5px] leading-snug text-[var(--cp-muted)] sm:col-span-2">
+            Paid on each job&rsquo;s collected revenue minus that job&rsquo;s material costs, and nothing
+            else &mdash; overhead and other people&rsquo;s pay never reduce it. A $1,000 job with $300 of
+            sealer pays {pct || "0"}% of $700. Leave the crew as &ldquo;Every crew&rdquo; for a
+            company-wide ops manager.
+          </p>
         )}
       </div>
 

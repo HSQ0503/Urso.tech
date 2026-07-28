@@ -1,7 +1,7 @@
 {
   "suiteId": "urso-brain-m6-controlled-learning",
-  "version": 1,
-  "description": "Deterministic acceptance contract for evidence-only controlled learning, exact scope and provenance, safe feature modes, routing, idempotency, and gardener findings.",
+  "version": 2,
+  "description": "Deterministic acceptance contract for evidence-only controlled learning, exact scope and provenance, safe feature modes, routing, idempotency, and durable gardener finding identities.",
   "thresholds": {
     "casePassRate": 1,
     "authorizationLeakageFailures": 0,
@@ -134,6 +134,31 @@
       "id": "gardener-detects-maintenance",
       "category": "gardener",
       "description": "The gardener deterministically detects stale documents, superseded references, weak provenance, aged conflicts, and repeated gaps."
+    },
+    {
+      "id": "gardener-threshold-boundaries",
+      "category": "gardener",
+      "description": "Review dates, conflict age, and repeated-gap thresholds use explicit inclusive or exclusive boundaries."
+    },
+    {
+      "id": "gardener-excludes-ineligible-inputs",
+      "category": "gardener",
+      "description": "Current documents, evidenced or unaccepted claims, resolved conflicts, and infrequent gaps do not create findings."
+    },
+    {
+      "id": "gardener-order-is-deterministic",
+      "category": "gardener",
+      "description": "Equivalent inputs produce the same finding order regardless of source row order."
+    },
+    {
+      "id": "gardener-identity-is-stable-and-scoped",
+      "category": "idempotency",
+      "description": "Finding identity ignores mutable messages and counts while separating type, department, project, and subject."
+    },
+    {
+      "id": "gardener-findings-are-observation-only",
+      "category": "governance",
+      "description": "Gardener analysis returns maintenance observations without mutation, proposal, or automation authority."
     },
     {
       "id": "failed-run-is-observable",

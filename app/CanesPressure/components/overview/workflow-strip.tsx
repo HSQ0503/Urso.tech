@@ -33,7 +33,7 @@ export function WorkflowStrip({
       label: "Leads",
       icon: Users,
       topline: "cp-topline-slate",
-      href: "/CanesPressure/leads?f=open",
+      href: "/CanesPressure/leads?f=new",
       count: counts.open,
       figure: null,
       action: `${leads.newCount} new`,

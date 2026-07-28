@@ -1,5 +1,5 @@
 import { canesDb } from "@/lib/canes/supabase";
-import { isDemo } from "@/lib/canes/data";
+import { isDemo, getSettings } from "@/lib/canes/data";
 import { listJobs } from "@/lib/canes/estimates";
 import { listJobExpensesInRange } from "@/lib/canes/expenses";
 import { overheadCentsForRange } from "@/lib/canes/overhead";
@@ -15,8 +15,17 @@ import type {
 
 // Payouts (0008_growth.sql). The waterfall for a calendar period:
 //   collected (payments) − job expenses − overhead − worker labor = gross profit
-//   gross − ops-manager profit share (a % of gross)              = distributable
+//   gross − ops-manager shares                                    = distributable
 //   distributable is split among owner/partner by comp_bps (60/40 default).
+//
+// Two ops-manager shapes, and the difference is the whole point:
+//   profit_share     — a % of COMPANY gross profit (overhead and labor already
+//                      deducted).
+//   job_margin_share — a % of PER-JOB margin: that job's collected revenue minus
+//                      that job's MATERIAL costs, and nothing else. Sebastian,
+//                      July 2026: "$1000 sealer job, $300 sealer, he gets 15
+//                      percent of 700 — I don't want him to get profits taken
+//                      away from outside of job expenses." (0016)
 // Worker labor is a PROXY until worker check-in/out ships: a worker's hours are
 // the sum of the durations of their crew's jobs completed in the period. Money in
 // integer cents; ET calendar boundaries so "this month" means the ET month.
@@ -111,12 +120,13 @@ export async function computePayouts(key: PayoutRangeKey): Promise<PayoutSummary
     return t >= startMs && t < endMs;
   };
 
-  const [team, payments, jobExpenses, overheadCents, jobs] = await Promise.all([
+  const [team, payments, jobExpenses, overheadCents, jobs, settings] = await Promise.all([
     listTeamMembers(),
     completedPaymentsSince(startIso),
     listJobExpensesInRange(startIso, endIso),
     overheadCentsForRange(startIso, endIso),
     listJobs(),
+    getSettings(),
   ]);
 
   const collectedCents = payments.filter((p) => inRange(p.created_at)).reduce((s, p) => s + p.amount_cents, 0);
@@ -142,15 +152,54 @@ export async function computePayouts(key: PayoutRangeKey): Promise<PayoutSummary
 
   const grossProfitCents = collectedCents - jobExpensesCents - overheadCents - laborCents;
 
-  // Ops-manager profit share is taken off gross (never negative gross).
+  // Per-job margin, for job_margin_share. Revenue is what was actually
+  // COLLECTED against the job (consistent with the rest of the waterfall, which
+  // never pays out on money that has not arrived); costs are that job's
+  // material-category expenses only. A job can't contribute negative margin —
+  // an over-spent job shouldn't claw back the share earned on other jobs.
+  const materialCats = new Set(
+    (settings.margin_share_categories ?? ["Materials"]).map((c) => c.toLowerCase()),
+  );
+  const revenueByJob = new Map<string, number>();
+  for (const p of payments) {
+    if (!p.job_id || !inRange(p.created_at)) continue;
+    revenueByJob.set(p.job_id, (revenueByJob.get(p.job_id) ?? 0) + p.amount_cents);
+  }
+  const materialsByJob = new Map<string, number>();
+  for (const e of jobExpenses) {
+    if (!materialCats.has((e.category ?? "").toLowerCase())) continue;
+    materialsByJob.set(e.job_id, (materialsByJob.get(e.job_id) ?? 0) + e.amount_cents);
+  }
+  const crewOfJob = new Map(jobs.map((j) => [j.id, j.crew_id]));
+  const marginForCrew = (crewId: string | null) => {
+    let total = 0;
+    for (const [jobId, revenue] of revenueByJob) {
+      // A member pinned to a crew earns only on that crew's work; a member with
+      // no crew (a company-wide ops manager) earns across every job.
+      if (crewId && crewOfJob.get(jobId) !== crewId) continue;
+      total += Math.max(0, revenue - (materialsByJob.get(jobId) ?? 0));
+    }
+    return total;
+  };
+
+  // Ops-manager shares are taken off gross (never negative gross).
   const grossForShare = Math.max(0, grossProfitCents);
   const opsByMember = new Map<string, number>();
+  const opsBasis = new Map<string, string>();
   let opsShareCents = 0;
   for (const m of team) {
-    if (m.comp_type !== "profit_share") continue;
-    const cents = Math.round(grossForShare * (m.comp_bps / 10_000));
-    opsByMember.set(m.id, cents);
-    opsShareCents += cents;
+    if (m.comp_type === "profit_share") {
+      const cents = Math.round(grossForShare * (m.comp_bps / 10_000));
+      opsByMember.set(m.id, cents);
+      opsBasis.set(m.id, `${pctLabel(m.comp_bps)} of ${fmtMoney(grossForShare)} profit`);
+      opsShareCents += cents;
+    } else if (m.comp_type === "job_margin_share") {
+      const margin = marginForCrew(m.crew_id);
+      const cents = Math.round(margin * (m.comp_bps / 10_000));
+      opsByMember.set(m.id, cents);
+      opsBasis.set(m.id, `${pctLabel(m.comp_bps)} of ${fmtMoney(margin)} job margin (after materials)`);
+      opsShareCents += cents;
+    }
   }
 
   const distributableCents = grossProfitCents - opsShareCents;
@@ -167,8 +216,8 @@ export async function computePayouts(key: PayoutRangeKey): Promise<PayoutSummary
       const cents = totalSplitBps > 0 ? Math.round(distributableCents * (m.comp_bps / totalSplitBps)) : 0;
       return { ...base, amount_cents: cents, basis: `${pctLabel(m.comp_bps)} of ${fmtMoney(distributableCents)}` };
     }
-    if (m.comp_type === "profit_share") {
-      return { ...base, amount_cents: opsByMember.get(m.id) ?? 0, basis: `${pctLabel(m.comp_bps)} of ${fmtMoney(grossForShare)} profit` };
+    if (m.comp_type === "profit_share" || m.comp_type === "job_margin_share") {
+      return { ...base, amount_cents: opsByMember.get(m.id) ?? 0, basis: opsBasis.get(m.id) ?? "" };
     }
     if (m.comp_type === "hourly") {
       const l = laborByMember.get(m.id) ?? { cents: 0, hours: 0 };

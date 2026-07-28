@@ -135,6 +135,9 @@ export type CanesSettings = {
   call_whisper_enabled: boolean;
   call_ivr_enabled: boolean; // optional "press 1 / press 2" menu, off by default
   expense_categories: string[];
+  // Which job_expenses categories count as "material" for a job_margin_share
+  // payout (0016). Configurable so the rule can change without a deploy.
+  margin_share_categories: string[];
   // ── 0012 review rewards: default amounts + destination links. An empty URL
   //    means that offer is unconfigured and never seeds onto an invoice.
   review_rewards: {
@@ -476,7 +479,7 @@ export type TeamRole = "owner" | "partner" | "ops_manager" | "worker";
 // after everyone else is paid (owner/partner); profit_share = a % of gross profit
 // taken before the split (ops manager); hourly = rate x hours worked; none =
 // tracked but not paid through this waterfall.
-export type CompType = "profit_split" | "profit_share" | "hourly" | "none";
+export type CompType = "profit_split" | "profit_share" | "hourly" | "none" | "job_margin_share";
 
 export type TeamMember = {
   id: string; created_at: string; name: string; role: TeamRole;

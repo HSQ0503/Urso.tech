@@ -115,6 +115,36 @@ type LearningRun = {
   completedAt: string | null;
 };
 
+type GardenerFinding = {
+  id: string;
+  findingType:
+    | "stale_document"
+    | "superseded_reference"
+    | "unresolved_conflict"
+    | "weak_provenance"
+    | "missing_knowledge";
+  risk: LearningRisk;
+  departmentId: string | null;
+  departmentName: string | null;
+  projectId: string | null;
+  projectName: string | null;
+  subjectKind: "document" | "claim" | "conflict" | "question";
+  subjectKey: string;
+  title: string;
+  message: string;
+  state: "open" | "resolved";
+  occurrenceCount: number;
+  firstDetectedAt: string;
+  lastDetectedAt: string;
+  resolvedAt: string | null;
+  lastRunId: string;
+  sources: Array<{
+    kind: string;
+    sourceId: string;
+    sourceVersion: number | null;
+  }>;
+};
+
 type LearningMetrics = {
   pendingCandidates: number | null;
   materialRiskCandidates: number | null;
@@ -127,6 +157,7 @@ type LearningResponse = {
   candidates: LearningCandidate[];
   batches: LearningBatch[];
   runs: LearningRun[];
+  gardenerFindings: GardenerFinding[];
   metrics: LearningMetrics;
 };
 
@@ -180,6 +211,14 @@ function scopeLabel(candidate: LearningCandidate) {
   if (candidate.projectId) return `Project ${candidate.projectId}`;
   if (candidate.departmentName) return candidate.departmentName;
   if (candidate.departmentId) return `Department ${candidate.departmentId}`;
+  return "Organization-wide";
+}
+
+function gardenerScopeLabel(finding: GardenerFinding) {
+  if (finding.projectName) return finding.projectName;
+  if (finding.projectId) return `Project ${finding.projectId}`;
+  if (finding.departmentName) return finding.departmentName;
+  if (finding.departmentId) return `Department ${finding.departmentId}`;
   return "Organization-wide";
 }
 
@@ -567,6 +606,12 @@ export function LearningInbox() {
   );
   const selected = data?.candidates.find((candidate) => candidate.id === selectedId) ?? pendingCandidates[0] ?? null;
   const gardenerRuns = (data?.runs ?? []).filter((run) => run.sourceType === "gardener");
+  const gardenerFindings = [...(data?.gardenerFindings ?? [])].sort(
+    (left, right) =>
+      Number(left.state === "resolved") - Number(right.state === "resolved") ||
+      riskOrder[left.risk] - riskOrder[right.risk] ||
+      new Date(right.lastDetectedAt).getTime() - new Date(left.lastDetectedAt).getTime(),
+  );
 
   const decide = async (candidate: LearningCandidate, decision: LearningDecision) => {
     setActing({ id: candidate.id, decision });
@@ -859,51 +904,128 @@ export function LearningInbox() {
         )}
 
         {view === "gardener" && (
-          gardenerRuns.length === 0 ? (
+          gardenerRuns.length === 0 && gardenerFindings.length === 0 ? (
             <EmptyState
               icon={Bot}
               title="No gardener runs recorded"
               description="Scheduled gardener scans will appear here when that source pipeline records them. The manual action above reviews only your latest authorized Context Receipt."
             />
           ) : (
-            <section aria-label="Gardener runs" className="overflow-hidden rounded-[22px] border border-edge bg-panel">
-              <ul className="divide-y divide-edge">
-                {gardenerRuns.map((run) => (
-                  <li key={run.id} className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-                    <div className="flex min-w-0 items-start gap-3">
-                      <span className="grid size-10 shrink-0 place-items-center rounded-full bg-raise text-ink-dim">
-                        {run.status === "running" ? (
-                          <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" />
-                        ) : run.status === "failed" ? (
-                          <CircleAlert className="size-4 text-orange" />
-                        ) : (
-                          <Bot className="size-4" />
-                        )}
-                      </span>
-                      <div className="min-w-0">
-                        <h2 className="text-[13px] font-medium text-ink">
-                          {titleCase(run.mode)} gardener review
-                        </h2>
-                        <p className="mt-1 text-[11px] text-ink-dimmer">
-                          {displayDate(run.startedAt)} · {run.provider && run.model ? `${run.provider} / ${run.model}` : "Model not recorded"}
-                        </p>
-                        {run.failureMessage && (
-                          <p className="mt-2 text-[11px] leading-5 text-orange">{run.failureMessage}</p>
-                        )}
-                      </div>
+            <div className="space-y-4">
+              {gardenerFindings.length > 0 && (
+                <section aria-labelledby="gardener-findings-title" className="overflow-hidden rounded-[22px] border border-edge bg-panel">
+                  <header className="flex flex-col gap-2 border-b border-edge px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+                    <div>
+                      <h2 id="gardener-findings-title" className="text-[13px] font-semibold text-ink">
+                        Maintenance findings
+                      </h2>
+                      <p className="mt-1 text-[11px] leading-5 text-ink-dimmer">
+                        Deterministic observations only. Gardener findings cannot write or propose truth.
+                      </p>
                     </div>
-                    <div className="flex items-center gap-3 pl-13 sm:pl-0">
-                      <span className="font-mono text-[11px] text-ink-dim">
-                        {run.candidateCount} candidate{run.candidateCount === 1 ? "" : "s"}
-                      </span>
-                      <span className="rounded-full border border-edge px-2.5 py-1 text-[9px] capitalize text-ink-dimmer">
-                        {run.status}
-                      </span>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </section>
+                    <span className="font-mono text-[10px] text-ink-dimmer">
+                      {gardenerFindings.filter((finding) => finding.state === "open").length} open
+                    </span>
+                  </header>
+                  <ul className="divide-y divide-edge">
+                    {gardenerFindings.map((finding) => (
+                      <li key={finding.id} className="p-5 sm:px-6">
+                        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <RiskBadge risk={finding.risk} />
+                              <span className="rounded-full border border-edge bg-raise px-2.5 py-1 text-[9px] capitalize text-ink-dim">
+                                {finding.state}
+                              </span>
+                              <span className="text-[10px] text-ink-dimmer">
+                                {gardenerScopeLabel(finding)}
+                              </span>
+                            </div>
+                            <h3 className="mt-3 text-[14px] font-semibold text-ink">{finding.title}</h3>
+                            <p className="mt-1.5 max-w-3xl text-[12px] leading-5 text-ink-dim">{finding.message}</p>
+                            <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[9px] text-ink-dimmer">
+                              <span>{titleCase(finding.findingType)}</span>
+                              <span>Observed {finding.occurrenceCount}×</span>
+                              <span>Last seen {displayDate(finding.lastDetectedAt)}</span>
+                            </div>
+                          </div>
+                          <div className="min-w-0 rounded-[14px] border border-edge bg-bg px-4 py-3 lg:w-80">
+                            <p className="text-[9px] font-semibold uppercase tracking-[0.1em] text-ink-dimmer">
+                              Exact source snapshot
+                            </p>
+                            {finding.sources.length ? (
+                              <ul className="mt-2 space-y-2">
+                                {finding.sources.map((source) => (
+                                  <li key={`${source.kind}:${source.sourceId}`} className="min-w-0">
+                                    <p className="truncate text-[10px] text-ink-dim">
+                                      {titleCase(source.kind)}
+                                      {source.sourceVersion === null ? "" : ` · v${source.sourceVersion}`}
+                                    </p>
+                                    <p className="mt-0.5 truncate font-mono text-[9px] text-ink-dimmer">
+                                      {source.sourceId}
+                                    </p>
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <p className="mt-2 text-[10px] leading-5 text-ink-dimmer">
+                                No source snapshot was returned for this finding.
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+
+              {gardenerRuns.length > 0 && (
+                <section aria-labelledby="gardener-runs-title" className="overflow-hidden rounded-[22px] border border-edge bg-panel">
+                  <header className="border-b border-edge px-5 py-4 sm:px-6">
+                    <h2 id="gardener-runs-title" className="text-[13px] font-semibold text-ink">
+                      Scheduled runs
+                    </h2>
+                  </header>
+                  <ul className="divide-y divide-edge">
+                    {gardenerRuns.map((run) => (
+                      <li key={run.id} className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+                        <div className="flex min-w-0 items-start gap-3">
+                          <span className="grid size-10 shrink-0 place-items-center rounded-full bg-raise text-ink-dim">
+                            {run.status === "running" ? (
+                              <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" />
+                            ) : run.status === "failed" ? (
+                              <CircleAlert className="size-4 text-orange" />
+                            ) : (
+                              <Bot className="size-4" />
+                            )}
+                          </span>
+                          <div className="min-w-0">
+                            <h3 className="text-[13px] font-medium text-ink">
+                              {titleCase(run.mode)} gardener scan
+                            </h3>
+                            <p className="mt-1 text-[11px] text-ink-dimmer">
+                              {displayDate(run.startedAt)} · Deterministic detector
+                            </p>
+                            {run.failureMessage && (
+                              <p className="mt-2 text-[11px] leading-5 text-orange">{run.failureMessage}</p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3 pl-13 sm:pl-0">
+                          <span className="font-mono text-[11px] text-ink-dim">
+                            {run.candidateCount} finding{run.candidateCount === 1 ? "" : "s"}
+                          </span>
+                          <span className="rounded-full border border-edge px-2.5 py-1 text-[9px] capitalize text-ink-dimmer">
+                            {run.status}
+                          </span>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+            </div>
           )
         )}
 
