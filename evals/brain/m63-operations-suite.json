@@ -1,0 +1,145 @@
+{
+  "suiteId": "urso-brain-m63-learning-operations",
+  "version": "1.0.0",
+  "description": "Permanent acceptance contract for append-only steward assessment, honest learning metrics, exact-scope batch operations, and version-locked document-patch proposals.",
+  "thresholds": {
+    "casePassRate": 1
+  },
+  "cases": [
+    {
+      "id": "assessment-history-is-append-only",
+      "category": "assessment",
+      "description": "A later steward assessment appends history rather than overwriting an earlier decision."
+    },
+    {
+      "id": "assessment-latest-controls-kpis",
+      "category": "metrics",
+      "description": "Only the latest assessment per candidate contributes to current KPI denominators."
+    },
+    {
+      "id": "assessment-verdict-is-bounded",
+      "category": "assessment",
+      "description": "Unknown assessment verdicts and oversized notes are rejected."
+    },
+    {
+      "id": "assessment-requires-steward-scope",
+      "category": "authorization",
+      "description": "A reviewer cannot assess a candidate outside their exact organization and department scope."
+    },
+    {
+      "id": "strict-precision-is-honest",
+      "category": "metrics",
+      "description": "Strict precision is correct divided by adjudicated latest assessments and is null without a denominator."
+    },
+    {
+      "id": "actionable-yield-is-honest",
+      "category": "metrics",
+      "description": "Actionable yield is correct plus partially correct divided by all latest assessed candidates."
+    },
+    {
+      "id": "insufficient-evidence-is-not-adjudicated",
+      "category": "metrics",
+      "description": "Insufficient-evidence assessments count as reviewed but not as adjudicated precision outcomes."
+    },
+    {
+      "id": "batch-requires-candidates",
+      "category": "batch",
+      "description": "A batch cannot be created without at least one available candidate."
+    },
+    {
+      "id": "batch-candidate-limit-is-enforced",
+      "category": "batch",
+      "description": "A batch contains at most 25 unique candidates."
+    },
+    {
+      "id": "batch-requires-exact-shared-scope",
+      "category": "authorization",
+      "description": "Every batch candidate shares the same organization, project, and department scope."
+    },
+    {
+      "id": "batch-assignee-must-be-authorized",
+      "category": "authorization",
+      "description": "A batch assignee must be an active steward authorized for the batch scope."
+    },
+    {
+      "id": "batch-creation-is-transactional",
+      "category": "batch",
+      "description": "A failed candidate validation rolls back the batch, memberships, and candidate transitions."
+    },
+    {
+      "id": "candidate-cannot-enter-conflicting-active-batches",
+      "category": "concurrency",
+      "description": "Concurrent batching attempts converge without placing a candidate in conflicting active batches."
+    },
+    {
+      "id": "dismissed-batch-releases-candidates",
+      "category": "batch",
+      "description": "Dismissing a batch returns still-batched candidates to the governed review queue."
+    },
+    {
+      "id": "batch-actions-never-write-truth",
+      "category": "governance",
+      "description": "Batch creation and lifecycle actions cannot create proposals, claims, documents, or document versions."
+    },
+    {
+      "id": "document-patch-requires-review-mode",
+      "category": "patch",
+      "description": "Shadow mode cannot promote a document-patch candidate into a governed proposal."
+    },
+    {
+      "id": "document-patch-requires-exact-target",
+      "category": "authorization",
+      "description": "A patch targets only the candidate document in the candidate's exact persisted scope."
+    },
+    {
+      "id": "document-patch-requires-versioned-evidence",
+      "category": "provenance",
+      "description": "A patch requires persisted Context Receipt evidence for the exact target document version."
+    },
+    {
+      "id": "document-patch-preserves-maintenance-metadata",
+      "category": "provenance",
+      "description": "A detected document-patch candidate persists its bounded automation kind and evidence base version."
+    },
+    {
+      "id": "document-patch-operation-limit-is-enforced",
+      "category": "patch",
+      "description": "A patch contains between one and ten bounded exact replacements."
+    },
+    {
+      "id": "document-patch-find-is-unique",
+      "category": "patch",
+      "description": "Every find value must occur exactly once in the sequential base document."
+    },
+    {
+      "id": "document-patch-noop-is-rejected",
+      "category": "patch",
+      "description": "An empty or no-op replacement cannot create a proposal."
+    },
+    {
+      "id": "document-patch-content-is-reconstructed",
+      "category": "patch",
+      "description": "The database reconstructs proposed content from the current immutable version and exact replacements."
+    },
+    {
+      "id": "document-patch-is-proposal-only",
+      "category": "governance",
+      "description": "Patch promotion creates one pending knowledge proposal and does not mutate a document or version."
+    },
+    {
+      "id": "document-patch-stale-version-fails-closed",
+      "category": "concurrency",
+      "description": "A changed target version rejects patch promotion or approval without partial writes."
+    },
+    {
+      "id": "operations-rpcs-are-service-role-only",
+      "category": "authorization",
+      "description": "Authenticated clients cannot execute M6.3 mutation RPCs directly."
+    },
+    {
+      "id": "operations-audit-is-complete",
+      "category": "audit",
+      "description": "Assessment, batch, and patch-proposal transitions persist bounded audit events."
+    }
+  ]
+}

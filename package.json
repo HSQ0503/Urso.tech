@@ -13,6 +13,7 @@
     "brain:acceptance": "node scripts/brain-acceptance.mjs",
     "brain:acceptance:m5": "node scripts/brain-m5-acceptance.mjs",
     "brain:acceptance:m6": "node --no-warnings scripts/brain-m6-acceptance.mjs",
+    "brain:acceptance:m63": "node --no-warnings scripts/brain-m63-db-acceptance.mjs",
     "brain:eval": "node scripts/brain-eval.mjs",
     "brain:eval:full": "node scripts/brain-eval.mjs --mode=full"
   },
@@ -27,7 +28,7 @@
     "@supabase/supabase-js": "^2.107.0",
     "ai": "^6.0.204",
     "lucide-react": "^1.21.0",
-    "next": "16.2.6",
+    "next": "16.2.12",
     "ogl": "^1.0.11",
     "react": "19.2.4",
     "react-dom": "19.2.4",
@@ -36,12 +37,14 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.4",
+    "@electric-sql/pglite-pgvector": "^0.0.5",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.2.6",
+    "eslint-config-next": "16.2.12",
     "tailwindcss": "^4",
     "typescript": "^5"
   },

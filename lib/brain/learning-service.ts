@@ -346,6 +346,14 @@ export async function runAuthorizedContextLearningReview(input: {
           targetDocId: targetEvidence
             ? evidence.get(targetEvidence.contextEvidenceId)?.doc_id ?? null
             : null,
+          ...(candidate.type === "document_patch"
+            ? {
+                proposedChange: {
+                  automation_kind: candidate.automationKind,
+                  target_base_version: targetEvidence?.sourceVersion ?? null,
+                },
+              }
+            : {}),
           evidence: candidate.evidence.map((item) => ({
             ...item,
             documentId: evidence.get(item.contextEvidenceId)?.doc_id ?? null,
