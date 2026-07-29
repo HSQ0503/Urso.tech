@@ -96,9 +96,14 @@ function discover() {
       // Routes under .../crew/... are the technician surface; an admin bearer
       // must be refused there (403) because an admin has no crew identity.
       isCrew: urlPath.includes("/crew/"),
-      // Every route must go through a shared wrapper. crewRoute() is apiRoute()
-      // plus an up-front technician assertion; anything else means a route is
-      // hand-rolling its own auth, which is the failure this check exists for.
+      // /v1/auth/* is the front door — necessarily reachable without a token,
+      // since obtaining one is the whole point. These are held to a different
+      // contract below rather than exempted: a public endpoint that hands out
+      // credentials deserves MORE scrutiny, not less.
+      isPublicAuth: urlPath.startsWith("/api/v1/auth/"),
+      // Every guarded route must go through a shared wrapper. crewRoute() is
+      // apiRoute() plus an up-front technician assertion; anything else means a
+      // route is hand-rolling its own auth, which is the failure this exists for.
       usesWrapper: /\b(apiRoute|crewRoute)\s*[(<]/.test(source),
     };
   });
@@ -123,6 +128,19 @@ const TOKENS = {
   noExp: mint({ email: "han@urso.ws", k: "mobile" }),
 };
 const ADMIN_TOKEN = mint({ email: "han@urso.ws", exp: Date.now() + HOUR, k: "mobile" });
+
+async function postJson(path, body) {
+  const res = await fetch(`${BASE}${path}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  let parsed = null;
+  try {
+    parsed = await res.json();
+  } catch {}
+  return { status: res.status, body: parsed };
+}
 
 async function hit(path, method, token) {
   const headers = { "content-type": "application/json" };
@@ -165,6 +183,43 @@ if (DEMO) {
 }
 
 for (const route of routes) {
+  if (route.isPublicAuth) {
+    // Contract for the credential front door. It may answer without a token,
+    // but it must never hand one out for a malformed or bogus request, and it
+    // must not reveal whether an address is provisioned — that would enumerate
+    // who has owner access to a client's business.
+    for (const method of route.methods) {
+      const label = `${method} ${route.path.replace(NONEXISTENT, ":id")}`;
+
+      const empty = await hit(route.path, method, null);
+      record(
+        [422, 503].includes(empty.status) ? "pass" : "fail",
+        `${label} — rejects an empty body`,
+        `${empty.status} ${JSON.stringify(empty.body)}`,
+      );
+
+      const bogus = await postJson(route.path, { email: "nobody@example.com", code: "000000" });
+      const leaked = JSON.stringify(bogus.body ?? {}).includes("token");
+      record(
+        !leaked ? "pass" : "fail",
+        `${label} — never returns a token for a bogus credential`,
+        leaked ? `LEAKED: ${JSON.stringify(bogus.body)}` : `${bogus.status}, no token`,
+      );
+
+      // An unknown address and a real admin must be indistinguishable.
+      const unknown = await postJson(route.path, { email: "definitely-not-real@example.com", code: "000000" });
+      const known = await postJson(route.path, { email: "han@urso.ws", code: "000000" });
+      record(
+        unknown.status === known.status ? "pass" : "fail",
+        `${label} — does not reveal who is provisioned`,
+        unknown.status === known.status
+          ? `both ${unknown.status}`
+          : `unknown=${unknown.status} known=${known.status} — enumerable`,
+      );
+    }
+    continue;
+  }
+
   if (!route.usesWrapper) {
     record("fail", `${route.file} uses apiRoute()`, "Route does not call apiRoute() — auth is not enforced by the shared wrapper.");
   } else {
