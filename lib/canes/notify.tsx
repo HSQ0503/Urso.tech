@@ -26,10 +26,22 @@ import { DigestEmail } from "@/emails/canes/digest-email";
 // Rendering ourselves and sending `html` keeps the dependency static.
 
 const FROM = process.env.CANES_EMAIL_FROM ?? "Canes Platform <server@urso.ws>";
-const TO = (process.env.CANES_NOTIFY_EMAIL ?? "han@urso.ws")
-  .split(",")
-  .map((s) => s.trim())
-  .filter(Boolean);
+
+// The business owner. Every owner-facing alert reaches him, always.
+// CANES_NOTIFY_EMAIL used to REPLACE this address, which is how every alert —
+// new leads, deposits, payments, the 7am digest — ended up going only to Urso
+// and never to Sebastian. It now only ADDS recipients, so a stale env var can
+// never silence him again.
+const OWNER_EMAIL = "canespressurewashing@gmail.com";
+const TO = [
+  ...new Set([
+    OWNER_EMAIL,
+    ...(process.env.CANES_NOTIFY_EMAIL ?? "")
+      .split(",")
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean),
+  ]),
+];
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://urso.ws";
 
