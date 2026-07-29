@@ -3534,18 +3534,49 @@ export async function setPrimaryAddress(contactId: string, addressId: string): P
   const denied = await denyUnlessPermitted("customers");
   if (denied) return denied;
   const db = canesDb();
-  // Demote-then-promote keeps exactly one primary per contact.
+  // Checked BEFORE the demote, which is the whole point.
+  //
+  // Demote-then-promote keeps exactly one primary per contact, but the two
+  // statements do not fail together: the demote clears is_primary on EVERY
+  // address the contact has, while the promote is filtered by both id and
+  // contact_id. An addressId that was deleted, or that belongs to a different
+  // customer, therefore matched nothing on the way back up — and the action
+  // returned ok:true having left the customer with NO primary address at all.
+  // A row-count check on the promote would report that correctly and still
+  // leave the damage done, so the read has to come first.
+  //
+  // On web this is nearly unreachable: the button is rendered from the
+  // contact's own address list. From a phone the list is CACHED, so an address
+  // deleted on the laptop a minute ago is an ordinary stale id.
+  const { data: target, error: lookupErr } = await db
+    .from("addresses")
+    .select("id")
+    .eq("id", addressId)
+    .eq("contact_id", contactId)
+    .maybeSingle();
+  if (lookupErr) return { ok: false, notice: lookupErr.message };
+  if (!target) {
+    return { ok: false, notice: "That address just changed — refresh and try again." };
+  }
   const { error: demoteErr } = await db
     .from("addresses")
     .update({ is_primary: false })
     .eq("contact_id", contactId);
   if (demoteErr) return { ok: false, notice: demoteErr.message };
-  const { error } = await db
+  const { data: claimed, error } = await db
     .from("addresses")
     .update({ is_primary: true })
     .eq("id", addressId)
-    .eq("contact_id", contactId);
+    .eq("contact_id", contactId)
+    .select("id");
   if (error) return { ok: false, notice: error.message };
+  // Belt and braces: the row was there a moment ago, so zero here means it was
+  // removed between the two statements. Say so rather than report a primary
+  // that does not exist — the demote has already run, and the customer is in
+  // exactly the state this function exists to prevent.
+  if (!claimed || claimed.length === 0) {
+    return { ok: false, notice: "That address just changed — refresh and try again." };
+  }
   refresh();
   return { ok: true };
 }
