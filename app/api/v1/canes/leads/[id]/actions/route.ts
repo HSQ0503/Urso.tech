@@ -1,4 +1,4 @@
-import { apiFail, apiResult, apiRoute } from "@/lib/api/v1";
+import { apiFail, apiResult, apiRoute, isIsoInstant } from "@/lib/api/v1";
 import {
   setLeadStatus,
   setAppointment,
@@ -90,8 +90,13 @@ export const POST = apiRoute<{ id: string }>(async ({ req, params }) => {
     }
 
     case "snooze": {
-      if (typeof body.untilIso !== "string") return apiFail("`untilIso` must be an ISO instant.", 422);
-      if (!Number.isFinite(Date.parse(body.untilIso))) {
+      // isIsoInstant, not Number.isFinite(Date.parse(…)) as this first read:
+      // V8's fallback parser accepts "tomorrow at 3" (2001-03-01) and a bare
+      // "3", so the loose check let a non-instant through to snoozeLead — which
+      // writes untilIso RAW into the snoozed_until timestamptz. Postgres then
+      // refuses it and the driver's message becomes the caller's notice, which
+      // is the one thing this layer promises never to do.
+      if (!isIsoInstant(body.untilIso)) {
         return apiFail("`untilIso` must be an ISO instant.", 422);
       }
       return apiResult(await snoozeLead(id, body.untilIso));
@@ -137,14 +142,18 @@ export const POST = apiRoute<{ id: string }>(async ({ req, params }) => {
     }
 
     case "setAppointment": {
-      if (typeof body.appointmentIso !== "string") {
+      // setAppointment DOES check the date it is given — `new Date(iso)` then
+      // `Number.isNaN(getTime())` → "Invalid date." — and unlike createLead its
+      // refusal reaches the caller, so this looked like a place to add nothing.
+      //
+      // The gap is that `new Date()` accepts far more than an instant. "3" and
+      // "tomorrow at 3" both become 2001-03-01, so the action does not refuse:
+      // it books the visit, flips the lead to appointment_set and queues a
+      // confirmation text for a date twenty-five years in the past. A wrong
+      // appointment reported as saved is worse than a rejected one.
+      if (!isIsoInstant(body.appointmentIso)) {
         return apiFail("`appointmentIso` must be an ISO instant.", 422);
       }
-      // No Date.parse here, unlike `snooze` above: snoozeLead writes untilIso
-      // straight to the column, but setAppointment does its own
-      // `Number.isNaN(when.getTime())` check and answers "Invalid date." So the
-      // instant is already validated one layer down — a second check would be a
-      // second sentence for the same failure.
       return apiResult(await setAppointment(id, body.appointmentIso));
     }
 

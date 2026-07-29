@@ -1,4 +1,4 @@
-import { apiFail, apiOk, apiResult, apiRoute, denyUnlessPagePermitted } from "@/lib/api/v1";
+import { apiFail, apiOk, apiResult, apiRoute, denyUnlessPagePermitted, isIsoInstant } from "@/lib/api/v1";
 import { listLeads } from "@/lib/canes/data";
 import { createLead, createQuoteVisit } from "@/app/CanesPressure/actions";
 import type { LeadSource, LeadType } from "@urso/types";
@@ -78,7 +78,21 @@ export const POST = apiRoute(async ({ req }) => {
       if (body.address !== undefined && typeof body.address !== "string") {
         return apiFail("`address` must be a string.", 422);
       }
-      if (body.appointmentIso !== undefined && typeof body.appointmentIso !== "string") {
+      // The instant check matters most here of anywhere in this layer, because
+      // createLead is the one caller that CANNOT report the failure. It inserts
+      // the lead, then runs `if (fields.appointmentIso) await setAppointment(...)`
+      // and DISCARDS the result — so setAppointment's own "Invalid date." refusal
+      // is thrown away and the route answers ok:true for a lead with no visit
+      // booked and no confirmation task queued. On web that is unreachable (the
+      // form composes the instant with etLocalToIso); from a phone it is one bad
+      // string. Refuse before the insert so there is no half-made lead — and note
+      // that a retry with a good instant would then collide with the UNIQUE phone
+      // constraint and read as a duplicate, which is why this cannot be left to
+      // the domain.
+      //
+      // isIsoInstant, not Number.isFinite(Date.parse(…)): V8's fallback parser
+      // reads "tomorrow at 3" as 2001-03-01, so the loose check would book that.
+      if (body.appointmentIso !== undefined && !isIsoInstant(body.appointmentIso)) {
         return apiFail("`appointmentIso` must be an ISO instant.", 422);
       }
       // `type` and `source` are cast, not re-validated: both columns carry a
@@ -114,7 +128,12 @@ export const POST = apiRoute(async ({ req }) => {
       }
       if (typeof body.jobName !== "string") return apiFail("`jobName` must be a string.", 422);
       if (typeof body.address !== "string") return apiFail("`address` must be a string.", 422);
-      if (typeof body.appointmentIso !== "string") {
+      // Same instant check as `create` above, though it is not load-bearing here:
+      // createQuoteVisit validates the date itself and its refusal DOES reach the
+      // caller. It only sharpens a 409 into a 422 for a string that is not an
+      // instant at all — and keeps one definition of "ISO instant" in this file
+      // rather than two that drift.
+      if (!isIsoInstant(body.appointmentIso)) {
         return apiFail("`appointmentIso` must be an ISO instant.", 422);
       }
       // Emptiness, length caps, and "must be in the future" are all the

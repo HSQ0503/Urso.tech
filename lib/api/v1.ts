@@ -226,6 +226,22 @@ export function isCents(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value >= 0;
 }
 
+// An instant, not "whatever V8 will accept". `Date.parse` is far more lenient
+// than its name suggests — it falls back to a legacy heuristic parser, so
+// Date.parse("tomorrow at 3") is 2001-03-01, not NaN. A route that validates an
+// appointment with Number.isFinite(Date.parse(x)) therefore passes obvious
+// garbage straight through to the domain, which books it.
+//
+// The offset is REQUIRED. An ISO string with no Z and no ±HH:MM is interpreted
+// in the SERVER's zone, which is UTC in production while the business runs in
+// ET — the same string would mean a different hour on a laptop and on Vercel.
+// Every real caller already sends one: etLocalToIso() ends in toISOString().
+const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?(Z|[+-]\d{2}:\d{2})$/;
+
+export function isIsoInstant(value: unknown): value is string {
+  return typeof value === "string" && ISO_INSTANT.test(value) && Number.isFinite(Date.parse(value));
+}
+
 // ── Handler wrapper ──────────────────────────────────────────────────────────
 
 export type ApiHandler<P = Record<string, string>> = (ctx: {

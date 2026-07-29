@@ -45,6 +45,13 @@ type Patch = {
   active?: boolean;
 };
 
+// The only keys `update` accepts, written as a Record over Patch so a field
+// added to that type without a branch below fails to COMPILE rather than
+// quietly going missing from this sentence.
+const PATCH_KEYS = Object.keys({
+  name: 0, role: 0, compType: 0, compBps: 0, hourlyCents: 0, crewId: 0, active: 0,
+} satisfies Record<keyof Patch, 0>);
+
 // A whole-number field (basis points, integer cents). Rejects floats and the
 // numeric strings a form-driven client would otherwise send.
 function badInteger(value: unknown, field: string) {
@@ -86,6 +93,22 @@ export const POST = apiRoute(async ({ req }) => {
         const bad = badInteger(body.hourlyCents, "hourlyCents");
         if (bad) return bad;
         hourlyCents = body.hourlyCents as number;
+      }
+
+      // An hourly member must arrive WITH their rate. The web refuses this
+      // (`compType === "hourly" && toCents(rate) <= 0` → "Enter the hourly
+      // rate."), but the action does not: it stores `Math.max(0, ...(?? 0))`, so
+      // an omitted or zero rate becomes a real roster row at $0.00/hr. Nothing
+      // downstream complains — computePayouts multiplies hours by the rate and
+      // pays them zero, correctly, forever, and it reads as a quiet payroll bug
+      // rather than a rejected form.
+      //
+      // Only `hourly` is checked. The percentage comp types are NOT: the web's
+      // own rule there is `!(Number(pct) >= 0)`, which an empty field passes as
+      // 0, so a 0% profit_split is something the owner can legitimately create
+      // today and this route must not start refusing it.
+      if (body.compType === "hourly" && !(hourlyCents !== undefined && hourlyCents > 0)) {
+        return apiFail("`hourlyCents` is required for an hourly member.", 422);
       }
 
       if (body.crewId !== undefined && body.crewId !== null && typeof body.crewId !== "string") {
@@ -151,6 +174,23 @@ export const POST = apiRoute(async ({ req }) => {
           return apiFail("`patch.active` must be a boolean.", 422);
         }
         patch.active = raw.active;
+      }
+
+      // A patch whose keys are ALL unknown copies nothing, and updateTeamMember
+      // returns a bare { ok: true } for an empty update without touching the
+      // row — so a client that misspelled `hourly_cents` is told its pay change
+      // saved. On web the patch is built by the form, so this cannot happen;
+      // a phone assembling JSON is exactly where it can.
+      if (Object.keys(patch).length === 0) {
+        return apiFail(`Send at least one of: ${PATCH_KEYS.join(", ")}.`, 422);
+      }
+      // The pay-rate rule from `add`, applied to the one shape that can reach
+      // the same end state: the web edit form submits compType and hourlyCents
+      // together and refuses that pair at zero. A patch that moves someone to
+      // hourly WITHOUT naming a rate is left alone — it keeps whatever rate the
+      // row already had, which is not this route's call to second-guess.
+      if (patch.compType === "hourly" && patch.hourlyCents !== undefined && patch.hourlyCents <= 0) {
+        return apiFail("`patch.hourlyCents` must be more than zero for an hourly member.", 422);
       }
 
       return apiResult(await updateTeamMember(body.id, patch));

@@ -1,4 +1,4 @@
-import { apiFail, apiResult, apiRoute } from "@/lib/api/v1";
+import { apiFail, apiResult, apiRoute, isCents } from "@/lib/api/v1";
 import { upsertCatalogItem, deleteCatalogItem } from "@/app/CanesPressure/actions";
 import type { CatalogKind } from "@urso/types";
 
@@ -15,11 +15,16 @@ import type { CatalogKind } from "@urso/types";
 // cookie, so that guard sees the same actor here as on the web.
 //
 // MONEY. `defaultPriceCents` is integer cents and is passed through untouched:
-// no parse, no multiply, no round. The type check is deliberately strict —
-// typeof number AND Number.isInteger — because upsertCatalogItem calls
-// Math.round() on whatever arrives, so a float or a numeric string would be
-// silently coerced into a price nobody typed. 49.99 must be rejected, not
-// quietly stored as 50 cents.
+// no parse, no multiply, no round. The check is `isCents` — integer AND
+// non-negative — because upsertCatalogItem calls Math.round() on whatever
+// arrives and clamps nothing, so anything this route lets past becomes the
+// price. A float or numeric string would be silently coerced into a price
+// nobody typed (49.99 must be rejected, not quietly stored as 50 cents), and a
+// NEGATIVE price is worse: the catalog default prefills an estimate line, and
+// lineTotalCents multiplies it by the quantity, so one line silently subtracts
+// from the subtotal. The web refuses it already — dollarsToCents() in
+// catalog-editor.tsx returns null for n < 0 and the field is min=0 — so this is
+// parity, not a new rule.
 
 export const dynamic = "force-dynamic";
 
@@ -51,8 +56,8 @@ export const POST = apiRoute(async ({ req }) => {
     case "upsert": {
       if (typeof body.name !== "string") return apiFail("`name` must be a string.", 422);
       if (typeof body.kind !== "string") return apiFail("`kind` must be a string.", 422);
-      if (typeof body.defaultPriceCents !== "number" || !Number.isInteger(body.defaultPriceCents)) {
-        return apiFail("`defaultPriceCents` must be an integer number of cents.", 422);
+      if (!isCents(body.defaultPriceCents)) {
+        return apiFail("`defaultPriceCents` must be a whole number of cents, and not negative.", 422);
       }
       // An id turns this into an update; without one the action inserts.
       if (body.id !== undefined && typeof body.id !== "string") {

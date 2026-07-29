@@ -8,6 +8,7 @@ import {
   addJobChecklistItem,
   removeJobChecklistItem,
 } from "@/app/CanesPressure/crew-owner-actions";
+import { DEFAULT_CREW_PERMISSIONS } from "@urso/types";
 import type { CrewAccountRole, CrewPermissionKey } from "@urso/types";
 
 // POST /api/v1/canes/crew-accounts/actions — crew roster administration:
@@ -39,11 +40,33 @@ import type { CrewAccountRole, CrewPermissionKey } from "@urso/types";
 // The route's job is: parse, validate SHAPE, dispatch, and pass the result
 // through untouched so the caller sees the sentence the action wrote.
 //
-// No money crosses this route — nothing here takes cents. addApprovedTechnician
-// seeds comp_type/comp_bps internally from the role; changing pay is the Payouts
-// surface, not this one.
+// No money crosses this route — nothing here takes cents. But `role` DOES:
+// addApprovedTechnician seeds comp_type/comp_bps from it, so it is validated
+// below. Changing pay after the fact is the Payouts surface, not this one.
 
 export const dynamic = "force-dynamic";
+
+// `role` is pay-determining, and this is the only place that can catch a bad
+// one. addApprovedTechnician reads it as `input.role === "ops_manager"` and
+// derives everything else from that single boolean — role, comp_type and
+// comp_bps — so ANY other string, a typo included, silently seeds an hourly
+// worker at 0/hr instead of an ops manager on a 20% profit share. Nothing
+// downstream catches it: the team_members CHECK constraint only ever sees the
+// already-collapsed "ops_manager"/"worker", never what the caller sent, and
+// payouts.ts pays from the row that was written.
+//
+// Membership is read off DEFAULT_CREW_PERMISSIONS — a Record keyed by
+// CrewAccountRole, so a role added to the union without a defaults entry fails
+// to compile rather than being quietly rejected here. Same trick as
+// isPaymentMethod over PAYMENT_METHOD_LABEL; a hand-written list would be a
+// second copy to drift.
+//
+// setCrewMemberRole below is deliberately NOT given this check: that action
+// validates the union itself and answers "Invalid role.", and a second copy of
+// a rule is the divergence this layer keeps being bitten by.
+function isCrewAccountRole(value: unknown): value is CrewAccountRole {
+  return typeof value === "string" && Object.hasOwn(DEFAULT_CREW_PERMISSIONS, value);
+}
 
 type Body = {
   action?: unknown;
@@ -91,20 +114,21 @@ export const POST = apiRoute(async ({ req }) => {
       // manager runs every crew, so the action makes the crew pick optional for
       // that role and refuses an empty one for a technician.
       if (typeof body.crewId !== "string") return apiFail("`crewId` must be a string.", 422);
-      if (body.role !== undefined && typeof body.role !== "string") {
-        return apiFail("`role` must be a string.", 422);
+      // Optional — the action defaults an absent role to a technician, which is
+      // the same thing the web's unchecked "ops manager" box means. Present but
+      // unrecognised is refused rather than collapsed to a worker.
+      if (body.role !== undefined && !isCrewAccountRole(body.role)) {
+        return apiFail("`role` must be technician or ops_manager.", 422);
       }
       // The action email/phone/crew validation and the duplicate-email conflict
-      // all come back as written notices. Note it reads `role` as
-      // `=== "ops_manager"` without validating the union, so any other value —
-      // including a typo — is treated as a worker, exactly as on the web.
+      // all come back as written notices.
       return apiResult(
         await addApprovedTechnician({
           name: body.name,
           email: body.email,
           phone: body.phone,
           crewId: body.crewId,
-          role: body.role as CrewAccountRole | undefined,
+          role: body.role,
         }),
       );
     }
