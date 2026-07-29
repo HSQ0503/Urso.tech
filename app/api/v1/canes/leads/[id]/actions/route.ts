@@ -53,6 +53,11 @@ type Body = {
 // a column CHECK. It would log a call that reads correct and quietly leave the
 // lead status wrong. Compare setStatus below: an unknown status IS refused
 // downstream (the leads.status CHECK), so it needs no list here.
+// The only columns `update` may touch. updateLeadFields spreads whatever it is
+// given, so this list — not the action — is what stands between a caller and
+// every other column on the row, opted_out included.
+const LEAD_FIELDS = ["name", "phone", "email", "address", "service", "notes", "source"] as const;
+
 const CALL_OUTCOMES = ["closed", "follow_up", "no_answer", "lost"] as const;
 
 type CallOutcome = (typeof CALL_OUTCOMES)[number];
@@ -96,7 +101,39 @@ export const POST = apiRoute<{ id: string }>(async ({ req, params }) => {
       if (typeof body.fields !== "object" || body.fields === null) {
         return apiFail("`fields` must be an object.", 422);
       }
-      return apiResult(await updateLeadFields(id, body.fields as Record<string, string | null>));
+      // WHITELIST, never a cast. An earlier version forwarded the caller's whole
+      // object with `as Record<string, string | null>` — an unsound assertion
+      // that TypeScript does not check. updateLeadFields then does
+      // `{ ...fields }` straight into .update(), so EVERY column on `leads`
+      // became caller-writable.
+      //
+      // The one that matters is `opted_out`. It is the entire consent record:
+      // sendCanesSms performs no opt-out check of its own, and every automation
+      // gates on reading that column. A single POST flipping it back to false
+      // resumes texting a number that sent STOP — which is a legal problem, not
+      // a data problem, and it was reachable by any technician holding the leads
+      // flag. `appointment_at` was writable too, booking a visit while bypassing
+      // the confirmation-task machinery that setAppointment exists to run.
+      //
+      // Absent stays distinct from empty: a key nobody sent must not wipe a
+      // live value.
+      const raw = body.fields as Record<string, unknown>;
+      const patch: Record<string, string> = {};
+      for (const key of LEAD_FIELDS) {
+        const value = raw[key];
+        if (value === undefined) continue;
+        if (typeof value !== "string") {
+          // Without this the domain calls .trim()/toE164() on a number and
+          // throws, which surfaces as a 500 with a reference id instead of a
+          // 422 telling the caller what was wrong.
+          return apiFail(`\`fields.${key}\` must be a string.`, 422);
+        }
+        patch[key] = value;
+      }
+      if (Object.keys(patch).length === 0) {
+        return apiFail(`Send at least one of: ${LEAD_FIELDS.join(", ")}.`, 422);
+      }
+      return apiResult(await updateLeadFields(id, patch));
     }
 
     case "setAppointment": {

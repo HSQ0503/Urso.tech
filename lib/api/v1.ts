@@ -5,6 +5,7 @@ import { technicianActorFromAuthUserId, verifyCrewAccessToken } from "@/lib/cane
 import { accessAllows, type ConsoleAccess } from "@/lib/canes/access";
 import { isDemo } from "@/lib/canes/data";
 import type { CrewPermissionKey, TechnicianActor } from "@/lib/canes/crew-types";
+import { PAYMENT_METHOD_LABEL, type PaymentMethod } from "@urso/types";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // /api/v1 — the JSON layer the Expo app talks to (Phase 6).
@@ -55,11 +56,23 @@ export function apiResult(
   result: { ok: boolean; notice?: string } & Record<string, unknown>,
 ): NextResponse {
   if (result.ok) {
-    // Strip the envelope keys; anything else the action returned (invoiceId,
-    // grant, …) becomes the payload.
+    // Anything else the action returned (invoiceId, grant, …) becomes the
+    // payload — but the NOTICE IS KEPT, and that matters more than it looks.
+    //
+    // 17 actions return ok:true WITH a notice, and several of those are
+    // QUALIFIED successes rather than confirmations: "Approved. The deposit
+    // link could not be created — send it from the estimate.", the
+    // double-booking warning from scheduleJob, a cash payment recorded against
+    // a total that had already moved. Dropping the sentence turned every one of
+    // them into an unqualified success, so a phone would report a deposit taken
+    // that was never taken. On the money path that is the worst possible
+    // rounding of the truth.
     const data: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(result)) {
       if (key !== "ok" && key !== "notice") data[key] = value;
+    }
+    if (typeof result.notice === "string" && result.notice.length > 0) {
+      data.notice = result.notice;
     }
     return apiOk(data);
   }
@@ -193,6 +206,26 @@ export function requireTechnician(actor: ApiActor): TechnicianActor | NextRespon
 
 export { accessAllows };
 
+// ── Shared body validators ───────────────────────────────────────────────────
+
+// `as PaymentMethod` is an assertion, not a check — TypeScript verifies nothing
+// at runtime, and nothing downstream does either: the actions default with
+// `?? "cash"` and the column has no CHECK constraint. An arbitrary string
+// therefore lands in the payments ledger as the recorded method, which is the
+// record the business reconciles against. Validated against the label map so a
+// new method can never be accepted here before it exists in the domain.
+export function isPaymentMethod(value: unknown): value is PaymentMethod {
+  return typeof value === "string" && Object.hasOwn(PAYMENT_METHOD_LABEL, value);
+}
+
+// Money crossing this layer is always integer cents and never negative. The
+// actions clamp some of it (`Math.min` caps a deposit at the total) but nothing
+// rejects a negative, so a negative deposit silently REDUCES what was collected
+// and reports success.
+export function isCents(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0;
+}
+
 // ── Handler wrapper ──────────────────────────────────────────────────────────
 
 export type ApiHandler<P = Record<string, string>> = (ctx: {
@@ -230,13 +263,28 @@ export function apiRoute<P extends Record<string, string> = Record<string, strin
       const params = await ctx.params;
       return await handler({ req, actor, params });
     } catch (e) {
-      // Crew server actions call requireTechnicianActor(), which redirect()s
-      // when identity is missing. In a route handler that throws NEXT_REDIRECT.
-      // The wrapper already authenticated, so reaching this means the session
-      // died mid-request — an auth failure, not a server fault.
-      if (e && typeof e === "object" && "digest" in e && typeof e.digest === "string"
-          && e.digest.startsWith("NEXT_REDIRECT")) {
-        return apiFail("Sign in again.", 401);
+      // A redirect() inside an action throws NEXT_REDIRECT. Two very different
+      // things arrive here that way, and treating them alike was wrong.
+      //
+      //   requireTechnicianActor() -> redirect to a LOGIN page = auth failure.
+      //   deleteLead / deleteEstimate / deleteInvoice / deleteContact all END
+      //   in redirect("/CanesPressure/<list>") on SUCCESS — that is how the web
+      //   navigates away from a page whose record no longer exists.
+      //
+      // Mapping every NEXT_REDIRECT to 401 meant a successful delete removed the
+      // row and then told the client its session had died: the owner got bounced
+      // to sign-in, and on retry saw "not found" for something they had in fact
+      // just deleted. The destination is what separates the two cases.
+      if (
+        e && typeof e === "object" && "digest" in e && typeof e.digest === "string" &&
+        e.digest.startsWith("NEXT_REDIRECT")
+      ) {
+        // digest is "NEXT_REDIRECT;<kind>;<url>;<status>;"
+        const target = e.digest.split(";")[2] ?? "";
+        if (/\/login(\/|$|\?)/.test(target)) return apiFail("Sign in again.", 401);
+        // A post-mutation redirect means the action completed. Hand back the
+        // destination so a client can follow the same navigation the web does.
+        return apiOk({ done: true, redirectTo: target });
       }
       // Never surface driver text: a Postgres or Supabase message can name
       // tables, columns and constraints. Log it, hand back an id.

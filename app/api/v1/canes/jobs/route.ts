@@ -1,4 +1,4 @@
-import { apiFail, apiResult, apiRoute } from "@/lib/api/v1";
+import { apiFail, apiResult, apiRoute, isCents, isPaymentMethod } from "@/lib/api/v1";
 import { createManualJob } from "@/app/CanesPressure/actions";
 import type { PaymentMethod } from "@urso/types";
 
@@ -63,6 +63,9 @@ export const POST = apiRoute(async ({ req }) => {
 
   switch (body.action) {
     case "createManual": {
+      // Same unchecked cast as the other deposit paths, plus a negative-cents
+      // gap: the action caps a deposit with Math.min but never rejects a
+      // negative one, so it silently reduced collected money and reported ok.
       if (typeof body.customerName !== "string") {
         return apiFail("`customerName` must be a string.", 422);
       }
@@ -71,16 +74,17 @@ export const POST = apiRoute(async ({ req }) => {
       }
       // MONEY. Integer cents in, integer cents through — never a currency
       // string, never scaled, never rounded here.
-      if (typeof body.totalCents !== "number" || !Number.isInteger(body.totalCents)) {
-        return apiFail("`totalCents` must be an integer number of cents.", 422);
+      // isCents also rejects a NEGATIVE. Number.isInteger alone admits one, and
+      // nothing below refuses it: createManualJob caps a deposit with Math.min
+      // but never checks the sign, so a negative silently reduced collected
+      // money and answered ok.
+      if (!isCents(body.totalCents)) {
+        return apiFail("`totalCents` must be whole cents, 0 or more.", 422);
       }
       let depositCollectedCents: number | undefined;
       if (body.depositCollectedCents !== undefined) {
-        if (
-          typeof body.depositCollectedCents !== "number" ||
-          !Number.isInteger(body.depositCollectedCents)
-        ) {
-          return apiFail("`depositCollectedCents` must be an integer number of cents.", 422);
+        if (!isCents(body.depositCollectedCents)) {
+          return apiFail("`depositCollectedCents` must be whole cents, 0 or more.", 422);
         }
         depositCollectedCents = body.depositCollectedCents;
       }
@@ -100,16 +104,26 @@ export const POST = apiRoute(async ({ req }) => {
         optional[key] = value;
       }
 
-      // The action owns everything else: an empty name, a negative total, a
-      // deposit above the total, an unparseable date, a bad phone or email — and
-      // it writes the sentence for each. On success the result carries jobId,
-      // which apiResult() hands back as the payload.
+      // The comment here used to say the action "refuses an unknown one
+      // downstream". It does not: createManualJob passes depositMethod through
+      // to a column with no CHECK constraint, so any string became the recorded
+      // method on a real deposit. Validated here instead.
+      let depositMethod: PaymentMethod | undefined;
+      if (optional.depositMethod !== undefined) {
+        if (!isPaymentMethod(optional.depositMethod)) {
+          return apiFail("`depositMethod` is not a payment method.", 422);
+        }
+        depositMethod = optional.depositMethod;
+      }
+
+      // The action owns everything else: an empty name, a deposit above the
+      // total, an unparseable date, a bad phone or email — and it writes the
+      // sentence for each. On success the result carries jobId, which
+      // apiResult() hands back as the payload.
       return apiResult(
         await createManualJob({
           ...optional,
-          // Re-stated after the spread so the method keeps its domain type; the
-          // action refuses an unknown one downstream.
-          depositMethod: optional.depositMethod as PaymentMethod | undefined,
+          depositMethod,
           customerName: body.customerName,
           jobName: body.jobName,
           totalCents: body.totalCents,

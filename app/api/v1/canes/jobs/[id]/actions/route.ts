@@ -1,4 +1,4 @@
-import { apiFail, apiResult, apiRoute } from "@/lib/api/v1";
+import { apiFail, apiResult, apiRoute, isCents, isPaymentMethod } from "@/lib/api/v1";
 import {
   scheduleJob,
   moveJob,
@@ -13,7 +13,7 @@ import {
   deleteJob,
   recordJobDeposit,
 } from "@/app/CanesPressure/actions";
-import type { JobRecurrence, JobStatus, PaymentMethod } from "@urso/types";
+import type { JobRecurrence, JobStatus } from "@urso/types";
 
 // POST /api/v1/canes/jobs/:id/actions — mutations on one job.
 //
@@ -202,6 +202,17 @@ export const POST = apiRoute<{ id: string }>(async ({ req, params }) => {
     }
 
     case "recordDeposit": {
+      // `as PaymentMethod` asserted nothing at runtime: the action defaults with
+      // ?? "cash" and the column has no CHECK, so an arbitrary string became the
+      // recorded method in the payments ledger — the record the business
+      // reconciles against.
+      if (!isPaymentMethod(body.method)) {
+        return apiFail("`method` is not a payment method.", 422);
+      }
+      // Negative cents would REDUCE what was collected and report success.
+      if (!isCents(body.amountCents)) {
+        return apiFail("`amountCents` must be whole cents, 0 or more.", 422);
+      }
       // MONEY. Integer cents in, integer cents through — no currency string is
       // ever parsed here, nothing is scaled, nothing is rounded. A float is
       // rejected outright rather than silently rounded by the action, because
@@ -215,7 +226,7 @@ export const POST = apiRoute<{ id: string }>(async ({ req, params }) => {
       // against the job total, the 20-second double-submit guard, and the
       // already-sent-invoice refusal.
       return apiResult(
-        await recordJobDeposit(id, body.amountCents, body.method as PaymentMethod),
+        await recordJobDeposit(id, body.amountCents, body.method),
       );
     }
 

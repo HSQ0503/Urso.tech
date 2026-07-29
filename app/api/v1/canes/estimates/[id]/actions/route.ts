@@ -1,4 +1,4 @@
-import { apiFail, apiResult, apiRoute } from "@/lib/api/v1";
+import { apiFail, apiResult, apiRoute, isPaymentMethod } from "@/lib/api/v1";
 import {
   updateEstimate,
   saveEstimateItems,
@@ -7,7 +7,7 @@ import {
   deleteEstimate,
   approveEstimateInPerson,
 } from "@/app/CanesPressure/actions";
-import type { CatalogKind, EstimateType, PaymentMethod } from "@urso/types";
+import type { CatalogKind, EstimateType } from "@urso/types";
 
 // POST /api/v1/canes/estimates/:id/actions — mutations on one estimate.
 //
@@ -191,6 +191,10 @@ export const POST = apiRoute<{ id: string }>(async ({ req, params }) => {
     }
 
     case "approveInPerson": {
+      // Unvalidated, this string became the recorded method on a real deposit.
+      if (body.depositMethod !== undefined && !isPaymentMethod(body.depositMethod)) {
+        return apiFail("`depositMethod` is not a payment method.", 422);
+      }
       // The GUARDED owner equivalent of the public approveEstimate — same
       // finalize path (job, deposit link, lead → won) with the signature
       // recorded as an in-person agreement.
@@ -205,7 +209,7 @@ export const POST = apiRoute<{ id: string }>(async ({ req, params }) => {
       return apiResult(
         await approveEstimateInPerson(id, {
           depositCollected: body.depositCollected,
-          depositMethod: body.depositMethod as PaymentMethod | undefined,
+          depositMethod: body.depositMethod,
         }),
       );
     }
