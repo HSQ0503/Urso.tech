@@ -1,4 +1,4 @@
-import { apiFail, apiResult, apiRoute, isCents, isPaymentMethod } from "@/lib/api/v1";
+import { apiFail, apiResult, apiRoute, isCents, isIsoInstant, isPaymentMethod } from "@/lib/api/v1";
 import { createManualJob } from "@/app/CanesPressure/actions";
 import type { PaymentMethod } from "@urso/types";
 
@@ -102,6 +102,17 @@ export const POST = apiRoute(async ({ req }) => {
         if (value === undefined) continue;
         if (typeof value !== "string") return apiFail(`\`${key}\` must be a string.`, 422);
         optional[key] = value;
+      }
+
+      // scheduledAtIso rides in OPTIONAL_STRINGS for the typeof check, but a
+      // string is not an instant. createManualJob guards NaN ("Invalid date.")
+      // and nothing more, so a V8-coercible non-instant ("3" → 2001-03-01)
+      // created the job, scheduled it into 2001 and armed its confirmation task
+      // there — and unlike a reschedule this is the job's BIRTH, so there is no
+      // prior good slot to fall back to. Absent stays absent: an omitted key
+      // means an unscheduled job in the tray, which is a normal way to create one.
+      if (optional.scheduledAtIso !== undefined && !isIsoInstant(optional.scheduledAtIso)) {
+        return apiFail("`scheduledAtIso` must be an ISO instant.", 422);
       }
 
       // The comment here used to say the action "refuses an unknown one

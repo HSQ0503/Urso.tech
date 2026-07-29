@@ -1,4 +1,4 @@
-import { apiFail, apiResult, apiRoute, isPaymentMethod } from "@/lib/api/v1";
+import { apiFail, apiResult, apiRoute, isIsoInstant, isPaymentMethod } from "@/lib/api/v1";
 import {
   updateEstimate,
   saveEstimateItems,
@@ -115,6 +115,16 @@ export const POST = apiRoute<{ id: string }>(async ({ req, params }) => {
       // range itself — a string here would round to NaN and blank the deposit.
       if (patch.depositPercent !== undefined && typeof patch.depositPercent !== "number") {
         return apiFail("`patch.depositPercent` must be a number.", 422);
+      }
+      // expiresAtIso is the one field here the action does not parse AT ALL —
+      // `row.expires_at = patch.expiresAtIso` puts the caller's string straight
+      // into a timestamptz. So a bad value is refused by POSTGRES, and the
+      // driver's message becomes the notice, which is the one thing this layer
+      // promises never to do. null is a real value: it clears the expiry.
+      if (patch.expiresAtIso !== undefined
+          && patch.expiresAtIso !== null
+          && !isIsoInstant(patch.expiresAtIso)) {
+        return apiFail("`patch.expiresAtIso` must be an ISO instant or null.", 422);
       }
       // The action refuses a non-draft estimate for anything but the contact
       // fields, and validates the phone; both refusals come back as a sentence.

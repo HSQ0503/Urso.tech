@@ -1,4 +1,4 @@
-import { apiFail, apiResult, apiRoute } from "@/lib/api/v1";
+import { apiFail, apiResult, apiRoute, isIsoInstant } from "@/lib/api/v1";
 import { createCalendarEvent } from "@/app/CanesPressure/actions";
 import type { CalendarEventKind } from "@urso/types";
 
@@ -46,12 +46,19 @@ export const POST = apiRoute(async ({ req }) => {
   switch (body.action) {
     case "create": {
       if (typeof body.title !== "string") return apiFail("`title` must be a string.", 422);
-      // Strings only. The action parses both instants and refuses an unparseable
-      // one ("Invalid date.") or an end at or before the start ("End must be
-      // after start."), and those sentences are written for the reader — parsing
-      // them again here would be a second copy of the same rules.
-      if (typeof body.startIso !== "string") return apiFail("`startIso` must be an ISO instant.", 422);
-      if (typeof body.endIso !== "string") return apiFail("`endIso` must be an ISO instant.", 422);
+      // The action DOES parse both instants — `new Date()` then isNaN, answering
+      // "Invalid date." — plus "End must be after start.", and those sentences
+      // are written for the reader. What it cannot catch is a string that is not
+      // an instant but that V8 coerces anyway: "3" and "tomorrow at 3" are both
+      // 2001-03-01, so the action accepts them, the end really is after the
+      // start, and it drops a time-off block into 2001 and reports success. The
+      // block then sits behind a week nobody will ever look at, so the crew is
+      // scheduled straight through the time off it was meant to protect.
+      //
+      // The offset is required for the same reason as the range reads: these are
+      // ET wall-clock blocks, and a naive string resolves in the server's zone.
+      if (!isIsoInstant(body.startIso)) return apiFail("`startIso` must be an ISO instant.", 422);
+      if (!isIsoInstant(body.endIso)) return apiFail("`endIso` must be an ISO instant.", 422);
 
       if (body.allDay !== undefined && typeof body.allDay !== "boolean") {
         return apiFail("`allDay` must be a boolean.", 422);

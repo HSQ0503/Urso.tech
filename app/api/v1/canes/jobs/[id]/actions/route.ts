@@ -1,4 +1,4 @@
-import { apiFail, apiResult, apiRoute, isCents, isPaymentMethod } from "@/lib/api/v1";
+import { apiFail, apiResult, apiRoute, isCents, isIsoInstant, isPaymentMethod } from "@/lib/api/v1";
 import {
   scheduleJob,
   moveJob,
@@ -77,7 +77,13 @@ export const POST = apiRoute<{ id: string }>(async ({ req, params }) => {
 
   switch (body.action) {
     case "schedule": {
-      if (typeof body.scheduledIso !== "string") {
+      // scheduleJob parses this itself and refuses NaN with "Invalid date.", but
+      // `new Date()` accepts far more than an instant: "3" and "tomorrow at 3"
+      // are both 2001-03-01. The action then schedules the job there, writes
+      // ends_at from it, re-arms the day-before confirmation task against it and
+      // reports success — a job that has left the tray, is on no week anyone will
+      // look at, and whose customer text is queued for 2001.
+      if (!isIsoInstant(body.scheduledIso)) {
         return apiFail("`scheduledIso` must be an ISO instant.", 422);
       }
       if (typeof body.durationMinutes !== "number" || !Number.isFinite(body.durationMinutes)) {
@@ -100,7 +106,7 @@ export const POST = apiRoute<{ id: string }>(async ({ req, params }) => {
       // null is a real value here: moveJob(id, null) means "send it back to the
       // tray" and delegates to unscheduleJob.
       const scheduledIso = body.scheduledIso;
-      if (scheduledIso !== null && typeof scheduledIso !== "string") {
+      if (scheduledIso !== null && !isIsoInstant(scheduledIso)) {
         return apiFail("`scheduledIso` must be an ISO instant or null.", 422);
       }
       // Absent and null differ for BOTH remaining arguments, and the difference

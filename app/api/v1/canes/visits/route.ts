@@ -1,4 +1,4 @@
-import { apiFail, apiOk, apiRoute, denyUnlessPagePermitted } from "@/lib/api/v1";
+import { apiFail, apiOk, apiRoute, denyUnlessPagePermitted, isIsoInstant } from "@/lib/api/v1";
 import { listVisitsInRange } from "@/lib/canes/data";
 
 // GET /api/v1/canes/visits?from=<iso>&days=<n> — estimate visits inside an
@@ -22,6 +22,17 @@ import { listVisitsInRange } from "@/lib/canes/data";
 // schedule. A client with a date-format bug would show "no visits" to someone
 // standing in a yard with work booked, and nothing would report an error
 // anywhere. Bad input has to fail loudly.
+//
+// And `Number.isFinite(Date.parse(from))` was not enough to make it fail loudly.
+// V8 falls back to a legacy parser, so "3" and "tomorrow at 3" are both
+// 2001-03-01 rather than NaN: they cleared that check, produced a window
+// twenty-five years wide of the mark, and returned the same empty array with the
+// same 200. isIsoInstant also REQUIRES an offset, which matters more here than
+// anywhere else in this layer — the window is ET wall time, so a naive
+// "2026-08-01T00:00" would be read in the server's zone (UTC in production) and
+// silently shift the day boundary by four or five hours. Every real caller
+// already sends a resolved instant: the web page and the app both compose it
+// with etLocalToIso, which ends in toISOString().
 
 export const dynamic = "force-dynamic";
 
@@ -35,7 +46,7 @@ export const GET = apiRoute(async ({ req, actor }) => {
   const days = req.nextUrl.searchParams.get("days");
   if (!from || !days) return apiFail("Pass `from` (ISO instant) and `days`.", 422);
 
-  if (!Number.isFinite(Date.parse(from))) {
+  if (!isIsoInstant(from)) {
     return apiFail("`from` must be an ISO instant.", 422);
   }
   const dayCount = Number(days);
