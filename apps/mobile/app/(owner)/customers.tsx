@@ -46,10 +46,17 @@ function CustomerRow({ customer }: { customer: CustomerSummary }) {
         <Text style={styles.name} numberOfLines={1}>
           {customer.name ?? "Unnamed customer"}
         </Text>
-        <Text style={styles.lifetime}>{fmtMoney(customer.lifetime_cents)}</Text>
+        {/* A customer who has never been billed shows nothing here. "$0.00"
+            reads as a figure that was calculated, and it put a column of zeroes
+            down the list where the eye is looking for real revenue. */}
+        {customer.lifetime_cents > 0 ? (
+          <Text style={styles.lifetime}>{fmtMoney(customer.lifetime_cents)}</Text>
+        ) : null}
       </View>
 
-      <Text style={styles.phone}>{fmtPhone(customer.phone)}</Text>
+      {customer.phone !== null ? (
+        <Text style={styles.phone}>{fmtPhone(customer.phone)}</Text>
+      ) : null}
 
       {customer.primary_address !== null ? (
         <Text style={styles.address} numberOfLines={1}>
@@ -232,7 +239,11 @@ const styles = StyleSheet.create({
     paddingVertical: space.sm,
   },
   search: {
-    ...type.body,
+    // Deliberately NOT ...type.body: that spread carries lineHeight, and iOS
+    // renders a TextInput placeholder with visibly wrong tracking when a
+    // lineHeight is combined with a custom font. Height comes from minHeight.
+    fontFamily: font.body,
+    fontSize: 15,
     color: color.ink,
     minHeight: HIT,
     paddingHorizontal: space.md,

@@ -166,15 +166,20 @@ function JobRow({ job, crewName }: { job: BoardJob; crewName: string | null }) {
 }
 
 function TrayRow({ job }: { job: Job }) {
+  // The name leads, not the amount. Every row in this section is by definition
+  // unscheduled, so repeating "UNSCHEDULED" on each one said nothing the section
+  // header had not already said, while the customer — the thing being scanned
+  // for — sat second. A zero total is left blank rather than shown as $0.00:
+  // an unpriced job is not a nothing job, and rendering it as money reads as one.
+  const total = job.total_cents > 0 ? fmtMoney(job.total_cents) : null;
   return (
     <View style={styles.row}>
       <View style={styles.rowTop}>
-        <Text style={styles.money}>{fmtMoney(job.total_cents)}</Text>
-        <Text style={styles.status}>{JOB_STATUS_LABEL[job.status]}</Text>
+        <Text style={styles.customerLead} numberOfLines={1}>
+          {job.customer_name ?? "Customer"}
+        </Text>
+        {total !== null && <Text style={styles.money}>{total}</Text>}
       </View>
-      <Text style={styles.customer} numberOfLines={1}>
-        {job.customer_name ?? "Customer"}
-      </Text>
       <Text style={styles.address} numberOfLines={1}>
         {job.job_address ?? "Address pending"}
       </Text>
@@ -517,7 +522,10 @@ const styles = StyleSheet.create({
   status: { ...type.micro, color: color.muted },
   statusLive: { ...type.micro, color: color.job },
   customer: { ...type.title, color: color.ink, marginTop: space.sm },
-  address: { ...type.small, color: color.muted, marginTop: 2 },
+  // TrayRow puts the name IN the top row beside the amount, so it must not
+  // carry the stacked variant's top margin.
+  customerLead: { ...type.title, color: color.ink, flexShrink: 1 },
+  address: { ...type.small, color: color.muted, marginTop: space.xs },
   crew: { ...type.micro, color: color.faint, marginTop: space.sm },
   crewUnassigned: { ...type.small, color: color.danger, marginTop: space.sm },
 

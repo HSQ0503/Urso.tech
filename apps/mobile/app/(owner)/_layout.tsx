@@ -63,6 +63,15 @@ export default function OwnerLayout(): React.ReactElement {
           tabBarIcon: ({ color: c, size }) => <Feather name="menu" size={size} color={c} />,
         }}
       />
+
+      {/* Reached from More, never from the tab bar. Tabs renders EVERY route in
+          the group as a tab unless told otherwise, which put seven items down
+          there — including "lead/[id]", a detail route with no meaning as a
+          destination. href:null keeps them navigable while leaving the bar at
+          the four things this app is actually organised around. */}
+      <Tabs.Screen name="leads" options={{ href: null }} />
+      <Tabs.Screen name="customers" options={{ href: null }} />
+      <Tabs.Screen name="lead/[id]" options={{ href: null }} />
     </Tabs>
   );
 }

@@ -32,7 +32,7 @@ import {
   type TechnicianJobItem,
 } from "@urso/types";
 import { api, SessionExpiredError, type ApiResult } from "@/api";
-import { color, HIT, radius, space, type } from "@/theme";
+import { color, font, HIT, radius, space, type } from "@/theme";
 
 // Mirrors the web TERMINAL list — these statuses mean the work is off the
 // technician's hands, so check-in and complete disappear rather than fail.
@@ -599,7 +599,11 @@ const styles = StyleSheet.create({
   },
 
   input: {
-    ...type.body,
+    // Not ...type.body: the spread carries lineHeight, and iOS renders a
+    // TextInput's placeholder with visibly wrong tracking when lineHeight is
+    // combined with a custom font. Same fix as the customers search field.
+    fontFamily: font.body,
+    fontSize: 15,
     color: color.ink,
     minHeight: 80,
     padding: space.md,
