@@ -1,35 +1,72 @@
 import { Section, Text } from "@react-email/components";
 import { CanesEmail, CANES } from "./base";
 
-// The technician sign-in code, sent when someone taps "Send code" in the Urso
-// mobile app. Delivered through OUR Resend account via the Supabase Send Email
-// Hook, not Supabase's built-in mailer — that one is throttled to a couple of
-// messages an hour, which is fine for one developer and useless for a crew all
-// clocking in at 7am.
+// The one-time code Supabase generates for an auth action, sent through OUR
+// Resend account via the Send Email Hook rather than Supabase's built-in
+// mailer — that one is throttled to a couple of messages an hour, which is fine
+// for one developer and useless when a crew all clock in at 7am, and it sends
+// from a supabase.io address with none of the Canes branding.
+//
+// IMPORTANT: enabling the hook routes EVERY auth email through it, not just
+// sign-in. So this template covers each purpose rather than assuming a login —
+// telling someone resetting their password that it is a "sign-in code" is the
+// kind of small wrongness that makes people distrust the whole system.
 //
 // Deliberately sparse: a technician standing in a driveway needs the number and
 // nothing else. No CTA button, because there is no link to follow — the code is
 // typed into an app that is already open.
 
-export type SignInCodeEmailProps = {
-  code: string;
-  // Whether the account is signing in or being created. Copy differs slightly;
-  // the crew flow is allowlist-only so in practice this is nearly always "login".
-  action?: "login" | "signup";
+export type CodePurpose = "login" | "signup" | "recovery" | "email_change" | "other";
+
+type Copy = { subject: string; heading: string; lede: string };
+
+// Exported so the route uses exactly the same subject line it renders a body
+// for — the two drifting apart is an easy and confusing mistake.
+export const CODE_COPY: Record<CodePurpose, Copy> = {
+  login: {
+    subject: "Your Canes sign-in code",
+    heading: "Your sign-in code",
+    lede: "Enter this code in the Urso app:",
+  },
+  signup: {
+    subject: "Finish setting up your Canes account",
+    heading: "Finish setting up your account",
+    lede: "Enter this code in the Urso app to finish setting up:",
+  },
+  recovery: {
+    subject: "Your Canes password reset code",
+    heading: "Reset your password",
+    lede: "Enter this code to set a new password:",
+  },
+  email_change: {
+    subject: "Confirm your new email for Canes",
+    heading: "Confirm your new email",
+    lede: "Enter this code to confirm this email address:",
+  },
+  other: {
+    subject: "Your Canes verification code",
+    heading: "Your verification code",
+    lede: "Enter this code to continue:",
+  },
 };
 
-export function SignInCodeEmail({ code, action = "login" }: SignInCodeEmailProps) {
-  const isSignup = action === "signup";
+export type SignInCodeEmailProps = {
+  code: string;
+  purpose?: CodePurpose;
+};
+
+export function SignInCodeEmail({ code, purpose = "login" }: SignInCodeEmailProps) {
+  const copy = CODE_COPY[purpose] ?? CODE_COPY.other;
   return (
     <CanesEmail
-      preview={`Your Canes sign-in code: ${code}`}
+      preview={`${copy.heading}: ${code}`}
       accent="brand"
       eyebrow="Crew portal"
-      heading={isSignup ? "Finish setting up your account" : "Your sign-in code"}
+      heading={copy.heading}
     >
       <Section className="px-7 pt-4">
         <Text className="m-0 text-[14px] leading-[1.6]" style={{ color: CANES.ink }}>
-          Enter this code in the Urso app:
+          {copy.lede}
         </Text>
       </Section>
 
@@ -69,7 +106,7 @@ export function SignInCodeEmail({ code, action = "login" }: SignInCodeEmailProps
 
       <Section className="px-7 pt-4">
         <Text className="m-0 text-[13px] leading-[1.6]" style={{ color: CANES.muted }}>
-          It expires shortly and can only be used once. If you didn’t ask to sign in, you can ignore
+          It expires shortly and can only be used once. If you didn’t ask for it, you can ignore
           this email — nobody can get in without the code.
         </Text>
       </Section>

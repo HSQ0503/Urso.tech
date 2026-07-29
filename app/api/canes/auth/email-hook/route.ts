@@ -2,7 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { Resend } from "resend";
 import { render } from "@react-email/components";
-import { SignInCodeEmail } from "@/emails/canes/signin-code-email";
+import { SignInCodeEmail, CODE_COPY, type CodePurpose } from "@/emails/canes/signin-code-email";
 
 // Supabase Send Email Hook — WE send the auth emails, not Supabase.
 //
@@ -71,6 +71,26 @@ type HookPayload = {
   email_data?: { token?: string; email_action_type?: string };
 };
 
+// Supabase's action types, mapped to the copy each one needs. "magiclink" is
+// what signInWithOtp on an existing account sends — the crew's normal login.
+function purposeFor(actionType: string | undefined): CodePurpose {
+  switch (actionType) {
+    case "magiclink":
+    case "login":
+      return "login";
+    case "signup":
+    case "invite":
+      return "signup";
+    case "recovery":
+      return "recovery";
+    case "email_change":
+    case "email_change_new":
+      return "email_change";
+    default:
+      return "other";
+  }
+}
+
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const secret = process.env.CANES_AUTH_HOOK_SECRET;
   const apiKey = process.env.RESEND_API; // note: RESEND_API, not RESEND_API_KEY
@@ -98,19 +118,21 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "missing email or token" }, { status: 400 });
   }
 
-  // signInWithOtp on an existing account arrives as "magiclink"; the crew flow
-  // is allowlist-only (shouldCreateUser: false) so "signup" should not occur,
-  // but handle it rather than mislabel the copy if it ever does.
-  const action = payload.email_data?.email_action_type === "signup" ? "signup" : "login";
+  // Enabling this hook makes Supabase route EVERY auth email through it, not
+  // just the crew sign-in. Map each action to its own copy: telling someone
+  // resetting a password that it is a "sign-in code" is small but corrosive.
+  // Anything unrecognised still sends, with neutral wording — dropping an email
+  // we don't recognise would lock the person out with no way to tell why.
+  const purpose = purposeFor(payload.email_data?.email_action_type);
 
-  const html = await render(SignInCodeEmail({ code, action }));
+  const html = await render(SignInCodeEmail({ code, purpose }));
 
   try {
     const resend = new Resend(apiKey);
     const { error } = await resend.emails.send({
       from: process.env.CANES_AUTH_EMAIL_FROM ?? "Canes Pressure Washing <server@urso.ws>",
       to: [to],
-      subject: "Your Canes sign-in code",
+      subject: CODE_COPY[purpose].subject,
       html,
     });
     if (error) {

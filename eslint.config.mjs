@@ -13,6 +13,12 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // The Expo app is a separate toolchain with its own tsconfig and its own
+    // conventions; this config is eslint-config-next and misjudges them — a
+    // Metro config is CommonJS by design, so require() there is correct, not an
+    // error. Matches the "apps" exclusion already in tsconfig.json. The mobile
+    // app should get eslint-config-expo of its own.
+    "apps/**",
   ]),
 ]);
 
