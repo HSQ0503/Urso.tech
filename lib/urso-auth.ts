@@ -1,6 +1,6 @@
 import { cache } from "react";
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { Resend } from "resend";
 
 // Admin magic-link auth — a self-contained layer beside the Supabase password
@@ -182,11 +182,42 @@ export async function setAdminSession(email: string, scope: AdminScope): Promise
 export const getAdminSession = cache(async (): Promise<{ email: string; scope: AdminScope } | null> => {
   const raw = (await cookies()).get(COOKIE.session)?.value;
   const p = decode<{ email: string; scope: AdminScope }>(raw, "session");
-  if (!p) return null;
   // Re-derive scope from the live ADMINS map, never the token — so changing or
   // removing an admin takes effect immediately, not after the 30-day expiry.
-  const admin = getAdmin(p.email);
-  return admin ? { email: p.email, scope: admin.scope } : null;
+  if (p) {
+    const admin = getAdmin(p.email);
+    if (admin) return { email: p.email, scope: admin.scope };
+  }
+
+  // Phase 6 — bearer fallback for the Expo app, mirroring what getTechnicianActor
+  // does for the crew. React Native has no cookie jar tied to this origin, so an
+  // admin presents a k:"mobile" token instead.
+  //
+  // This is the single choke point that makes the OWNER half of the app work at
+  // all. Everything downstream resolves identity through here: access.ts's
+  // getConsoleAccess, and therefore denyUnlessPermitted, and therefore all ~72
+  // server actions. Without it every owner mutation over bearer would see no
+  // session, fall through to kind:"none", and refuse — the same failure that
+  // silently broke technician job completion, arriving a second time by the same
+  // route. Fixing it here rather than per-action is what stops that recurring.
+  //
+  // The cookie is checked FIRST, so web behaviour is unchanged. Bearer tokens are
+  // not sent automatically by browsers, so this adds no CSRF surface: a caller
+  // presenting one is authenticating as themselves.
+  const authorization = (await headers()).get("authorization");
+  if (!authorization) return null;
+  const [scheme, ...rest] = authorization.trim().split(/\s+/);
+  if (scheme.toLowerCase() !== "bearer") return null;
+  const token = rest.join("");
+  if (!token) return null;
+
+  try {
+    return readMobileToken(token);
+  } catch {
+    // Missing URSO_AUTH_SECRET in production. Loud elsewhere; here it simply
+    // means nobody can authenticate, which is the correct fail-closed outcome.
+    return null;
+  }
 });
 
 export async function clearAdminSession(): Promise<void> {

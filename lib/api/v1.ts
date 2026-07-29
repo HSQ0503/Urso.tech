@@ -147,6 +147,40 @@ export function denyUnlessOwner(actor: ApiActor): NextResponse | null {
   return actor.kind === "admin" ? null : apiFail("This is owner-only.", 403);
 }
 
+// "May this caller use the owner console at all?" — the guard the (app) LAYOUT
+// applies on the web, which has no equivalent here.
+//
+// This gap produced the worst finding of the M6b review. The Today page carries
+// no requirePagePermission of its own, so a route built from it looked like it
+// needed no guard — but app/CanesPressure/(app)/layout.tsx redirects a plain
+// technician to /CanesPressure/crew before the page ever renders. /api/v1 has no
+// layout, so that protection silently vanished and any active crew account could
+// read the owner's revenue. Same shape as the completeJob bug: a guard that
+// lives in one surface's STRUCTURE does not travel to another surface.
+//
+// Owner or ops-manager, not owner-only: DJ genuinely has Today on the web.
+export function denyUnlessConsole(actor: ApiActor): NextResponse | null {
+  return consoleAccessFor(actor).kind === "none"
+    ? apiFail("This is for the owner console.", 403)
+    : null;
+}
+
+// Page-parity permission check, for routes derived from a PAGE rather than an
+// action. denyUnlessApiPermitted mirrors denyUnlessPermitted, including its
+// technician fallback — correct for actions a flagged technician may invoke from
+// the crew portal, but WRONG for reads that back an owner-console page:
+// requirePagePermission goes through accessAllows, which is false for any plain
+// technician regardless of flags. Using the action guard for a page read makes
+// mobile strictly more permissive than web.
+export function denyUnlessPagePermitted(
+  actor: ApiActor,
+  key: CrewPermissionKey,
+): NextResponse | null {
+  return accessAllows(consoleAccessFor(actor), key)
+    ? null
+    : apiFail("You don’t have permission for this — ask the owner.", 403);
+}
+
 // Technician-surface endpoints. An ops manager is also a crew account and keeps
 // its crew scoping, so it passes; a pure admin has no crew identity and must use
 // the owner endpoints instead.

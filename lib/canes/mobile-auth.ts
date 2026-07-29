@@ -1,4 +1,4 @@
-import { randomInt, scryptSync, timingSafeEqual } from "node:crypto";
+import { randomBytes, randomInt, scryptSync, timingSafeEqual } from "node:crypto";
 import { canesDb } from "@/lib/canes/supabase";
 import { getAdmin, isAdminEmail } from "@/lib/urso-auth";
 
@@ -106,9 +106,13 @@ export async function issueMobileCode(email: string): Promise<IssueResult> {
 
   // randomInt is CSPRNG-backed; Math.random would be guessable.
   const code = String(randomInt(0, 10 ** CODE_DIGITS)).padStart(CODE_DIGITS, "0");
-  const salt = Buffer.from(randomInt(0, 2 ** 48).toString() + address + Date.now())
-    .toString("base64url")
-    .slice(0, 22);
+  // randomBytes, not randomInt: node's randomInt caps at 2^48-1, and an earlier
+  // version called randomInt(0, 2**48) — one past the limit. It threw on EVERY
+  // request, so no admin could ever receive a code, and because the throw only
+  // happened after the ADMINS lookup a real address answered 500 while an
+  // unknown one answered 200 — resurrecting the enumeration leak this file had
+  // just been fixed for. Caught by the acceptance suite.
+  const salt = randomBytes(16).toString("base64url");
 
   await writeRecord(key, {
     salt,

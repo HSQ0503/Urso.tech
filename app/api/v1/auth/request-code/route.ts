@@ -77,18 +77,24 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       // Never log `issued.code`.
       const message = typeof error === "string" ? error : error.message;
       console.error(`[canes mobile auth] resend failed: ${message}`);
-      return NextResponse.json(
-        { ok: false, notice: "Couldn’t send the email. Try again in a moment." },
-        { status: 502 },
-      );
     }
   } catch (e) {
     console.error(`[canes mobile auth] threw: ${e instanceof Error ? e.message : String(e)}`);
-    return NextResponse.json(
-      { ok: false, notice: "Couldn’t send the email. Try again in a moment." },
-      { status: 502 },
-    );
   }
+
+  // Deliberately SAME_ANSWER even when the send failed.
+  //
+  // Reporting the failure would be friendlier, but it only ever happens for an
+  // address that passed the ADMINS check — so a Resend outage, a rate limit or a
+  // bad key would turn this endpoint into a live oracle for who has owner access
+  // to a client's business, exactly when the system is least healthy. The
+  // acceptance suite caught precisely that.
+  //
+  // The trade-off is real and accepted: if Resend is down, the caller is told to
+  // check their email and nothing arrives. That is a server fault, it is logged
+  // loudly above, and it belongs in monitoring rather than in a response body
+  // that doubles as an identity disclosure. This is the same reason password-
+  // reset endpoints answer identically whether or not the account exists.
 
   return NextResponse.json(SAME_ANSWER, { status: 200 });
 }

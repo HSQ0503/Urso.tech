@@ -86,7 +86,7 @@ function discover() {
   }
   return files.map((file) => {
     const source = readFileSync(file, "utf8");
-    const methods = [...source.matchAll(/export const (GET|POST|PATCH|PUT|DELETE)\b/g)].map((m) => m[1]);
+    const methods = [...source.matchAll(/export (?:const|async function) (GET|POST|PATCH|PUT|DELETE)\b/g)].map((m) => m[1]);
     const segments = relative(join(ROOT, "app"), file).replace(/\/route\.ts$/, "");
     const urlPath = "/" + segments.replace(/\[([^\]]+)\]/g, NONEXISTENT);
     return {
