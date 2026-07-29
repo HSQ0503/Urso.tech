@@ -39,7 +39,7 @@ import {
 } from "@/lib/canes/expenses";
 import { addBusinessExpenseRow, deleteBusinessExpenseRow } from "@/lib/canes/overhead";
 import { ensureContact, getCustomer } from "@/lib/canes/customers";
-import { denyUnlessPermitted } from "@/lib/canes/access";
+import { denyUnlessPermitted, denyUnlessPermittedOrAssignedTechnician } from "@/lib/canes/access";
 import { listInvoiceRewards, rewardConfigFrom, getRewardConfig, type RewardConfig } from "@/lib/canes/rewards";
 import {
   notifyEstimateSent,
@@ -2198,7 +2198,11 @@ export async function startJob(jobId: string): Promise<ActionResult> {
 // reused (job_id is UNIQUE), so re-completing never mints a second bill.
 export async function completeJob(jobId: string): Promise<ActionResult & { invoiceId?: string }> {
   if (!canesConfigured()) return DEMO;
-  const denied = await denyUnlessPermitted("schedule");
+  // Reachable from the owner console AND from the crew portal via
+  // completeTechnicianJob. "schedule" gates the owner's button; a technician
+  // assigned to this job is allowed regardless, verified against the database
+  // rather than any flag the caller sends.
+  const denied = await denyUnlessPermittedOrAssignedTechnician("schedule", jobId);
   if (denied) return denied;
   const job = await getJob(jobId);
   if (!job) return { ok: false, notice: "Job not found." };

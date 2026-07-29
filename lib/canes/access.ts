@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getAdminSession } from "@/lib/urso-auth";
-import { getTechnicianActor } from "@/lib/canes/crew-auth";
+import { getTechnicianActor, technicianCanAccessJob } from "@/lib/canes/crew-auth";
 import { isDemo } from "@/lib/canes/data";
 import type { CrewPermissionKey, TechnicianActor } from "@/lib/canes/crew-types";
 
@@ -50,6 +50,31 @@ export async function requireOwnerPage(): Promise<void> {
   if (isDemo()) return;
   const access = await getConsoleAccess();
   if (access.kind !== "owner") redirect("/CanesPressure");
+}
+
+// A few actions are legitimately reachable from BOTH consoles, and completeJob
+// is the one that matters: the owner console gates it on `schedule`, but a
+// technician finishing their own assigned job is the entire point of the crew
+// portal. Guarding it with `schedule` alone silently broke crew completion —
+// a technician's default permissions are all false — from 0015 (7e28e83) until
+// this fix, on the web portal as well as mobile.
+//
+// The tempting shortcut is a caller-supplied flag ("I'm the crew portal"). That
+// would be forgeable: server actions are POSTs, so anyone able to reach the
+// action could pass it and skip the owner check entirely. Instead this
+// re-derives the caller's identity and confirms in the DATABASE that they are
+// assigned to this specific job. Nothing the caller sends is trusted.
+export async function denyUnlessPermittedOrAssignedTechnician(
+  key: CrewPermissionKey,
+  jobId: string,
+): Promise<{ ok: false; notice: string } | null> {
+  const denied = await denyUnlessPermitted(key);
+  if (!denied) return null; // owner, ops with the flag, or a flagged technician
+
+  const actor = await getTechnicianActor();
+  if (actor && (await technicianCanAccessJob(actor, jobId))) return null;
+
+  return denied;
 }
 
 // Action guard. Returns null when allowed, or an ActionResult-shaped refusal
