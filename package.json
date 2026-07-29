@@ -14,6 +14,8 @@
     "brain:acceptance:m5": "node scripts/brain-m5-acceptance.mjs",
     "brain:acceptance:m6": "node --no-warnings scripts/brain-m6-acceptance.mjs",
     "brain:acceptance:m63": "node --no-warnings scripts/brain-m63-db-acceptance.mjs",
+    "brain:staging:m63": "node --env-file=.env.m63-smoke.local scripts/brain-m63-staging-fixture.mjs",
+    "brain:staging:m63:dev": "node scripts/brain-m63-staging-dev.mjs",
     "brain:eval": "node scripts/brain-eval.mjs",
     "brain:eval:full": "node scripts/brain-eval.mjs --mode=full"
   },

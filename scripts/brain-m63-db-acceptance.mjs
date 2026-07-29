@@ -63,9 +63,9 @@ async function applyMigrations() {
   await db.exec("create role anon; create role authenticated; create role service_role;");
   const migrationDirectory = new URL("supabase/urso/", ROOT);
   const migrationNames = (await readdir(migrationDirectory))
-    .filter((name) => /^000[1-8]_.*\.sql$/.test(name))
+    .filter((name) => /^000[1-9]_.*\.sql$/.test(name))
     .sort();
-  assert.equal(migrationNames.length, 8);
+  assert.equal(migrationNames.length, 9);
   for (const name of migrationNames) {
     await db.exec(await readFile(new URL(name, migrationDirectory), "utf8"));
   }
@@ -1151,6 +1151,27 @@ async function main() {
   await check("operations-rpcs-are-service-role-only", async () => {
     await db.exec("set role authenticated");
     try {
+      await rejects(
+        () => db.query("select * from brain_learning_assessments limit 1"),
+        /permission denied/,
+      );
+      await rejects(
+        () =>
+          db.query("select * from brain_learning_latest_assessments limit 1"),
+        /permission denied/,
+      );
+      await rejects(
+        () =>
+          db.query("select * from brain_learning_operations_metrics limit 1"),
+        /permission denied/,
+      );
+      await rejects(
+        () =>
+          db.query(
+            "select nextval('brain_learning_assessments_assessment_order_seq')",
+          ),
+        /permission denied/,
+      );
       await rejects(
         () =>
           db.query(
