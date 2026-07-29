@@ -1,5 +1,25 @@
-import type { TechnicianJob, TechnicianWeek, CrewPermissions, CrewAccountRole } from "@urso/types";
+import type {
+  Agenda,
+  Call,
+  Crew,
+  CrewAccountRole,
+  CrewPermissions,
+  CustomerDetail,
+  CustomerSummary,
+  Estimate,
+  Invoice,
+  Job,
+  JobWithItems,
+  Lead,
+  LeadEvent,
+  Message,
+  Overview,
+  TechnicianJob,
+  TechnicianWeek,
+  Thread,
+} from "@urso/types";
 import { getAccessToken, signOut } from "./auth";
+import { getAdminToken } from "./session";
 
 // Typed client for /api/v1. Mirrors the server envelope exactly:
 //   success →  { ok: true,  data: T }
@@ -32,7 +52,11 @@ type RequestOptions = {
 };
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<ApiResult<T>> {
-  const token = await getAccessToken();
+  // Admin token first. An owner is not a Supabase user at all, so falling back
+  // to getAccessToken() for them would find nothing; a technician has no admin
+  // token, so the reverse holds. Whichever exists is the caller's identity, and
+  // the server resolves the same actor either way.
+  const token = (await getAdminToken()) ?? (await getAccessToken());
   if (!token) throw new SessionExpiredError();
 
   const headers: Record<string, string> = { authorization: `Bearer ${token}` };
@@ -122,4 +146,45 @@ export const api = {
       method: "PATCH",
       body: { note },
     }),
+};
+
+// ── Owner endpoints (M6b) ────────────────────────────────────────────────────
+//
+// Reads only for now. Every one is permission-guarded server-side, so a call the
+// signed-in account may not make comes back as ok:false with a sentence written
+// for them — the screen shows it and moves on rather than treating it as a fault.
+
+export type ScheduleJob = Job & { crew: Crew | null };
+
+export const owner = {
+  overview: () => request<Overview>("/canes/overview"),
+  agenda: () => request<Agenda>("/canes/agenda"),
+
+  threads: () => request<Thread[]>("/canes/threads"),
+  threadMessages: (phone: string) =>
+    request<Message[]>(`/canes/threads/${encodeURIComponent(phone)}/messages`),
+  threadCalls: (phone: string) =>
+    request<Call[]>(`/canes/threads/${encodeURIComponent(phone)}/calls`),
+
+  leads: () => request<Lead[]>("/canes/leads"),
+  lead: (id: string) => request<Lead>(`/canes/leads/${id}`),
+  leadEvents: (id: string) => request<LeadEvent[]>(`/canes/leads/${id}/events`),
+  leadCalls: (id: string) => request<Call[]>(`/canes/leads/${id}/calls`),
+
+  customers: () => request<CustomerSummary[]>("/canes/customers"),
+  customer: (id: string) => request<CustomerDetail>(`/canes/customers/${id}`),
+
+  estimates: () => request<Estimate[]>("/canes/estimates"),
+  invoices: () => request<Invoice[]>("/canes/invoices"),
+
+  // The board is the owner's dispatch view; crews come with it so a job can be
+  // shown with its assignment without a second round trip.
+  scheduleBoard: (fromIso: string, toIso: string) =>
+    request<unknown>(
+      `/canes/schedule/board?from=${encodeURIComponent(fromIso)}&to=${encodeURIComponent(toIso)}`,
+    ),
+  unscheduled: () => request<Job[]>("/canes/schedule/unscheduled"),
+  crews: () => request<Crew[]>("/canes/crews"),
+
+  job: (id: string) => request<JobWithItems>(`/canes/jobs/${id}`),
 };

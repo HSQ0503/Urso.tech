@@ -1,6 +1,7 @@
 import "react-native-url-polyfill/auto";
 import * as SecureStore from "expo-secure-store";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { clearAdminSession, saveAdminSession } from "./session";
 
 // Technician authentication.
 //
@@ -105,37 +106,126 @@ export async function getAccessToken(): Promise<string | null> {
   return data.session?.access_token ?? null;
 }
 
-// Passwordless: the server mails a 6-digit code. A code beats a magic link on
-// mobile — a link has to survive the mail app, Safari, and a universal-link
-// association, and any break in that chain strands the user outside the app.
-export async function sendLoginCode(email: string): Promise<{ ok: boolean; notice?: string }> {
+// Passwordless: a code, not a magic link. A link has to survive the mail app,
+// Safari, and a universal-link association, and any break in that chain strands
+// the user outside the app.
+//
+// ── One email field for two different identity systems ──────────────────────
+//
+// Owners are the server's provisioned ADMINS map; technicians are Supabase Auth
+// accounts. Different backends, different credentials. The obvious solution —
+// ask "are you an owner or crew?" — is a bad question: nobody should have to
+// know which authentication system their employer uses.
+//
+// We also cannot detect it from the response, and that is deliberate: the admin
+// endpoint answers identically for provisioned and unknown addresses so it can't
+// be used to discover who has owner access. That anti-enumeration property is
+// worth keeping, so the client works around it rather than weakening it.
+//
+// So both are asked. Exactly one will actually deliver an email, because each
+// backend silently ignores an address it doesn't own. The user types the code
+// they received and the verify step figures out which system issued it.
+
+const API_BASE: string = process.env.EXPO_PUBLIC_API_BASE ?? "https://urso.ws";
+
+export type LoginResult = { ok: boolean; notice?: string };
+
+async function requestAdminCode(email: string): Promise<void> {
+  try {
+    await fetch(`${API_BASE}/api/v1/auth/request-code`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: email.trim().toLowerCase() }),
+    });
+  } catch {
+    // A network failure here must not block the crew path below.
+  }
+}
+
+export async function sendLoginCode(email: string): Promise<LoginResult> {
   if (!authConfigured()) return { ok: false, notice: "The app is not configured yet." };
-  const { error } = await supabase().auth.signInWithOtp({
-    email: email.trim().toLowerCase(),
-    // Provisioning stays allowlist-only and server-side: the crew_accounts row
-    // must already exist. Never let a login create an account.
-    options: { shouldCreateUser: false },
-  });
-  if (error) return { ok: false, notice: error.message };
+  const address = email.trim().toLowerCase();
+
+  const [, crew] = await Promise.all([
+    requestAdminCode(address),
+    supabase()
+      .auth.signInWithOtp({
+        email: address,
+        // Provisioning stays allowlist-only and server-side: the crew_accounts
+        // row must already exist. Never let a login create an account.
+        options: { shouldCreateUser: false },
+      })
+      .then((r) => r.error),
+  ]);
+
+  // "Signups not allowed" just means this address is not a technician — it may
+  // still be an owner, whose code went out through the admin path. Surfacing
+  // Supabase's wording here would tell an owner their own email is invalid.
+  if (crew && !/signup|not allowed|not found/i.test(crew.message)) {
+    // A real fault (rate limit, outage) is worth showing.
+    return { ok: false, notice: crew.message };
+  }
   return { ok: true };
 }
 
+export type VerifiedIdentity = "owner" | "crew";
+
+// Try the admin exchange first, then Supabase. Order is a cost choice, not a
+// security one — both verify cryptographically and neither can be satisfied by
+// a code the other issued.
 export async function verifyLoginCode(
   email: string,
   token: string,
-): Promise<{ ok: boolean; notice?: string }> {
+): Promise<LoginResult & { identity?: VerifiedIdentity }> {
   if (!authConfigured()) return { ok: false, notice: "The app is not configured yet." };
+  const address = email.trim().toLowerCase();
+  const code = token.trim();
+
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/auth/verify-code`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: address, code }),
+    });
+    const body = (await res.json()) as {
+      ok?: boolean;
+      notice?: string;
+      data?: { token: string; email: string; name: string; scope: "canes" | "admin" };
+    };
+    if (res.ok && body.ok && body.data) {
+      await saveAdminSession(body.data.token, {
+        email: body.data.email,
+        name: body.data.name,
+        scope: body.data.scope,
+      });
+      return { ok: true, identity: "owner" };
+    }
+    // A lockout is about this person's own behaviour and worth showing straight
+    // away rather than falling through to a second, confusing failure.
+    if (res.status === 429) return { ok: false, notice: body.notice ?? "Too many tries." };
+  } catch {
+    // Fall through to the crew path — the device may be offline for our API but
+    // still reach Supabase, and vice versa.
+  }
+
   const { error } = await supabase().auth.verifyOtp({
-    email: email.trim().toLowerCase(),
-    token: token.trim(),
+    email: address,
+    token: code,
     type: "email",
   });
-  if (error) return { ok: false, notice: error.message };
-  return { ok: true };
+  if (error) {
+    // Both systems rejected it. Say so plainly; naming which one failed would
+    // disclose which identity the address belongs to.
+    return { ok: false, notice: "That code didn’t work. Ask for a new one." };
+  }
+  return { ok: true, identity: "crew" };
 }
 
 export async function signOut(): Promise<void> {
+  // Clear both identities regardless of which one is active: a stale token in
+  // the Keychain would otherwise send the launch gate to the wrong surface.
+  await clearAdminSession();
   if (!authConfigured()) return;
-  // Revokes server-side too, unlike the stateless admin session.
+  // Revokes server-side too, unlike the stateless admin token.
   await supabase().auth.signOut();
 }

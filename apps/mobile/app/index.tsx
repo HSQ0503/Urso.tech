@@ -3,20 +3,30 @@ import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { api } from "@/api";
 import { authConfigured } from "@/auth";
+import { getAdminToken } from "@/session";
 import { checkEtSupport } from "@/intl-guard";
 import { color, radius, space, type } from "@/theme";
 
-// The launch gate. It decides between the crew stack and login before either is
-// visible, because a technician who sees the login screen blink past on every
-// cold start stops trusting that they are actually signed in.
+// The launch gate. It decides between the owner console, the crew stack and
+// login before any of them is visible, because someone who sees the login screen
+// blink past on every cold start stops trusting that they are actually signed in.
+//
+// Two identities, checked in order of certainty:
+//   admin token in the Keychain -> owner console
+//   Supabase session that api.me() accepts -> crew portal
+//   neither -> login
+//
+// The admin token is checked first and locally, so an owner never waits on a
+// network round trip that is going to fail: api.me() is a CREW endpoint and
+// correctly answers 403 for them.
 
 export default function Index(): React.ReactElement {
   const router = useRouter();
   const configured = authConfigured();
   // Proven once at launch, not assumed. Hermes gets its timezone data from the
   // platform, and a build without it renders every job time in the device's own
-  // zone instead of the shop's — silently. Wrong arrival times sent a crew to
-  // the wrong place is worse than an honest stop.
+  // zone instead of the shop's. Wrong times sent a crew to the wrong place is
+  // worse than an honest stop.
   const et = checkEtSupport();
 
   useEffect(() => {
@@ -25,7 +35,11 @@ export default function Index(): React.ReactElement {
 
     void (async () => {
       try {
-        // me() is the cheapest call that proves the stored session is still
+        if (await getAdminToken()) {
+          if (!cancelled) router.replace("/(owner)");
+          return;
+        }
+        // me() is the cheapest call that proves a stored crew session is still
         // one the server will honour — an expired or revoked token fails here
         // rather than three screens deep.
         const result = await api.me();
@@ -43,21 +57,6 @@ export default function Index(): React.ReactElement {
     };
   }, [configured, et.ok, router]);
 
-  if (!et.ok) {
-    return (
-      <View style={styles.screen}>
-        <View style={styles.card}>
-          <Text style={styles.title}>Times can’t be shown correctly</Text>
-          <Text style={styles.body}>
-            This phone isn’t showing Eastern time properly, so job times would be wrong. Rather than
-            risk sending you to a job at the wrong hour, the app has stopped here.
-          </Text>
-          <Text style={styles.body}>Send this to Urso: {et.detail}</Text>
-        </View>
-      </View>
-    );
-  }
-
   if (!configured) {
     return (
       <View style={styles.screen}>
@@ -70,6 +69,21 @@ export default function Index(): React.ReactElement {
           <Text style={styles.body}>
             Whoever set the app up needs to fill in apps/mobile/.env.local and start it again.
           </Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (!et.ok) {
+    return (
+      <View style={styles.screen}>
+        <View style={styles.card}>
+          <Text style={styles.title}>Times can’t be shown correctly</Text>
+          <Text style={styles.body}>
+            This phone isn’t showing Eastern time properly, so job times would be wrong. Rather than
+            risk sending you to a job at the wrong hour, the app has stopped here.
+          </Text>
+          <Text style={styles.body}>Send this to Urso: {et.detail}</Text>
         </View>
       </View>
     );

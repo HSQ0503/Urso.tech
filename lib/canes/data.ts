@@ -1,4 +1,13 @@
 import { canesConfigured, canesDb } from "@/lib/canes/supabase";
+// Agenda and Overview describe what the Today reads RETURN. They were declared
+// here, but this module imports Supabase and so cannot be reached from the Expo
+// app, leaving the mobile client unable to type the owner surface it consumes.
+// They are pure type declarations, so the shared contract is where they belong.
+//
+// IMPORTED then re-exported, not `export type {..} from`: the latter does not
+// bring the names into local scope, and this module uses both internally.
+import type { Agenda, Overview } from "@urso/types";
+export type { Agenda, Overview };
 import {
   DEMO_CALLS,
   DEMO_CONTACTS,
@@ -314,7 +323,6 @@ export async function getThreadCalls(peerPhone: string): Promise<Call[]> {
   return (data ?? []) as Call[];
 }
 
-export type Agenda = { day: string; leads: Lead[] }[];
 
 // Epoch ms of midnight today in ET, so past appointments drop off the agenda.
 function etMidnightTodayMs(): number {
@@ -364,32 +372,6 @@ export async function listVisitsInRange(startIso: string, days: number): Promise
     .sort((a, b) => (a.appointment_at as string).localeCompare(b.appointment_at as string));
 }
 
-export type Overview = {
-  counts: { open: number; hot: number; cold: number; wonThisWeek: number };
-  coldNeedingCall: Lead[]; // status new, type cold — the "call now" queue
-  unconfirmedToday: Lead[]; // appointment inside 24h, not confirmed
-  followUpsDue: Lead[];
-  todayAgenda: Lead[];
-  pastDueVisits: Lead[]; // appointment came and went with no disposition — the black hole
-  pipeline: {
-    leads: { newCount: number; hotCount: number };
-    quotes: { awaitingCount: number; awaitingCents: number; declinedRecentCount: number };
-    jobs: { unscheduledCount: number; unscheduledCents: number; activeCount: number };
-    invoices: { outstandingCents: number; outstandingCount: number; overdueCount: number };
-  };
-  money: {
-    collectedThisWeekCents: number; // completed payments, rolling 7 days
-    wonThisWeekCents: number; // estimates approved, rolling 7 days
-    bookedNext7DaysCents: number; // active jobs scheduled in the next 7 days
-  };
-  recentActivity: {
-    at: string;
-    leadId: string | null;
-    leadName: string | null;
-    kind: string;
-    detail: string | null;
-  }[];
-};
 
 // ── getOverview module readers: one small targeted select each, run in a single
 //    Promise.all round from getOverview. Every one demo-branches to fixtures.

@@ -695,3 +695,40 @@ export function approvedRewardCents(
     .filter((r) => r.status === "approved")
     .reduce((sum, r) => sum + r.amount_cents, 0);
 }
+
+// ── Owner console read shapes ────────────────────────────────────────────────
+// These describe what the Today reads RETURN. They were declared in
+// lib/canes/data.ts, which imports Supabase and so cannot be reached from the
+// Expo app — leaving the mobile client with no way to type the owner surface it
+// consumes. They are pure type declarations over types already in this file, so
+// the shared contract is where they belong. data.ts re-exports them, and every
+// existing import of Overview/Agenda from data.ts keeps working unchanged.
+
+export type Agenda = { day: string; leads: Lead[] }[];
+
+export type Overview = {
+  counts: { open: number; hot: number; cold: number; wonThisWeek: number };
+  coldNeedingCall: Lead[]; // status new, type cold — the "call now" queue
+  unconfirmedToday: Lead[]; // appointment inside 24h, not confirmed
+  followUpsDue: Lead[];
+  todayAgenda: Lead[];
+  pastDueVisits: Lead[]; // appointment came and went with no disposition — the black hole
+  pipeline: {
+    leads: { newCount: number; hotCount: number };
+    quotes: { awaitingCount: number; awaitingCents: number; declinedRecentCount: number };
+    jobs: { unscheduledCount: number; unscheduledCents: number; activeCount: number };
+    invoices: { outstandingCents: number; outstandingCount: number; overdueCount: number };
+  };
+  money: {
+    collectedThisWeekCents: number; // completed payments, rolling 7 days
+    wonThisWeekCents: number; // estimates approved, rolling 7 days
+    bookedNext7DaysCents: number; // active jobs scheduled in the next 7 days
+  };
+  recentActivity: {
+    at: string;
+    leadId: string | null;
+    leadName: string | null;
+    kind: string;
+    detail: string | null;
+  }[];
+};

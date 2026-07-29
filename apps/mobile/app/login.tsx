@@ -13,15 +13,20 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { sendLoginCode, verifyLoginCode } from "@/auth";
 import { color, font, HIT, radius, space, type } from "@/theme";
 
-// Passwordless technician sign-in, in two steps on one screen.
+// Passwordless sign-in for BOTH identities, in two steps on one screen.
+//
+// Owners and technicians authenticate against different systems, but nobody
+// should have to know that. One email field; auth.ts asks both backends and only
+// the one that owns the address delivers anything. The verify step reports which
+// system accepted the code, and that decides where the app lands.
 //
 // A code, not a magic link: a link has to survive the mail app, the browser and
 // a universal-link association, and every break in that chain strands someone
 // standing at a customer's driveway. Numbers they can read off a phone always
 // work.
 //
-// The copy is written for a technician, not a developer — no "OTP", no "auth",
-// no error codes.
+// The copy is written for whoever is holding the phone, not a developer — no
+// "OTP", no "auth", no error codes.
 
 type Step = "email" | "code";
 
@@ -86,7 +91,10 @@ export default function Login(): React.ReactElement {
       setNotice(result.notice ?? FALLBACK_NOTICE);
       return;
     }
-    router.replace("/(crew)");
+    // The verify step reports which identity system accepted the code, so the
+    // user never has to say whether they are an owner or crew — they type one
+    // email, get one code, and land in the right place.
+    router.replace(result.identity === "owner" ? "/(owner)" : "/(crew)");
   }
 
   function handleChangeEmail(): void {
@@ -102,7 +110,7 @@ export default function Login(): React.ReactElement {
         <Text style={styles.wordmark}>
           Canes<Text style={styles.wordmarkDot}>.</Text>
         </Text>
-        <Text style={styles.wordmarkLabel}>Crew portal</Text>
+        <Text style={styles.wordmarkLabel}>Canes Pressure Washing</Text>
       </View>
 
       <KeyboardAvoidingView
