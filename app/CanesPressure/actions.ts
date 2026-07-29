@@ -121,8 +121,19 @@ export async function updateLeadFields(
     if (email && !EMAIL_RE.test(email)) return { ok: false, notice: "That email address doesn't look valid." };
     patch.email = email;
   }
-  const { error } = await canesDb().from("leads").update(patch).eq("id", leadId);
+  // Claimed write. The filter is the id alone, so zero rows means this lead does
+  // not exist — and unlike a deactivation there is no reading of that under which
+  // the caller got what they asked for: the typed name, corrected phone or gate
+  // code simply went nowhere while the editor showed "Saved".
+  const { data: claimed, error } = await canesDb()
+    .from("leads")
+    .update(patch)
+    .eq("id", leadId)
+    .select("id");
   if (error) return { ok: false, notice: error.message };
+  if (!claimed || claimed.length === 0) {
+    return { ok: false, notice: "This lead just changed — refresh and try again." };
+  }
   await logEvent(leadId, "edited", "Lead details updated");
   await touch(leadId);
   refresh();
@@ -136,8 +147,18 @@ export async function setLeadStatus(leadId: string, status: LeadStatus, lostReas
   const patch: Record<string, unknown> = { status };
   if (status === "lost") patch.lost_reason = lostReason ?? null;
   if (status === "confirmed") patch.confirmed_at = new Date().toISOString();
-  const { error } = await canesDb().from("leads").update(patch).eq("id", leadId);
+  // Claimed write, same reasoning as updateLeadFields: id-only filter, so zero
+  // rows is a lead that is gone, and the pipeline move the owner was told about
+  // (won, lost with its reason, confirmed with its timestamp) never happened.
+  const { data: claimed, error } = await canesDb()
+    .from("leads")
+    .update(patch)
+    .eq("id", leadId)
+    .select("id");
   if (error) return { ok: false, notice: error.message };
+  if (!claimed || claimed.length === 0) {
+    return { ok: false, notice: "This lead just changed — refresh and try again." };
+  }
   await logEvent(leadId, "status", `Status set to ${status}${lostReason ? ` — ${lostReason}` : ""}`);
   await touch(leadId);
   refresh();
@@ -155,11 +176,21 @@ export async function setAppointment(leadId: string, appointmentIso: string): Pr
   const when = new Date(appointmentIso);
   if (Number.isNaN(when.getTime())) return { ok: false, notice: "Invalid date." };
   const db = canesDb();
-  const { error } = await db
+  // Claimed write, and it has to be THIS write that refuses rather than anything
+  // downstream. Everything below assumes the appointment landed: the confirmation
+  // task upsert carries lead_id, so on a missing lead it fails its foreign key —
+  // and its error is deliberately unchecked, so the failure is silent. The owner
+  // was told the visit was booked, no appointment_at was stored, no confirmation
+  // text was queued, and nothing anywhere reported a problem.
+  const { data: claimed, error } = await db
     .from("leads")
     .update({ appointment_at: when.toISOString(), status: "appointment_set", confirmed_at: null })
-    .eq("id", leadId);
+    .eq("id", leadId)
+    .select("id");
   if (error) return { ok: false, notice: error.message };
+  if (!claimed || claimed.length === 0) {
+    return { ok: false, notice: "This lead just changed — refresh and try again." };
+  }
 
   const settings = await getSettings();
   const sendAt = new Date(when.getTime() - settings.confirmation_offset_hours * 3_600_000);
@@ -246,8 +277,19 @@ export async function snoozeLead(leadId: string, untilIso: string): Promise<Acti
   if (!canesConfigured()) return DEMO;
   const denied = await denyUnlessPermitted("leads");
   if (denied) return denied;
-  const { error } = await canesDb().from("leads").update({ snoozed_until: untilIso }).eq("id", leadId);
+  // Claimed write. Mildest of the four — the web card partly reveals it, since
+  // the "Snoozed until" line just never appears — but the API reports a flat
+  // success, so a follow-up the owner believes is parked keeps surfacing in the
+  // queue they thought they had cleared.
+  const { data: claimed, error } = await canesDb()
+    .from("leads")
+    .update({ snoozed_until: untilIso })
+    .eq("id", leadId)
+    .select("id");
   if (error) return { ok: false, notice: error.message };
+  if (!claimed || claimed.length === 0) {
+    return { ok: false, notice: "This lead just changed — refresh and try again." };
+  }
   await logEvent(leadId, "snooze", `Follow-up snoozed until ${fmtEt(untilIso)}`);
   refresh();
   return { ok: true };
@@ -2787,12 +2829,31 @@ export async function voidInvoice(invoiceId: string): Promise<ActionResult> {
   if (!invoice) return { ok: false, notice: "Invoice not found." };
   if (invoice.status === "paid") return { ok: false, notice: "A paid invoice can't be voided." };
   const now = new Date().toISOString();
-  const { error } = await canesDb()
+  // Claimed write, and the highest-value one on this path. The read above already
+  // refuses a paid invoice, so `.neq("status","paid")` looks redundant — it is not:
+  // it re-checks the condition ATOMICALLY, and the window it covers is genuinely
+  // live. recomputeInvoicePaid (lib/canes/square.ts), driven by the Square payment
+  // webhook, flips draft|sent|viewed to paid at any moment, including between that
+  // read and this write.
+  //
+  // Zero rows therefore means the customer's card payment landed a moment ago. On
+  // ok:true everything below then ran anyway: the job was released for re-billing,
+  // the hosted Square link the customer had just paid was CANCELED, every pending
+  // reminder was killed, and "Invoice N voided" went onto the lead timeline — while
+  // Sebastian was told a bill was dead that had in fact just been settled.
+  const { data: voided, error } = await canesDb()
     .from("invoices")
     .update({ status: "void", voided_at: now, updated_at: now })
     .eq("id", invoiceId)
-    .neq("status", "paid");
+    .neq("status", "paid")
+    .select("id");
   if (error) return { ok: false, notice: error.message };
+  if (!voided || voided.length === 0) {
+    return {
+      ok: false,
+      notice: "This invoice just changed — it may have just been paid. Refresh and check it.",
+    };
+  }
   // A voided invoice must release its job for re-billing (the partial unique
   // index only allows a fresh invoice once the old one is void) and kill the
   // hosted Square link so the customer can't pay a dead document.
@@ -3395,10 +3456,25 @@ export async function updateTeamMember(
   if (patch.crewId !== undefined) upd.crew_id = patch.crewId;
   if (patch.active !== undefined) upd.active = patch.active;
   if (Object.keys(upd).length === 0) return { ok: true };
-  const { error } = await canesDb().from("team_members").update(upd).eq("id", id);
+  // Claimed write — this patch carries comp_bps and hourly_cents, the pay terms
+  // the payout waterfall divides by. Zero rows means a rate change was reported
+  // saved and was not, and the next payout run uses the old number.
+  //
+  // Note for the split editor, which calls this in a LOOP over members: a refusal
+  // stops the loop with the notice shown, which is a real improvement on today's
+  // behaviour — a deleted member currently returns ok:true, so the loop finishes,
+  // says "Split saved", and leaves shares that no longer sum to 100.
+  const { data: claimed, error } = await canesDb()
+    .from("team_members")
+    .update(upd)
+    .eq("id", id)
+    .select("id");
   if (error) {
     console.error(`[canes] updateTeamMember: ${error.message}`);
     return { ok: false, notice: "Couldn't update the team member. Please try again." };
+  }
+  if (!claimed || claimed.length === 0) {
+    return { ok: false, notice: "That team member just changed — refresh and try again." };
   }
   refresh();
   return { ok: true };
@@ -3495,10 +3571,20 @@ export async function updateCustomer(
   }
   if (fields.notes !== undefined) patch.notes = fields.notes.trim() || null;
   if (fields.archived !== undefined) patch.archived = fields.archived;
-  const { error } = await canesDb().from("contacts").update(patch).eq("id", id);
+  // Claimed write. id-only filter, no prior read, so zero rows is a customer that
+  // is gone — and the edits reported saved (a corrected phone number, the archive
+  // flag that decides whether they appear in the directory at all) went nowhere.
+  const { data: claimed, error } = await canesDb()
+    .from("contacts")
+    .update(patch)
+    .eq("id", id)
+    .select("id");
   if (error) {
     if (error.code === "23505") return { ok: false, notice: "Another customer already has that phone number." };
     return { ok: false, notice: error.message };
+  }
+  if (!claimed || claimed.length === 0) {
+    return { ok: false, notice: "This customer just changed — refresh and try again." };
   }
   refresh();
   return { ok: true };

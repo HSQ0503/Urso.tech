@@ -178,12 +178,22 @@ export async function setCrewMemberRole(
   }
   const db = canesDb();
   const teamRole = role === "ops_manager" ? "ops_manager" : "worker";
-  const { error } = await db
+  // Claimed write, exactly as setTechnicianActive above and for the same reason:
+  // the `.in(role)` filter can miss while the row survives. team_members.role is
+  // owner|partner|ops_manager|worker, so pointing this at an owner or partner row
+  // matches nothing — and so does a stale id. Either way the owner read
+  // "Promoted to ops manager." for an account whose role never moved, which is a
+  // permissions answer, since ops_manager is what opens the owner console.
+  const { data: claimed, error } = await db
     .from("team_members")
     .update({ role: teamRole })
     .eq("id", teamMemberId)
-    .in("role", ["worker", "ops_manager"]);
+    .in("role", ["worker", "ops_manager"])
+    .select("id");
   if (error) return { ok: false, notice: error.message };
+  if (!claimed || claimed.length === 0) {
+    return { ok: false, notice: "That account just changed — refresh and try again." };
+  }
   const { error: accErr } = await db
     .from("crew_accounts")
     .update({ account_role: role })
