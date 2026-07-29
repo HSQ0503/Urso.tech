@@ -17,8 +17,8 @@ import { color, font, HIT, radius, space, type } from "@/theme";
 //
 // A code, not a magic link: a link has to survive the mail app, the browser and
 // a universal-link association, and every break in that chain strands someone
-// standing at a customer's driveway. Six numbers they can read off a phone
-// always works.
+// standing at a customer's driveway. Numbers they can read off a phone always
+// work.
 //
 // The copy is written for a technician, not a developer — no "OTP", no "auth",
 // no error codes.
@@ -26,6 +26,13 @@ import { color, font, HIT, radius, space, type } from "@/theme";
 type Step = "email" | "code";
 
 const FALLBACK_NOTICE = "That didn’t go through. Try again in a moment.";
+
+// Supabase issues an OTP whose length is configured per project, anywhere from
+// 6 to 10 digits. Accept the whole range rather than assuming one: a maxLength
+// that is too small truncates the code as it is typed or pasted, and the server
+// then reports an invalid token, which sends you looking in the wrong place.
+const MIN_CODE_LENGTH = 6;
+const MAX_CODE_LENGTH = 10;
 
 export default function Login(): React.ReactElement {
   const router = useRouter();
@@ -61,8 +68,12 @@ export default function Login(): React.ReactElement {
   async function handleSignIn(): Promise<void> {
     if (busy) return;
     const entered = code.trim();
-    if (entered.length !== 6) {
-      setNotice("Enter all six numbers from the email.");
+    // Supabase's OTP length is a PROJECT SETTING (6–10 digits), not a constant.
+    // This project issues 8. Hardcoding 6 silently truncated the pasted code and
+    // produced "Token has expired or is invalid", which points at the wrong
+    // problem entirely. Validate a range and let the server judge the value.
+    if (entered.length < MIN_CODE_LENGTH) {
+      setNotice("Enter all the numbers from the email.");
       return;
     }
 
@@ -103,7 +114,7 @@ export default function Login(): React.ReactElement {
             <>
               <Text style={styles.title}>Sign in</Text>
               <Text style={styles.lede}>
-                We send a 6-digit code to your work email — the address the office set up for you.
+                We send a code to your work email — the address the office set up for you.
                 No password to remember.
               </Text>
 
@@ -129,11 +140,11 @@ export default function Login(): React.ReactElement {
             <>
               <Text style={styles.title}>Check your email</Text>
               <Text style={styles.lede}>
-                We sent 6 numbers to {email.trim()}. Type them in below. If it isn’t there in a
+                We sent a code to {email.trim()}. Type it in below. If it isn’t there in a
                 minute, look in your junk mail.
               </Text>
 
-              <Text style={styles.label}>6-digit code</Text>
+              <Text style={styles.label}>Code</Text>
               <TextInput
                 style={[styles.input, styles.codeInput]}
                 value={code}
@@ -141,7 +152,7 @@ export default function Login(): React.ReactElement {
                 placeholder="000000"
                 placeholderTextColor={color.faint}
                 keyboardType="number-pad"
-                maxLength={6}
+                maxLength={MAX_CODE_LENGTH}
                 autoComplete="one-time-code"
                 textContentType="oneTimeCode"
                 editable={!busy}
