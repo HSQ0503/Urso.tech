@@ -142,12 +142,22 @@ export async function setTechnicianActive(
 ): Promise<CrewOwnerActionResult> {
   if (!(await requireOwner())) return { ok: false, notice: "Owner sign-in required." };
   const db = canesDb();
-  const { error } = await db
+  // Claimed write. The `.in(role)` filter is deliberate — an owner or partner
+  // row is not deactivatable from here — but combined with a silent zero-row
+  // result it meant the two ways this can match nothing (the id is gone, or the
+  // row is an owner/partner) both reported success. `active` is a payout field:
+  // listTeamMembers filters `.eq("active", true)`, so a deactivation that never
+  // landed leaves someone on the next payout run who was told they were off it.
+  const { data: claimed, error } = await db
     .from("team_members")
     .update({ active })
     .eq("id", teamMemberId)
-    .in("role", ["worker", "ops_manager"]);
+    .in("role", ["worker", "ops_manager"])
+    .select("id");
   if (error) return { ok: false, notice: error.message };
+  if (!claimed || claimed.length === 0) {
+    return { ok: false, notice: "That account just changed — refresh and try again." };
+  }
   await db.from("crew_accounts").update({ active }).eq("team_member_id", teamMemberId);
   revalidatePath("/CanesPressure/settings");
   return { ok: true };

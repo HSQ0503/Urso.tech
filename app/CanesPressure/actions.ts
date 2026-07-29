@@ -1747,8 +1747,19 @@ export async function upsertCatalogItem(item: {
     position: item.position ?? 0,
   };
   if (item.id) {
-    const { error } = await db.from("service_catalog").update(row).eq("id", item.id);
+    // Claimed write: an id that no longer exists (deleted in another tab, or
+    // held in a phone's cached price list) matched zero rows and still reported
+    // success — so a PRICE CHANGE the owner watched confirm had not happened,
+    // and the next estimate quoted the old number.
+    const { data: claimed, error } = await db
+      .from("service_catalog")
+      .update(row)
+      .eq("id", item.id)
+      .select("id");
     if (error) return { ok: false, notice: error.message };
+    if (!claimed || claimed.length === 0) {
+      return { ok: false, notice: "This item just changed — refresh and try again." };
+    }
   } else {
     const { error } = await db.from("service_catalog").insert(row);
     if (error) return { ok: false, notice: error.message };

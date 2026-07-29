@@ -80,13 +80,22 @@ export async function addJobExpenseRow(input: {
   return data.id as string;
 }
 
+// Claimed delete. `.select("id")` makes the statement RETURNING, so a row that
+// was already gone comes back as an empty array rather than as success — the
+// caller turns that into "Couldn't remove the expense. Please try again."
+//
+// It reads like a formality on web, where the button only exists on a row the
+// page just rendered. It is not one for a phone: the app deletes from a CACHED
+// list, so a stale id is ordinary rather than exceptional. Job expenses are
+// subtracted from job revenue, so a delete that removed nothing and reported
+// success moves the profit number the owner is reading.
 export async function deleteJobExpenseRow(id: string): Promise<boolean> {
-  const { error } = await canesDb().from("job_expenses").delete().eq("id", id);
+  const { data, error } = await canesDb().from("job_expenses").delete().eq("id", id).select("id");
   if (error) {
     console.error(`[canes] deleteJobExpenseRow failed for ${id}: ${error.message}`);
     return false;
   }
-  return true;
+  return (data?.length ?? 0) > 0;
 }
 
 // ── Estimate expenses (0014) — the quote-time cost model ─────────────────────
@@ -136,11 +145,18 @@ export async function addEstimateExpenseRow(input: {
   return data.id as string;
 }
 
+// Claimed delete, for the same reason as deleteJobExpenseRow above: these rows
+// are the quote-time cost model, so one that survives a "removed" confirmation
+// keeps suppressing the margin the estimate is priced against.
 export async function deleteEstimateExpenseRow(id: string): Promise<boolean> {
-  const { error } = await canesDb().from("estimate_expenses").delete().eq("id", id);
+  const { data, error } = await canesDb()
+    .from("estimate_expenses")
+    .delete()
+    .eq("id", id)
+    .select("id");
   if (error) {
     console.error(`[canes] deleteEstimateExpenseRow failed for ${id}: ${error.message}`);
     return false;
   }
-  return true;
+  return (data?.length ?? 0) > 0;
 }

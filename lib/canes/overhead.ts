@@ -104,11 +104,18 @@ export async function addBusinessExpenseRow(input: {
   return data.id as string;
 }
 
+// Claimed delete — see deleteJobExpenseRow. Overhead rows are the recurring
+// side of the profit model, so one that outlives its own "removed" confirmation
+// keeps being charged against every month.
 export async function deleteBusinessExpenseRow(id: string): Promise<boolean> {
-  const { error } = await canesDb().from("business_expenses").delete().eq("id", id);
+  const { data, error } = await canesDb()
+    .from("business_expenses")
+    .delete()
+    .eq("id", id)
+    .select("id");
   if (error) {
     console.error(`[canes] deleteBusinessExpenseRow: ${error.message}`);
     return false;
   }
-  return true;
+  return (data?.length ?? 0) > 0;
 }
