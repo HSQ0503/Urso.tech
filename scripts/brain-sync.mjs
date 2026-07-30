@@ -11,10 +11,10 @@
 // Soft-deleted docs (deleted_at) are skipped and reported — the disk file, if
 // any, is never touched.
 //
-//   Run:  node scripts/brain-sync.mjs [--prune] [--export] [--dry] [--path-prefix="07 - Urso Brain"]
+//   Run:  node scripts/brain-sync.mjs [--prune] [--export] [--dry] [--path-prefix="07 - Urso Brain"] [--config=scripts/brain-sync.woof-gang.config.json]
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
-import { dirname, join, relative } from "node:path";
+import { dirname, join, relative, resolve as resolvePath } from "node:path";
 import { createClient } from "@supabase/supabase-js";
 
 // Load env with no dependency (this repo keeps keys in .env; .env.local wins).
@@ -47,9 +47,50 @@ const PATH_PREFIX = pathPrefixArg
 const inScope = (path) =>
   !PATH_PREFIX || path === PATH_PREFIX || path.startsWith(`${PATH_PREFIX}/`);
 
-const config = JSON.parse(readFileSync(new URL("./brain-sync.config.json", import.meta.url), "utf8"));
+const DEFAULT_CONFIG_URL = new URL("./brain-sync.config.json", import.meta.url);
+const configArg = process.argv.find((value) => value.startsWith("--config="));
+const config = JSON.parse(
+  configArg
+    ? readFileSync(resolvePath(process.cwd(), configArg.slice("--config=".length)), "utf8")
+    : readFileSync(DEFAULT_CONFIG_URL, "utf8"),
+);
 const VAULT = config.vaultRoot;
 const ORGANIZATION_ID = config.organizationId ?? "urso";
+
+// ── Shared-root guard ────────────────────────────────────────────────────────
+// A non-default org (e.g. woof-gang) must never sync a vault folder the
+// default (urso) config also owns — the same files landing in two
+// organizations would cross-contaminate their Brains. A root only "owns"
+// files under a subfolder when it is recursive, so the default "." root
+// (recursive:false — top-level files only) doesn't block sibling org folders.
+if (ORGANIZATION_ID !== "urso") {
+  const defaultConfig = JSON.parse(readFileSync(DEFAULT_CONFIG_URL, "utf8"));
+  // Different vault roots can't share files, so the guard only applies within one vault.
+  if (config.vaultRoot === defaultConfig.vaultRoot) {
+    const normDir = (dir) => {
+      const n = String(dir ?? "").replace(/\/+$/g, "");
+      return n === "." ? "" : n;
+    };
+    const covers = (root, otherDir) => {
+      const dir = normDir(root.dir);
+      if (dir === otherDir) return true;
+      const isAncestor = dir === "" || otherDir.startsWith(`${dir}/`);
+      return isAncestor && root.recursive !== false;
+    };
+    for (const a of config.roots) {
+      for (const b of defaultConfig.roots) {
+        if (covers(a, normDir(b.dir)) || covers(b, normDir(a.dir))) {
+          console.error(
+            `✖ Shared-root guard: root "${a.dir}" (org ${ORGANIZATION_ID}) overlaps root "${b.dir}" ` +
+              `in brain-sync.config.json (org ${defaultConfig.organizationId ?? "urso"}).\n` +
+              "  A vault folder must never sync into two organizations — fix the configs first.",
+          );
+          process.exit(1);
+        }
+      }
+    }
+  }
+}
 
 // Scope metadata is relational, so validate it against the live organization
 // before constructing rows. Existing vault files may already use `project:` as

@@ -1,0 +1,7 @@
+{
+  "organizationId": "woof-gang",
+  "vaultRoot": "/Users/han/Research Vault/Projects/Urso",
+  "roots": [
+    { "dir": "08 - Woof Gang Client Corpus", "department": "ops", "exclude": ["_README.md"] }
+  ]
+}
