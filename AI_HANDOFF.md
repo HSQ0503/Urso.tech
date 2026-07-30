@@ -1,9 +1,40 @@
-# AI Layer — Agent Handoff (updated 2026-06-17)
+# AI Layer — Agent Handoff (updated 2026-07-30)
 
-> **Canonical reference:** the Obsidian vault doc `03 - Product & Build/AI Layer — urso.ai Analyst.md`
-> (in `C:\Users\HSQ05\OneDrive\Desktop\Obby Vault\Urso\`). Read it for the full design, rationale, and
-> locked decisions. **This file is the short, current "where we are + how to continue + gotchas."**
+> **Canonical reference:** the Obsidian vault doc `03 - Woof Gang — Product & Build/AI Layer — urso.ai Analyst.md`
+> (on this Mac: `/Users/han/Research Vault/Projects/Urso/`). Read its **2026-07-30 section first** — it
+> supersedes much of this file. **This file is the short, current "where we are + how to continue + gotchas."**
 > When you finish a chunk of work, update *both* this file and the vault doc.
+
+## 2026-07-30 — data reach + Brain fusion (supersedes the TL;DR below)
+
+- **Belt = 35 tools** (chat tier 31, console tier 35 via `buildAnalystTools(scope, cross, {tier})`).
+  New: `groomer_client_book` (customer↔groomer), `find_customer` → `customer_profile` (id-chain; the old
+  "no name lookup" decision is REVERSED — owner's call), `customer_watchlist` (cadence-slip vs own cycle),
+  `revenue_series` (day/week grain), and console-only `groomer_retention` / `demand_heatmap` /
+  `discount_analysis` / `groomer_monthly_series`. `product_performance` truncation bug fixed
+  (`getProductRevenueFull` — the page loader pre-sliced to 5/line).
+- **PII posture:** the 0027 RPCs (affinity/lookup/profile) are service-role-only; their data fns use the
+  admin client (money-layer pattern). Scope still binds at tool construction — never from the model.
+- **Drift can't hide anymore:** `schema_migrations` ledger (0026 / canes 0017 / urso 0011),
+  apply-migration.mjs records applies, `scripts/check-drift.mjs` (+ revenue reconciliation) and
+  `/api/health` probe the live schema; missing-RPC fallbacks now `console.error` with the migration number.
+- **Brain fusion v1 (flag `AI_BRAIN_FUSION=1`):** business sections live in the vault
+  `08 - Woof Gang Client Corpus/` → Brain org `woof-gang` (second org in Urso HQ; Brain core untouched;
+  only new Brain surface = `?org=` on the proposals route + queue org tabs). `wg-knowledge-export.mjs`
+  generates `lib/ai/business-sections.generated.ts` (byte-identical seed gate; 6k-token cap; numeric lint).
+  The console (only) serves LIVE sections + `propose_knowledge_update` — proposals are approved by Han at
+  `/brain/settings?org=woof-gang`, then the next conversation knows it with **no deploy**. All cross-project logic
+  lives in `lib/ai/brain-bridge.ts` (the fusion's ONLY fail-open catch); `check-brain-hosts.mjs` lints the
+  boundary; `brain-wg-isolation.mjs` gates org isolation; twins provisioned by
+  `provision-users.mjs --brain-twins` (`wg:<uid>` — no HQ auth accounts needed).
+- **NOT YET APPLIED to prod:** migrations 0025–0028, canes 0017, urso 0010–0011 — blocked on
+  `SUPABASE_ACCESS_TOKEN` in `.env.local` (create at supabase.com/dashboard/account/tokens). After
+  applying: `node scripts/check-drift.mjs` green → `node scripts/brain-wg-isolation.mjs` green →
+  `node scripts/provision-users.mjs --brain-twins` → `node scripts/brain-sync.mjs
+  --config=scripts/brain-sync.woof-gang.config.json --dry` then real → replay the incident question
+  ("who do my top customers at Winter Park groom with").
+- **F3+ (compiler/receipts/shadow learning/gardener) is trigger-gated** — do not build ahead of:
+  ≥5 approved proposals/month, ≥3 observed retrieval misses, or corpus >20 docs.
 
 ---
 

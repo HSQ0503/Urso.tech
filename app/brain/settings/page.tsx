@@ -17,9 +17,16 @@ import { ProposalQueue } from "@/components/brain/proposal-queue";
 import { TemporalReviewQueue } from "@/components/brain/temporal-review-queue";
 import { WorkspacePage } from "@/components/brain/workspace-ui";
 
-export default async function BrainSettingsPage() {
+export default async function BrainSettingsPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ org?: string }>;
+}) {
   const user = await getBrainUser();
   if (!user) redirect("/brain/login");
+  // Deep link: /brain/settings?org=woof-gang opens the WG review queue tab.
+  // Resolved server-side so the queue's first client render matches the HTML.
+  const initialOrg = (await searchParams)?.org === "woof-gang" ? "woof-gang" : "urso";
 
   const admin = ursoDbSafe();
   if (!admin) redirect("/brain"); // setup notice lives there
@@ -95,7 +102,7 @@ export default async function BrainSettingsPage() {
               Review AI-suggested changes before they become a new immutable document version.
             </p>
             <div className="mt-4">
-              <ProposalQueue />
+              <ProposalQueue initialOrg={initialOrg} />
             </div>
           </section>
         )}

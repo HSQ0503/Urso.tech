@@ -76,12 +76,21 @@ type ProposalMutation = {
 const occurrences = (content: string, value: string): number =>
   value ? content.split(value).length - 1 : 0;
 
-async function stewardAccess() {
+const orgParam = (req: Request | undefined): string | null => {
+  if (!req) return null;
+  const value = new URL(req.url).searchParams.get("org");
+  return value && /^[a-z0-9-]{2,40}$/.test(value) ? value : null;
+};
+
+async function stewardAccess(organizationId: string | null = null) {
   const user = await getBrainUser();
   if (!user) return { error: Response.json({ error: "unauthorized" }, { status: 401 }) };
   const admin = ursoDbSafe();
   if (!admin) return { error: Response.json({ error: URSO_DB_MISSING }, { status: 503 }) };
-  const principal = await resolveBrainPrincipal(admin, user);
+  // ?org= lets a steward review another organization's queue (Woof Gang's
+  // client corpus) — same fail-closed resolution: no membership in that org,
+  // no access. This is the ONLY brain route with org routing in fusion v1.
+  const principal = await resolveBrainPrincipal(admin, user, organizationId ?? undefined);
   if (!principal || !canEditBrainTruth(principal)) {
     return { error: Response.json({ error: "knowledge steward access required" }, { status: 403 }) };
   }
@@ -99,8 +108,8 @@ async function getStewardDocument(
   return getAuthorizedBrainDoc(auth.admin, auth.principal, path, projectScope);
 }
 
-export async function GET() {
-  const auth = await stewardAccess();
+export async function GET(req: Request) {
+  const auth = await stewardAccess(orgParam(req));
   if ("error" in auth) return auth.error;
   const { data, error } = await auth.admin
     .from("brain_knowledge_proposals")
@@ -350,7 +359,7 @@ async function applyProposal(
 }
 
 export async function PATCH(req: Request) {
-  const auth = await stewardAccess();
+  const auth = await stewardAccess(orgParam(req));
   if ("error" in auth) return auth.error;
   const body = (await req.json().catch(() => ({}))) as {
     id?: string;

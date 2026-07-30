@@ -28,36 +28,57 @@ type Proposal = {
   created_at: string;
 };
 
-export function ProposalQueue() {
+// The queues a steward can review: Urso's own, and client-brain orgs (fusion).
+// The API re-runs fail-closed principal resolution per org, so a tab the
+// steward lacks membership for just 403s.
+const ORG_TABS = [
+  { id: "urso", label: "Urso" },
+  { id: "woof-gang", label: "Woof Gang" },
+] as const;
+
+export function ProposalQueue({ initialOrg = "urso" }: { initialOrg?: string }) {
   const [proposals, setProposals] = useState<Proposal[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Loading is DERIVED (which org has finished loading vs which is selected)
+  // so the org-switch effect never calls setState synchronously.
+  const [loadedOrg, setLoadedOrg] = useState<string | null>(null);
   const [acting, setActing] = useState<string | null>(null);
   const [error, setError] = useState("");
+  // The ?org= deep link is resolved by the SERVER page and passed in, so the
+  // first client render always matches the server HTML.
+  const [org, setOrg] = useState<string>(initialOrg);
+  const loading = loadedOrg !== org;
+  const orgQs = org === "urso" ? "" : `?org=${org}`;
 
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       try {
-        const response = await fetch("/api/brain/proposals");
+        const response = await fetch(`/api/brain/proposals${orgQs}`);
         const data = (await response.json()) as { proposals?: Proposal[]; error?: string };
         if (!response.ok) throw new Error(data.error ?? "Could not load proposals.");
-        if (!cancelled) setProposals(data.proposals ?? []);
+        if (!cancelled) {
+          setProposals(data.proposals ?? []);
+          setError("");
+        }
       } catch (caught) {
-        if (!cancelled) setError(caught instanceof Error ? caught.message : String(caught));
+        if (!cancelled) {
+          setProposals([]);
+          setError(caught instanceof Error ? caught.message : String(caught));
+        }
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) setLoadedOrg(org);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [org, orgQs]);
 
   const decide = async (id: string, decision: "approve" | "reject") => {
     setActing(id);
     setError("");
     try {
-      const response = await fetch("/api/brain/proposals", {
+      const response = await fetch(`/api/brain/proposals${orgQs}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ id, decision }),
@@ -72,18 +93,46 @@ export function ProposalQueue() {
     }
   };
 
+  const orgTabs = (
+    <div className="mb-3 flex gap-1">
+      {ORG_TABS.map((tab) => (
+        <button
+          key={tab.id}
+          type="button"
+          onClick={() => setOrg(tab.id)}
+          className={`rounded-[5px] border px-2.5 py-1 text-[11px] transition-colors ${
+            org === tab.id
+              ? "border-orange/50 bg-orange/10 text-[var(--ob-text)]"
+              : "border-[var(--ob-border)] text-[var(--ob-muted)] hover:text-[var(--ob-text)]"
+          }`}
+        >
+          {tab.label}
+        </button>
+      ))}
+    </div>
+  );
+
   if (loading) {
     return (
-      <div className="flex items-center gap-2 rounded-[6px] bg-[var(--ob-bg-alt)] p-4 text-[12px] text-[var(--ob-muted)]">
-        <LoaderCircle className="size-3.5 animate-spin" />
-        Loading the review queue…
+      <div>
+        {orgTabs}
+        <div className="flex items-center gap-2 rounded-[6px] bg-[var(--ob-bg-alt)] p-4 text-[12px] text-[var(--ob-muted)]">
+          <LoaderCircle className="size-3.5 animate-spin" />
+          Loading the review queue…
+        </div>
       </div>
     );
   }
 
   return (
     <div>
-      {proposals.length === 0 ? (
+      {orgTabs}
+      {/* A failed org fetch must not masquerade as an empty (all-clear) queue. */}
+      {error && proposals.length === 0 ? (
+        <div className="rounded-[6px] border border-[var(--ob-border)] bg-[var(--ob-bg-alt)] p-5 text-[12px] text-[var(--ob-muted)]">
+          Couldn’t load this queue: {error}
+        </div>
+      ) : proposals.length === 0 ? (
         <div className="rounded-[6px] border border-[var(--ob-border)] bg-[var(--ob-bg-alt)] p-5">
           <div className="flex items-center gap-2 text-[12.5px] font-medium text-[var(--ob-text)]">
             <Check className="size-4 text-orange" />
@@ -139,9 +188,20 @@ export function ProposalQueue() {
                     </dl>
                   )}
                   {proposal.proposed_change.content && (
-                    <p className="mt-2 line-clamp-3 rounded-[5px] bg-[var(--ob-bg)] px-3 py-2 font-mono text-[10px] leading-[1.55] text-[var(--ob-muted)]">
-                      {proposal.proposed_change.content}
-                    </p>
+                    /* Approval publishes EXACTLY this text as truth, so the
+                       steward must be able to read all of it — clamped
+                       preview, expandable to the full body. */
+                    <details className="mt-2 rounded-[5px] bg-[var(--ob-bg)] px-3 py-2">
+                      <summary className="cursor-pointer list-none">
+                        <span className="line-clamp-3 font-mono text-[10px] leading-[1.55] text-[var(--ob-muted)]">
+                          {proposal.proposed_change.content}
+                        </span>
+                        <span className="mt-1 block text-[9.5px] text-[var(--ob-faint)]">expand full proposed text ▾</span>
+                      </summary>
+                      <pre className="mt-2 max-h-80 overflow-auto border-t border-[var(--ob-border)] pt-2 font-mono text-[10px] leading-[1.55] whitespace-pre-wrap text-[var(--ob-muted)]">
+                        {proposal.proposed_change.content}
+                      </pre>
+                    </details>
                   )}
                   {Boolean(proposal.proposed_change.relatedEdits?.length) && (
                     <div className="mt-3 rounded-[5px] border border-[var(--ob-border)] bg-[var(--ob-bg)] p-3">
@@ -149,14 +209,29 @@ export function ProposalQueue() {
                         Corpus impact · {proposal.proposed_change.relatedEdits?.length} related document
                         {proposal.proposed_change.relatedEdits?.length === 1 ? "" : "s"}
                       </div>
-                      <ul className="mt-2 space-y-1.5">
+                      <ul className="mt-2 space-y-2">
                         {proposal.proposed_change.relatedEdits?.map((edit) => (
-                          <li key={edit.targetPath} className="flex min-w-0 items-center justify-between gap-3 text-[10px]">
-                            <span className="truncate font-mono text-[var(--ob-muted)]">{edit.targetPath}</span>
-                            <span className="shrink-0 text-[var(--ob-faint)]">
-                              v{edit.baseVersion} · {edit.replacements.length} edit
-                              {edit.replacements.length === 1 ? "" : "s"}
-                            </span>
+                          <li key={edit.targetPath} className="min-w-0 text-[10px]">
+                            <div className="flex min-w-0 items-center justify-between gap-3">
+                              <span className="truncate font-mono text-[var(--ob-muted)]">{edit.targetPath}</span>
+                              <span className="shrink-0 text-[var(--ob-faint)]">
+                                v{edit.baseVersion} · {edit.replacements.length} edit
+                                {edit.replacements.length === 1 ? "" : "s"}
+                              </span>
+                            </div>
+                            {/* Approval applies these exact strings — show them. */}
+                            <ul className="mt-1 space-y-1">
+                              {edit.replacements.map((r, i) => (
+                                <li key={i} className="rounded-[4px] bg-[var(--ob-bg-alt)] p-1.5 font-mono text-[9.5px] leading-[1.5]">
+                                  <del className="block whitespace-pre-wrap text-red-400/80 no-underline">− {r.find}</del>
+                                  {r.replace ? (
+                                    <ins className="block whitespace-pre-wrap text-emerald-400/80 no-underline">+ {r.replace}</ins>
+                                  ) : (
+                                    <span className="block text-[var(--ob-faint)]">(removed)</span>
+                                  )}
+                                </li>
+                              ))}
+                            </ul>
                           </li>
                         ))}
                       </ul>

@@ -96,6 +96,8 @@ Keep ONLY things that stay true across conversations and would help the analyst 
 
 NEVER store specific metric values, dollar amounts, dates of "this week", or any number — those go stale and are always re-fetched live. Store the durable intent, not the figure.
 
+Company facts the analyst has already queued through its knowledge-proposal tool don't need duplicating here — when in doubt, keep this memory weighted toward the OWNER's personal preferences, goals, and concerns rather than company facts.
+
 Return the FULL updated memory as a short list of plain bullet lines (max ~12 bullets, no headers, no preamble). Merge new information into the existing memory, drop anything that's been superseded, and keep it tight. If there is nothing worth remembering, return an empty string.`;
 
 // Fold the user's recent turns (across all their threads) plus the existing

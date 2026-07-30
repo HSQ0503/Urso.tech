@@ -4,7 +4,7 @@
 // reasoning budget, and richer pre-loaded context (full brief + action pipeline).
 // Auth + scope come from the session; managers stay locked to their store.
 
-import { streamText, convertToModelMessages, stepCountIs, generateId, type UIMessage } from "ai";
+import { streamText, convertToModelMessages, stepCountIs, generateId, type ToolSet, type UIMessage } from "ai";
 import { getSession, resolveScope } from "@/lib/auth";
 import { getMetrics, getKpiDeltas, getWeeklyBrief, getAllAgentActions } from "@/components/dashboard/data.server";
 import { buildAgentSystemPrompt } from "@/lib/ai/analyst";
@@ -12,6 +12,7 @@ import { buildAnalystTools } from "@/lib/ai/tools";
 import { agentModel, assertAgentKey } from "@/lib/ai/models";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getAnalystMemory, getOwnedThread, persistTurn, type StoredMessage } from "@/lib/ai/memory";
+import { resolveWgBrainContext } from "@/lib/ai/brain-bridge";
 import { stores, scopeLabel, monthLabel, type MonthValue, type Scope } from "@/components/dashboard/data";
 
 // Opus + a multi-tool analysis can run longer than a quick chat answer.
@@ -45,16 +46,20 @@ export async function POST(req: Request) {
   const ownedThreadId = body.threadId ? (await getOwnedThread(admin, user.id, body.threadId))?.id ?? null : null;
 
   // Pre-load the analyst's opening picture in parallel, best-effort: scope seed,
-  // the full weekly brief, the action pipeline, and the user's rolling memory —
-  // so it starts already informed and remembers prior conversations.
-  const [mRes, dRes, briefRes, actionsRes, memRes] = await Promise.allSettled([
+  // the full weekly brief, the action pipeline, the user's rolling memory, and
+  // (behind AI_BRAIN_FUSION=1) the Brain knowledge bridge — live corpus
+  // sections + the proposal tool. The bridge fails open to null, so a Brain
+  // outage leaves this route exactly as it was before fusion.
+  const [mRes, dRes, briefRes, actionsRes, memRes, bridgeRes] = await Promise.allSettled([
     getMetrics(scope, month),
     getKpiDeltas(scope, month),
     getWeeklyBrief(scope),
     getAllAgentActions(),
     getAnalystMemory(admin, user.id),
+    resolveWgBrainContext(user),
   ]);
   const memory = memRes.status === "fulfilled" ? memRes.value : "";
+  const bridge = bridgeRes.status === "fulfilled" ? bridgeRes.value : null;
 
   let seed = "";
   if (mRes.status === "fulfilled" && dRes.status === "fulfilled") {
@@ -92,13 +97,32 @@ export async function POST(req: Request) {
       .slice(0, 12);
   }
 
-  if (AGENT_DEBUG) console.log(`\n┌─ [ai/agent] ${user.name} (${user.role}) · ${scopeLabel(scope)} · ${monthLabel(month)}`);
+  if (AGENT_DEBUG)
+    console.log(
+      `\n┌─ [ai/agent] ${user.name} (${user.role}) · ${scopeLabel(scope)} · ${monthLabel(month)}` +
+        (bridge ? ` · brain:${bridge.liveSections ? "live" : "snapshot"}` : ""),
+    );
 
-  const tools = buildAnalystTools(scope, cross);
+  // The console runs the full belt (the graph chats stay on the smaller chat
+  // tier); with the bridge up it also serves LIVE knowledge sections and gains
+  // the proposal tool — the model proposes, the steward publishes. Typed as a
+  // plain ToolSet: the conditional proposal spread would otherwise make a
+  // member optional, which breaks the SDK's step typing.
+  const tools: ToolSet = {
+    ...buildAnalystTools(scope, cross, { tier: "full", liveSections: bridge?.liveSections }),
+    ...(bridge ? bridge.proposalTools : {}),
+  };
 
   const result = streamText({
     model: agentModel(),
-    system: buildAgentSystemPrompt({ user, scope, month }, seed, brief, actions, memory),
+    system: buildAgentSystemPrompt(
+      { user, scope, month },
+      seed,
+      brief,
+      actions,
+      memory,
+      bridge ? { live: bridge.liveSections !== undefined } : undefined,
+    ),
     // ignoreIncompleteToolCalls strips any dangling tool-call from a previously
     // interrupted turn so a rehydrated thread can't send Anthropic an unpaired
     // tool_use (which 400s and would break the thread permanently).
