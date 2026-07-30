@@ -121,7 +121,7 @@ export async function POST(req: Request) {
       brief,
       actions,
       memory,
-      bridge ? { live: bridge.liveSections !== undefined } : undefined,
+      bridge ? { live: bridge.liveSections !== undefined, corpusPaths: bridge.corpusPaths } : undefined,
     ),
     // ignoreIncompleteToolCalls strips any dangling tool-call from a previously
     // interrupted turn so a rehydrated thread can't send Anthropic an unpaired

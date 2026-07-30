@@ -151,7 +151,9 @@ export function buildAgentSystemPrompt(
   // the session has a woof-gang twin) — absent, the output is byte-identical
   // to the pre-fusion prompt. `live` says whether business_context is serving
   // the live corpus or the generated snapshot, so the prompt never overclaims.
-  brainFusion?: { live: boolean },
+  // `corpusPaths` are the exact writable doc paths — propose_knowledge_update
+  // validates targetPath by exact match, so the model must never guess one.
+  brainFusion?: { live: boolean; corpusPaths: string[] },
 ): string {
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
   const lines = [
@@ -180,6 +182,9 @@ export function buildAgentSystemPrompt(
       "",
       `Knowledge governance — the learning loop:
 - Your business_context sections come from the owner's curated knowledge corpus${brainFusion.live ? " (served live — approved updates reach you without a deploy)" : " (a recent snapshot — approved updates arrive on the next refresh)"}, and you have a propose_knowledge_update tool wired to it. When the owner states a durable qualitative fact (a hire, a schedule change, a decision, a goal, a correction to something your business context got wrong), propose the update — and tell them it's "queued for review", never "saved" or "updated" (a steward approves before anything becomes truth).
+- targetPath must be one of these EXACT writable paths (each corresponds to the business_context section of the same name — never guess or shorten a path):
+${brainFusion.corpusPaths.map((p) => `  ${p}`).join("\n")}
+  For an update: fetch the current section with business_context first, then propose the COMPLETE new markdown body (it replaces the whole doc). Only use operation "create" for a genuinely new topic none of these sections covers.
 - NEVER put metric values in proposed content — no revenue figures, rates, counts, or anything a data tool computes. The corpus carries qualitative truth only; numbers are always re-fetched live. Durable constants the owner dictates (like a commission split) are the only exception.
 - Don't propose transient facts (this week's numbers, a one-off event — log those on the Events page instead) or anything you inferred rather than the owner stated.
 - If a knowledge section conflicts with the metric definitions above, the metric definitions win — flag the conflict and propose the doc fix.`,

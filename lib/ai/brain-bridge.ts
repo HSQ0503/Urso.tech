@@ -36,8 +36,13 @@ export type WgBrainContext = {
   // proposal reaches the next conversation with no deploy. undefined = serve
   // the generated snapshot (missing docs, oversized corpus).
   liveSections: BusinessSection[] | undefined;
+  // The writable corpus paths, for the prompt: propose_knowledge_update
+  // validates targetPath by EXACT match against the authorized catalog, and
+  // the model only knows sections by key — without this list it guesses a
+  // path and the proposal dies on "not in the caller's permitted catalog".
+  corpusPaths: string[];
   // Exactly the proposal tool, nothing else from the Brain belt in v1 — the
-  // model proposes, the steward publishes at /brain?org=woof-gang.
+  // model proposes, the steward publishes at /brain/settings?org=woof-gang.
   proposalTools: { propose_knowledge_update: ReturnType<typeof buildBrainTools>["propose_knowledge_update"] };
 };
 
@@ -82,7 +87,12 @@ export async function resolveWgBrainContext(user: SessionUser): Promise<WgBrainC
       projectId: null,
     });
 
-    return { principal, liveSections, proposalTools: { propose_knowledge_update: tools.propose_knowledge_update } };
+    return {
+      principal,
+      liveSections,
+      corpusPaths: manifest.map((d) => d.path).filter((p) => p.startsWith(CORPUS_PREFIX)).sort(),
+      proposalTools: { propose_knowledge_update: tools.propose_knowledge_update },
+    };
   } catch (e) {
     // The fusion's ONLY fail-open catch (see header): Brain down must never
     // take the owner's console down with it.
