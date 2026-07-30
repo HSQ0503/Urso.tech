@@ -31,9 +31,19 @@ import {
   getServiceLineMargin,
   getBreakeven,
   getCostSpikes,
+  getGroomerAffinity,
+  findCustomersByName,
+  getCustomerProfileById,
+  getCustomerWatchlist,
+  getGroomerRetention,
+  getDemandHeatmap,
+  getDiscountAnalysis,
+  getGroomerMonthlyRevenue,
+  getDailyRevenueSeries,
+  getProductRevenueFull,
 } from "@/components/dashboard/data.server";
 import { stores, type Scope, type StoreId, type MonthValue } from "@/components/dashboard/data";
-import { BUSINESS_SECTIONS, BUSINESS_SECTION_KEYS, getBusinessSection } from "@/lib/ai/business";
+import { BUSINESS_SECTIONS, BUSINESS_SECTION_KEYS, getBusinessSection, type BusinessSection } from "@/lib/ai/business";
 
 const monthSchema = z
   .string()
@@ -128,14 +138,40 @@ function movers(cur: { name: string; value: number }[], base: { name: string; va
   };
 }
 
-export function buildAnalystTools(allowed: Scope, cross: Scope = allowed) {
+// Inclusive [start, end] date range for a monthSchema value. "all" here means
+// the trailing 365 days ending today — a close approximation of the
+// dashboard's trailing-12-full-months window, chosen because these tools
+// window raw lines rather than month buckets.
+function monthRangeInclusive(month: string): { start: string; end: string } {
+  const today = nyToday();
+  if (month === "all") return { start: addDays(today, -365), end: today };
+  if (/^\d{4}$/.test(month)) return { start: `${month}-01-01`, end: `${month}-12-31` };
+  const [y, m] = month.split("-").map(Number);
+  const lastDay = addDays(m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, "0")}-01`, -1);
+  return { start: `${month}-01`, end: lastDay };
+}
+
+const PENDING = (migration: string) => ({
+  error: `this data surface isn't deployed yet (migration ${migration} pending) — the rest of your tools still work.`,
+});
+
+export type AnalystToolOptions = {
+  // "chat" (default) keeps the belt small enough for the flash model to route
+  // reliably; "full" (the Opus console) adds the deeper data-science tools.
+  tier?: "chat" | "full";
+  // Live knowledge sections from the Woof Gang Brain corpus (the console's
+  // fusion path). Absent → the generated snapshot baked into the build.
+  liveSections?: BusinessSection[];
+};
+
+export function buildAnalystTools(allowed: Scope, cross: Scope = allowed, extra: AnalystToolOptions = {}) {
   const ids = allowedIds(allowed);
   // `cross` widens the comparison/trend tools to every store an owner may see, so
   // an owner filtered to one store can still ask cross-store questions. For a
   // manager the caller passes cross === their store, so they stay fully locked.
   const crossIds = allowedIds(cross);
 
-  return {
+  const belt = {
     metrics_overview: tool({
       description:
         "Headline metrics for the allowed scope in one period: revenue, grooming/retail split, bookings, avg visit, return rate, retail attach — plus deltas vs the prior comparable period.",
@@ -203,14 +239,17 @@ export function buildAnalystTools(allowed: Scope, cross: Scope = allowed) {
     }),
 
     product_performance: tool({
-      description: "Top products and services by revenue for a period, tagged service vs retail.",
+      description: "Top products and services by revenue for a period, tagged service vs retail, with units sold.",
       inputSchema: z.object({
         month: monthSchema,
         top: z.number().int().min(5).max(40).default(20).describe("how many rows"),
       }),
+      // getProductRevenueFull, not getRevenueByService — the page loader
+      // pre-slices to 5 per line, which silently capped this tool at ~10 rows
+      // no matter what `top` asked for.
       execute: async ({ month, top }) => {
-        const rows = await getRevenueByService(allowed, month as MonthValue);
-        return rows.slice(0, top).map((p) => ({ name: p.name, revenue: r0(p.value), line: p.line }));
+        const rows = await getProductRevenueFull(allowed, month as MonthValue, top);
+        return rows.map((p) => ({ name: p.name, revenue: r0(p.value), line: p.line, units: r3(p.units) }));
       },
     }),
 
@@ -383,7 +422,10 @@ export function buildAnalystTools(allowed: Scope, cross: Scope = allowed) {
           .describe("the section key to retrieve (see the reference list in the system context)"),
       }),
       execute: ({ section }) => {
-        const s = getBusinessSection(section);
+        // The console's fusion path serves the LIVE Brain corpus (an approved
+        // correction reaches the next conversation with no deploy); everywhere
+        // else falls back to the generated snapshot baked into the build.
+        const s = extra.liveSections?.find((b) => b.key === section) ?? getBusinessSection(section);
         if (!s) return { error: `unknown section. Available: ${BUSINESS_SECTIONS.map((b) => b.key).join(", ")}` };
         return { title: s.title, body: s.body };
       },
@@ -588,5 +630,187 @@ export function buildAnalystTools(allowed: Scope, cross: Scope = allowed) {
         return spikes.map((s) => ({ category: s.category, prior: r0(s.prevAmount), current: r0(s.curAmount), pctJump: r3(s.pctJump) }));
       },
     }),
+
+    // ── Relationships & customer lookup (migration 0027) ────────────────────
+    groomer_client_book: tool({
+      description:
+        "The customer↔groomer link. WITHOUT `groomer`: the top customers by lifetime value with each one's PRIMARY groomer and their per-groomer visit split — answers 'who do my top customers groom with'. WITH `groomer` (display name as shown by team_performance): that groomer's client book, ranked by visits. Visits are distinct tickets, groomer-role staff only; ltv is lifetime value at the stores you can see. Period dates are inclusive.",
+      inputSchema: z.object({
+        month: monthSchema,
+        groomer: z.string().min(2).optional().describe("a groomer's display name to get THEIR client book; omit for top customers with their primary groomer"),
+        top: z.number().int().min(5).max(40).default(15).describe("how many customers"),
+      }),
+      execute: async ({ month, groomer, top }) => {
+        const { start, end } = monthRangeInclusive(month);
+        const rows = await getGroomerAffinity(allowed, { start, end, groomer, limit: top });
+        if (rows === null) return PENDING("0027");
+        return rows.map((r) => ({
+          customerId: r.customerId, customer: r.customer, pet: r.pet, segment: r.segment, ltv: r0(r.ltv),
+          store: r.store, groomer: r.groomer, visits: r.visits, shareOfTheirVisits: r3(r.share),
+          isPrimaryGroomer: r.isPrimary, lastVisit: r.lastVisit,
+        }));
+      },
+    }),
+
+    find_customer: tool({
+      description:
+        "Look up a customer by name OR pet name (FranPOS stores the pet in the first-name field, so both are searched; 3+ characters). Returns up to 5 matches with customerId — chain the id into customer_profile for the full drill-down. visits/ltv are at the stores you can see. Caveat: a multi-store customer is filed under one arbitrary store.",
+      inputSchema: z.object({
+        query: z.string().min(3).describe("part of the customer's or pet's name"),
+      }),
+      execute: async ({ query }) => {
+        const rows = await findCustomersByName(allowed, query);
+        if (rows === null) return PENDING("0027");
+        if (!rows.length) return { matches: [], note: "no matching customer — try fewer letters or the pet's name" };
+        return {
+          matches: rows.map((r) => ({
+            customerId: r.customerId, name: r.name, pet: r.pet, store: r.store, visits: r.visits,
+            ltv: r0(r.ltv), segment: r.segment, lastVisit: r.lastVisit, usualCycleDays: r.cycleDays,
+          })),
+        };
+      },
+    }),
+
+    customer_profile: tool({
+      description:
+        "Everything about ONE customer by customerId (get it from find_customer, groomer_client_book, or customer_watchlist): scoped lifetime totals, visit-day timeline, who grooms them (with visit counts), and their top products. Use for 'pull up <name>', 'what does she buy', 'who's her groomer'.",
+      inputSchema: z.object({
+        // Other tools emit customerId as a string (customers.id is text) — accept
+        // both so the id-chain never trips on the type boundary.
+        customerId: z.union([z.number().int(), z.string().regex(/^\d+$/)]).describe("the FranPOS customer id from another tool's result"),
+      }),
+      execute: async ({ customerId }) => {
+        const profile = await getCustomerProfileById(allowed, Number(customerId));
+        if (profile === null) return PENDING("0027");
+        return profile;
+      },
+    }),
+
+    customer_watchlist: tool({
+      description:
+        "Cadence-slip early warning: customers overdue against their OWN historical grooming cycle (not the blunt 60-day segment cutoff), ranked by value at risk. Supports arbitrary thresholds — 'VIPs 45+ days out', 'anyone $500+ LTV who's slipping'. overdueOnly=false lists by recency threshold alone.",
+      inputSchema: z.object({
+        minDaysSince: z.number().int().min(0).max(365).optional().describe("only customers at least this many days since their last visit"),
+        minLtv: z.number().int().min(0).optional().describe("only customers worth at least this much lifetime"),
+        segment: z.enum(["VIP", "Loyal", "At risk", "Lapsed", "Dormant"]).optional(),
+        overdueOnly: z.boolean().default(true).describe("true = only customers ≥1.2× past their own usual cycle"),
+        top: z.number().int().min(5).max(50).default(20),
+      }),
+      execute: async ({ minDaysSince, minLtv, segment, overdueOnly, top }) => {
+        const rows = await getCustomerWatchlist(allowed, { minDaysSince, minLtv, segment, overdueOnly, top });
+        return rows.map((r) => ({
+          customerId: r.customerId, name: r.name, pet: r.pet, store: r.store, segment: r.segment,
+          ltv: r0(r.ltv), daysSinceLastVisit: r.daysSinceLastVisit, usualCycleDays: r.cycleDays,
+          overdueRatio: r.overdueRatio, visits: r.visits,
+        }));
+      },
+    }),
+
+    revenue_series: tool({
+      description:
+        "Revenue as a TIME SERIES inside an arbitrary window (both dates inclusive) — daily (≤92 days) or weekly (≤370 days) buckets. Use for 'weekly revenue last quarter', 'show the trend since May', or spotting when a change started at finer-than-month grain. Weeks start Monday.",
+      inputSchema: z.object({
+        startDate: dateSchema.describe("first day included, YYYY-MM-DD"),
+        endDate: dateSchema.describe("last day included, YYYY-MM-DD"),
+        grain: z.enum(["day", "week"]).default("week"),
+      }),
+      execute: async ({ startDate, endDate, grain }) => {
+        if (startDate > endDate) return { error: "startDate must be on or before endDate" };
+        const days = Math.round((Date.parse(`${endDate}T00:00:00Z`) - Date.parse(`${startDate}T00:00:00Z`)) / 86_400_000) + 1;
+        if (grain === "day" && days > 92) return { error: "daily grain is capped at 92 days — use grain: 'week' or a shorter window" };
+        if (days > 370) return { error: "window too wide — cap is 370 days" };
+        const daily = await getDailyRevenueSeries(allowed, startDate, addDays(endDate, 1));
+        if (grain === "day") return daily.map((d) => ({ date: d.date, revenue: r0(d.revenue) }));
+        const weeks = new Map<string, number>();
+        for (const d of daily) {
+          const dt = new Date(`${d.date}T00:00:00Z`);
+          const monday = addDays(d.date, -((dt.getUTCDay() + 6) % 7));
+          weeks.set(monday, (weeks.get(monday) ?? 0) + d.revenue);
+        }
+        return [...weeks.entries()].sort(([a], [b]) => (a < b ? -1 : 1)).map(([weekOf, revenue]) => ({ weekOf, revenue: r0(revenue) }));
+      },
+    }),
+
+    // ── Deeper data-science tools — console tier only (stripped for chat
+    // below, to keep the flash belt small enough to route reliably). ────────
+    ...{
+          groomer_retention: tool({
+            description:
+              "Groomer-ATTRIBUTED retention for a window (dates inclusive): of each groomer's identified customer visits, how many returned within 90 days — and how many returned to the SAME groomer. This is the honest 'do Haley's clients come back more than Erica's' tool (team_performance's returnRate is lifetime and not groomer-attributed). Null rates mean too little eligible volume; censored=true means part of the window is too recent to have a full 90-day observation — prefer windows ending 90+ days ago.",
+            inputSchema: z.object({
+              startDate: dateSchema.describe("first visit day included, YYYY-MM-DD"),
+              endDate: dateSchema.describe("last visit day included — for uncensored rates use a date 90+ days ago"),
+            }),
+            execute: async ({ startDate, endDate }) => {
+              const rows = await getGroomerRetention(allowed, startDate, endDate);
+              if (rows === null) return PENDING("0028");
+              return rows.map((r) => ({
+                groomer: r.groomer, store: r.store, eligibleVisits: r.eligibleVisits,
+                returnRate: r.returnRate == null ? null : r3(r.returnRate),
+                sameGroomerRate: r.sameGroomerRate == null ? null : r3(r.sameGroomerRate),
+                censored: r.censored,
+              }));
+            },
+          }),
+
+          demand_heatmap: tool({
+            description:
+              "When each store is actually busy: tickets and revenue by day-of-week × hour for a window (dates inclusive). Use for staffing questions ('busiest day at Windermere', 'should we add Saturday capacity'). dow: 0=Sunday…6=Saturday.",
+            inputSchema: z.object({
+              startDate: dateSchema.describe("first day included, YYYY-MM-DD"),
+              endDate: dateSchema.describe("last day included, YYYY-MM-DD"),
+            }),
+            execute: async ({ startDate, endDate }) => {
+              const cells = await getDemandHeatmap(allowed, startDate, endDate);
+              if (cells === null) return PENDING("0028");
+              return {
+                caveat:
+                  "times are CHECKOUT times — grooming pays at pickup, so the curve runs 1–3 hours later than when dogs are actually in the chair; read morning demand from late-morning/afternoon checkouts.",
+                cells: cells.map((c) => ({ store: c.store, dow: c.dow, hour: c.hour, tickets: c.tickets, serviceTickets: c.serviceTickets, revenue: r0(c.revenue) })),
+              };
+            },
+          }),
+
+          discount_analysis: tool({
+            description:
+              "Where discounts go (dates inclusive): total discount dollars, discounted-line counts and discount share of gross, grouped by store, groomer, product, month, or customer_type (new vs repeat vs walk-in — answers 'did the promo bring new customers or just discount the regulars'). Revenue elsewhere is always net of discounts; this is the only tool that surfaces them.",
+            inputSchema: z.object({
+              startDate: dateSchema.describe("first day included, YYYY-MM-DD"),
+              endDate: dateSchema.describe("last day included, YYYY-MM-DD"),
+              groupBy: z.enum(["store", "groomer", "product", "month", "customer_type"]),
+            }),
+            execute: async ({ startDate, endDate, groupBy }) => {
+              const rows = await getDiscountAnalysis(allowed, startDate, endDate, groupBy);
+              if (rows === null) return PENDING("0028");
+              return rows.map((r) => ({
+                bucket: r.bucket, discountedLines: r.discountedLines, discountTotal: r0(r.discountTotal),
+                gross: r0(r.gross), discountShare: r.discountPct == null ? null : r3(r.discountPct),
+              }));
+            },
+          }),
+
+          groomer_monthly_series: tool({
+            description:
+              "Per-groomer monthly service revenue and appointment counts over a month range — is a groomer's book growing or shrinking? The per-groomer version of monthly_series. Data starts 2024-01.",
+            inputSchema: z.object({
+              fromMonth: z.string().regex(/^\d{4}-\d{2}$/).describe("inclusive start, YYYY-MM"),
+              toMonth: z.string().regex(/^\d{4}-\d{2}$/).describe("inclusive end, YYYY-MM"),
+            }),
+            execute: async ({ fromMonth, toMonth }) => {
+              const rows = await getGroomerMonthlyRevenue(allowed, `${fromMonth}-01`, monthRangeInclusive(toMonth).end);
+              if (rows === null) return PENDING("0028");
+              return rows.map((r) => ({ month: r.month, groomer: r.groomer, store: r.store, revenue: r0(r.revenue), appts: r.appts }));
+            },
+          }),
+        },
   };
+
+  if (extra.tier === "full") return belt;
+  // Chat tier: strip the console-only tools so the flash model routes over a
+  // smaller belt. The cast keeps ONE concrete return type — optional tool
+  // members break the SDK's step typing, and nothing statically enumerates
+  // the chat belt.
+  const { groomer_retention, demand_heatmap, discount_analysis, groomer_monthly_series, ...chatBelt } = belt;
+  void groomer_retention; void demand_heatmap; void discount_analysis; void groomer_monthly_series;
+  return chatBelt as typeof belt;
 }

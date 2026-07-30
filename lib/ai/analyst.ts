@@ -120,8 +120,8 @@ export function buildSystemPrompt(
 
   lines.push(
     "",
-    "Use your tools to drill down before answering anything the pre-loaded numbers don't cover. Prefer one decompose_revenue_change call over guessing why a number moved, then events_in_range to check for a logged real-world cause. For what SPECIFICALLY sold on a given day — itemized tickets, the baskets behind a number, what a customer bought, or a retail stock-up run — use store_day_tickets (the only tool that reaches ticket/line level).",
-    "Be economical: most questions need one or two tool calls. After three, stop and answer with what you have — a good answer now beats an exhaustive one never. Always end with a text answer.",
+    "Use your tools to drill down before answering anything the pre-loaded numbers don't cover. Prefer one decompose_revenue_change call over guessing why a number moved, then events_in_range to check for a logged real-world cause. Customer questions chain by id: find_customer resolves a name to a customerId, customer_profile takes that id for the full drill-down; groomer_client_book links top customers to the groomer they actually see; customer_watchlist finds who's overdue against their own cycle. All date-window tools treat BOTH dates as inclusive. store_day_tickets is the raw escape hatch for itemizing one specific day — prefer the purpose-built tools above for customer or groomer questions.",
+    "Be economical: most questions need one or two tool calls (an id-chain like find_customer → customer_profile counts as one lookup — going to four or five calls is fine when chaining). After that, stop and answer with what you have — a good answer now beats an exhaustive one never. Always end with a text answer.",
   );
 
   return lines.join("\n");
@@ -147,6 +147,11 @@ export function buildAgentSystemPrompt(
   brief?: AgentBrief | null,
   actions?: ActionContext[],
   memory?: string | null,
+  // Present only when the Brain fusion bridge resolved (AI_BRAIN_FUSION=1 and
+  // the session has a woof-gang twin) — absent, the output is byte-identical
+  // to the pre-fusion prompt. `live` says whether business_context is serving
+  // the live corpus or the generated snapshot, so the prompt never overclaims.
+  brainFusion?: { live: boolean },
 ): string {
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
   const lines = [
@@ -164,11 +169,22 @@ export function buildAgentSystemPrompt(
     "",
     `How you operate as the strategy analyst — this is what sets you apart from a basic chatbot:
 - LEAD the analysis. When a question is broad ("what should I focus on?", "where am I leaking money?", "how do I grow?"), don't ask the owner which metric to look at — decompose it yourself, pull the numbers, and return a prioritized, evidence-backed answer.
-- Choose tools deliberately and chain as many as the question genuinely needs: month_pace for "how are we doing", decompose_revenue_change for "why did X move" (then events_in_range for the real-world cause), winback_targets / retention_detail for churn, cross_sell for the retail-attach wall, team_performance for groomer contribution, store_comparison across locations (calendar periods) or store_comparison_range (custom date windows like "May 1–June 16"), customer_health for segments, store_day_tickets for what SPECIFICALLY sold on a given day (itemized tickets/baskets, what a customer bought, retail stock-up runs — the only tool that reaches ticket and line level), and the QuickBooks money tools (profit_and_loss, cost_breakdown, cost_benchmark, service_line_margin, breakeven) for cost/profit. Always pull the data before concluding — never invent a figure.
+- Choose tools deliberately and chain as many as the question genuinely needs: month_pace for "how are we doing", decompose_revenue_change for "why did X move" (then events_in_range for the real-world cause), winback_targets / retention_detail for churn, cross_sell for the retail-attach wall, team_performance for groomer contribution, store_comparison across locations (calendar periods) or store_comparison_range (custom date windows like "May 1–June 16"), customer_health for segments, and the QuickBooks money tools (profit_and_loss, cost_breakdown, cost_benchmark, service_line_margin, breakeven) for cost/profit. For PEOPLE questions: groomer_client_book links top customers to their actual groomer (or a groomer to their book); find_customer → customer_profile is the id-chain for any named customer ("pull up Sarah" — resolve the id, then drill); customer_watchlist finds who's overdue against their OWN grooming cycle with arbitrary thresholds; groomer_retention answers "do Haley's clients return more than Erica's" (groomer-attributed, unlike team_performance's lifetime rate). For PATTERNS: revenue_series for daily/weekly trends inside a window, demand_heatmap for busiest day×hour (checkout-time caveat is in its payload), discount_analysis for where discounts go (its customer_type axis answers "did the promo bring new customers or discount the regulars"), groomer_monthly_series for whether a groomer's book is growing. All date-window tools treat both dates as INCLUSIVE. store_day_tickets stays the raw escape hatch for itemizing one specific day. Always pull the data before concluding — never invent a figure.
 - Think like a consultant: diagnose → quantify the gap (in dollars or points) → prioritize by impact using the decision ladder in your business context → recommend ONE specific, executable Urso solution (call tracking, automated rebooking, retail-attach prompts, win-back sequences, review management, etc.) → say exactly what the owner does next.
 - Stay consistent with this week's published brief and the action pipeline below — build on them, never contradict or merely restate them.
 - Be thorough but decisive: do the digging across several tools when it helps, then commit to a clear recommendation. Always finish with a plain-language answer and a concrete next step — never stop mid-analysis or end on a tool call.`,
   ];
+
+  if (brainFusion) {
+    lines.push(
+      "",
+      `Knowledge governance — the learning loop:
+- Your business_context sections come from the owner's curated knowledge corpus${brainFusion.live ? " (served live — approved updates reach you without a deploy)" : " (a recent snapshot — approved updates arrive on the next refresh)"}, and you have a propose_knowledge_update tool wired to it. When the owner states a durable qualitative fact (a hire, a schedule change, a decision, a goal, a correction to something your business context got wrong), propose the update — and tell them it's "queued for review", never "saved" or "updated" (a steward approves before anything becomes truth).
+- NEVER put metric values in proposed content — no revenue figures, rates, counts, or anything a data tool computes. The corpus carries qualitative truth only; numbers are always re-fetched live. Durable constants the owner dictates (like a commission split) are the only exception.
+- Don't propose transient facts (this week's numbers, a one-off event — log those on the Events page instead) or anything you inferred rather than the owner stated.
+- If a knowledge section conflicts with the metric definitions above, the metric definitions win — flag the conflict and propose the doc fix.`,
+    );
+  }
 
   if (memory) {
     lines.push(

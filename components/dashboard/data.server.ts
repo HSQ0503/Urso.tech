@@ -443,8 +443,14 @@ export async function getProductCatalog(
     p_offset: (opts.page - 1) * PRODUCT_PAGE_SIZE,
   });
   // null = RPC not deployed yet (pre-0018) — the page renders a setup note
-  // instead of crashing, same pattern as getReturnRateTrend pre-0014.
-  if (error && /schema cache|does not exist/i.test(error.message)) return null;
+  // instead of crashing, same pattern as getReturnRateTrend pre-0014. Loud on
+  // the server so schema drift shows in logs instead of hiding behind the
+  // graceful fallback (the 0025 incident: "pending deploy" discovered by the
+  // owner mid-question).
+  if (error && /schema cache|does not exist/i.test(error.message)) {
+    console.error("[drift] product_catalog RPC missing — migration 0018 not applied to this database");
+    return null;
+  }
   if (error) throw new Error(`product_catalog failed: ${error.message}`);
   type Row = { key: string; name: string; is_service: boolean; revenue: number; units: number; cost: number; stores: number; total_count: number };
   const typed = (data ?? []) as unknown as Row[];
@@ -500,7 +506,10 @@ export async function getStoreDayLineItems(
     p_end: endDate,
     p_include_passthrough: includePassthrough,
   });
-  if (error && /schema cache|does not exist/i.test(error.message)) return null;
+  if (error && /schema cache|does not exist/i.test(error.message)) {
+    console.error("[drift] store_day_lineitems RPC missing — migration 0025 not applied to this database");
+    return null;
+  }
   if (error) throw new Error(`store_day_lineitems failed: ${error.message}`);
 
   type Row = {
@@ -2152,4 +2161,259 @@ export async function getCostSpikes(scope: Scope = "all", minPct = 0.25, minAbs 
     if (p > 0 && c - p >= minAbs && (c - p) / p >= minPct) spikes.push({ category: b, prevAmount: p, curAmount: c, pctJump: (c - p) / p });
   }
   return spikes.sort((x, y) => y.curAmount - y.prevAmount - (x.curAmount - x.prevAmount));
+}
+
+// ── AI relationship & data-science reads (migrations 0027/0028) ──────────────
+// ALL of the 0027/0028 RPCs are service-role-only in the DB (revoked from
+// anon/authenticated) and go through the admin client — 0027 because it
+// returns customer names, 0028 because a public grant would let the anon key
+// query per-groomer revenue over raw REST. Same posture as QuickBooks. Scope is still enforced in code: every
+// p_store_ids comes from the session's resolved scope, never from the model.
+// A missing RPC returns null (migration not applied yet) and logs loudly so
+// drift shows in server logs instead of surfacing as an owner-facing mystery.
+
+const missingRpc = (error: { message: string } | null, rpc: string, migration: string): boolean => {
+  if (error && /schema cache|does not exist/i.test(error.message)) {
+    console.error(`[drift] ${rpc} RPC missing — migration ${migration} not applied to this database`);
+    return true;
+  }
+  return false;
+};
+
+export type GroomerAffinityRow = {
+  customerId: string; customer: string; pet: string | null; segment: string | null; ltv: number;
+  store: StoreId; groomer: string; visits: number; totalVisits: number; share: number;
+  isPrimary: boolean; lastVisit: string;
+};
+
+// Mode A (no groomer): top customers by LTV with their per-groomer visit split.
+// Mode B (groomer set): that groomer's client book. Window is inclusive.
+export async function getGroomerAffinity(
+  scope: Scope,
+  opts: { start: string; end: string; groomer?: string; limit?: number },
+): Promise<GroomerAffinityRow[] | null> {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase.rpc("customer_groomer_affinity", {
+    p_store_ids: scopeIds(scope),
+    p_start: opts.start,
+    p_end: opts.end,
+    p_groomer: opts.groomer ?? null,
+    p_limit: Math.min(opts.limit ?? 25, 100),
+  });
+  if (missingRpc(error, "customer_groomer_affinity", "0027")) return null;
+  if (error) throw new Error(`customer_groomer_affinity failed: ${error.message}`);
+  type Row = {
+    customer_id: string; customer_name: string; pet: string | null; segment: string | null; ltv: number;
+    store_id: StoreId; groomer: string; visits: number; total_visits: number; share: number;
+    is_primary: boolean; last_visit: string;
+  };
+  return ((data ?? []) as unknown as Row[]).map((r) => ({
+    customerId: r.customer_id, customer: r.customer_name, pet: r.pet, segment: r.segment, ltv: Number(r.ltv),
+    store: r.store_id, groomer: r.groomer, visits: Number(r.visits), totalVisits: Number(r.total_visits),
+    share: Number(r.share), isPrimary: r.is_primary, lastVisit: r.last_visit,
+  }));
+}
+
+export type FoundCustomer = {
+  customerId: string; name: string; pet: string | null; store: StoreId; visits: number; ltv: number;
+  segment: string | null; firstVisit: string | null; lastVisit: string | null; cycleDays: number | null;
+};
+
+// Name/pet lookup (FranPOS stores the PET in FirstName, so both are searched).
+// Known blind spot, stated in the tool description: customers.store_id is an
+// arbitrary max(store_id) for multi-store customers.
+export async function findCustomersByName(scope: Scope, query: string, limit = 5): Promise<FoundCustomer[] | null> {
+  if (query.trim().length < 3) return [];
+  const supabase = createAdminClient();
+  const { data, error } = await supabase.rpc("find_customer", {
+    p_store_ids: scopeIds(scope),
+    p_query: query.trim(),
+    p_limit: Math.min(limit, 10),
+  });
+  if (missingRpc(error, "find_customer", "0027")) return null;
+  if (error) throw new Error(`find_customer failed: ${error.message}`);
+  type Row = {
+    customer_id: string; name: string; pet: string | null; store_id: StoreId; visits: number; ltv: number;
+    segment: string | null; first_visit_at: string | null; last_visit_at: string | null; grooming_cycle_days: number | null;
+  };
+  return ((data ?? []) as unknown as Row[]).map((r) => ({
+    customerId: r.customer_id, name: r.name, pet: r.pet, store: r.store_id, visits: Number(r.visits),
+    ltv: Number(r.ltv), segment: r.segment, firstVisit: r.first_visit_at, lastVisit: r.last_visit_at,
+    cycleDays: r.grooming_cycle_days == null ? null : Number(r.grooming_cycle_days),
+  }));
+}
+
+// Full per-customer drill: header + scoped totals + visit timeline + groomer
+// split + top products, one jsonb envelope from the RPC. Totals are computed
+// from SCOPED lines in SQL — a manager never sees another store's spend.
+export async function getCustomerProfileById(scope: Scope, customerId: number): Promise<Record<string, unknown> | null> {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase.rpc("customer_profile", {
+    p_store_ids: scopeIds(scope),
+    p_customer_id: customerId,
+  });
+  if (missingRpc(error, "customer_profile", "0027")) return null;
+  if (error) throw new Error(`customer_profile failed: ${error.message}`);
+  return (data ?? { error: "no data" }) as Record<string, unknown>;
+}
+
+export type WatchlistCustomer = {
+  customerId: string; name: string; pet: string | null; store: StoreId; visits: number; ltv: number;
+  segment: string; daysSinceLastVisit: number; cycleDays: number | null; overdueRatio: number | null;
+};
+
+// Cadence-slip watchlist: customers overdue against their OWN historical cycle
+// (grooming_cycle_days, migration 0012), with arbitrary thresholds — the sharp
+// version of the blunt 60-day segment cutoffs. Pure filter over customers, no
+// RPC needed; admin client because results carry names.
+export async function getCustomerWatchlist(
+  scope: Scope,
+  opts: { minDaysSince?: number; minLtv?: number; segment?: string; overdueOnly?: boolean; top?: number } = {},
+): Promise<WatchlistCustomer[]> {
+  const supabase = createAdminClient();
+  let q = supabase
+    .from("customers")
+    .select("id, store_id, name, pet, visits, ltv, segment, last_visit_at, grooming_cycle_days")
+    .gte("visits", 2)
+    .neq("name", "—")
+    .order("ltv", { ascending: false })
+    .limit(400);
+  if (scope !== "all") q = q.eq("store_id", scope);
+  if (opts.minLtv) q = q.gte("ltv", opts.minLtv);
+  if (opts.segment) q = q.eq("segment", opts.segment);
+  const { data, error } = await q;
+  if (error) throw new Error(`watchlist read failed: ${error.message}`);
+  type Row = {
+    id: string; store_id: StoreId; name: string; pet: string | null; visits: number; ltv: number;
+    segment: string; last_visit_at: string; grooming_cycle_days: number | null;
+  };
+  const today = Date.now();
+  const rows = ((data ?? []) as unknown as Row[]).map((r) => {
+    const daysSince = Math.max(0, Math.round((today - new Date(`${r.last_visit_at}T00:00:00Z`).getTime()) / 86400000));
+    const cycle = r.grooming_cycle_days == null || Number(r.grooming_cycle_days) <= 0 ? null : Number(r.grooming_cycle_days);
+    return {
+      customerId: r.id, name: r.name, pet: r.pet, store: r.store_id, visits: r.visits, ltv: Number(r.ltv),
+      segment: r.segment, daysSinceLastVisit: daysSince, cycleDays: cycle,
+      overdueRatio: cycle ? Math.round((daysSince / cycle) * 100) / 100 : null,
+    };
+  });
+  const minDays = opts.minDaysSince ?? 0;
+  const overdueOnly = opts.overdueOnly ?? true;
+  return rows
+    .filter((r) => r.daysSinceLastVisit >= minDays)
+    .filter((r) => !overdueOnly || (r.overdueRatio != null && r.overdueRatio >= 1.2))
+    .sort((a, b) => (b.overdueRatio ?? 0) * b.ltv - (a.overdueRatio ?? 0) * a.ltv)
+    .slice(0, Math.min(opts.top ?? 20, 50));
+}
+
+export type GroomerRetentionRow = {
+  groomer: string; store: StoreId; eligibleVisits: number; returned: number; returnRate: number | null;
+  sameGroomerReturns: number; sameGroomerRate: number | null; censored: boolean;
+};
+
+// Groomer-ATTRIBUTED retention (unlike team_performance's lifetime rebook):
+// did this groomer's customers come back within 90 days? Right-censored in the
+// RPC; rates come back null when eligible volume is too thin to trust.
+export async function getGroomerRetention(scope: Scope, start: string, end: string): Promise<GroomerRetentionRow[] | null> {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase.rpc("groomer_retention", {
+    p_store_ids: scopeIds(scope), p_start: start, p_end: end,
+  });
+  if (missingRpc(error, "groomer_retention", "0028")) return null;
+  if (error) throw new Error(`groomer_retention failed: ${error.message}`);
+  type Row = {
+    groomer: string; store_id: StoreId; eligible_visits: number; returned: number; return_rate: number | null;
+    same_groomer_returns: number; same_groomer_rate: number | null; censored: boolean;
+  };
+  const MIN_ELIGIBLE = 20;
+  return ((data ?? []) as unknown as Row[]).map((r) => ({
+    groomer: r.groomer, store: r.store_id, eligibleVisits: Number(r.eligible_visits), returned: Number(r.returned),
+    returnRate: Number(r.eligible_visits) >= MIN_ELIGIBLE && r.return_rate != null ? Number(r.return_rate) : null,
+    sameGroomerReturns: Number(r.same_groomer_returns),
+    sameGroomerRate: Number(r.eligible_visits) >= MIN_ELIGIBLE && r.same_groomer_rate != null ? Number(r.same_groomer_rate) : null,
+    censored: r.censored,
+  }));
+}
+
+export type HeatmapCell = { store: StoreId; dow: number; hour: number; tickets: number; serviceTickets: number; revenue: number };
+
+export async function getDemandHeatmap(scope: Scope, start: string, end: string): Promise<HeatmapCell[] | null> {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase.rpc("demand_heatmap", {
+    p_store_ids: scopeIds(scope), p_start: start, p_end: end,
+  });
+  if (missingRpc(error, "demand_heatmap", "0028")) return null;
+  if (error) throw new Error(`demand_heatmap failed: ${error.message}`);
+  type Row = { store_id: StoreId; dow: number; hour: number; tickets: number; service_tickets: number; revenue: number };
+  return ((data ?? []) as unknown as Row[]).map((r) => ({
+    store: r.store_id, dow: Number(r.dow), hour: Number(r.hour),
+    tickets: Number(r.tickets), serviceTickets: Number(r.service_tickets), revenue: Number(r.revenue),
+  }));
+}
+
+export type DiscountBucket = { bucket: string; discountedLines: number; discountTotal: number; gross: number; discountPct: number | null };
+
+export async function getDiscountAnalysis(
+  scope: Scope, start: string, end: string, groupBy: string,
+): Promise<DiscountBucket[] | null> {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase.rpc("discount_analysis", {
+    p_store_ids: scopeIds(scope), p_start: start, p_end: end, p_group_by: groupBy,
+  });
+  if (missingRpc(error, "discount_analysis", "0028")) return null;
+  if (error) throw new Error(`discount_analysis failed: ${error.message}`);
+  type Row = { bucket: string; discounted_lines: number; discount_total: number; gross: number; discount_pct: number | null };
+  return ((data ?? []) as unknown as Row[]).map((r) => ({
+    bucket: r.bucket, discountedLines: Number(r.discounted_lines), discountTotal: Number(r.discount_total),
+    gross: Number(r.gross), discountPct: r.discount_pct == null ? null : Number(r.discount_pct),
+  }));
+}
+
+export type GroomerMonthRow = { month: string; groomer: string; store: StoreId; revenue: number; appts: number };
+
+export async function getGroomerMonthlyRevenue(scope: Scope, start: string, end: string): Promise<GroomerMonthRow[] | null> {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase.rpc("groomer_monthly_revenue", {
+    p_store_ids: scopeIds(scope), p_start: start, p_end: end,
+  });
+  if (missingRpc(error, "groomer_monthly_revenue", "0028")) return null;
+  if (error) throw new Error(`groomer_monthly_revenue failed: ${error.message}`);
+  type Row = { month: string; groomer: string; store_id: StoreId; revenue: number; appts: number };
+  return ((data ?? []) as unknown as Row[]).map((r) => ({
+    month: r.month, groomer: r.groomer, store: r.store_id, revenue: Number(r.revenue), appts: Number(r.appts),
+  }));
+}
+
+// Daily revenue buckets for an arbitrary window via the existing metrics_series
+// RPC (bucketed + summed in the DB, so no row-cap risk). Weekly bucketing is
+// done by the caller — the AI's revenue_series tool.
+export async function getDailyRevenueSeries(
+  scope: Scope, start: string, endExclusive: string,
+): Promise<{ date: string; revenue: number }[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("metrics_series", {
+    p_store_ids: scopeIds(scope), p_start: start, p_end: endExclusive, p_monthly: false,
+  });
+  if (error) throw new Error(`metrics_series failed: ${error.message}`);
+  type Row = { bucket: string; revenue: number };
+  return ((data ?? []) as unknown as Row[]).map((r) => ({ date: r.bucket.slice(0, 10), revenue: Number(r.revenue) }));
+}
+
+// Product revenue WITHOUT the dashboard's 5-per-line presentation slice — the
+// AI's product_performance advertises top 5–40 and must honor it. (The page's
+// getRevenueByService keeps its top-5+5 by design.)
+export async function getProductRevenueFull(
+  scope: Scope, month: MonthValue, top: number,
+): Promise<{ name: string; value: number; line: ServiceLine; units: number }[]> {
+  const supabase = await createClient();
+  const range = monthRange(month);
+  const { data, error } = await supabase.rpc("product_revenue_by_name", {
+    p_store_ids: scopeIds(scope), p_start: range?.start ?? null, p_end: range?.end ?? null,
+  });
+  if (error) throw new Error(`product_revenue_by_name failed: ${error.message}`);
+  type Row = { name: string; is_service: boolean; revenue: number; units: number };
+  return ((data ?? []) as unknown as Row[])
+    .map((r) => ({ name: r.name, value: Number(r.revenue), line: (r.is_service ? "Grooming" : "Retail") as ServiceLine, units: Number(r.units) }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, Math.min(top, 40));
 }
