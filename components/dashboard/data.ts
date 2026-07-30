@@ -307,6 +307,29 @@ export const MONTH_OPTIONS: { value: MonthValue; label: string }[] = [
   ...YEAR_KEYS.map((y) => ({ value: y as MonthValue, label: `${y} · full year` })),
 ];
 
+// The live month dropdown: a PURE function of the caller-supplied date, so the
+// list rolls forward every month without putting Date at module scope (the
+// server resolves "today" once — see currentMonthOptions in data.server.ts —
+// and passes the list down, the same pattern as the day-picker bounds). The
+// static MONTH_OPTIONS above stays as the deterministic fallback/labels table.
+export const DATA_START_YEAR = 2024; // FranPOS history begins 2024-01-01
+export function monthOptionsFor(todayIso: string): { value: MonthValue; label: string }[] {
+  const [ty, tm] = todayIso.split("-").map(Number);
+  const months: { value: MonthValue; label: string }[] = [];
+  // Trailing 12 months, newest first, INCLUDING the current (open) month —
+  // POS data syncs twice daily, so the running month is real and viewable.
+  for (let i = 0; i < 12; i++) {
+    const m0 = tm - 1 - i;
+    const y = ty + Math.floor(m0 / 12);
+    const m = ((m0 % 12) + 12) % 12;
+    if (y < DATA_START_YEAR) break;
+    months.push({ value: `${y}-${String(m + 1).padStart(2, "0")}` as MonthValue, label: `${ABBR[m]} ${y}` });
+  }
+  const years: { value: MonthValue; label: string }[] = [];
+  for (let y = ty - 1; y >= DATA_START_YEAR; y--) years.push({ value: String(y) as MonthValue, label: `${y} · full year` });
+  return [{ value: "all", label: "Last 12 months" }, ...months, ...years];
+}
+
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 const ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -333,7 +356,12 @@ export function parseScope(v?: string | null): Scope {
 }
 export function parseMonth(v?: string | null): MonthValue {
   if (!v) return "all";
-  if (MONTH_KEYS.includes(v) || YEAR_KEYS.includes(v)) return v;
+  // Format-validated, not list-validated: the old MONTH_KEYS membership check
+  // silently clamped any month newer than the hardcoded table to "all" (July
+  // 2026 was unselectable while its data sat synced in the DB). Whether a
+  // month actually has rows is the data layer's answer, not this function's.
+  if (/^\d{4}-(0[1-9]|1[0-2])$/.test(v) && v >= `${DATA_START_YEAR}-01`) return v;
+  if (/^\d{4}$/.test(v) && Number(v) >= DATA_START_YEAR && Number(v) <= 2099) return v;
   return isDayValue(v) ? v : "all";
 }
 export function scopeLabel(s: Scope) {
@@ -342,7 +370,12 @@ export function scopeLabel(s: Scope) {
 export function monthLabel(m: MonthValue) {
   const known = MONTH_OPTIONS.find((o) => o.value === m);
   if (known) return known.label;
-  return isDayValue(m) ? dayLabel(m) : "Last 12 months";
+  if (isDayValue(m)) return dayLabel(m);
+  // Any valid month/year beyond the static table labels deterministically —
+  // same fixed ABBR table, so server and client strings can never diverge.
+  if (/^\d{4}-\d{2}$/.test(m)) return `${ABBR[Number(m.slice(5, 7)) - 1]} ${m.slice(0, 4)}`;
+  if (/^\d{4}$/.test(m)) return `${m} · full year`;
+  return "Last 12 months";
 }
 function monthIndex(m: MonthValue) {
   return m === "all" ? -1 : MONTH_KEYS.indexOf(m);

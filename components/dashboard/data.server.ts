@@ -10,6 +10,7 @@ import {
   STORE_OPTIONS,
   scopeLabel,
   groomerShare,
+  monthOptionsFor,
   COMPARE_METRICS,
   COST_BUCKETS,
   type CompareMode,
@@ -64,6 +65,13 @@ const scopeIds = (scope: Scope): StoreId[] => (scope === "all" ? stores.map((s) 
 
 const isYear = (month: MonthValue) => /^\d{4}$/.test(month);
 const isDay = (month: MonthValue) => /^\d{4}-\d{2}-\d{2}$/.test(month);
+
+// The month dropdown's live option list, resolved once per request in NY time
+// (module-scope Date would let server and client disagree across midnight —
+// same pattern as compareBounds below).
+export function currentMonthOptions() {
+  return monthOptionsFor(nyToday());
+}
 
 function monthRange(month: MonthValue): { start: string; end: string } | null {
   const pad = (n: number) => String(n).padStart(2, "0");

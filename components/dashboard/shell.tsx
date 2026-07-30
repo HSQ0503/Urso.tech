@@ -6,13 +6,13 @@ import Image from "next/image";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   STORE_OPTIONS,
-  MONTH_OPTIONS,
   parseScope,
   parseMonth,
   scopeLabel,
   monthLabel,
   isDayValue,
   type StoreId,
+  type MonthValue,
 } from "@/components/dashboard/data";
 import type { Role } from "@/lib/auth";
 import type { Locale } from "@/lib/i18n";
@@ -117,6 +117,10 @@ type ShellProps = {
   memberSince: string;
   locale: Locale;
   dayBounds: DayBounds;
+  // Resolved server-side per request (currentMonthOptions) so the dropdown
+  // rolls forward every month — the hardcoded MONTH_OPTIONS table froze at
+  // its authoring month and made the current month unselectable.
+  monthOptions: { value: MonthValue; label: string }[];
   children: ReactNode;
 };
 type ChromeProps = Omit<ShellProps, "locale">;
@@ -136,7 +140,7 @@ function ShellLive({ children, ...rest }: ChromeProps) {
   return <ShellChrome qs={qs} {...rest}>{children}</ShellChrome>;
 }
 
-function ShellChrome({ qs, role, storeId, clientName, userName, email, streak, memberSince, dayBounds, children }: ChromeProps & { qs: string }) {
+function ShellChrome({ qs, role, storeId, clientName, userName, email, streak, memberSince, dayBounds, monthOptions, children }: ChromeProps & { qs: string }) {
   const pathname = usePathname();
   const t = useT();
   const [accountOpen, setAccountOpen] = useState(false);
@@ -250,7 +254,7 @@ function ShellChrome({ qs, role, storeId, clientName, userName, email, streak, m
             <span className="truncate text-ink-dim">{t(current)}</span>
           </div>
           <div className="flex items-center gap-2">
-            <FilterBar qs={qs} pathname={pathname} lockedStore={lockedStore} dayBounds={dayBounds} />
+            <FilterBar qs={qs} pathname={pathname} lockedStore={lockedStore} dayBounds={dayBounds} monthOptions={monthOptions} />
             <LangToggle />
           </div>
         </header>
@@ -340,7 +344,7 @@ function StreakDays({ streak }: { streak: number }) {
 // ---- Global filter (Store + Month), URL-driven -----------------------------
 // Managers have their store pinned (shown as a static label); everyone else
 // gets the store dropdown.
-function FilterBar({ qs, pathname, lockedStore, dayBounds }: { qs: string; pathname: string; lockedStore: StoreId | null; dayBounds: DayBounds }) {
+function FilterBar({ qs, pathname, lockedStore, dayBounds, monthOptions }: { qs: string; pathname: string; lockedStore: StoreId | null; dayBounds: DayBounds; monthOptions: { value: MonthValue; label: string }[] }) {
   const router = useRouter();
   const t = useT();
   const params = new URLSearchParams(qs);
@@ -389,7 +393,7 @@ function FilterBar({ qs, pathname, lockedStore, dayBounds }: { qs: string; pathn
           // A picked day isn't in MONTH_OPTIONS, so the pill needs the label
           // spelled out or it would fall back to "Last 12 months".
           currentLabel={monthLabel(month)}
-          options={MONTH_OPTIONS}
+          options={monthOptions}
           onChange={(v) => setParam("month", v, "all")}
           day={{
             label: t("Specific date"),
