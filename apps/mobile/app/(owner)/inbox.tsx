@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   AppState,
   ActivityIndicator,
@@ -9,7 +9,6 @@ import {
   Text,
   View,
 } from "react-native";
-import { useFocusEffect, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   fmtCallDuration,
@@ -20,7 +19,8 @@ import {
   type Thread,
   type ThreadKind,
 } from "@urso/types";
-import { owner, SessionExpiredError } from "@/api";
+import { useThreads } from "@/queries";
+import { noticeFrom, usePullToRefresh, useRefetchOnFocus } from "@/query";
 import { color, font, HIT, radius, space, type } from "@/theme";
 
 // The shared inbox — every phone number the shop has ever texted or been called
@@ -225,50 +225,21 @@ function ThreadRow({ row }: { row: Extract<Row, { kind: "thread" }> }) {
 }
 
 export default function InboxScreen(): React.ReactElement {
-  const router = useRouter();
   const insets = useSafeAreaInsets();
 
-  const [threads, setThreads] = useState<Thread[] | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-
-  const load = useCallback(
-    async (mode: "initial" | "refresh") => {
-      if (mode === "refresh") setRefreshing(true);
-      else setLoading(true);
-      try {
-        const result = await owner.threads();
-        if (result.ok) {
-          setThreads(result.data);
-          setNotice(null);
-        } else {
-          // A refusal keeps whatever is already on screen. The notice is the
-          // server's sentence, written for whoever is reading it, and is shown
-          // exactly as sent.
-          setNotice(result.notice);
-        }
-      } catch (error) {
-        if (error instanceof SessionExpiredError) {
-          router.replace("/login");
-          return;
-        }
-        setNotice("Something went wrong. Pull down to try again.");
-      } finally {
-        setLoading(false);
-        setRefreshing(false);
-      }
-    },
-    [router],
-  );
+  // A refusal keeps whatever is already on screen (query.data survives an
+  // error state), and the notice is the server's sentence, written for whoever
+  // is reading it, shown exactly as sent. Session death routes to /login in
+  // the query cache's onError, not here.
+  const threadsQuery = useThreads();
 
   // Refetch on focus: a reply sent from anywhere else should not leave a thread
   // sitting in "Waiting on you".
-  useFocusEffect(
-    useCallback(() => {
-      void load("initial");
-    }, [load]),
-  );
+  useRefetchOnFocus(threadsQuery.refetch);
+  const { refreshing, onRefresh } = usePullToRefresh(threadsQuery.refetch);
+
+  const threads = threadsQuery.data ?? null;
+  const notice = noticeFrom(threadsQuery.error);
 
   // Relative labels are computed against a REFERENCE INSTANT, and capturing it
   // once per fetch meant an app left open past ET midnight kept calling
@@ -305,7 +276,7 @@ export default function InboxScreen(): React.ReactElement {
     </View>
   );
 
-  if (loading && threads === null) {
+  if (threadsQuery.isPending) {
     return (
       <View style={styles.screen}>
         {header}
@@ -326,22 +297,27 @@ export default function InboxScreen(): React.ReactElement {
           <View style={styles.notice}>
             <Text style={styles.noticeText}>{notice ?? "The inbox isn't available."}</Text>
           </View>
-          {/* mode "initial", not "refresh": refresh drives the pull-to-refresh
-              spinner, which is not mounted on this branch — so the button sat
-              visually dead for the whole request and invited a second tap. */}
+          {/* In practice this tap never shows its busy state: a refetch with
+              no data resets the query to pending (v5 fetchState), so the
+              isPending branch above takes over with the full-screen spinner on
+              the very next render — the same switch the hand-rolled version
+              made via setLoading(true). The isFetching guard is a one-frame
+              belt-and-braces against a double tap, as `loading` was before. */}
           <Pressable
             accessibilityRole="button"
-            disabled={loading}
+            disabled={threadsQuery.isFetching}
             onPress={() => {
-              void load("initial");
+              void threadsQuery.refetch();
             }}
             style={({ pressed }) => [
               styles.button,
               pressed && styles.pressed,
-              loading && styles.buttonBusy,
+              threadsQuery.isFetching && styles.buttonBusy,
             ]}
           >
-            <Text style={styles.buttonText}>{loading ? "Trying…" : "Try again"}</Text>
+            <Text style={styles.buttonText}>
+              {threadsQuery.isFetching ? "Trying…" : "Try again"}
+            </Text>
           </Pressable>
         </View>
       </View>
@@ -362,9 +338,7 @@ export default function InboxScreen(): React.ReactElement {
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
-            onRefresh={() => {
-              void load("refresh");
-            }}
+            onRefresh={onRefresh}
             tintColor={color.brand}
             colors={[color.brand]}
           />

@@ -36,7 +36,11 @@ import { getAdminToken } from "./session";
 // real API rather than silently at localhost.
 const API_BASE: string = process.env.EXPO_PUBLIC_API_BASE ?? "https://urso.ws";
 
-export type ApiResult<T> = { ok: true; data: T } | { ok: false; notice: string };
+// `transient` marks the two transport failures (no connection, unparseable
+// response) — the only refusals it is ever correct to retry. A server refusal
+// is a sentence written for the reader and retrying it would just repeat the
+// sentence; the query layer keys its retry policy off this flag.
+export type ApiResult<T> = { ok: true; data: T } | { ok: false; notice: string; transient?: true };
 
 export class SessionExpiredError extends Error {
   constructor() {
@@ -73,7 +77,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<A
   } catch {
     // No signal in a yard is the normal case, not an error state. Callers show
     // cached data and this notice rather than an alarming failure screen.
-    return { ok: false, notice: "No connection. Showing the last update." };
+    return { ok: false, notice: "No connection. Showing the last update.", transient: true };
   }
 
   // 401 means the Supabase session is gone (expired, revoked, account
@@ -88,7 +92,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<A
   try {
     payload = await res.json();
   } catch {
-    return { ok: false, notice: "The server sent something unexpected." };
+    return { ok: false, notice: "The server sent something unexpected.", transient: true };
   }
 
   const body = payload as { ok?: boolean; data?: T; notice?: string } | null;

@@ -22,7 +22,7 @@ import {
   Text,
   View,
 } from "react-native";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useFocusEffect } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   etLocalToIso,
@@ -33,7 +33,8 @@ import {
   type Job,
   type JobStatus,
 } from "@urso/types";
-import { owner, SessionExpiredError } from "@/api";
+import { useCrews, useScheduleBoard, useUnscheduled } from "@/queries";
+import { noticeFrom, usePullToRefresh, useRefetchOnFocus } from "@/query";
 import { color, HIT, radius, space, type } from "@/theme";
 
 // Statuses where the green actually means "this is happening / happened".
@@ -188,78 +189,59 @@ function TrayRow({ job }: { job: Job }) {
 }
 
 export default function ScheduleScreen(): React.ReactElement {
-  const router = useRouter();
   const insets = useSafeAreaInsets();
 
   const [win, setWin] = useState<Window>(buildWindow);
   const [selectedKey, setSelectedKey] = useState<string>(() => win.days[0].key);
 
-  const [board, setBoard] = useState<BoardJob[] | null>(null);
-  const [tray, setTray] = useState<Job[] | null>(null);
-  const [crewNames, setCrewNames] = useState<Map<string, string>>(() => new Map());
-  const [notices, setNotices] = useState<string[]>([]);
+  // Recomputed on every focus and every pull so an app left open overnight
+  // rolls onto the new day the moment it is picked back up. The board's query
+  // key carries the window, so a rolled window fetches itself.
+  const rollWindow = useCallback(() => {
+    const next = buildWindow();
+    setWin(next);
+    setSelectedKey((key) => (next.days.some((d) => d.key === key) ? key : next.days[0].key));
+  }, []);
+  useFocusEffect(rollWindow);
 
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  // One trip each, in parallel: the board covers the whole week, so switching
+  // days afterwards is instant and offline-friendly.
+  //
+  // The board route takes (from, days) and defaults days to 7 — `to` is part
+  // of the client signature but the server derives the end itself. DAYS is 7
+  // for exactly that reason: the strip and the fetched window are the same
+  // seven days, not two windows that drift apart.
+  const boardQuery = useScheduleBoard(win.fromIso, win.toIso);
+  const trayQuery = useUnscheduled();
+  const crewsQuery = useCrews();
 
-  const load = useCallback(
-    async (mode: "initial" | "refresh") => {
-      if (mode === "refresh") setRefreshing(true);
-      else setLoading(true);
+  useRefetchOnFocus(boardQuery.refetch);
+  useRefetchOnFocus(trayQuery.refetch);
+  useRefetchOnFocus(crewsQuery.refetch);
 
-      // Recomputed every load so an app left open overnight rolls onto the new
-      // day the moment it is pulled to refresh.
-      const next = buildWindow();
-      setWin(next);
-      setSelectedKey((key) => (next.days.some((d) => d.key === key) ? key : next.days[0].key));
+  const { refreshing, onRefresh } = usePullToRefresh(() => {
+    rollWindow();
+    return Promise.all([boardQuery.refetch(), trayQuery.refetch(), crewsQuery.refetch()]);
+  });
 
-      try {
-        // One trip each, in parallel: the board covers the whole week, so
-        // switching days afterwards is instant and offline-friendly.
-        //
-        // The board route takes (from, days) and defaults days to 7 — `to` is
-        // part of the client signature but the server derives the end itself.
-        // DAYS is 7 for exactly that reason: the strip and the fetched window
-        // are the same seven days, not two windows that drift apart.
-        const [boardRes, trayRes, crewRes] = await Promise.all([
-          owner.scheduleBoard(next.fromIso, next.toIso),
-          owner.unscheduled(),
-          owner.crews(),
-        ]);
-
-        // Each read is permission-gated on its own, so one refusal must not
-        // discard the other two answers. Whatever came back is kept; every
-        // refusal is collected and shown verbatim.
-        const failures: string[] = [];
-        if (boardRes.ok) setBoard(toBoardJobs(boardRes.data));
-        else failures.push(boardRes.notice);
-
-        if (trayRes.ok) setTray(trayRes.data);
-        else failures.push(trayRes.notice);
-
-        if (crewRes.ok) setCrewNames(new Map(crewRes.data.map((c) => [c.id, c.name])));
-        else failures.push(crewRes.notice);
-
-        setNotices([...new Set(failures)]);
-      } catch (error) {
-        if (error instanceof SessionExpiredError) {
-          router.replace("/login");
-          return;
-        }
-        setNotices(["Something went wrong. Pull down to try again."]);
-      } finally {
-        setLoading(false);
-        setRefreshing(false);
-      }
-    },
-    [router],
+  // Each read is permission-gated on its own, so one refusal must not discard
+  // the other two answers. Whatever came back stays on screen (query data
+  // survives an error state); every refusal is collected and shown verbatim.
+  const board = useMemo(
+    () => (boardQuery.data === undefined ? null : toBoardJobs(boardQuery.data)),
+    [boardQuery.data],
   );
-
-  useFocusEffect(
-    useCallback(() => {
-      void load("initial");
-    }, [load]),
+  const tray = trayQuery.data ?? null;
+  const crewNames = useMemo(
+    () => new Map<string, string>((crewsQuery.data ?? []).map((c) => [c.id, c.name])),
+    [crewsQuery.data],
   );
+  const notices = useMemo(() => {
+    const failures = [boardQuery.error, trayQuery.error, crewsQuery.error]
+      .map(noticeFrom)
+      .filter((notice): notice is string => notice !== null);
+    return [...new Set(failures)];
+  }, [boardQuery.error, trayQuery.error, crewsQuery.error]);
 
   const countsByDay = useMemo(() => {
     const counts = new Map<string, number>();
@@ -318,6 +300,10 @@ export default function ScheduleScreen(): React.ReactElement {
   }, [board, tray, selectedKey, crewNames]);
 
   const selected = win.days.find((d) => d.key === selectedKey) ?? win.days[0];
+  // "Loading" in the old sense — any of the three reads in flight. isPending
+  // alone would drop the spinner during the dead screen's Try again, where the
+  // queries sit in error state while fetching again.
+  const loading = boardQuery.isFetching || trayQuery.isFetching || crewsQuery.isFetching;
   const showSpinner = loading && board === null && tray === null;
   const dead = !loading && board === null && tray === null;
 
@@ -391,7 +377,10 @@ export default function ScheduleScreen(): React.ReactElement {
           <Pressable
             accessibilityRole="button"
             onPress={() => {
-              void load("initial");
+              rollWindow();
+              void boardQuery.refetch();
+              void trayQuery.refetch();
+              void crewsQuery.refetch();
             }}
             style={({ pressed }) => [styles.button, pressed && styles.pressedSurface]}
           >
@@ -413,9 +402,7 @@ export default function ScheduleScreen(): React.ReactElement {
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
-            onRefresh={() => {
-              void load("refresh");
-            }}
+            onRefresh={onRefresh}
             tintColor={color.brand}
             colors={[color.brand]}
           />

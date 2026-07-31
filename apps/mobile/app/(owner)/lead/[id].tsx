@@ -9,7 +9,7 @@
 // consulted — a phone that has travelled would otherwise show an appointment at
 // the wrong hour, which on this project already cost a missed visit once.
 
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import {
   ActivityIndicator,
   Linking,
@@ -31,24 +31,10 @@ import {
   STATUS_LABEL,
   type Call,
   type Lead,
-  type LeadEvent,
 } from "@urso/types";
-import { owner, SessionExpiredError, type ApiResult } from "@/api";
+import { useLead, useLeadCalls, useLeadEvents } from "@/queries";
+import { noticeFrom, usePullToRefresh } from "@/query";
 import { color, HIT, radius, space, type } from "@/theme";
-
-// A 401 anywhere means the session is gone; the api layer has already cleared
-// it, so the only thing left is to get out of the authenticated stack.
-async function guard<T>(action: () => Promise<ApiResult<T>>): Promise<ApiResult<T>> {
-  try {
-    return await action();
-  } catch (err) {
-    if (err instanceof SessionExpiredError) {
-      router.replace("/login");
-      return { ok: false, notice: "Sign in again." };
-    }
-    return { ok: false, notice: "That didn't go through — try again." };
-  }
-}
 
 function Notice({ text }: { text: string | null }) {
   if (!text) return null;
@@ -94,64 +80,33 @@ export default function LeadScreen(): React.ReactElement {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
 
-  const [lead, setLead] = useState<Lead | null>(null);
-  const [events, setEvents] = useState<LeadEvent[]>([]);
-  const [calls, setCalls] = useState<Call[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [eventsNotice, setEventsNotice] = useState<string | null>(null);
-  const [callsNotice, setCallsNotice] = useState<string | null>(null);
-  const [actionNotice, setActionNotice] = useState<string | null>(null);
-
   // Three reads, one round trip's worth of waiting. The lead is the only one
   // whose refusal blocks the screen — a missing activity trail is a thinner
   // page, not a broken one. Each refusal still gets said, in the section it
-  // belongs to and in the server's own words.
-  const load = useCallback(async () => {
-    const [leadRes, eventsRes, callsRes] = await Promise.all([
-      guard(() => owner.lead(id)),
-      guard(() => owner.leadEvents(id)),
-      guard(() => owner.leadCalls(id)),
-    ]);
+  // belongs to and in the server's own words, while whatever loaded before
+  // stays up (query.data survives an error state). Session death routes to
+  // /login in the query cache's onError, not here.
+  // No focus refetch here, deliberately: the original loaded on mount/id-change
+  // only, and this is a kept-mounted hidden tab — adding useRefetchOnFocus made
+  // every return to the screen fire three requests and let the lead mutate in
+  // place, which the hand-rolled version never did. Pull-to-refresh is the
+  // reader's explicit refresh, same as before.
+  const leadQuery = useLead(id);
+  const eventsQuery = useLeadEvents(id);
+  const callsQuery = useLeadCalls(id);
+  const { refreshing, onRefresh } = usePullToRefresh(() =>
+    Promise.all([leadQuery.refetch(), eventsQuery.refetch(), callsQuery.refetch()]),
+  );
 
-    if (leadRes.ok) {
-      setLead(leadRes.data ?? null);
-      setNotice(null);
-    } else {
-      setNotice(leadRes.notice);
-    }
+  const lead = leadQuery.data ?? null;
+  const events = eventsQuery.data ?? [];
+  const calls = callsQuery.data ?? [];
+  const notice = noticeFrom(leadQuery.error);
+  const eventsNotice = noticeFrom(eventsQuery.error);
+  const callsNotice = noticeFrom(callsQuery.error);
+  const [actionNotice, setActionNotice] = useState<string | null>(null);
 
-    if (eventsRes.ok) {
-      setEvents(eventsRes.data ?? []);
-      setEventsNotice(null);
-    } else {
-      setEventsNotice(eventsRes.notice);
-    }
-
-    if (callsRes.ok) {
-      setCalls(callsRes.data ?? []);
-      setCallsNotice(null);
-    } else {
-      setCallsNotice(callsRes.notice);
-    }
-  }, [id]);
-
-  useEffect(() => {
-    let live = true;
-    setLoading(true);
-    void load().finally(() => {
-      if (live) setLoading(false);
-    });
-    return () => {
-      live = false;
-    };
-  }, [load]);
-
-  const onRefresh = useCallback(() => {
-    setRefreshing(true);
-    void load().finally(() => setRefreshing(false));
-  }, [load]);
+  const loading = leadQuery.isPending || eventsQuery.isPending || callsQuery.isPending;
 
   const open = (url: string) => {
     Linking.openURL(url).catch(() => setActionNotice("This phone couldn't open that."));

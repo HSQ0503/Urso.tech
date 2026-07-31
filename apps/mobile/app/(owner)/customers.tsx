@@ -9,7 +9,7 @@
 // Money is integer cents from the server, rendered with fmtMoney. Nothing here
 // divides, rounds, or adds — the figures are exactly what the API returned.
 
-import { useCallback, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -19,10 +19,10 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { useFocusEffect, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { fmtEt, fmtMoney, fmtPhone, type CustomerSummary } from "@urso/types";
-import { owner, SessionExpiredError } from "@/api";
+import { useCustomers } from "@/queries";
+import { noticeFrom, usePullToRefresh, useRefetchOnFocus } from "@/query";
 import { color, font, HIT, radius, space, type } from "@/theme";
 
 // Name matches on plain text; phone matches on digits, so "407" finds a number
@@ -82,48 +82,19 @@ function CustomerRow({ customer }: { customer: CustomerSummary }) {
 }
 
 export default function CustomersScreen(): React.ReactElement {
-  const router = useRouter();
   const insets = useSafeAreaInsets();
 
-  const [customers, setCustomers] = useState<CustomerSummary[] | null>(null);
+  // Refusal semantics carry over from the hand-rolled version: an error keeps
+  // the last-good list on screen (query.data survives an error state) and the
+  // sentence shows in the notice banner. Session death routes to /login in the
+  // query cache's onError, not here.
+  const customersQuery = useCustomers();
+  useRefetchOnFocus(customersQuery.refetch);
+  const { refreshing, onRefresh } = usePullToRefresh(customersQuery.refetch);
+
+  const customers = customersQuery.data ?? null;
+  const notice = noticeFrom(customersQuery.error);
   const [query, setQuery] = useState("");
-  const [notice, setNotice] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-
-  const load = useCallback(
-    async (mode: "initial" | "refresh") => {
-      if (mode === "refresh") setRefreshing(true);
-      else setLoading(true);
-      try {
-        const result = await owner.customers();
-        if (result.ok) {
-          setCustomers(result.data);
-          setNotice(null);
-        } else {
-          // Keep whatever list is already loaded; a refusal is a message, not a
-          // reason to empty the screen.
-          setNotice(result.notice);
-        }
-      } catch (error) {
-        if (error instanceof SessionExpiredError) {
-          router.replace("/login");
-          return;
-        }
-        setNotice("Something went wrong. Pull down to try again.");
-      } finally {
-        setLoading(false);
-        setRefreshing(false);
-      }
-    },
-    [router],
-  );
-
-  useFocusEffect(
-    useCallback(() => {
-      void load("initial");
-    }, [load]),
-  );
 
   const visible = useMemo(
     () => (customers ?? []).filter((customer) => matches(customer, query)),
@@ -131,7 +102,7 @@ export default function CustomersScreen(): React.ReactElement {
   );
 
   const searching = query.trim().length > 0;
-  const showSpinner = loading && customers === null;
+  const showSpinner = customersQuery.isPending;
 
   return (
     <View style={styles.screen}>
@@ -176,9 +147,7 @@ export default function CustomersScreen(): React.ReactElement {
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
-              onRefresh={() => {
-                void load("refresh");
-              }}
+              onRefresh={onRefresh}
               tintColor={color.brand}
               colors={[color.brand]}
             />

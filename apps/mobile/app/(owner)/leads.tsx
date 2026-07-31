@@ -9,7 +9,7 @@
 // minutesSince, which is a pure epoch difference and has no timezone in it;
 // anything that lands on a calendar day goes through fmtEt.
 
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -19,7 +19,7 @@ import {
   Text,
   View,
 } from "react-native";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   fmtEt,
@@ -29,7 +29,8 @@ import {
   STATUS_LABEL,
   type Lead,
 } from "@urso/types";
-import { owner, SessionExpiredError } from "@/api";
+import { useLeads } from "@/queries";
+import { noticeFrom, usePullToRefresh, useRefetchOnFocus } from "@/query";
 import { color, font, HIT, radius, space, type } from "@/theme";
 
 function ageLabel(iso: string): string {
@@ -82,45 +83,17 @@ export default function LeadsScreen(): React.ReactElement {
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
-  const [leads, setLeads] = useState<Lead[] | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-
-  const load = useCallback(
-    async (mode: "initial" | "refresh") => {
-      if (mode === "refresh") setRefreshing(true);
-      else setLoading(true);
-      try {
-        const result = await owner.leads();
-        if (result.ok) {
-          setLeads(result.data);
-          setNotice(null);
-        } else {
-          // A refusal leaves the list that is already on screen alone — a stale
-          // lead list still beats a blank one when the signal drops.
-          setNotice(result.notice);
-        }
-      } catch (error) {
-        if (error instanceof SessionExpiredError) {
-          router.replace("/login");
-          return;
-        }
-        setNotice("Something went wrong. Pull down to try again.");
-      } finally {
-        setLoading(false);
-        setRefreshing(false);
-      }
-    },
-    [router],
-  );
-
+  // A refusal leaves the list that is already on screen alone — a stale lead
+  // list still beats a blank one when the signal drops (leadsQuery.data
+  // survives an error state). Session death routes to /login in the query
+  // cache's onError, not here.
+  const leadsQuery = useLeads();
   // Refetch on focus so a status changed on the detail screen shows here.
-  useFocusEffect(
-    useCallback(() => {
-      void load("initial");
-    }, [load]),
-  );
+  useRefetchOnFocus(leadsQuery.refetch);
+  const { refreshing, onRefresh } = usePullToRefresh(leadsQuery.refetch);
+
+  const leads = leadsQuery.data ?? null;
+  const notice = noticeFrom(leadsQuery.error);
 
   const openLead = useCallback(
     (id: string) => {
@@ -129,7 +102,7 @@ export default function LeadsScreen(): React.ReactElement {
     [router],
   );
 
-  const showSpinner = loading && leads === null;
+  const showSpinner = leadsQuery.isPending;
 
   return (
     <View style={styles.screen}>
@@ -157,9 +130,7 @@ export default function LeadsScreen(): React.ReactElement {
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
-              onRefresh={() => {
-                void load("refresh");
-              }}
+              onRefresh={onRefresh}
               tintColor={color.brand}
               colors={[color.brand]}
             />

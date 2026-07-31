@@ -23,17 +23,9 @@ import {
 } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import {
-  fmtEt,
-  fmtMoney,
-  fmtPhone,
-  minutesSince,
-  SOURCE_LABEL,
-  type Agenda,
-  type Lead,
-  type Overview,
-} from "@urso/types";
-import { owner, SessionExpiredError } from "@/api";
+import { fmtEt, fmtMoney, fmtPhone, minutesSince, SOURCE_LABEL, type Lead } from "@urso/types";
+import { useAgenda, useOverview } from "@/queries";
+import { noticeFrom, usePullToRefresh, useRefetchOnFocus } from "@/query";
 import { getAdminProfile } from "@/session";
 import { color, font, HIT, radius, space, type } from "@/theme";
 
@@ -277,11 +269,6 @@ export default function TodayScreen(): React.ReactElement {
   const insets = useSafeAreaInsets();
 
   const [name, setName] = useState<string | null>(null);
-  const [overview, setOverview] = useState<Overview | null>(null);
-  const [agenda, setAgenda] = useState<Agenda | null>(null);
-  const [notices, setNotices] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [callFailedFor, setCallFailedFor] = useState<string | null>(null);
   // Bumped on a timer purely to re-render the waiting counters; value unused.
   const [, setTick] = useState<number>(0);
@@ -296,39 +283,30 @@ export default function TodayScreen(): React.ReactElement {
     };
   }, []);
 
-  const load = useCallback(
-    async (mode: "initial" | "refresh") => {
-      if (mode === "refresh") setRefreshing(true);
-      else setLoading(true);
-      try {
-        const [ov, ag] = await Promise.all([owner.overview(), owner.agenda()]);
-
-        // A refusal for one read must not blank the other. Whatever still
-        // answered stays on screen, and the server's own sentence explains the
-        // gap — those sentences are written for the reader, so they ship as-is.
-        const next: string[] = [];
-        if (ov.ok) setOverview(ov.data);
-        else next.push(ov.notice);
-        if (ag.ok) setAgenda(ag.data);
-        else if (!next.includes(ag.notice)) next.push(ag.notice);
-        setNotices(next);
-      } catch (error) {
-        if (error instanceof SessionExpiredError) {
-          router.replace("/login");
-          return;
-        }
-        setNotices(["Something went wrong. Pull down to try again."]);
-      } finally {
-        setLoading(false);
-        setRefreshing(false);
-      }
-    },
-    [router],
+  // Refetch on focus: a lead worked on the detail screen should leave the queue
+  // the moment he comes back here. Session death routes to /login in the query
+  // cache's onError, not here.
+  const overviewQuery = useOverview();
+  const agendaQuery = useAgenda();
+  useRefetchOnFocus(overviewQuery.refetch);
+  useRefetchOnFocus(agendaQuery.refetch);
+  const { refreshing, onRefresh } = usePullToRefresh(() =>
+    Promise.all([overviewQuery.refetch(), agendaQuery.refetch()]),
   );
 
-  // Refetch on focus: a lead worked on the detail screen should leave the queue
-  // the moment he comes back here.
-  // The interval is not a second fetch — it re-renders so the speed-to-lead
+  const overview = overviewQuery.data ?? null;
+  const agenda = agendaQuery.data ?? null;
+
+  // A refusal for one read must not blank the other. Whatever still
+  // answered stays on screen, and the server's own sentence explains the
+  // gap — those sentences are written for the reader, so they ship as-is.
+  const notices: string[] = [];
+  const overviewNotice = noticeFrom(overviewQuery.error);
+  if (overviewNotice !== null) notices.push(overviewNotice);
+  const agendaNotice = noticeFrom(agendaQuery.error);
+  if (agendaNotice !== null && !notices.includes(agendaNotice)) notices.push(agendaNotice);
+
+  // The interval is not a fetch — it re-renders so the speed-to-lead
   // timers advance. This screen's whole premise is the 5/15-minute escalation,
   // and computing minutesSince() only at render meant a Today screen left open
   // kept showing a lead's original minute count in its original colour: one that
@@ -336,10 +314,9 @@ export default function TodayScreen(): React.ReactElement {
   // and is the difference between a live queue and a screenshot of one.
   useFocusEffect(
     useCallback(() => {
-      void load("initial");
       const id = setInterval(() => setTick((n) => n + 1), 30_000);
       return () => clearInterval(id);
-    }, [load]),
+    }, []),
   );
 
   const openLead = useCallback(
@@ -354,7 +331,16 @@ export default function TodayScreen(): React.ReactElement {
     Linking.openURL(`tel:${phone}`).catch(() => setCallFailedFor(leadId));
   }, []);
 
-  const showSpinner = loading && overview === null && agenda === null;
+  // Hold the full-screen spinner until BOTH cold-start loads settle — the
+  // hand-rolled Promise.all revealed the whole screen atomically, and dropping
+  // the spinner on the first answer painted a Today missing its "Needs you
+  // now" half for the slower read's whole round trip. errorUpdateCount keeps
+  // this a COLD-START gate only: a no-data refetch resets status to pending
+  // (v5 fetchState), so without it a permission-refused overview would throw
+  // this spinner over a perfectly usable agenda on every tab focus.
+  const coldStart = (q: { isPending: boolean; errorUpdateCount: number }) =>
+    q.isPending && q.errorUpdateCount === 0;
+  const showSpinner = coldStart(overviewQuery) || coldStart(agendaQuery);
 
   const cold = overview?.coldNeedingCall ?? [];
   const unconfirmed = overview?.unconfirmedToday ?? [];
@@ -388,9 +374,7 @@ export default function TodayScreen(): React.ReactElement {
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
-              onRefresh={() => {
-                void load("refresh");
-              }}
+              onRefresh={onRefresh}
               tintColor={color.brand}
               colors={[color.brand]}
             />
@@ -406,9 +390,7 @@ export default function TodayScreen(): React.ReactElement {
           {notices.length > 0 ? (
             <Pressable
               accessibilityRole="button"
-              onPress={() => {
-                void load("refresh");
-              }}
+              onPress={onRefresh}
               style={({ pressed }) => [styles.button, pressed && styles.pressed]}
             >
               <Text style={styles.buttonText}>Try again</Text>

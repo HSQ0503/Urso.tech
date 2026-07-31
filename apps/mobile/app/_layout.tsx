@@ -12,6 +12,7 @@ import {
   IBMPlexSans_600SemiBold,
 } from "@expo-google-fonts/ibm-plex-sans";
 import { IBMPlexMono_400Regular } from "@expo-google-fonts/ibm-plex-mono";
+import { QueryProvider } from "@/query";
 import { color } from "@/theme";
 
 // Root layout. Every screen draws its own true-black chrome header, so the
@@ -37,14 +38,16 @@ export default function RootLayout(): React.ReactElement | null {
 
   return (
     <SafeAreaProvider>
-      <StatusBar style="light" />
-      <Stack
-        screenOptions={{
-          headerShown: false,
-          // Bone, not white, so a push never flashes a bright card-shaped gap.
-          contentStyle: { backgroundColor: color.bg },
-        }}
-      />
+      <QueryProvider>
+        <StatusBar style="light" />
+        <Stack
+          screenOptions={{
+            headerShown: false,
+            // Bone, not white, so a push never flashes a bright card-shaped gap.
+            contentStyle: { backgroundColor: color.bg },
+          }}
+        />
+      </QueryProvider>
     </SafeAreaProvider>
   );
 }
