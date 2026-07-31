@@ -7,13 +7,17 @@ import type {
   CustomerDetail,
   CustomerSummary,
   Estimate,
+  EstimateWithItems,
   Invoice,
+  InvoiceReward,
+  InvoiceWithItems,
   Job,
   JobWithItems,
   Lead,
   LeadEvent,
   Message,
   Overview,
+  TeamMember,
   TechnicianJob,
   TechnicianWeek,
   Thread,
@@ -179,7 +183,10 @@ export const owner = {
   customer: (id: string) => request<CustomerDetail>(`/canes/customers/${id}`),
 
   estimates: () => request<Estimate[]>("/canes/estimates"),
+  estimate: (id: string) => request<EstimateWithItems>(`/canes/estimates/${id}`),
   invoices: () => request<Invoice[]>("/canes/invoices"),
+  invoice: (id: string) => request<InvoiceWithItems>(`/canes/invoices/${id}`),
+  invoiceRewards: (id: string) => request<InvoiceReward[]>(`/canes/invoices/${id}/rewards`),
 
   // The board is the owner's dispatch view; crews come with it so a job can be
   // shown with its assignment without a second round trip.
@@ -191,6 +198,11 @@ export const owner = {
   crews: () => request<Crew[]>("/canes/crews"),
 
   job: (id: string) => request<JobWithItems>(`/canes/jobs/${id}`),
+
+  // OWNER ONLY server-side (the roster carries pay terms). Fetched lazily at
+  // the moments that need a name — never on screen mount — so an ops manager
+  // simply proceeds without it instead of reading a refusal about payroll.
+  team: () => request<TeamMember[]>("/canes/team"),
 };
 
 // ── Owner mutations (O1) ─────────────────────────────────────────────────────
@@ -274,4 +286,47 @@ export const jobActions = {
   delete: (id: string) => act(`/canes/jobs/${id}/actions`, { action: "delete" }),
   recordDeposit: (id: string, amountCents: number, method: string) =>
     act(`/canes/jobs/${id}/actions`, { action: "recordDeposit", amountCents, method }),
+};
+
+export const invoiceActions = {
+  // Draft-only (contact fields excepted) is the action's rule; the patch is
+  // built field-by-field at the route so absent ≠ empty.
+  update: (
+    id: string,
+    patch: Partial<{
+      customerName: string;
+      customerPhone: string;
+      customerEmail: string;
+      adjustmentCents: number;
+      messageToCustomer: string;
+      terms: string;
+      internalNotes: string;
+    }>,
+  ) => act(`/canes/invoices/${id}/actions`, { action: "update", ...patch }),
+  // No options = text and email whatever the invoice snapshot carries.
+  send: (id: string, opts?: { channels?: { email?: boolean; text?: boolean }; toEmail?: string; toPhone?: string }) =>
+    act(`/canes/invoices/${id}/actions`, { action: "send", ...opts }),
+  // MONEY: the one action here that writes a payments-ledger row.
+  recordCashPayment: (id: string, amountCents: number) =>
+    act(`/canes/invoices/${id}/actions`, { action: "recordCashPayment", amountCents }),
+  void: (id: string) => act(`/canes/invoices/${id}/actions`, { action: "void" }),
+  delete: (id: string) => act(`/canes/invoices/${id}/actions`, { action: "delete" }),
+  setRewardOffer: (id: string, kind: string, enabled: boolean) =>
+    act(`/canes/invoices/${id}/actions`, { action: "setRewardOffer", kind, enabled }),
+  // Keyed by REWARD id — the invoice id in the path is navigation context.
+  // Approving is the money mutation: the reward enters recomputeInvoiceTotals.
+  setRewardApproval: (id: string, rewardId: string, approve: boolean, attributedMemberId?: string | null) =>
+    act(`/canes/invoices/${id}/actions`, { action: "setRewardApproval", rewardId, approve, attributedMemberId }),
+};
+
+export const estimateActions = {
+  send: (id: string, opts?: { channels?: { email?: boolean; text?: boolean }; toEmail?: string; toPhone?: string }) =>
+    act(`/canes/estimates/${id}/actions`, { action: "send", ...opts }),
+  void: (id: string) => act(`/canes/estimates/${id}/actions`, { action: "void" }),
+  delete: (id: string) => act(`/canes/estimates/${id}/actions`, { action: "delete" }),
+  // The GUARDED owner twin of the public approveEstimate — same finalize path
+  // (job, deposit, lead → won), signature recorded as an in-person agreement.
+  // depositMethod defaults to cash inside the action when absent.
+  approveInPerson: (id: string, opts?: { depositCollected?: boolean; depositMethod?: string }) =>
+    act(`/canes/estimates/${id}/actions`, { action: "approveInPerson", ...opts }),
 };

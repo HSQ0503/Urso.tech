@@ -244,6 +244,9 @@ export default function JobScreen(): React.ReactElement {
   // invoice read yet, and the whole invoices list is already cached.
   const invoice = (invoicesQuery.data ?? []).find((i) => i.job_id === job.id) ?? null;
 
+  // Const binding so the non-null narrowing survives into onPress closures.
+  const estimateId = job.estimate_id;
+
   const open = (url: string) => {
     Linking.openURL(url).catch(() => setCustomerNotice("This phone couldn't open that."));
   };
@@ -726,15 +729,29 @@ export default function JobScreen(): React.ReactElement {
             </View>
 
             {invoice !== null ? (
-              // Deliberately NOT pressable: no invoice screen exists yet, and a
-              // tap that goes nowhere teaches the wrong thing about the app.
-              <View style={[styles.pad, styles.divided]}>
-                <Text style={styles.fieldLabel}>Invoice {invoice.number}</Text>
-                <View style={styles.moneyRow}>
-                  <Text style={styles.body}>{INVOICE_STATUS_LABEL[invoice.status]}</Text>
-                  <Text style={styles.money}>{fmtMoney(invoice.total_cents)}</Text>
+              // Presses through to the invoice screen, which exists now.
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Open invoice ${invoice.number}`}
+                onPress={() =>
+                  router.push({ pathname: "/(owner)/invoice/[id]", params: { id: invoice.id } })
+                }
+                style={({ pressed }) => [
+                  styles.pad,
+                  styles.divided,
+                  styles.linkedRow,
+                  pressed && styles.cardPressed,
+                ]}
+              >
+                <View style={styles.linkedRowBody}>
+                  <Text style={styles.fieldLabel}>Invoice {invoice.number}</Text>
+                  <View style={styles.moneyRow}>
+                    <Text style={styles.body}>{INVOICE_STATUS_LABEL[invoice.status]}</Text>
+                    <Text style={styles.money}>{fmtMoney(invoice.total_cents)}</Text>
+                  </View>
                 </View>
-              </View>
+                <Feather name="chevron-right" size={20} color={color.faint} />
+              </Pressable>
             ) : (
               <View style={[styles.pad, styles.divided, styles.actions]}>
                 <Notice text={moneyNotice} />
@@ -809,6 +826,25 @@ export default function JobScreen(): React.ReactElement {
                 )}
               </View>
             )}
+
+            {estimateId !== null ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="View estimate"
+                onPress={() =>
+                  router.push({ pathname: "/(owner)/estimate/[id]", params: { id: estimateId } })
+                }
+                style={({ pressed }) => [
+                  styles.pad,
+                  styles.divided,
+                  styles.linkedRow,
+                  pressed && styles.cardPressed,
+                ]}
+              >
+                <Text style={[styles.body, styles.grow]}>View estimate</Text>
+                <Feather name="chevron-right" size={20} color={color.faint} />
+              </Pressable>
+            ) : null}
           </View>
         </Section>
 
@@ -966,6 +1002,8 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   cardPressed: { backgroundColor: color.hover },
+  linkedRow: { flexDirection: "row", alignItems: "center", minHeight: HIT },
+  linkedRowBody: { flex: 1, gap: space.sm },
   pad: { padding: space.lg, gap: space.sm },
   divided: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.line },
   actions: { gap: space.sm },

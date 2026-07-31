@@ -443,21 +443,34 @@ export default function CustomerScreen(): React.ReactElement {
           </View>
         </Section>
 
-        {/* Deliberately Views, not Pressables, in the next two sections: the
-            app has no estimate or invoice detail screens yet, and a row that
-            presses but goes nowhere teaches the wrong thing about the app —
-            the same call customers.tsx made for its rows. */}
+        {/* Each row presses through to its detail screen, which exists now. */}
         <Section label="Estimates">
           <View style={styles.card}>
             {estimates.length > 0 ? (
               estimates.map((estimate, index) => (
-                <View key={estimate.id} style={[styles.pad, index > 0 && styles.divided]}>
-                  <View style={styles.rowBetween}>
-                    <Text style={styles.body}>{estimate.number}</Text>
-                    <Text style={styles.money}>{fmtMoney(estimate.total_cents)}</Text>
+                <Pressable
+                  key={estimate.id}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Open estimate ${estimate.number}`}
+                  onPress={() =>
+                    router.push({ pathname: "/(owner)/estimate/[id]", params: { id: estimate.id } })
+                  }
+                  style={({ pressed }) => [
+                    styles.pad,
+                    styles.linkedRow,
+                    index > 0 && styles.divided,
+                    pressed && styles.rowPressed,
+                  ]}
+                >
+                  <View style={styles.linkedRowBody}>
+                    <View style={styles.rowBetween}>
+                      <Text style={styles.body}>{estimate.number}</Text>
+                      <Text style={styles.money}>{fmtMoney(estimate.total_cents)}</Text>
+                    </View>
+                    <Text style={styles.metaMicro}>{ESTIMATE_STATUS_LABEL[estimate.status]}</Text>
                   </View>
-                  <Text style={styles.metaMicro}>{ESTIMATE_STATUS_LABEL[estimate.status]}</Text>
-                </View>
+                  <Feather name="chevron-right" size={18} color={color.faint} />
+                </Pressable>
               ))
             ) : (
               <View style={styles.pad}>
@@ -471,13 +484,29 @@ export default function CustomerScreen(): React.ReactElement {
           <View style={styles.card}>
             {invoices.length > 0 ? (
               invoices.map((invoice, index) => (
-                <View key={invoice.id} style={[styles.pad, index > 0 && styles.divided]}>
-                  <View style={styles.rowBetween}>
-                    <Text style={styles.body}>{invoice.number}</Text>
-                    <Text style={styles.money}>{fmtMoney(invoice.total_cents)}</Text>
+                <Pressable
+                  key={invoice.id}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Open invoice ${invoice.number}`}
+                  onPress={() =>
+                    router.push({ pathname: "/(owner)/invoice/[id]", params: { id: invoice.id } })
+                  }
+                  style={({ pressed }) => [
+                    styles.pad,
+                    styles.linkedRow,
+                    index > 0 && styles.divided,
+                    pressed && styles.rowPressed,
+                  ]}
+                >
+                  <View style={styles.linkedRowBody}>
+                    <View style={styles.rowBetween}>
+                      <Text style={styles.body}>{invoice.number}</Text>
+                      <Text style={styles.money}>{fmtMoney(invoice.total_cents)}</Text>
+                    </View>
+                    <Text style={styles.metaMicro}>{INVOICE_STATUS_LABEL[invoice.status]}</Text>
                   </View>
-                  <Text style={styles.metaMicro}>{INVOICE_STATUS_LABEL[invoice.status]}</Text>
-                </View>
+                  <Feather name="chevron-right" size={18} color={color.faint} />
+                </Pressable>
               ))
             ) : (
               <View style={styles.pad}>
@@ -682,6 +711,8 @@ const styles = StyleSheet.create({
   pad: { padding: space.lg, gap: space.sm },
   divided: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.line },
   rowPressed: { backgroundColor: color.hover },
+  linkedRow: { flexDirection: "row", alignItems: "center", minHeight: HIT },
+  linkedRowBody: { flex: 1, gap: space.sm },
 
   identity: { flexDirection: "row", alignItems: "center", gap: space.md, padding: space.lg },
   identityText: { flex: 1, gap: 2 },

@@ -9,7 +9,9 @@ import {
   Text,
   View,
 } from "react-native";
+import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Feather } from "@expo/vector-icons";
 import {
   fmtCallDuration,
   fmtEt,
@@ -145,6 +147,7 @@ type Row =
   | {
       kind: "thread";
       key: string;
+      phone: string;
       name: string;
       when: string;
       preview: string;
@@ -157,6 +160,7 @@ function toRow(thread: Thread, dayKeys: string[]): Row {
   return {
     kind: "thread",
     key: thread.peer_phone,
+    phone: thread.peer_phone,
     name: threadName(thread),
     when: relativeEt(thread.last_activity_at, dayKeys),
     preview: previewOf(thread),
@@ -187,44 +191,57 @@ function buildRows(threads: Thread[], nowMs: number): Row[] {
   return rows;
 }
 
-function ThreadRow({ row }: { row: Extract<Row, { kind: "thread" }> }) {
-  // Deliberately not pressable. The conversation view is a later slice, and a
-  // row that responds to a tap by doing nothing teaches the owner that the
-  // screen is broken.
+// Tapping a row opens the conversation at /(owner)/thread/[phone].
+function ThreadRow({
+  row,
+  onPress,
+}: {
+  row: Extract<Row, { kind: "thread" }>;
+  onPress: () => void;
+}) {
   return (
-    <View
-      style={[styles.thread, row.waiting ? styles.threadWaiting : null]}
-      accessible
+    <Pressable
+      accessibilityRole="button"
       accessibilityLabel={`${row.name}. ${row.preview}. ${row.when}.`}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.thread,
+        row.waiting ? styles.threadWaiting : null,
+        pressed && styles.pressed,
+      ]}
     >
-      <View style={styles.threadTop}>
-        <Text style={[styles.name, row.vendor && styles.nameQuiet]} numberOfLines={1}>
-          {row.name}
+      <View style={styles.threadMain}>
+        <View style={styles.threadTop}>
+          <Text style={[styles.name, row.vendor && styles.nameQuiet]} numberOfLines={1}>
+            {row.name}
+          </Text>
+          <Text style={[styles.when, row.waiting && styles.whenWaiting]} numberOfLines={1}>
+            {row.when}
+          </Text>
+        </View>
+
+        <Text
+          style={[
+            styles.preview,
+            row.waiting && styles.previewWaiting,
+            row.vendor && styles.previewQuiet,
+          ]}
+          numberOfLines={1}
+        >
+          {row.preview}
         </Text>
-        <Text style={[styles.when, row.waiting && styles.whenWaiting]} numberOfLines={1}>
-          {row.when}
+
+        <Text style={[styles.marker, row.vendor && styles.markerQuiet]} numberOfLines={1}>
+          {row.marker}
         </Text>
       </View>
-
-      <Text
-        style={[
-          styles.preview,
-          row.waiting && styles.previewWaiting,
-          row.vendor && styles.previewQuiet,
-        ]}
-        numberOfLines={1}
-      >
-        {row.preview}
-      </Text>
-
-      <Text style={[styles.marker, row.vendor && styles.markerQuiet]} numberOfLines={1}>
-        {row.marker}
-      </Text>
-    </View>
+      <Feather name="chevron-right" size={18} color={color.faint} />
+    </Pressable>
   );
 }
 
 export default function InboxScreen(): React.ReactElement {
+  const router = useRouter();
   const insets = useSafeAreaInsets();
 
   // A refusal keeps whatever is already on screen (query.data survives an
@@ -361,7 +378,12 @@ export default function InboxScreen(): React.ReactElement {
           item.kind === "label" ? (
             <Text style={styles.sectionLabel}>{item.label}</Text>
           ) : (
-            <ThreadRow row={item} />
+            <ThreadRow
+              row={item}
+              onPress={() =>
+                router.push({ pathname: "/(owner)/thread/[phone]", params: { phone: item.phone } })
+              }
+            />
           )
         }
       />
@@ -412,6 +434,9 @@ const styles = StyleSheet.create({
 
   thread: {
     minHeight: HIT,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
     backgroundColor: color.surface,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: color.line,
@@ -425,6 +450,7 @@ const styles = StyleSheet.create({
     marginBottom: space.sm,
   },
   threadWaiting: { borderLeftColor: color.brand },
+  threadMain: { flex: 1 },
 
   threadTop: {
     flexDirection: "row",

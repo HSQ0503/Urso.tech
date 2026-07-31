@@ -21,6 +21,7 @@ import {
   Text,
   View,
 } from "react-native";
+import { Feather } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { fmtEt, fmtMoney, fmtPhone, minutesSince, SOURCE_LABEL, type Lead } from "@urso/types";
@@ -151,17 +152,20 @@ function CallQueueCard({
         accessibilityRole="button"
         accessibilityLabel={`Open ${leadTitle(lead)}`}
         onPress={onOpen}
-        style={({ pressed }) => [styles.cardBody, pressed && styles.pressed]}
+        style={({ pressed }) => [styles.cardBody, styles.openRow, pressed && styles.pressed]}
       >
-        <View style={styles.rowTop}>
-          <Text style={styles.leadName} numberOfLines={1}>
-            {leadTitle(lead)}
+        <View style={styles.openBody}>
+          <View style={styles.rowTop}>
+            <Text style={styles.leadName} numberOfLines={1}>
+              {leadTitle(lead)}
+            </Text>
+            <Text style={[styles.wait, waitStyle(minutes)]}>{waited(minutes)}</Text>
+          </View>
+          <Text style={styles.leadSub} numberOfLines={1}>
+            {lead.service ?? "Service not listed"} · {SOURCE_LABEL[lead.source]}
           </Text>
-          <Text style={[styles.wait, waitStyle(minutes)]}>{waited(minutes)}</Text>
         </View>
-        <Text style={styles.leadSub} numberOfLines={1}>
-          {lead.service ?? "Service not listed"} · {SOURCE_LABEL[lead.source]}
-        </Text>
+        <Feather name="chevron-right" size={18} color={color.faint} />
       </Pressable>
 
       {phone ? (
@@ -206,17 +210,20 @@ function LeadRow({
       accessibilityRole="button"
       accessibilityLabel={`Open ${leadTitle(lead)}`}
       onPress={onOpen}
-      style={({ pressed }) => [styles.card, styles.cardBody, pressed && styles.pressed]}
+      style={({ pressed }) => [styles.card, styles.cardBody, styles.openRow, pressed && styles.pressed]}
     >
-      <View style={styles.rowTop}>
-        <Text style={styles.leadName} numberOfLines={1}>
-          {leadTitle(lead)}
+      <View style={styles.openBody}>
+        <View style={styles.rowTop}>
+          <Text style={styles.leadName} numberOfLines={1}>
+            {leadTitle(lead)}
+          </Text>
+          {trailing ? <Text style={styles.trailing}>{trailing}</Text> : null}
+        </View>
+        <Text style={styles.leadSub} numberOfLines={1}>
+          {sub}
         </Text>
-        {trailing ? <Text style={styles.trailing}>{trailing}</Text> : null}
       </View>
-      <Text style={styles.leadSub} numberOfLines={1}>
-        {sub}
-      </Text>
+      <Feather name="chevron-right" size={18} color={color.faint} />
     </Pressable>
   );
 }
@@ -503,6 +510,7 @@ export default function TodayScreen(): React.ReactElement {
                             {lead.address ?? lead.service ?? "Address pending"}
                           </Text>
                         </View>
+                        <Feather name="chevron-right" size={18} color={color.faint} />
                       </Pressable>
                     ))}
                   </View>
@@ -599,6 +607,10 @@ const styles = StyleSheet.create({
   cardBody: { padding: space.md, gap: space.xs, minHeight: HIT, justifyContent: "center" },
   divided: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.line },
   pressed: { backgroundColor: color.hover },
+  // Chevron affordance per the house list idiom (customers.tsx): the tappable
+  // body flexes beside a trailing chevron-right in color.faint.
+  openRow: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  openBody: { flex: 1, gap: space.xs },
 
   rowTop: {
     flexDirection: "row",

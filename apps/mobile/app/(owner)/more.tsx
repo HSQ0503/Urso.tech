@@ -101,6 +101,18 @@ export default function MoreScreen(): React.ReactElement {
       icon: "users",
       go: () => router.push("/(owner)/customers"),
     },
+    {
+      key: "estimates",
+      label: "Estimates",
+      icon: "file-text",
+      go: () => router.push("/(owner)/estimates"),
+    },
+    {
+      key: "invoices",
+      label: "Invoices",
+      icon: "dollar-sign",
+      go: () => router.push("/(owner)/invoices"),
+    },
   ];
 
   return (

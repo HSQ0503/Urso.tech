@@ -26,7 +26,10 @@ export const keys = {
     one: (id: string) => ["owner", "customers", id] as const,
   },
   estimates: () => ["owner", "estimates"] as const,
+  estimateOne: (id: string) => ["owner", "estimates", id] as const,
   invoices: () => ["owner", "invoices"] as const,
+  invoiceOne: (id: string) => ["owner", "invoices", id] as const,
+  invoiceRewards: (id: string) => ["owner", "invoices", id, "rewards"] as const,
   schedule: {
     board: (fromIso: string, toIso: string) => ["owner", "schedule", fromIso, toIso] as const,
     unscheduled: () => ["owner", "unscheduled"] as const,
@@ -109,3 +112,15 @@ export const useCrews = () =>
 
 export const useJob = (id: string) =>
   useQuery({ queryKey: keys.jobs.one(id), queryFn: () => owner.job(id).then(unwrap) });
+
+export const useEstimate = (id: string) =>
+  useQuery({ queryKey: keys.estimateOne(id), queryFn: () => owner.estimate(id).then(unwrap) });
+
+export const useInvoice = (id: string) =>
+  useQuery({ queryKey: keys.invoiceOne(id), queryFn: () => owner.invoice(id).then(unwrap) });
+
+export const useInvoiceRewards = (id: string) =>
+  useQuery({
+    queryKey: keys.invoiceRewards(id),
+    queryFn: () => owner.invoiceRewards(id).then(unwrap),
+  });
