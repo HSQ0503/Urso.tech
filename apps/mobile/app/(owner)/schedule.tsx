@@ -22,7 +22,7 @@ import {
   Text,
   View,
 } from "react-native";
-import { useFocusEffect } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   etLocalToIso,
@@ -132,12 +132,22 @@ function Notices({ items }: { items: string[] }) {
   );
 }
 
-// Job rows are inert for now: tapping one should open /(owner)/job/[id], which
-// lands in a later slice, and pushing to a route that does not exist crashes
-// the app. No onPress until the detail screen is real.
-function JobRow({ job, crewName }: { job: BoardJob; crewName: string | null }) {
+function JobRow({
+  job,
+  crewName,
+  onPress,
+}: {
+  job: BoardJob;
+  crewName: string | null;
+  onPress: () => void;
+}) {
   return (
-    <View style={styles.row}>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={job.customer_name ?? "Customer"}
+      onPress={onPress}
+      style={({ pressed }) => [styles.row, pressed && styles.pressedSurface]}
+    >
       <View style={styles.rowTop}>
         <Text style={styles.time}>{fmtEtTimeRange(job.scheduled_at, job.ends_at)}</Text>
         {/* Green only where green MEANS something. Rendering every status in the
@@ -162,11 +172,11 @@ function JobRow({ job, crewName }: { job: BoardJob; crewName: string | null }) {
           {crewName}
         </Text>
       )}
-    </View>
+    </Pressable>
   );
 }
 
-function TrayRow({ job }: { job: Job }) {
+function TrayRow({ job, onPress }: { job: Job; onPress: () => void }) {
   // The name leads, not the amount. Every row in this section is by definition
   // unscheduled, so repeating "UNSCHEDULED" on each one said nothing the section
   // header had not already said, while the customer — the thing being scanned
@@ -174,7 +184,12 @@ function TrayRow({ job }: { job: Job }) {
   // an unpriced job is not a nothing job, and rendering it as money reads as one.
   const total = job.total_cents > 0 ? fmtMoney(job.total_cents) : null;
   return (
-    <View style={styles.row}>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={job.customer_name ?? "Customer"}
+      onPress={onPress}
+      style={({ pressed }) => [styles.row, pressed && styles.pressedSurface]}
+    >
       <View style={styles.rowTop}>
         <Text style={styles.customerLead} numberOfLines={1}>
           {job.customer_name ?? "Customer"}
@@ -184,12 +199,20 @@ function TrayRow({ job }: { job: Job }) {
       <Text style={styles.address} numberOfLines={1}>
         {job.job_address ?? "Address pending"}
       </Text>
-    </View>
+    </Pressable>
   );
 }
 
 export default function ScheduleScreen(): React.ReactElement {
+  const router = useRouter();
   const insets = useSafeAreaInsets();
+
+  const openJob = useCallback(
+    (id: string) => {
+      router.push({ pathname: "/(owner)/job/[id]", params: { id } });
+    },
+    [router],
+  );
 
   const [win, setWin] = useState<Window>(buildWindow);
   const [selectedKey, setSelectedKey] = useState<string>(() => win.days[0].key);
@@ -418,8 +441,16 @@ export default function ScheduleScreen(): React.ReactElement {
             );
           }
           if (item.kind === "calm") return <Text style={styles.calm}>{item.text}</Text>;
-          if (item.kind === "tray") return <TrayRow job={item.job} />;
-          return <JobRow job={item.job} crewName={item.crewName} />;
+          if (item.kind === "tray") {
+            return <TrayRow job={item.job} onPress={() => openJob(item.job.id)} />;
+          }
+          return (
+            <JobRow
+              job={item.job}
+              crewName={item.crewName}
+              onPress={() => openJob(item.job.id)}
+            />
+          );
         }}
       />
     </View>

@@ -124,7 +124,23 @@ export function useAction<TVars, TData>(
 ) {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: fn,
+    // Session death is absorbed HERE so mutateAsync never rejects for it: the
+    // QueryCache onError above only sees queries, and every screen awaits
+    // mutateAsync inside a fire-and-forget handler — an exception there is an
+    // unhandled rejection and a tap that silently does nothing. Absorbing it
+    // routes to /login and hands back an ordinary refusal; the screen sets a
+    // notice it will never show because it is already navigating away.
+    mutationFn: async (vars: TVars): Promise<ApiResult<TData>> => {
+      try {
+        return await fn(vars);
+      } catch (error) {
+        if (error instanceof SessionExpiredError) {
+          router.replace("/login");
+          return { ok: false, notice: error.message };
+        }
+        throw error;
+      }
+    },
     onSuccess: async () => {
       await Promise.all(
         (opts?.invalidates ?? []).map((queryKey) => client.invalidateQueries({ queryKey })),

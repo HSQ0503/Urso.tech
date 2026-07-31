@@ -2,24 +2,26 @@
 //
 // The whole list arrives in one read, so the search box filters what is already
 // in memory rather than asking the server on every keystroke — instant, and it
-// keeps working in a driveway with one bar. Rows do not navigate yet: the
-// customer detail screen is a later slice, and a tap that goes nowhere teaches
-// the wrong thing about the app.
+// keeps working in a driveway with one bar. Every row opens the customer's
+// profile at /(owner)/customer/[id].
 //
 // Money is integer cents from the server, rendered with fmtMoney. Nothing here
 // divides, rounds, or adds — the figures are exactly what the API returned.
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  Pressable,
   RefreshControl,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
+import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Feather } from "@expo/vector-icons";
 import { fmtEt, fmtMoney, fmtPhone, type CustomerSummary } from "@urso/types";
 import { useCustomers } from "@/queries";
 import { noticeFrom, usePullToRefresh, useRefetchOnFocus } from "@/query";
@@ -35,54 +37,68 @@ function matches(customer: CustomerSummary, query: string): boolean {
   return digits.length > 0 && (customer.phone ?? "").includes(digits);
 }
 
-// Deliberately a View, not a Pressable: the customer detail screen is a later
-// slice, and a row that presses but goes nowhere is a worse answer than a row
-// that plainly does not press.
-function CustomerRow({ customer }: { customer: CustomerSummary }) {
+// Tapping a row opens the customer's profile at /(owner)/customer/[id].
+function CustomerRow({ customer, onPress }: { customer: CustomerSummary; onPress: () => void }) {
   const owes = customer.open_balance_cents > 0;
   return (
-    <View style={styles.row}>
-      <View style={styles.rowTop}>
-        <Text style={styles.name} numberOfLines={1}>
-          {customer.name ?? "Unnamed customer"}
-        </Text>
-        {/* A customer who has never been billed shows nothing here. "$0.00"
-            reads as a figure that was calculated, and it put a column of zeroes
-            down the list where the eye is looking for real revenue. */}
-        {customer.lifetime_cents > 0 ? (
-          <Text style={styles.lifetime}>{fmtMoney(customer.lifetime_cents)}</Text>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={customer.name ?? "Unnamed customer"}
+      onPress={onPress}
+      style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+    >
+      <View style={styles.rowBody}>
+        <View style={styles.rowTop}>
+          <Text style={styles.name} numberOfLines={1}>
+            {customer.name ?? "Unnamed customer"}
+          </Text>
+          {/* A customer who has never been billed shows nothing here. "$0.00"
+              reads as a figure that was calculated, and it put a column of zeroes
+              down the list where the eye is looking for real revenue. */}
+          {customer.lifetime_cents > 0 ? (
+            <Text style={styles.lifetime}>{fmtMoney(customer.lifetime_cents)}</Text>
+          ) : null}
+        </View>
+
+        {customer.phone !== null ? (
+          <Text style={styles.phone}>{fmtPhone(customer.phone)}</Text>
         ) : null}
-      </View>
 
-      {customer.phone !== null ? (
-        <Text style={styles.phone}>{fmtPhone(customer.phone)}</Text>
-      ) : null}
-
-      {customer.primary_address !== null ? (
-        <Text style={styles.address} numberOfLines={1}>
-          {customer.primary_address}
-        </Text>
-      ) : null}
-
-      <View style={styles.rowFoot}>
-        <Text style={styles.meta}>
-          {customer.jobs_count} {customer.jobs_count === 1 ? "job" : "jobs"}
-        </Text>
-        {customer.last_job_at !== null ? (
-          <Text style={styles.meta}>
-            Last {fmtEt(customer.last_job_at, { month: "short", day: "numeric", year: "numeric" })}
+        {customer.primary_address !== null ? (
+          <Text style={styles.address} numberOfLines={1}>
+            {customer.primary_address}
           </Text>
         ) : null}
-        {owes ? (
-          <Text style={styles.owing}>{fmtMoney(customer.open_balance_cents)} open</Text>
-        ) : null}
+
+        <View style={styles.rowFoot}>
+          <Text style={styles.meta}>
+            {customer.jobs_count} {customer.jobs_count === 1 ? "job" : "jobs"}
+          </Text>
+          {customer.last_job_at !== null ? (
+            <Text style={styles.meta}>
+              Last {fmtEt(customer.last_job_at, { month: "short", day: "numeric", year: "numeric" })}
+            </Text>
+          ) : null}
+          {owes ? (
+            <Text style={styles.owing}>{fmtMoney(customer.open_balance_cents)} open</Text>
+          ) : null}
+        </View>
       </View>
-    </View>
+      <Feather name="chevron-right" size={18} color={color.faint} />
+    </Pressable>
   );
 }
 
 export default function CustomersScreen(): React.ReactElement {
+  const router = useRouter();
   const insets = useSafeAreaInsets();
+
+  const openCustomer = useCallback(
+    (id: string) => {
+      router.push({ pathname: "/(owner)/customer/[id]", params: { id } });
+    },
+    [router],
+  );
 
   // Refusal semantics carry over from the hand-rolled version: an error keeps
   // the last-good list on screen (query.data survives an error state) and the
@@ -170,7 +186,9 @@ export default function CustomersScreen(): React.ReactElement {
               </View>
             ) : null
           }
-          renderItem={({ item }) => <CustomerRow customer={item} />}
+          renderItem={({ item }) => (
+            <CustomerRow customer={item} onPress={() => openCustomer(item.id)} />
+          )}
         />
       )}
     </View>
@@ -235,13 +253,17 @@ const styles = StyleSheet.create({
 
   row: {
     minHeight: HIT,
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: color.surface,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: color.line,
     borderRadius: radius.lg,
     padding: space.md,
-    gap: space.xs,
+    gap: space.sm,
   },
+  pressed: { backgroundColor: color.hover },
+  rowBody: { flex: 1, gap: space.xs },
   rowTop: {
     flexDirection: "row",
     alignItems: "baseline",

@@ -18,6 +18,12 @@ import { color, font } from "@/theme";
 export default function OwnerLayout(): React.ReactElement {
   return (
     <Tabs
+      // The detail screens (lead/job/customer) are hidden tabs, and a tab
+      // navigator's default backBehavior is firstRoute — so back from a job
+      // opened off the Schedule jumped to Today, severing the exact
+      // job → customer → job graph this app is organised around. "history"
+      // makes back return to the screen that opened this one.
+      backBehavior="history"
       screenOptions={{
         headerShown: false, // every screen draws its own black chrome header
         tabBarActiveTintColor: color.brand,
@@ -72,6 +78,8 @@ export default function OwnerLayout(): React.ReactElement {
       <Tabs.Screen name="leads" options={{ href: null }} />
       <Tabs.Screen name="customers" options={{ href: null }} />
       <Tabs.Screen name="lead/[id]" options={{ href: null }} />
+      <Tabs.Screen name="job/[id]" options={{ href: null }} />
+      <Tabs.Screen name="customer/[id]" options={{ href: null }} />
     </Tabs>
   );
 }

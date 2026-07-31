@@ -34,7 +34,7 @@ import { getAdminToken } from "./session";
 // Static dot notation is required for the build-time inline (see auth.ts).
 // Defaults to production so a release build without a .env still points at the
 // real API rather than silently at localhost.
-const API_BASE: string = process.env.EXPO_PUBLIC_API_BASE ?? "https://urso.ws";
+export const API_BASE: string = process.env.EXPO_PUBLIC_API_BASE ?? "https://urso.ws";
 
 // `transient` marks the two transport failures (no connection, unparseable
 // response) — the only refusals it is ever correct to retry. A server refusal
@@ -191,4 +191,87 @@ export const owner = {
   crews: () => request<Crew[]>("/canes/crews"),
 
   job: (id: string) => request<JobWithItems>(`/canes/jobs/${id}`),
+};
+
+// ── Owner mutations (O1) ─────────────────────────────────────────────────────
+//
+// One function per dispatchable action, posting { action, ...params } to the
+// resource's actions route. Param shapes mirror the ROUTE's validation exactly
+// (see app/api/v1/canes/*/actions/route.ts) — the route refuses shape, the
+// action refuses meaning, and both refusals arrive as a sentence the screen
+// shows verbatim. Nothing here re-validates: a second copy of a rule is a
+// second copy to drift.
+//
+// Money is integer cents in these signatures, always. The dollars-to-cents
+// conversion belongs to the input component at the edge, nowhere else.
+
+const act = <T = Record<string, never>>(path: string, body: Record<string, unknown>) =>
+  request<T>(path, { method: "POST", body });
+
+export type LeadPatch = Partial<
+  Record<"name" | "phone" | "email" | "address" | "service" | "notes" | "source", string>
+>;
+export type CustomerPatch = Partial<
+  Record<"name" | "phone" | "email" | "notes", string> & { archived: boolean }
+>;
+export type JobDetailsPatch = Partial<Record<"notes" | "gateCode" | "siteNotes", string>>;
+export type CallOutcome = "closed" | "follow_up" | "no_answer" | "lost";
+
+export const leadActions = {
+  setStatus: (id: string, status: string, lostReason?: string) =>
+    act(`/canes/leads/${id}/actions`, { action: "setStatus", status, lostReason }),
+  snooze: (id: string, untilIso: string) =>
+    act(`/canes/leads/${id}/actions`, { action: "snooze", untilIso }),
+  update: (id: string, fields: LeadPatch) =>
+    act(`/canes/leads/${id}/actions`, { action: "update", fields }),
+  setAppointment: (id: string, appointmentIso: string) =>
+    act(`/canes/leads/${id}/actions`, { action: "setAppointment", appointmentIso }),
+  logCallOutcome: (id: string, outcome: CallOutcome, detail?: string) =>
+    act(`/canes/leads/${id}/actions`, { action: "logCallOutcome", outcome, detail }),
+  // The peer phone rides in the body because the thread key IS the peer phone —
+  // the web composer is handed it the same way, so mobile can never text a
+  // different number than web does for the same thread.
+  sendMessage: (id: string, phone: string, message: string) =>
+    act(`/canes/leads/${id}/actions`, { action: "sendMessage", phone, message }),
+  sendConfirmationNow: (id: string) =>
+    act(`/canes/leads/${id}/actions`, { action: "sendConfirmationNow" }),
+  delete: (id: string) => act(`/canes/leads/${id}/actions`, { action: "delete" }),
+};
+
+export const customerActions = {
+  update: (id: string, fields: CustomerPatch) =>
+    act(`/canes/customers/${id}/actions`, { action: "update", fields }),
+  addAddress: (id: string, line: string, siteNotes?: string) =>
+    act(`/canes/customers/${id}/actions`, { action: "addAddress", line, siteNotes }),
+  setPrimaryAddress: (id: string, addressId: string) =>
+    act(`/canes/customers/${id}/actions`, { action: "setPrimaryAddress", addressId }),
+  delete: (id: string) => act(`/canes/customers/${id}/actions`, { action: "delete" }),
+};
+
+export const jobActions = {
+  // crewId is REQUIRED and explicitly nullable on schedule: the action has no
+  // "keep the crew" value here, so an absent key would quietly unassign. `move`
+  // is the one that can leave the crew alone by omitting it.
+  schedule: (id: string, scheduledIso: string, durationMinutes: number, crewId: string | null) =>
+    act(`/canes/jobs/${id}/actions`, { action: "schedule", scheduledIso, durationMinutes, crewId }),
+  move: (
+    id: string,
+    scheduledIso: string | null,
+    opts?: { durationMinutes?: number; crewId?: string | null },
+  ) => act(`/canes/jobs/${id}/actions`, { action: "move", scheduledIso, ...opts }),
+  unschedule: (id: string) => act(`/canes/jobs/${id}/actions`, { action: "unschedule" }),
+  assign: (id: string, crewId: string | null) =>
+    act(`/canes/jobs/${id}/actions`, { action: "assign", crewId }),
+  setStatus: (id: string, status: string, reason?: string) =>
+    act(`/canes/jobs/${id}/actions`, { action: "setStatus", status, reason }),
+  updateDetails: (id: string, fields: JobDetailsPatch) =>
+    act(`/canes/jobs/${id}/actions`, { action: "updateDetails", fields }),
+  start: (id: string) => act(`/canes/jobs/${id}/actions`, { action: "start" }),
+  // On success the payload carries invoiceId — completing a job mints its bill.
+  complete: (id: string) =>
+    act<{ invoiceId?: string }>(`/canes/jobs/${id}/actions`, { action: "complete" }),
+  reopen: (id: string) => act(`/canes/jobs/${id}/actions`, { action: "reopen" }),
+  delete: (id: string) => act(`/canes/jobs/${id}/actions`, { action: "delete" }),
+  recordDeposit: (id: string, amountCents: number, method: string) =>
+    act(`/canes/jobs/${id}/actions`, { action: "recordDeposit", amountCents, method }),
 };
