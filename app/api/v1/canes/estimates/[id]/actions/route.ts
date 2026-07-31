@@ -1,4 +1,4 @@
-import { apiFail, apiResult, apiRoute, isIsoInstant, isPaymentMethod } from "@/lib/api/v1";
+import { apiFail, apiResult, apiRoute, isCents, isIsoInstant, isPaymentMethod } from "@/lib/api/v1";
 import {
   updateEstimate,
   saveEstimateItems,
@@ -39,7 +39,22 @@ export const dynamic = "force-dynamic";
 // silently rounded by the action (Math.round), and a currency string would slip
 // past a bare `typeof === "number"` check only to land as NaN in a totals
 // column. Both checks, every time.
-function isCents(value: unknown): value is number {
+//
+// SIGNED, unlike the shared `isCents` in lib/api/v1.ts — which is why this local
+// helper exists rather than importing that one. Two of the three money fields on
+// this route are legitimately negative ON THE WEB, and a route that refuses what
+// the builder can save is as wrong as one that accepts what it can't:
+//
+//   adjustmentCents  the estimate's discount lever. computeTotals ADDS it to the
+//                    subtotal, and the Adjustment input is free text through
+//                    inputToCents, whose class [^0-9.\-] keeps the minus.
+//   unitPriceCents   same input treatment (type="text", no min), so a negative
+//                    line is typeable today — and with no discount field in the
+//                    builder it is the only way to express a credit line.
+//
+// discountCents is the exception and uses the shared non-negative helper; see
+// the call site in saveItems.
+function isSignedCents(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value);
 }
 
@@ -108,7 +123,7 @@ export const POST = apiRoute<{ id: string }>(async ({ req, params }) => {
         return apiFail("`patch` must be an object.", 422);
       }
       const patch = body.patch as EstimatePatch;
-      if (patch.adjustmentCents !== undefined && !isCents(patch.adjustmentCents)) {
+      if (patch.adjustmentCents !== undefined && !isSignedCents(patch.adjustmentCents)) {
         return apiFail("`patch.adjustmentCents` must be an integer number of cents.", 422);
       }
       // Not money, but the action feeds it straight to Math.round and clamps the
@@ -152,11 +167,18 @@ export const POST = apiRoute<{ id: string }>(async ({ req, params }) => {
         if (typeof item.quantity !== "number" || !Number.isFinite(item.quantity)) {
           return apiFail(`\`items[${i}].quantity\` must be a number.`, 422);
         }
-        if (!isCents(item.unitPriceCents)) {
+        if (!isSignedCents(item.unitPriceCents)) {
           return apiFail(`\`items[${i}].unitPriceCents\` must be an integer number of cents.`, 422);
         }
+        // The one non-negative field on this route, and the only one no web
+        // form can produce: the builder has no discount input at all — every
+        // line carries 0 (new and catalog lines) or whatever the stored row
+        // already had. A negative one is not a discount in either direction it
+        // travels: lineTotalCents SUBTRACTS it, so it quietly RAISES the line,
+        // and computeTotals accumulates it into the estimate's own
+        // discount_cents, which would then report a negative total discount.
         if (item.discountCents !== undefined && !isCents(item.discountCents)) {
-          return apiFail(`\`items[${i}].discountCents\` must be an integer number of cents.`, 422);
+          return apiFail(`\`items[${i}].discountCents\` must be a non-negative integer number of cents.`, 422);
         }
       }
       return apiResult(await saveEstimateItems(id, body.items as EstimateItemInput[]));
