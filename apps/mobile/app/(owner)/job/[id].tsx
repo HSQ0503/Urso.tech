@@ -29,6 +29,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { QueryKey } from "@tanstack/react-query";
 import {
+  etLocalToIso,
   fmtEt,
   fmtEtTimeRange,
   fmtMoney,
@@ -40,6 +41,7 @@ import {
 import { jobActions, type JobDetailsPatch } from "@/api";
 import { Avatar } from "@/components/avatar";
 import { Notice } from "@/components/notice";
+import { isCompleteWhen, SlotPicker } from "@/components/slot-picker";
 import { keys, useCrews, useInvoices, useJob } from "@/queries";
 import { noticeFrom, useAction, usePullToRefresh } from "@/query";
 import { color, font, HIT, radius, space, type } from "@/theme";
@@ -132,6 +134,18 @@ export default function JobScreen(): React.ReactElement {
   const assign = useAction((crewId: string | null) => jobActions.assign(id, crewId), {
     invalidates: everywhere,
   });
+  // One mutation serves both booking flows. An UNSCHEDULED job goes through
+  // `schedule`, whose crewId is required-and-nullable — passing the job's
+  // current crew means booking never silently unassigns (crew changes belong
+  // to the Assign picker). A SCHEDULED job goes through `move` with crewId
+  // omitted entirely, which is that action's "keep the crew" value.
+  const book = useAction(
+    (vars: { iso: string; durationMinutes: number; scheduled: boolean; crewId: string | null }) =>
+      vars.scheduled
+        ? jobActions.move(id, vars.iso, { durationMinutes: vars.durationMinutes })
+        : jobActions.schedule(id, vars.iso, vars.durationMinutes, vars.crewId),
+    { invalidates: everywhere },
+  );
   const recordDeposit = useAction(
     (vars: { amountCents: number; method: string }) =>
       jobActions.recordDeposit(id, vars.amountCents, vars.method),
@@ -159,6 +173,9 @@ export default function JobScreen(): React.ReactElement {
   const [dangerNotice, setDangerNotice] = useState<string | null>(null);
 
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [slotOpen, setSlotOpen] = useState(false);
+  const [slotValue, setSlotValue] = useState("");
+  const [durationDraft, setDurationDraft] = useState<number | null>(null);
   const [depositOpen, setDepositOpen] = useState(false);
   const [depositAmount, setDepositAmount] = useState("");
   const [depositMethod, setDepositMethod] = useState("cash");
@@ -234,6 +251,28 @@ export default function JobScreen(): React.ReactElement {
   const goCustomer = () => {
     if (job.contact_id === null) return;
     router.push({ pathname: "/(owner)/customer/[id]", params: { id: job.contact_id } });
+  };
+
+  const openSlot = () => {
+    setSlotValue("");
+    setDurationDraft(job.duration_minutes || 120);
+    setScheduleNotice(null);
+    setSlotOpen((v) => !v);
+  };
+
+  const onBook = async () => {
+    setScheduleNotice(null);
+    const r = await book.mutateAsync({
+      iso: etLocalToIso(slotValue),
+      durationMinutes: durationDraft ?? job.duration_minutes ?? 120,
+      scheduled: job.scheduled_at !== null,
+      crewId: job.crew_id,
+    });
+    if (!r.ok) setScheduleNotice(r.notice);
+    else {
+      setSlotOpen(false);
+      setSlotValue("");
+    }
   };
 
   const onStart = async () => {
@@ -555,6 +594,66 @@ export default function JobScreen(): React.ReactElement {
                   >
                     <Text style={styles.buttonText}>No crew</Text>
                     {job.crew_id === null ? <Text style={styles.assignedMark}>Assigned</Text> : null}
+                  </Pressable>
+                </View>
+              ) : null}
+
+              <Pressable
+                accessibilityRole="button"
+                onPress={openSlot}
+                style={({ pressed }) => [styles.button, pressed && styles.pressed]}
+              >
+                <Text style={styles.buttonText}>
+                  {job.scheduled_at !== null ? "Move job" : "Schedule job"}
+                </Text>
+              </Pressable>
+
+              {slotOpen ? (
+                <View style={styles.slotCard}>
+                  {/* allowPast: Sebastian back-dates work he forgot to log —
+                      the same reason the web job flows pass it. */}
+                  <SlotPicker value={slotValue} onChange={setSlotValue} allowPast />
+                  <View style={styles.durationRow}>
+                    {[60, 90, 120, 180, 240].map((m) => (
+                      <Pressable
+                        key={m}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: durationDraft === m }}
+                        onPress={() => setDurationDraft(m)}
+                        style={({ pressed }) => [
+                          styles.durationChip,
+                          durationDraft === m && styles.durationChipOn,
+                          pressed && styles.pressed,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.buttonText,
+                            durationDraft === m && styles.durationTextOn,
+                          ]}
+                        >
+                          {fmtDuration(m)}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => void onBook()}
+                    disabled={!isCompleteWhen(slotValue) || book.isPending}
+                    style={({ pressed }) => [
+                      styles.primary,
+                      pressed && styles.primaryPressed,
+                      (!isCompleteWhen(slotValue) || book.isPending) && styles.disabled,
+                    ]}
+                  >
+                    <Text style={styles.primaryText}>
+                      {book.isPending
+                        ? "Booking…"
+                        : job.scheduled_at !== null
+                          ? "Move here"
+                          : "Book it"}
+                    </Text>
                   </Pressable>
                 </View>
               ) : null}
@@ -949,6 +1048,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.md,
   },
   assignedMark: { ...type.micro, color: color.brandDeep },
+
+  slotCard: {
+    gap: space.sm,
+    padding: space.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.line,
+    borderRadius: radius.md,
+    backgroundColor: color.bg,
+  },
+  durationRow: { flexDirection: "row", flexWrap: "wrap", gap: space.xs + 2 },
+  durationChip: {
+    minHeight: HIT - 6,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: space.md,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.lineStrong,
+    backgroundColor: color.surface,
+  },
+  durationChipOn: { backgroundColor: color.brandFill, borderColor: color.brandFill },
+  durationTextOn: { color: color.chromeInk },
 
   itemRow: {
     minHeight: HIT,

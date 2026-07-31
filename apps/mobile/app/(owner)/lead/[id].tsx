@@ -45,6 +45,7 @@ import {
 } from "@urso/types";
 import { leadActions, type CallOutcome, type LeadPatch } from "@/api";
 import { AddressInput } from "@/components/address-input";
+import { isCompleteWhen, SlotPicker } from "@/components/slot-picker";
 import { Avatar } from "@/components/avatar";
 import { Notice } from "@/components/notice";
 import { PhoneInput, toPhoneDisplay } from "@/components/phone-input";
@@ -306,10 +307,27 @@ export default function LeadScreen(): React.ReactElement {
   const [deleteNotice, setDeleteNotice] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [editing, setEditing] = useState(false);
+  const [visitOpen, setVisitOpen] = useState(false);
+  const [visitValue, setVisitValue] = useState("");
+  const [visitNotice, setVisitNotice] = useState<string | null>(null);
 
   const setStatusRun = useAction(
     (vars: { status: LeadStatus; lostReason?: string }) =>
       leadActions.setStatus(id, vars.status, vars.lostReason),
+    {
+      invalidates: [
+        keys.leads.one(id),
+        keys.leads.all(),
+        keys.leads.events(id),
+        keys.overview(),
+        keys.agenda(),
+      ],
+    },
+  );
+  // Booking flips the lead to appointment_set and arms the confirmation text,
+  // so every attention surface refreshes with it.
+  const bookVisitRun = useAction(
+    (appointmentIso: string) => leadActions.setAppointment(id, appointmentIso),
     {
       invalidates: [
         keys.leads.one(id),
@@ -640,8 +658,6 @@ export default function LeadScreen(): React.ReactElement {
                 <Notice text={statusNotice} />
               </View>
 
-              {/* setAppointment waits for the next slice — booking needs a real
-                  slot picker, not a text field. */}
               {lead.appointment_at !== null ? (
                 <Field
                   label="Appointment"
@@ -655,6 +671,54 @@ export default function LeadScreen(): React.ReactElement {
                 />
               ) : null}
               <Field label="Arrived" value={fmtEt(lead.created_at)} />
+
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => {
+                  setVisitValue("");
+                  setVisitNotice(null);
+                  setVisitOpen((v) => !v);
+                }}
+                style={({ pressed }) => [styles.button, pressed && styles.pressed]}
+              >
+                <Text style={styles.buttonText}>
+                  {lead.appointment_at !== null ? "Rebook visit" : "Book a visit"}
+                </Text>
+              </Pressable>
+
+              {visitOpen ? (
+                <View style={styles.visitCard}>
+                  {/* Future-only, same as the web lead-appointment flow — a
+                      quote visit in the past books a confirmation text for a
+                      moment that already happened. */}
+                  <SlotPicker value={visitValue} onChange={setVisitValue} />
+                  <Notice text={visitNotice} />
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => {
+                      void (async () => {
+                        setVisitNotice(null);
+                        const r = await bookVisitRun.mutateAsync(etLocalToIso(visitValue));
+                        if (!r.ok) setVisitNotice(r.notice);
+                        else {
+                          setVisitOpen(false);
+                          setVisitValue("");
+                        }
+                      })();
+                    }}
+                    disabled={!isCompleteWhen(visitValue) || bookVisitRun.isPending}
+                    style={({ pressed }) => [
+                      styles.primary,
+                      pressed && styles.primaryPressed,
+                      (!isCompleteWhen(visitValue) || bookVisitRun.isPending) && styles.disabled,
+                    ]}
+                  >
+                    <Text style={styles.primaryText}>
+                      {bookVisitRun.isPending ? "Booking…" : "Book this visit"}
+                    </Text>
+                  </Pressable>
+                </View>
+              ) : null}
             </View>
 
             {lead.notes !== null ? (
@@ -915,6 +979,14 @@ const styles = StyleSheet.create({
     backgroundColor: color.surface,
   },
   chipCurrent: { borderColor: color.brand, backgroundColor: color.brandSoft },
+  visitCard: {
+    gap: space.sm,
+    padding: space.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.line,
+    borderRadius: radius.md,
+    backgroundColor: color.bg,
+  },
   chipText: { ...type.micro, color: color.muted },
   chipTextCurrent: { color: color.brandDeep },
 
