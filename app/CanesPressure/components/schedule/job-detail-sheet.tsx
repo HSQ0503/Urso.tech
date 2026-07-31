@@ -163,7 +163,7 @@ export function JobDetailSheet({
   const textHref = job.customer_phone
     ? `/CanesPressure/inbox?t=${encodeURIComponent(job.customer_phone)}`
     : null;
-  const hasLinks = Boolean(job.estimate_id || invoice || job.contact_id);
+  const hasLinks = Boolean(job.estimate_id || invoice);
 
   return (
     <SheetShell
@@ -177,9 +177,23 @@ export function JobDetailSheet({
       <section className="rounded-lg border border-[var(--cp-line)] bg-[var(--cp-bg)] p-4 md:p-5">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <p className="cp-display truncate text-[20px] leading-tight md:text-[22px]">
-              {job.customer_name ?? "Unnamed job"}
-            </p>
+            {job.contact_id ? (
+              <Link
+                href={`/CanesPressure/customers/${job.contact_id}`}
+                className="group inline-flex min-h-11 max-w-full cursor-pointer flex-col justify-center rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--cp-brand)]"
+              >
+                <span className="cp-display max-w-full truncate text-[20px] leading-tight transition-colors group-hover:text-[var(--cp-brand-deep)] md:text-[22px]">
+                  {job.customer_name ?? "Unnamed job"}
+                </span>
+                <span className="mt-1 inline-flex items-center gap-1 text-[11.5px] font-semibold text-[var(--cp-brand-deep)]">
+                  <UserRound size={12} strokeWidth={2} /> View customer profile
+                </span>
+              </Link>
+            ) : (
+              <p className="cp-display truncate text-[20px] leading-tight md:text-[22px]">
+                {job.customer_name ?? "Unnamed job"}
+              </p>
+            )}
             {job.job_name && (
               <p className="mt-1 text-[13.5px] text-[var(--cp-muted)]">{job.job_name}</p>
             )}
@@ -575,14 +589,6 @@ export function JobDetailSheet({
                 className="cp-btn cp-btn-sm" style={{ justifyContent: "flex-start" }}
               >
                 <Receipt size={14} strokeWidth={2} /> Open invoice {invoice.number}
-              </Link>
-            )}
-            {job.contact_id && (
-              <Link
-                href={`/CanesPressure/customers/${job.contact_id}`}
-                className="cp-btn cp-btn-sm" style={{ justifyContent: "flex-start" }}
-              >
-                <UserRound size={14} strokeWidth={2} /> View customer
               </Link>
             )}
           </div>

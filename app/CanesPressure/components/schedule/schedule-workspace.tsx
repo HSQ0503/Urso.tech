@@ -1,18 +1,22 @@
 "use client";
 
-import { useMemo, useOptimistic, useState, useTransition } from "react";
+import { useMemo, useOptimistic, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   CalendarClock,
   CalendarPlus,
   ChevronLeft,
   ChevronRight,
+  MoreHorizontal,
   Plus,
+  Trash2,
   Wrench,
 } from "lucide-react";
 import {
+  deleteJob,
   moveJob,
   scheduleJob,
+  setJobStatus,
   type ActionResult,
 } from "@/app/CanesPressure/actions";
 import {
@@ -73,6 +77,7 @@ type OptMove =
   | { kind: "unplace"; jobId: string };
 
 type Board = { scheduled: JobWithItems[]; unscheduled: JobWithItems[] };
+type Feedback = { ok: boolean; text: string } | null;
 
 function applyMove(board: Board, move: OptMove, crews: Crew[]): Board {
   const all = [...board.scheduled, ...board.unscheduled];
@@ -242,6 +247,9 @@ export function ScheduleWorkspace({
   // Mobile: tap-to-schedule target + the week strip's day filter.
   const [scheduleTarget, setScheduleTarget] = useState<JobWithItems | null>(null);
   const [selectedDayYmd, setSelectedDayYmd] = useState<string | null>(null);
+  const [cleanupTarget, setCleanupTarget] = useState<JobWithItems | null>(null);
+  const [cleanupFeedback, setCleanupFeedback] = useState<Feedback>(null);
+  const [showAllUnscheduled, setShowAllUnscheduled] = useState(false);
 
   // Run an action optimistically, revert-by-reconcile on failure via the notice.
   function dispatch(move: OptMove, fn: () => Promise<ActionResult>) {
@@ -292,6 +300,24 @@ export function ScheduleWorkspace({
   }
   function openDay(ymd: string) {
     navigate("day", ymd);
+  }
+
+  function confirmCleanup() {
+    if (!cleanupTarget) return;
+    setCleanupFeedback(null);
+    startTransition(async () => {
+      // Approved-estimate jobs are business history, so removal cancels and
+      // hides them without breaking the estimate trail. Truly manual junk jobs
+      // use the guarded permanent-delete action.
+      const res = cleanupTarget.estimate_id
+        ? await setJobStatus(cleanupTarget.id, "canceled", "Removed from the unscheduled queue")
+        : await deleteJob(cleanupTarget.id);
+      setCleanupFeedback(res.notice ? { ok: res.ok, text: res.notice } : null);
+      if (res.ok) {
+        setCleanupTarget(null);
+        setCleanupFeedback(null);
+      }
+    });
   }
 
   const rangeTitle =
@@ -373,7 +399,14 @@ export function ScheduleWorkspace({
 
       {/* ── Desktop (md+): tray + drag-drop board ─────────────────────────── */}
       <div className="hidden gap-4 md:grid md:grid-cols-[minmax(220px,260px)_1fr]">
-        <UnscheduledTray jobs={board.unscheduled} onCardClick={(j) => setDetailJobId(j.id)} />
+        <UnscheduledTray
+          jobs={board.unscheduled}
+          onCardClick={(j) => setDetailJobId(j.id)}
+          onRemoveClick={(j) => {
+            setCleanupFeedback(null);
+            setCleanupTarget(j);
+          }}
+        />
 
         <div className="flex min-w-0 flex-col gap-3">
           {/* Toolbar */}
@@ -532,36 +565,40 @@ export function ScheduleWorkspace({
           </div>
         </div>
 
-        {/* Unscheduled group — tap a row to schedule it */}
+        {/* Unscheduled group — compact by default so old work never buries
+            today's schedule. Swipe or the more button reveals safe cleanup. */}
         {board.unscheduled.length > 0 && (
           <section className="flex flex-col gap-2">
-            <p className="cp-list-header cp-group-brand">
-              Unscheduled · {board.unscheduled.length}
-            </p>
-            <div className="cp-list">
-              {board.unscheduled.map((job) => (
+            <div className="flex min-h-11 items-center justify-between gap-3 px-1">
+              <div>
+                <p className="cp-list-header cp-group-brand p-0">
+                  Unscheduled · {board.unscheduled.length}
+                </p>
+                <p className="mt-1 text-[11px] text-[var(--cp-faint)]">
+                  Swipe left or tap ••• to remove old jobs.
+                </p>
+              </div>
+              {board.unscheduled.length > 3 && (
                 <button
-                  key={job.id}
                   type="button"
-                  className="cp-list-row"
-                  onClick={() => setScheduleTarget(job)}
+                  className="min-h-11 shrink-0 cursor-pointer px-2 text-[12px] font-semibold text-[var(--cp-brand-deep)] hover:underline"
+                  onClick={() => setShowAllUnscheduled((shown) => !shown)}
                 >
-                  <span className="min-w-0 flex-1">
-                    <span className="cp-list-title flex items-center gap-1.5">
-                      <span className="truncate">{job.customer_name ?? "Customer"}</span>
-                    </span>
-                    {job.job_name && (
-                      <span className="cp-list-sub block truncate">{job.job_name}</span>
-                    )}
-                    <span className="mt-0.5 block text-[11.5px] font-semibold text-[var(--cp-brand-deep)]">
-                      Tap to schedule
-                    </span>
-                  </span>
-                  <span className="shrink-0 text-[13px] font-semibold tabular-nums">
-                    {fmtMoney(job.total_cents)}
-                  </span>
-                  <ChevronRight className="cp-list-chev" size={18} strokeWidth={2} />
+                  {showAllUnscheduled ? "Show less" : `Show all ${board.unscheduled.length}`}
                 </button>
+              )}
+            </div>
+            <div className="cp-list">
+              {(showAllUnscheduled ? board.unscheduled : board.unscheduled.slice(0, 3)).map((job) => (
+                <SwipeableUnscheduledRow
+                  key={job.id}
+                  job={job}
+                  onSchedule={() => setScheduleTarget(job)}
+                  onRemove={() => {
+                    setCleanupFeedback(null);
+                    setCleanupTarget(job);
+                  }}
+                />
               ))}
             </div>
           </section>
@@ -718,6 +755,63 @@ export function ScheduleWorkspace({
           }}
         />
       )}
+      {cleanupTarget && (
+        <SheetShell
+          title={cleanupTarget.estimate_id ? "Remove old job" : "Delete job"}
+          onClose={() => {
+            setCleanupTarget(null);
+            setCleanupFeedback(null);
+          }}
+        >
+          <div className="space-y-4">
+            <div>
+              <p className="text-[16px] font-semibold">{cleanupTarget.customer_name ?? "Customer"}</p>
+              {cleanupTarget.job_name && (
+                <p className="mt-1 text-[13px] text-[var(--cp-muted)]">{cleanupTarget.job_name}</p>
+              )}
+            </div>
+            <p className="text-[13px] leading-relaxed text-[var(--cp-muted)]">
+              {cleanupTarget.estimate_id
+                ? "This removes the job from the active schedule while preserving the approved estimate and customer history."
+                : "This permanently deletes the manual job if it has no invoice, payment, or crew hours. This cannot be undone."}
+            </p>
+            {cleanupFeedback && (
+              <p
+                role="status"
+                className={`text-[12.5px] leading-snug ${cleanupFeedback.ok ? "text-[var(--cp-good)]" : "text-[var(--cp-warn)]"}`}
+              >
+                {cleanupFeedback.text}
+              </p>
+            )}
+            <div className="flex gap-2">
+              <button
+                type="button"
+                className="cp-btn min-h-11 flex-1"
+                disabled={isPending}
+                onClick={() => {
+                  setCleanupTarget(null);
+                  setCleanupFeedback(null);
+                }}
+              >
+                Keep job
+              </button>
+              <button
+                type="button"
+                className="cp-btn cp-btn-danger min-h-11 flex-1"
+                disabled={isPending}
+                onClick={confirmCleanup}
+              >
+                <Trash2 size={14} strokeWidth={2} />
+                {isPending
+                  ? "Removing..."
+                  : cleanupTarget.estimate_id
+                    ? "Remove job"
+                    : "Delete job"}
+              </button>
+            </div>
+          </div>
+        </SheetShell>
+      )}
     </div>
   );
 }
@@ -768,6 +862,120 @@ function RunSheetOverlay({
 // iOS inset-list rows sharing one .cp-list card. The two-object discipline
 // survives via the leading marker: a solid green square for a job, a purple ring
 // for an estimate visit, a muted square for a non-bookable calendar event.
+
+const UNSCHEDULED_ACTION_WIDTH = 92;
+
+function SwipeableUnscheduledRow({
+  job,
+  onSchedule,
+  onRemove,
+}: {
+  job: JobWithItems;
+  onSchedule: () => void;
+  onRemove: () => void;
+}) {
+  const [revealed, setRevealed] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const [offset, setOffset] = useState(0);
+  const offsetRef = useRef(0);
+  const drag = useRef<{ x: number; y: number; base: number; moved: boolean } | null>(null);
+  const skipClick = useRef(false);
+
+  function settle(open: boolean) {
+    const next = open ? -UNSCHEDULED_ACTION_WIDTH : 0;
+    setDragging(false);
+    setRevealed(open);
+    offsetRef.current = next;
+    setOffset(next);
+  }
+
+  return (
+    <div className="cp-swipe-row relative overflow-hidden bg-[var(--cp-danger-bg)]">
+      <button
+        type="button"
+        className="absolute inset-y-0 right-0 flex w-[92px] cursor-pointer flex-col items-center justify-center gap-1 bg-[var(--cp-danger)] text-[12px] font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-white"
+        tabIndex={revealed ? 0 : -1}
+        aria-hidden={!revealed}
+        onClick={onRemove}
+      >
+        <Trash2 aria-hidden size={17} strokeWidth={2} /> Remove
+      </button>
+      <div
+        className={`cp-list-row relative touch-pan-y ${dragging ? "" : "transition-transform duration-200"}`}
+        style={{ transform: `translateX(${offset}px)` }}
+        onPointerDown={(event) => {
+          if (event.pointerType === "mouse") return;
+          drag.current = {
+            x: event.clientX,
+            y: event.clientY,
+            base: revealed ? -UNSCHEDULED_ACTION_WIDTH : 0,
+            moved: false,
+          };
+        }}
+        onPointerMove={(event) => {
+          const current = drag.current;
+          if (!current) return;
+          const dx = event.clientX - current.x;
+          const dy = event.clientY - current.y;
+          if (!current.moved && Math.abs(dy) > Math.abs(dx)) return;
+          if (Math.abs(dx) < 8 && !current.moved) return;
+          current.moved = true;
+          setDragging(true);
+          const next = Math.max(-UNSCHEDULED_ACTION_WIDTH, Math.min(0, current.base + dx));
+          offsetRef.current = next;
+          setOffset(next);
+        }}
+        onPointerUp={() => {
+          const current = drag.current;
+          drag.current = null;
+          if (!current?.moved) return;
+          skipClick.current = true;
+          settle(offsetRef.current < -UNSCHEDULED_ACTION_WIDTH / 2);
+          window.setTimeout(() => {
+            skipClick.current = false;
+          }, 0);
+        }}
+        onPointerCancel={() => {
+          drag.current = null;
+          settle(revealed);
+        }}
+      >
+        <button
+          type="button"
+          className="flex min-h-11 min-w-0 flex-1 cursor-pointer items-center text-left"
+          onClick={() => {
+            if (skipClick.current) return;
+            if (revealed) {
+              settle(false);
+              return;
+            }
+            onSchedule();
+          }}
+        >
+          <span className="min-w-0 flex-1">
+            <span className="cp-list-title block truncate">{job.customer_name ?? "Customer"}</span>
+            {job.job_name && <span className="cp-list-sub block truncate">{job.job_name}</span>}
+            <span className="mt-0.5 block text-[11.5px] font-semibold text-[var(--cp-brand-deep)]">
+              Tap to schedule
+            </span>
+          </span>
+          <span className="ml-3 shrink-0 text-[13px] font-semibold tabular-nums">
+            {fmtMoney(job.total_cents)}
+          </span>
+        </button>
+        <button
+          type="button"
+          className="flex min-h-11 min-w-11 cursor-pointer items-center justify-center rounded-md text-[var(--cp-faint)] transition-colors hover:bg-[var(--cp-hover)] hover:text-[var(--cp-ink)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--cp-brand)]"
+          aria-label={`Actions for ${job.customer_name ?? "job"}`}
+          aria-expanded={revealed}
+          onClick={() => settle(!revealed)}
+        >
+          <MoreHorizontal aria-hidden size={20} strokeWidth={2} />
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function MobileJobRow({
   job,
@@ -948,10 +1156,10 @@ function MobileScheduleSheet({
       </button>
       <button
         type="button"
-        className="mt-3 min-h-9 w-full cursor-pointer text-center text-[12.5px] font-semibold text-[var(--cp-brand-deep)] hover:underline"
+        className="cp-btn mt-2 min-h-11 w-full cursor-pointer"
         onClick={onOpenDetails}
       >
-        Open job details instead
+        Job details &amp; customer profile
       </button>
     </SheetShell>
   );

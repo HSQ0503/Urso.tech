@@ -5,13 +5,11 @@ import { MapPin } from "lucide-react";
 
 // Street-address input with search-as-you-type suggestions (Sebastian's
 // Markate-parity ask). Suggestions come from Photon (photon.komoot.io), the
-// OpenStreetMap typeahead geocoder — free, keyless, CORS-open. Results are
-// biased to Palm Beach County and boxed to greater Florida; the field always
-// accepts free text, so a network miss or an unmapped address costs nothing.
+// OpenStreetMap typeahead geocoder, through our same-origin route so browser
+// privacy/CORS settings cannot silently disable it. Results are biased to Palm
+// Beach County and boxed to greater Florida; the field always accepts free
+// text, so a network miss or an unmapped address costs nothing.
 // Swap the fetch for Google Places if rooftop-perfect coverage is ever needed.
-
-const BIAS = { lat: "26.71", lon: "-80.09" }; // West Palm Beach
-const FL_BBOX = "-87.65,24.4,-79.8,31.1";
 const STATE_ABBR: Record<string, string> = { Florida: "FL", Georgia: "GA", Alabama: "AL" };
 
 type PhotonProps = {
@@ -100,15 +98,9 @@ export function AddressInput({
       // over a pre-filled address.
       if (document.activeElement !== inputRef.current) return;
       try {
-        const url = new URL("https://photon.komoot.io/api/");
-        url.searchParams.set("q", q);
-        url.searchParams.set("limit", "6");
-        url.searchParams.set("lat", BIAS.lat);
-        url.searchParams.set("lon", BIAS.lon);
-        url.searchParams.set("bbox", FL_BBOX);
-        url.searchParams.append("layer", "house");
-        url.searchParams.append("layer", "street");
-        const res = await fetch(url, { signal: ctl.signal });
+        const res = await fetch(`/api/canes/address-search?q=${encodeURIComponent(q)}`, {
+          signal: ctl.signal,
+        });
         if (!res.ok) return;
         const json = (await res.json()) as { features?: { properties: PhotonProps }[] };
         const labels: string[] = [];

@@ -1,6 +1,6 @@
 "use client";
 
-import { MapPin } from "lucide-react";
+import { MapPin, Trash2 } from "lucide-react";
 import { fmtMoney, type JobWithItems } from "@/lib/canes/types";
 
 // The Unscheduled Tray: approved-but-unplaced jobs waiting to be scheduled —
@@ -68,10 +68,12 @@ export function TrayCardBody({ job }: { job: JobWithItems }) {
 export function UnscheduledTray({
   jobs,
   onCardClick,
+  onRemoveClick,
 }: {
   jobs: JobWithItems[];
   // Opens the job detail sheet (desktop keyboard/a11y fallback to drag).
   onCardClick: (job: JobWithItems) => void;
+  onRemoveClick: (job: JobWithItems) => void;
 }) {
   return (
     <aside className="cp-card flex h-full min-h-0 flex-col p-3">
@@ -93,26 +95,36 @@ export function UnscheduledTray({
               key={job.id}
               className="cp-tray-card"
               draggable
-              onDragStart={(e) =>
+              onDragStart={(e) => {
+                if ((e.target as HTMLElement).closest("[data-no-drag]")) {
+                  e.preventDefault();
+                  return;
+                }
                 writeDrag(e, {
                   type: "job",
                   id: job.id,
                   timeOfDay: null,
                   durationMinutes: job.duration_minutes,
                   crewId: job.crew_id,
-                })
-              }
-              onClick={() => onCardClick(job)}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  onCardClick(job);
-                }
+                });
               }}
             >
-              <TrayCardBody job={job} />
+              <button
+                type="button"
+                className="cursor-pointer text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--cp-brand)]"
+                onClick={() => onCardClick(job)}
+              >
+                <TrayCardBody job={job} />
+              </button>
+              <button
+                type="button"
+                data-no-drag
+                draggable={false}
+                className="mt-1 inline-flex min-h-10 cursor-pointer items-center justify-center gap-1.5 self-start rounded-md px-2 text-[11.5px] font-semibold text-[var(--cp-danger)] transition-colors hover:bg-[var(--cp-danger-bg)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--cp-brand)]"
+                onClick={() => onRemoveClick(job)}
+              >
+                <Trash2 size={13} strokeWidth={2} /> Remove
+              </button>
             </div>
           ))}
         </div>

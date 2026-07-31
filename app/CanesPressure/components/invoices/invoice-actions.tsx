@@ -23,6 +23,7 @@ import {
   type ChannelChoice,
   type SendOverride,
 } from "../estimates/channel-picker";
+import { PhoneInput } from "../phone-input";
 
 // Owner-side action rail for the invoice detail page (a Server Component). Send/
 // Resend for card, a fix-contact expander (updateInvoice allows contact fields
@@ -224,12 +225,11 @@ export function InvoiceActions({
             <p className="text-[13px] font-medium">Update where this invoice reaches the customer.</p>
             <div>
               <label className="cp-label" htmlFor="cp-inv-fix-phone">Phone</label>
-              <input
+              <PhoneInput
                 id="cp-inv-fix-phone"
-                type="tel"
                 className="cp-input tabular-nums"
-                value={fixPhone}
-                onChange={(e) => setFixPhone(e.target.value)}
+                defaultValue={fixPhone}
+                onChange={setFixPhone}
                 disabled={isPending}
                 placeholder="(561) 555-0123"
               />

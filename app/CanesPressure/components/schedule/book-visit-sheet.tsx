@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { createQuoteVisit, type ActionResult } from "@/app/CanesPressure/actions";
 import { etLocalToIso } from "@/lib/canes/types";
+import { AddressInput } from "../address-input";
 import { SheetShell } from "./sheet-shell";
 
 // Calendar-side quote booking is deliberately free-entry: a quote does not
@@ -73,15 +74,12 @@ export function BookVisitSheet({ onClose }: { onClose: () => void }) {
 
         <div>
           <label className="cp-label" htmlFor="visit-address">Client address</label>
-          <input
+          <AddressInput
             id="visit-address"
-            className="cp-input"
             placeholder="123 Palm Beach Rd, West Palm Beach"
             value={address}
-            maxLength={240}
-            autoComplete="street-address"
             required
-            onChange={(event) => setAddress(event.target.value)}
+            onChange={setAddress}
           />
         </div>
 

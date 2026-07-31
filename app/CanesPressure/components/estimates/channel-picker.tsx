@@ -1,6 +1,7 @@
 "use client";
 
 import { useId } from "react";
+import { PhoneInput } from "../phone-input";
 
 // Shared send-channel picker for the estimate builder and the estimate/invoice
 // action rails. Adapts to what's on file: phone + email → a Text / Email / Both
@@ -217,12 +218,11 @@ export function ChannelPicker({
           </div>
           <div>
             <label className="cp-label" htmlFor={`${uid}-phone`}>Other phone</label>
-            <input
+            <PhoneInput
               id={`${uid}-phone`}
-              type="tel"
               className="cp-input tabular-nums"
-              value={override.phone}
-              onChange={(e) => onOverrideChange({ ...override, phone: e.target.value })}
+              defaultValue={override.phone}
+              onChange={(phone) => onOverrideChange({ ...override, phone })}
               disabled={disabled}
               placeholder="(561) 555-0123"
             />
