@@ -562,6 +562,31 @@ export default function InvoiceScreen(): React.ReactElement {
               </View>
             )}
 
+            {/* Lines are write-once on every other surface; O3c opened them on
+                a DRAFT. The editor owns the rules (and the server refuses the
+                rest in its own words) — this is only the door. */}
+            {/* Draft is only ONE of saveInvoiceItems' refusals. A job that took
+                a booking deposit mints a draft that already carries a payment,
+                and that is the commonest bill here — so a door opened on status
+                alone leads straight to an editor whose every Save is refused.
+                The editor states the reason and blocks its own Save too; this
+                just stops the walk being offered in the first place. */}
+            {invoice.status === "draft"
+            && invoice.square_invoice_id === null
+            && invoice.payments.length === 0 ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Edit lines"
+                onPress={() =>
+                  router.push({ pathname: "/(owner)/invoice/lines", params: { id } })
+                }
+                style={({ pressed }) => [styles.jobRow, styles.divided, pressed && styles.pressed]}
+              >
+                <Text style={styles.body}>Edit lines</Text>
+                <Feather name="chevron-right" size={18} color={color.faint} />
+              </Pressable>
+            ) : null}
+
             <View style={[styles.pad, styles.divided]}>
               <View style={styles.moneyRow}>
                 <Text style={styles.fieldLabel}>Subtotal</Text>

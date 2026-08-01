@@ -35,6 +35,7 @@ export const keys = {
     unscheduled: () => ["owner", "unscheduled"] as const,
   },
   crews: () => ["owner", "crews"] as const,
+  catalog: () => ["owner", "catalog"] as const,
   jobs: {
     one: (id: string) => ["owner", "jobs", id] as const,
   },
@@ -124,3 +125,6 @@ export const useInvoiceRewards = (id: string) =>
     queryKey: keys.invoiceRewards(id),
     queryFn: () => owner.invoiceRewards(id).then(unwrap),
   });
+
+export const useCatalog = () =>
+  useQuery({ queryKey: keys.catalog(), queryFn: () => owner.catalog().then(unwrap) });

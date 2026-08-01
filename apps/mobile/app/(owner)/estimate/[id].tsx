@@ -6,9 +6,9 @@
 // strip answers "did they see it yet"; and the one thing the phone adds over
 // the web is APPROVE IN PERSON — the handshake moment, captured on the spot.
 //
-// There is deliberately NO editing surface here: lines, prices, deposit and
-// expiry belong to the estimate builder, which is a web surface. The phone
-// reads, sends, and closes — it never rewrites the quote.
+// This screen READS the quote; shaping it is the builder's job, one tap away
+// under the totals (draft only — the action refuses anything else). Expiry,
+// message and terms are still web-only surfaces.
 //
 // Money is integer cents formatted with fmtMoney; nothing here computes. Every
 // timestamp is America/New_York via fmtEt. Mutation refusals are the server's
@@ -445,6 +445,23 @@ export default function EstimateScreen(): React.ReactElement {
               ) : null}
             </View>
           </View>
+
+          {/* Directly under the numbers it changes — where a reader who has
+              just read the total looks to change it. Draft only: the builder's
+              saveItems refuses anything else, and offering a door that always
+              refuses is not an offer. */}
+          {estimate.status === "draft" ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Edit lines and pricing"
+              onPress={() =>
+                router.push({ pathname: "/(owner)/estimate/build", params: { id: estimate.id } })
+              }
+              style={({ pressed }) => [styles.button, pressed && styles.pressed]}
+            >
+              <Text style={styles.buttonText}>Edit lines &amp; pricing</Text>
+            </Pressable>
+          ) : null}
         </Section>
 
         <Section label="Journey">

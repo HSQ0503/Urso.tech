@@ -3,6 +3,7 @@ import type {
   Call,
   Crew,
   CrewAccountRole,
+  CatalogItem,
   CrewPermissions,
   CustomerDetail,
   CustomerSummary,
@@ -209,6 +210,10 @@ export const owner = {
   // the moments that need a name — never on screen mount — so an ops manager
   // simply proceeds without it instead of reading a refusal about payroll.
   team: () => request<TeamMember[]>("/canes/team"),
+
+  // The service catalog behind both builders — quick-add without typing a
+  // price from memory.
+  catalog: () => request<CatalogItem[]>("/canes/catalog"),
 };
 
 // ── Owner mutations (O1) ─────────────────────────────────────────────────────
@@ -294,7 +299,19 @@ export const jobActions = {
     act(`/canes/jobs/${id}/actions`, { action: "recordDeposit", amountCents, method }),
 };
 
+export type InvoiceLineInput = {
+  name: string;
+  description?: string | null;
+  quantity: number;
+  unitPriceCents: number;
+};
+
 export const invoiceActions = {
+  // Replace-all, but NEVER to empty and never once money or Square has touched
+  // the bill — the action owns those refusals. New in O3c: invoice_items were
+  // write-once until now.
+  saveItems: (id: string, items: InvoiceLineInput[]) =>
+    act(`/canes/invoices/${id}/actions`, { action: "saveItems", items }),
   // Draft-only (contact fields excepted) is the action's rule; the patch is
   // built field-by-field at the route so absent ≠ empty.
   update: (
@@ -325,7 +342,29 @@ export const invoiceActions = {
     act(`/canes/invoices/${id}/actions`, { action: "setRewardApproval", rewardId, approve, attributedMemberId }),
 };
 
+export type EstimateLineInput = {
+  catalogId?: string | null;
+  name: string;
+  description?: string | null;
+  kind: string;
+  quantity: number;
+  unitPriceCents: number;
+  discountCents?: number;
+  taxable?: boolean;
+  isOption?: boolean;
+  isMandatory?: boolean;
+  packageGroup?: string | null;
+};
+
 export const estimateActions = {
+  // Replace-all, draft-only. An empty array is a legitimate "clear the lines"
+  // on an estimate — it is an offer being shaped, not a demand.
+  saveItems: (id: string, items: EstimateLineInput[]) =>
+    act(`/canes/estimates/${id}/actions`, { action: "saveItems", items }),
+  update: (
+    id: string,
+    patch: Partial<{ adjustmentCents: number; depositPercent: number; expiresAtIso: string | null }>,
+  ) => act(`/canes/estimates/${id}/actions`, { action: "update", patch }),
   send: (id: string, opts?: { channels?: { email?: boolean; text?: boolean }; toEmail?: string; toPhone?: string }) =>
     act(`/canes/estimates/${id}/actions`, { action: "send", ...opts }),
   void: (id: string) => act(`/canes/estimates/${id}/actions`, { action: "void" }),
