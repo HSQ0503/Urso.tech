@@ -24,6 +24,7 @@ import {
   getInvoiceByJob,
   getInvoiceByToken,
   getInvoiceItems,
+  getInvoicePayments,
   nextInvoiceNumber,
   invoicePublicUrl,
   enqueueInvoiceSend,
@@ -2527,6 +2528,88 @@ export async function createInvoiceFromJob(
   await logInvoiceEvent(job.lead_id, `Invoice ${number} created`);
   refresh();
   return { ok: true, invoiceId };
+}
+
+// Replace a DRAFT invoice's line items, then recompute. Mirrors
+// saveEstimateItems (replace-all, recompute from what was actually written) —
+// but the guards are stricter, because an invoice is a bill and an estimate is
+// an offer.
+//
+// Until now invoice_items were WRITE-ONCE across the whole codebase: three
+// inserts, no update, no delete. The lines were snapshotted from the job at
+// completion and the only lever afterwards was adjustment_cents. That is fine
+// on the web, where Sebastian builds the work on the ESTIMATE and the job
+// inherits it — but it left no way to fix a bill whose lines are simply wrong
+// (a service dropped on site, a quantity that changed in the driveway) short of
+// voiding and re-billing.
+//
+// Why the extra guards over updateInvoice's draft-only rule:
+//   · a bill with PAYMENTS against it has money reconciled to those lines;
+//     editing them silently re-points what the customer already paid for
+//   · a bill with a SQUARE invoice has lines the customer can see on a hosted
+//     page we do not control — the two would disagree
+// Both are checked here rather than inferred from status, because a draft can
+// carry a deposit payment (recordJobDeposit re-points deposits onto the bill).
+export async function saveInvoiceItems(
+  invoiceId: string,
+  items: Array<{
+    name: string;
+    description?: string | null;
+    quantity: number;
+    unitPriceCents: number;
+  }>,
+): Promise<ActionResult> {
+  if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted("invoices");
+  if (denied) return denied;
+  const invoice = await getInvoice(invoiceId);
+  if (!invoice) return { ok: false, notice: "Invoice not found." };
+  if (invoice.status !== "draft") {
+    return { ok: false, notice: "Only draft invoices can have their lines edited." };
+  }
+  if (invoice.square_invoice_id) {
+    return {
+      ok: false,
+      notice: "This bill is already on Square — void it and re-bill to change the lines.",
+    };
+  }
+  const payments = await getInvoicePayments(invoiceId);
+  if (payments.length > 0) {
+    return {
+      ok: false,
+      notice: "Money has already been recorded against this bill — its lines are frozen.",
+    };
+  }
+  if (items.length === 0) {
+    return { ok: false, notice: "A bill needs at least one line." };
+  }
+
+  const db = canesDb();
+  const { error: delErr } = await db.from("invoice_items").delete().eq("invoice_id", invoiceId);
+  if (delErr) return { ok: false, notice: delErr.message };
+
+  const rows = items.map((it, i) => {
+    // Integer cents in, integer cents out. quantity is the only non-integer
+    // here (half-hours are real), so the line total rounds ONCE, exactly as
+    // lineTotalCents does for estimates and jobs.
+    const quantity = Number(it.quantity) || 0;
+    const unit = Math.round(it.unitPriceCents);
+    return {
+      invoice_id: invoiceId,
+      position: i,
+      name: it.name.trim() || "Service",
+      description: it.description?.trim() || null,
+      quantity,
+      unit_price_cents: unit,
+      line_total_cents: Math.round(quantity * unit),
+    };
+  });
+  const { error: insErr } = await db.from("invoice_items").insert(rows);
+  if (insErr) return { ok: false, notice: insErr.message };
+
+  await recomputeInvoiceTotals(invoiceId);
+  refresh();
+  return { ok: true };
 }
 
 // Edit a draft invoice — the "actual amount" lever is adjustment_cents, plus

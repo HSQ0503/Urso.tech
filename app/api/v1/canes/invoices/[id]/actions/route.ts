@@ -1,6 +1,7 @@
-import { apiFail, apiResult, apiRoute } from "@/lib/api/v1";
+import { apiFail, apiResult, apiRoute, isCents } from "@/lib/api/v1";
 import {
   updateInvoice,
+  saveInvoiceItems,
   sendInvoice,
   recordCashPayment,
   voidInvoice,
@@ -39,6 +40,8 @@ export const dynamic = "force-dynamic";
 
 type Body = {
   action?: unknown;
+  // saveItems
+  items?: unknown;
   // update
   customerName?: unknown;
   customerPhone?: unknown;
@@ -65,7 +68,13 @@ type Body = {
 // Money crosses this boundary as integer cents or not at all. A float here means
 // the caller multiplied a dollar figure somewhere and lost half a cent, so it is
 // a 422 rather than something we round into the ledger.
-function isCents(value: unknown): value is number {
+//
+// SIGNED, and named so — the same trap the estimate route carried until de8429f.
+// `adjustmentCents` is legitimately negative (it is this bill's discount lever,
+// rendered as "Discount" on the web page), so this helper cannot carry the
+// non-negative test. Fields that must NOT be negative import the shared `isCents`
+// from lib/api/v1 instead; see the unit price in saveItems.
+function isSignedCents(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value);
 }
 
@@ -105,7 +114,7 @@ export const POST = apiRoute<{ id: string }>(async ({ req, params }) => {
       }
       if (body.adjustmentCents !== undefined) {
         // MONEY. This is the "actual amount" lever on the bill.
-        if (!isCents(body.adjustmentCents)) {
+        if (!isSignedCents(body.adjustmentCents)) {
           return apiFail("`adjustmentCents` must be an integer number of cents.", 422);
         }
         patch.adjustmentCents = body.adjustmentCents;
@@ -125,6 +134,46 @@ export const POST = apiRoute<{ id: string }>(async ({ req, params }) => {
       // Draft-only (contact fields excepted) is the action's rule, and it
       // returns the sentence explaining it.
       return apiResult(await updateInvoice(id, patch));
+    }
+
+    case "saveItems": {
+      if (!Array.isArray(body.items)) return apiFail("`items` must be an array.", 422);
+      // NOT replace-all-to-empty, unlike the estimate route: an estimate with
+      // no lines is a blank offer, but a BILL with no lines is a demand for
+      // nothing. The action refuses it too; this says so before the round trip.
+      if (body.items.length === 0) return apiFail("A bill needs at least one line.", 422);
+      for (let i = 0; i < body.items.length; i += 1) {
+        const raw: unknown = body.items[i];
+        if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+          return apiFail(`\`items[${i}]\` must be an object.`, 422);
+        }
+        const item = raw as Record<string, unknown>;
+        if (typeof item.name !== "string") {
+          return apiFail(`\`items[${i}].name\` must be a string.`, 422);
+        }
+        if (item.description !== undefined && item.description !== null
+            && typeof item.description !== "string") {
+          return apiFail(`\`items[${i}].description\` must be a string or null.`, 422);
+        }
+        // Fractional quantities are real here (hours, square footage), so this
+        // is a number check, not a cents check. Negative or non-finite would
+        // reach Math.round(quantity * unit) and produce a negative line.
+        if (typeof item.quantity !== "number" || !Number.isFinite(item.quantity)
+            || item.quantity < 0) {
+          return apiFail(`\`items[${i}].quantity\` must be a number, 0 or more.`, 422);
+        }
+        // Non-negative, unlike the estimate builder's signed unit price. An
+        // estimate can carry a credit line because it is an offer being shaped;
+        // a bill's negative line would be a refund, and refunds belong in the
+        // payments ledger where they are auditable, never as a phantom line
+        // item that quietly reduces what was owed.
+        if (!isCents(item.unitPriceCents)) {
+          return apiFail(`\`items[${i}].unitPriceCents\` must be a non-negative integer number of cents.`, 422);
+        }
+      }
+      // The action owns the rest: draft-only, no Square invoice, no payments
+      // recorded, and at least one line. Every refusal is a written sentence.
+      return apiResult(await saveInvoiceItems(id, body.items as Parameters<typeof saveInvoiceItems>[1]));
     }
 
     case "send": {
@@ -162,7 +211,7 @@ export const POST = apiRoute<{ id: string }>(async ({ req, params }) => {
       // `amountCents` is passed through exactly as received; the action owns
       // the double-record lock, the partial-payment arithmetic and the settle
       // decision.
-      if (!isCents(body.amountCents)) {
+      if (!isSignedCents(body.amountCents)) {
         return apiFail("`amountCents` must be an integer number of cents.", 422);
       }
       return apiResult(await recordCashPayment(id, body.amountCents));
