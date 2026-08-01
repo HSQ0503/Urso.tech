@@ -438,6 +438,14 @@ export const estimateActions = {
   // new id — the caller navigates straight into the builder with it. An estimate
   // is created EMPTY and priced afterwards through saveItems, so none of these
   // carries money.
+  // Copy a quote, lines and all — the same driveway priced for the next house.
+  // Omitting contactId re-quotes the same customer. Totals are recomputed
+  // server-side from the copied lines, never carried across.
+  duplicate: (id: string, contactId?: string) =>
+    act<{ estimateId?: string }>(`/canes/estimates/${id}/actions`, {
+      action: "duplicate",
+      ...(contactId ? { contactId } : {}),
+    }),
   createFromLead: (leadId: string) =>
     act<{ estimateId?: string }>("/canes/estimates", { action: "createFromLead", leadId }),
   createForCustomer: (contactId: string) =>

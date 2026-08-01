@@ -4025,6 +4025,108 @@ async function findLeadIdByPhone(phone: string): Promise<string | null> {
 
 // Start a fresh estimate for an existing customer — prefills from the contact,
 // their primary address, and the linked lead (which now carries the email).
+// Copy a quote, lines and all.
+//
+// Canes prices the same handful of jobs all week — driveway, roof, paver seal —
+// and re-quoting meant retyping every line into a blank builder. Neither
+// surface could do this, so it is new capability rather than parity work, and
+// it is the highest-leverage thing on a repeat-service business's quote flow.
+//
+// `contactId` retargets the copy at a different customer; omitted, it re-quotes
+// the same one (a second property, a revised price after a decline).
+//
+// THE TOTALS ARE NEVER COPIED. saveEstimateItems is the one place that turns
+// lines into money, and it recomputes from what it actually wrote — so the copy
+// reuses that rather than carrying totals across, where a stale tax rate or a
+// changed adjustment would silently produce a quote whose lines and total
+// disagree. The adjustment and discount deliberately do NOT come along either:
+// they were a negotiation on that job, not a property of the work.
+export async function duplicateEstimate(
+  estimateId: string,
+  opts?: { contactId?: string },
+): Promise<ActionResult & { estimateId?: string }> {
+  if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted("estimates");
+  if (denied) return denied;
+
+  const source = await getEstimate(estimateId);
+  if (!source) return { ok: false, notice: "Estimate not found." };
+  const items = await getEstimateItems(estimateId);
+  if (items.length === 0) {
+    return { ok: false, notice: "That estimate has no lines to copy." };
+  }
+
+  // Retargeting reads the new customer so the copy carries THEIR contact
+  // details, not the original's. Without it the copy would quote the right work
+  // to the wrong phone number.
+  let target: {
+    contactId?: string;
+    leadId?: string;
+    customerName?: string;
+    customerPhone?: string;
+    customerEmail?: string;
+    jobAddress?: string;
+  };
+  if (opts?.contactId) {
+    const detail = await getCustomer(opts.contactId);
+    if (!detail) return { ok: false, notice: "Customer not found." };
+    const { contact, addresses, lead } = detail;
+    const primary = addresses.find((a) => a.is_primary) ?? addresses[0] ?? null;
+    target = {
+      contactId: contact.id,
+      leadId: lead?.id,
+      customerName: contact.name ?? undefined,
+      customerPhone: contact.phone ?? undefined,
+      customerEmail: contact.email ?? undefined,
+      jobAddress: primary?.line ?? undefined,
+    };
+  } else {
+    target = {
+      contactId: source.contact_id ?? undefined,
+      leadId: source.lead_id ?? undefined,
+      customerName: source.customer_name ?? undefined,
+      customerPhone: source.customer_phone ?? undefined,
+      customerEmail: source.customer_email ?? undefined,
+      jobAddress: source.job_address ?? undefined,
+    };
+  }
+
+  const created = await createEstimate({
+    ...target,
+    estimateType: source.estimate_type,
+    jobName: source.job_name ?? undefined,
+  });
+  if (!created.ok || !created.estimateId) return created;
+
+  const saved = await saveEstimateItems(
+    created.estimateId,
+    items.map((item) => ({
+      catalogId: item.catalog_id,
+      name: item.name,
+      description: item.description,
+      kind: item.kind,
+      quantity: Number(item.quantity),
+      unitPriceCents: item.unit_price_cents,
+      discountCents: item.discount_cents,
+      taxable: item.taxable,
+      isOption: item.is_option,
+      isMandatory: item.is_mandatory,
+      packageGroup: item.package_group,
+    })),
+  );
+  // The draft exists either way. Say so rather than reporting a clean success
+  // over an empty quote — he is about to open it and find nothing in it.
+  if (!saved.ok) {
+    return {
+      ok: true,
+      estimateId: created.estimateId,
+      notice: `Copied, but the lines didn’t come with it — ${saved.notice}`,
+    };
+  }
+
+  return { ok: true, estimateId: created.estimateId, notice: "Copied to a new draft." };
+}
+
 export async function createEstimateForCustomer(
   contactId: string,
 ): Promise<ActionResult & { estimateId?: string }> {

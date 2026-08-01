@@ -145,6 +145,14 @@ export default function EstimateScreen(): React.ReactElement {
   const del = useAction<void, Record<string, never>>(() => estimateActions.delete(id), {
     invalidates: quoteKeys,
   });
+  // Copies the lines onto a fresh draft for the same customer. Available in
+  // EVERY status, deliberately: the quote most worth copying is usually one
+  // that already went out — an approved job priced for the neighbour, or a
+  // declined one being re-pitched cheaper.
+  const duplicate = useAction<void, { estimateId?: string }>(
+    () => estimateActions.duplicate(id),
+    { invalidates: quoteKeys },
+  );
 
   // One refusal surface per section, so the sentence lands next to the tap
   // that earned it instead of at the top of a long scroll.
@@ -347,6 +355,28 @@ export default function EstimateScreen(): React.ReactElement {
         },
       ],
     );
+  };
+
+  // No confirmation: copying creates a draft and touches nothing that exists.
+  // The undo is deleting the draft, which is one tap on the screen it lands on.
+  const onDuplicate = () => {
+    void (async () => {
+      setActionNotice(null);
+      setGoodNotice(null);
+      const r = await duplicate.mutateAsync();
+      if (!r.ok) {
+        setActionNotice(r.notice);
+        return;
+      }
+      const newId = typeof r.data.estimateId === "string" ? r.data.estimateId : null;
+      // Land INSIDE the copy. A quote copied and left on a list is a quote he
+      // has to go find, and the point of copying is to price it and send it.
+      if (newId) {
+        router.replace({ pathname: "/(owner)/estimate/[id]", params: { id: newId } });
+        return;
+      }
+      setGoodNotice("Copied. Find the new draft at the top of your estimates.");
+    })();
   };
 
   const onDelete = () => {
@@ -754,6 +784,29 @@ export default function EstimateScreen(): React.ReactElement {
           </Section>
         ) : null}
 
+        {/* Its own section above the destructive one — copying is the opposite
+            of voiding, and burying it under a red block would read as danger. */}
+        <View style={styles.section}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Copy this estimate to a new draft"
+            onPress={onDuplicate}
+            disabled={duplicate.isPending}
+            style={({ pressed }) => [
+              styles.neutral,
+              pressed && styles.neutralPressed,
+              duplicate.isPending && styles.disabled,
+            ]}
+          >
+            <Text style={styles.neutralText}>
+              {duplicate.isPending ? "Copying…" : "Copy to a new quote"}
+            </Text>
+          </Pressable>
+          <Text style={styles.hint}>
+            Same lines, same prices, fresh draft — for the next house on the street.
+          </Text>
+        </View>
+
         {live || estimate.status === "draft" || estimate.status === "expired" ? (
           <View style={styles.section}>
             <Notice text={dangerNotice} />
@@ -952,6 +1005,18 @@ const styles = StyleSheet.create({
   },
   dangerPressed: { backgroundColor: color.dangerBg },
   dangerText: { ...type.body, color: color.danger },
+  neutral: {
+    minHeight: HIT,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.brand,
+    backgroundColor: color.surface,
+  },
+  neutralPressed: { backgroundColor: color.brandSoft },
+  neutralText: { ...type.body, color: color.brand },
+  hint: { ...type.small, color: color.faint, marginTop: space.xs },
 
   goodNotice: {
     backgroundColor: color.goodBg,

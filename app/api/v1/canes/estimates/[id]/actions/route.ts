@@ -6,6 +6,7 @@ import {
   voidEstimate,
   deleteEstimate,
   approveEstimateInPerson,
+  duplicateEstimate,
 } from "@/app/CanesPressure/actions";
 import type { CatalogKind, EstimateType } from "@urso/types";
 
@@ -102,6 +103,7 @@ type Body = {
   toPhone?: unknown;
   depositCollected?: unknown;
   depositMethod?: unknown;
+  contactId?: unknown;
 };
 
 export const POST = apiRoute<{ id: string }>(async ({ req, params }) => {
@@ -220,6 +222,18 @@ export const POST = apiRoute<{ id: string }>(async ({ req, params }) => {
       // refuses anything approved, declined, live, or attached to a job or
       // invoice. Every one of those is a written sentence.
       return apiResult(await deleteEstimate(id));
+    }
+
+    case "duplicate": {
+      // `contactId` retargets the copy at a different customer; omitted, it
+      // re-quotes the same one. Presence and type only — whether that customer
+      // exists is the action's refusal, with its own sentence.
+      if (body.contactId !== undefined && typeof body.contactId !== "string") {
+        return apiFail("`contactId` must be a string.", 422);
+      }
+      return apiResult(
+        await duplicateEstimate(id, body.contactId ? { contactId: body.contactId } : undefined),
+      );
     }
 
     case "approveInPerson": {
