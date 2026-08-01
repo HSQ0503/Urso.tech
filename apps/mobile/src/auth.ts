@@ -183,9 +183,10 @@ export async function sendLoginCode(email: string): Promise<LoginResult> {
 
 export type VerifiedIdentity = "owner" | "crew";
 
-// Try the admin exchange first, then Supabase. Order is a cost choice, not a
-// security one — both verify cryptographically and neither can be satisfied by
-// a code the other issued.
+// Canes owner/admin codes are six digits. Supabase OTP length is configured per
+// project and is currently eight, so a Supabase code must never be submitted to
+// the owner verifier: that verifier correctly counts bad guesses and would lock
+// a dual-provisioned Urso operator after repeated technician logins.
 export async function verifyLoginCode(
   email: string,
   token: string,
@@ -194,33 +195,38 @@ export async function verifyLoginCode(
   const address = email.trim().toLowerCase();
   const code = token.trim();
 
-  try {
-    const res = await fetch(`${API_BASE}/api/v1/auth/verify-code`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ email: address, code }),
-    });
-    const body = (await res.json()) as {
-      ok?: boolean;
-      notice?: string;
-      data?: { token: string; email: string; name: string; scope: "canes" | "admin" };
-    };
-    if (res.ok && body.ok && body.data) {
-      await saveAdminSession(body.data.token, {
-        email: body.data.email,
-        name: body.data.name,
-        scope: body.data.scope,
+  if (code.length === 6) {
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/auth/verify-code`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: address, code }),
       });
-      return { ok: true, identity: "owner" };
+      const body = (await res.json()) as {
+        ok?: boolean;
+        notice?: string;
+        data?: { token: string; email: string; name: string; scope: "canes" | "admin" };
+      };
+      if (res.ok && body.ok && body.data) {
+        await saveAdminSession(body.data.token, {
+          email: body.data.email,
+          name: body.data.name,
+          scope: body.data.scope,
+        });
+        return { ok: true, identity: "owner" };
+      }
+      // A lockout is about this person's own behaviour and worth showing
+      // immediately rather than falling through to a confusing OTP failure.
+      if (res.status === 429) return { ok: false, notice: body.notice ?? "Too many tries." };
+    } catch {
+      // Fall through to the crew path — the device may reach Supabase even when
+      // the Urso API is temporarily unavailable.
     }
-    // A lockout is about this person's own behaviour and worth showing straight
-    // away rather than falling through to a second, confusing failure.
-    if (res.status === 429) return { ok: false, notice: body.notice ?? "Too many tries." };
-  } catch {
-    // Fall through to the crew path — the device may be offline for our API but
-    // still reach Supabase, and vice versa.
   }
 
+  // Always try the Canes Supabase project. This is the technician path and its
+  // OTP is currently eight digits, the same length as Woof Gang's. The caller
+  // tries Woof Gang only if this project rejects the cryptographic challenge.
   const { error } = await supabase().auth.verifyOtp({
     email: address,
     token: code,

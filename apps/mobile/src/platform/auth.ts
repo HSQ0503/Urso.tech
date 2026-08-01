@@ -62,25 +62,22 @@ export async function verifyWorkspaceCode(
 ): Promise<WorkspaceLoginResult> {
   const entered = code.trim();
 
-  // Canes issues six-digit challenges; this Woof Gang project issues eight.
-  // Do not submit an eight-digit WG challenge to the Canes verifier first:
-  // that endpoint correctly counts every wrong guess and would eventually
-  // lock a dual-provisioned Urso operator out of an unrelated workspace.
-  if (entered.length === 6) {
-    const canes = await verifyLoginCode(email, entered);
-    if (canes.ok) {
-      const profile = await getAdminProfile();
-      if (canes.identity === "owner" && profile) {
-        const workspace: Workspace = profile.scope === "admin" ? "admin" : "canes-owner";
-        await clearWgSession();
-        await rememberWorkspace(workspace);
-        return { ok: true, workspace };
-      }
-      if (canes.identity === "crew") {
-        await clearWgSession();
-        await rememberWorkspace("canes-crew");
-        return { ok: true, workspace: "canes-crew" };
-      }
+  // Canes owns both six-digit owner codes and Supabase technician OTPs. Its
+  // verifier safely skips the owner endpoint for non-six-digit challenges, so
+  // technicians are checked before an equally long Woof Gang OTP.
+  const canes = await verifyLoginCode(email, entered);
+  if (canes.ok) {
+    const profile = await getAdminProfile();
+    if (canes.identity === "owner" && profile) {
+      const workspace: Workspace = profile.scope === "admin" ? "admin" : "canes-owner";
+      await clearWgSession();
+      await rememberWorkspace(workspace);
+      return { ok: true, workspace };
+    }
+    if (canes.identity === "crew") {
+      await clearWgSession();
+      await rememberWorkspace("canes-crew");
+      return { ok: true, workspace: "canes-crew" };
     }
   }
 
