@@ -20,7 +20,7 @@ export const METRIC_DEFINITIONS = `Metric definitions (these match the dashboard
 - Net profit = QuickBooks Net Income (revenue − cost of goods − ALL operating expenses incl. payroll, rent, royalty). This is REAL profit — grooming gross sales are not profit (groomers keep ~50–55%).
 - Gross margin = (revenue − cost of goods) ÷ revenue. Net margin = net profit ÷ revenue. Labor cost ratio = payroll (wages + taxes) ÷ revenue — the single biggest cost line in grooming.
 - Profit per booking = net profit ÷ grooming bookings. Contribution margin = 1 − variable-cost ratio; break-even revenue = fixed costs ÷ contribution margin (directional: payroll/COGS/royalty/fees/supplies counted variable, rent/insurance/utilities/repairs fixed).
-- OPEN-MONTH CAVEAT: the current calendar month's books aren't closed (income is entered after expenses), so its net reads as a fake loss — treat the latest month as provisional and never compare into it; multi-month totals already exclude it.
+- OPEN-MONTH CAVEAT: a month's books aren't closed until its income actually posts in QuickBooks — typically WEEKS after the month ends — so the latest month (sometimes two, right after a month turn) reads as a fake loss until then. Open months are provisional: never compare into them; multi-month totals already exclude them; headline revenue for an open month falls back to register sales.
 - PER-STORE PROFIT: Windermere (wm) and Lakeside (lv) are one QuickBooks company, split by class — their per-store P&L is accurate but a small slice of company-level cost is unallocated and shows only in the consolidated (all-stores) total. Revenue and gross margin reconcile exactly per store; net margin for wm/lv is classed-only.`;
 
 const DATA_SOURCES = `Data sources and honesty:

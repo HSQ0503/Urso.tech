@@ -545,7 +545,7 @@ export function buildAnalystTools(allowed: Scope, cross: Scope = allowed, extra:
     // ── Money / profit (QuickBooks) ─────────────────────────────────────────
     profit_and_loss: tool({
       description:
-        "QuickBooks profit & loss for the allowed scope in one period: revenue, cost of goods, gross profit & margin, operating expenses, net profit & margin, and labor cost ratio — plus deltas vs the prior comparable period. This is REAL accrual accounting (the cost/profit side the POS can't see). Caveats: the current calendar month's books aren't closed, so an open month's net is provisional; per-store Windermere (wm) and Lakeside (lv) exclude a little company-level unallocated cost.",
+        "QuickBooks profit & loss for the allowed scope in one period: revenue, cost of goods, gross profit & margin, operating expenses, net profit & margin, and labor cost ratio — plus deltas vs the prior comparable period. This is REAL accrual accounting (the cost/profit side the POS can't see). Caveats: books close weeks after a month ends, so the latest month (sometimes two) is provisional until income posts — openMonthProvisional says which; per-store Windermere (wm) and Lakeside (lv) exclude a little company-level unallocated cost.",
       inputSchema: z.object({ month: monthSchema }),
       execute: async ({ month }) => {
         const [o, d] = await Promise.all([

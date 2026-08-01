@@ -1701,6 +1701,51 @@ const PNL_LABEL = {
 const PNL_LABELS = Object.values(PNL_LABEL);
 const STORE_QBO_IDS: StoreId[] = ["wp", "wg", "wm", "lv"];
 const curMonthFirst = () => `${nyToday().slice(0, 7)}-01`;
+
+// ── When do books actually exist? ────────────────────────────────────────────
+// The calendar turning does NOT close a month's books: income posts into
+// QuickBooks weeks after month-end, so a just-ended month reads Total Income=0
+// (the fake-loss shape) long into the next month. Treating "calendar-current"
+// as the open month therefore zeroes the whole previous month's headline the
+// moment a month turns — the Aug-1 "July revenue $0" incident. "Open" is
+// measured from the DATA instead: the boundary is the month after the last
+// month where EVERY company's books (wp, wg, wm-lv) show posted income. The
+// calendar stays a floor (a month can't close before it ends). Cached briefly
+// so one page render shares a single boundary.
+let booksOpenCache: { value: string; until: number } | null = null;
+async function booksOpenFirst(): Promise<string> {
+  const now = Date.now();
+  if (booksOpenCache && now < booksOpenCache.until) return booksOpenCache.value;
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("quickbooks_pnl_totals")
+    .select("month, client_id")
+    .eq("label", PNL_LABEL.revenue)
+    .eq("accounting_method", QBO_BASIS)
+    .gt("amount", 0)
+    .in("client_id", ["wp", "wg", "wm-lv"])
+    .order("month", { ascending: false })
+    .limit(60);
+  let value = MONEY_START; // no books at all → everything is open
+  if (!error) {
+    const byMonth = new Map<string, Set<string>>();
+    for (const r of (data ?? []) as { month: string; client_id: string }[]) {
+      const k = String(r.month).slice(0, 10);
+      if (!byMonth.has(k)) byMonth.set(k, new Set());
+      byMonth.get(k)!.add(r.client_id);
+    }
+    const closed = [...byMonth.entries()].filter(([, ids]) => ids.size === 3).map(([m]) => m).sort();
+    const last = closed.at(-1);
+    if (last) {
+      const y = Number(last.slice(0, 4)), m = Number(last.slice(5, 7));
+      value = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, "0")}-01`;
+    }
+  }
+  const calendar = curMonthFirst();
+  if (value > calendar) value = calendar;
+  booksOpenCache = { value, until: now + 60_000 };
+  return value;
+}
 const storeShort = (id: StoreId) => STORE_OPTIONS.find((o) => o.value === id)!.short;
 // For a true consolidated total, the wm-lv company row carries unclassed costs
 // the per-store split drops — use it for "all"; the store id otherwise.
@@ -1783,9 +1828,9 @@ type MoneyData = {
 // client ids. `excludeOpen` drops the current (unclosed) calendar month so an
 // incomplete books month never drags a multi-month total into a fake loss.
 async function loadMoney(ids: string[], range: { start: string; end: string } | null, excludeOpen: boolean): Promise<MoneyData> {
-  const [totalRows, leafRows] = await Promise.all([loadPnlTotals(ids, range), loadPnlLeaves(ids, range)]);
-  const open = curMonthFirst();
-  const skip = (month: string) => excludeOpen && month === open;
+  const [totalRows, leafRows, open] = await Promise.all([loadPnlTotals(ids, range), loadPnlLeaves(ids, range), booksOpenFirst()]);
+  // >= — after a month turn there can be TWO open months (July unclosed + August running).
+  const skip = (month: string) => excludeOpen && month >= open;
 
   const totals: PnlTotals = { revenue: 0, cogs: 0, grossProfit: 0, expenses: 0, operatingIncome: 0, otherNet: 0, netIncome: 0 };
   const fieldByLabel: Record<string, keyof PnlTotals> = {
@@ -1796,7 +1841,7 @@ async function loadMoney(ids: string[], range: { start: string; end: string } | 
   const months = new Set<string>();
   const openMonths = new Set<string>();
   for (const r of totalRows) {
-    if (r.month === open) openMonths.add(r.month.slice(0, 7));
+    if (r.month >= open) openMonths.add(r.month.slice(0, 7));
     if (skip(r.month)) continue;
     months.add(r.month.slice(0, 7));
     const f = fieldByLabel[r.label];
@@ -1847,9 +1892,9 @@ const moneyFor = (scope: Scope, month: MonthValue) =>
 // QBO side excludes that open month — so for "all" clamp the POS end to the first
 // of the current month. This keeps profit-per-booking and break-even from
 // dividing a closed-month QBO numerator by a longer POS denominator.
-function franposRange(month: MonthValue): { start: string; end: string } | null {
+function franposRange(month: MonthValue, openFirst: string): { start: string; end: string } | null {
   const r = monthRange(month);
-  if (month === "all" && r) return { start: r.start, end: curMonthFirst() };
+  if (month === "all" && r) return { start: r.start, end: openFirst };
   return r;
 }
 
@@ -1859,10 +1904,12 @@ export async function getMoneyOverview(scope: Scope, month: MonthValue): Promise
   const rev = d.totals.revenue;
   let unallocated: number | null = null;
   if (scope === "all") {
-    const rows = await loadPnlTotals(["wm", "lv", "wm-lv"], pnlRange(month), [PNL_LABEL.netIncome]);
-    const open = curMonthFirst();
+    const [rows, open] = await Promise.all([
+      loadPnlTotals(["wm", "lv", "wm-lv"], pnlRange(month), [PNL_LABEL.netIncome]),
+      booksOpenFirst(),
+    ]);
     const excludeOpen = month === "all" || isYear(month);
-    const net = (id: string) => rows.filter((r) => r.client_id === id && !(excludeOpen && r.month === open)).reduce((s, r) => s + Number(r.amount), 0);
+    const net = (id: string) => rows.filter((r) => r.client_id === id && !(excludeOpen && r.month >= open)).reduce((s, r) => s + Number(r.amount), 0);
     unallocated = net("wm-lv") - net("wm") - net("lv");
   }
   return {
@@ -1924,8 +1971,10 @@ export type OwnerRevenue = {
   delta: number | null; // books-basis vs prior period; null when not comparable
 };
 
-async function loadIncomeMix(ids: string[], start: string, end: string): Promise<{ total: number; tips: number; other: number; monthsCovered: number }> {
-  const cEnd = end > curMonthFirst() ? curMonthFirst() : end;
+async function loadIncomeMix(ids: string[], start: string, end: string, openFirst: string): Promise<{ total: number; tips: number; other: number; monthsCovered: number }> {
+  // Clamp to where books actually EXIST (posted income), not the calendar —
+  // a just-ended month's zero-income rows must never count as covered books.
+  const cEnd = end > openFirst ? openFirst : end;
   if (start >= cEnd) return { total: 0, tips: 0, other: 0, monthsCovered: 0 };
   const [totals, leaves] = await Promise.all([
     loadPnlTotals(ids, { start, end: cEnd }, [PNL_LABEL.revenue]),
@@ -1954,11 +2003,12 @@ async function loadIncomeMix(ids: string[], start: string, end: string): Promise
 export async function getOwnerRevenue(scope: Scope, month: MonthValue): Promise<OwnerRevenue> {
   const range = monthRange(month);
   const ids = qboTotalIds(scope);
+  const openFirst = await booksOpenFirst();
   const [mix, byStore] = await Promise.all([
     // A single day has no books to count the owner's way (see pnlRange), so it
     // falls through to register sales — the honest number for one day.
     range && !isDay(month)
-      ? loadIncomeMix(ids, range.start, range.end)
+      ? loadIncomeMix(ids, range.start, range.end, openFirst)
       : Promise.resolve({ total: 0, tips: 0, other: 0, monthsCovered: 0 }),
     loadDaily(month),
   ]);
@@ -1967,11 +2017,15 @@ export async function getOwnerRevenue(scope: Scope, month: MonthValue): Promise<
     return { total: registerSales, source: "register", sales: 0, tips: 0, otherIncome: 0, registerSales, openRegister: registerSales, delta: null };
   }
 
-  const openFirst = curMonthFirst();
   const includesOpen = range.end > openFirst;
   let openRegister = 0;
   if (includesOpen) {
-    openRegister = sumScope(await loadDailyRange(openFirst, addDays(nyToday(), 1)), scopeIds(scope)).rev;
+    // Register sales for the OPEN part of the window only, clamped to the
+    // window itself — a July view must not absorb August 1's sales.
+    const oStart = range.start > openFirst ? range.start : openFirst;
+    const tomorrow = addDays(nyToday(), 1);
+    const oEnd = range.end < tomorrow ? range.end : tomorrow;
+    if (oStart < oEnd) openRegister = sumScope(await loadDailyRange(oStart, oEnd), scopeIds(scope)).rev;
   }
 
   // Books-basis delta, only when this window and its prior are both fully
@@ -1988,7 +2042,7 @@ export async function getOwnerRevenue(scope: Scope, month: MonthValue): Promise<
       prev = m === 1 ? { start: `${y - 1}-12-01`, end: `${y}-01-01` } : { start: `${y}-${pad(m - 1)}-01`, end: `${y}-${pad(m)}-01` };
     }
     if (prev.start >= MONEY_START) {
-      const pm = await loadIncomeMix(ids, prev.start, prev.end);
+      const pm = await loadIncomeMix(ids, prev.start, prev.end, openFirst);
       if (pm.monthsCovered > 0 && pm.total > 0) delta = (mix.total - pm.total) / pm.total;
     }
   }
@@ -2007,7 +2061,7 @@ export async function getOwnerRevenue(scope: Scope, month: MonthValue): Promise<
 
 // ── public: margin trend over all closed months ─────────────────────────────
 export async function getMarginTrend(scope: Scope): Promise<MarginTrend> {
-  const rows = await loadPnlTotals(qboTotalIds(scope), { start: MONEY_START, end: curMonthFirst() }, [PNL_LABEL.revenue, PNL_LABEL.grossProfit, PNL_LABEL.netIncome]);
+  const rows = await loadPnlTotals(qboTotalIds(scope), { start: MONEY_START, end: await booksOpenFirst() }, [PNL_LABEL.revenue, PNL_LABEL.grossProfit, PNL_LABEL.netIncome]);
   const byMonth = new Map<string, { rev: number; gross: number; net: number }>();
   for (const r of rows) {
     const m = byMonth.get(r.month) ?? { rev: 0, gross: 0, net: 0 };
@@ -2036,8 +2090,8 @@ export async function getProfitDeltas(scope: Scope, month: MonthValue): Promise<
     const [y, m] = month.split("-").map(Number);
     prev = m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, "0")}`;
   }
-  const openYM = curMonthFirst().slice(0, 7);
-  if (month === openYM || prev === openYM) return NULLD; // open books → no honest delta
+  const openYM = (await booksOpenFirst()).slice(0, 7);
+  if (month >= openYM || prev >= openYM) return NULLD; // books not posted yet → no honest delta
   const [a, b] = await Promise.all([moneyFor(scope, month), moneyFor(scope, prev)]);
   if (b.totals.revenue === 0) return NULLD;
   const d = (x: number, y: number) => (y !== 0 ? (x - y) / Math.abs(y) : null);
@@ -2075,10 +2129,9 @@ export async function getCostBenchmark(month: MonthValue): Promise<StoreCostBenc
 export async function getConsolidatedPnl(month: MonthValue): Promise<ConsolidatedPnl> {
   const range = pnlRange(month);
   const excludeOpen = month === "all" || isYear(month);
-  const open = curMonthFirst();
-  const rows = await loadPnlTotals(["wp", "wg", "wm", "lv", "wm-lv"], range, PNL_LABELS);
+  const [open, rows] = await Promise.all([booksOpenFirst(), loadPnlTotals(["wp", "wg", "wm", "lv", "wm-lv"], range, PNL_LABELS)]);
   const sum = (ids: string[], label: string) =>
-    rows.filter((r) => ids.includes(r.client_id) && r.label === label && !(excludeOpen && r.month === open)).reduce((s, r) => s + Number(r.amount), 0);
+    rows.filter((r) => ids.includes(r.client_id) && r.label === label && !(excludeOpen && r.month >= open)).reduce((s, r) => s + Number(r.amount), 0);
   const company = ["wp", "wg", "wm-lv"];
   const totals: PnlTotals = {
     revenue: sum(company, PNL_LABEL.revenue), cogs: sum(company, PNL_LABEL.cogs),
@@ -2101,7 +2154,7 @@ export async function getConsolidatedPnl(month: MonthValue): Promise<Consolidate
 
 // ── public: profit per booking / visit (QBO net × FranPOS volume) ───────────
 export async function getProfitPerBooking(scope: Scope, month: MonthValue): Promise<ProfitPerUnit> {
-  const fr = franposRange(month);
+  const fr = franposRange(month, await booksOpenFirst());
   const [d, byStore] = await Promise.all([moneyFor(scope, month), loadDailyRange(fr?.start ?? null, fr?.end ?? null)]);
   const a = sumScope(byStore, scopeIds(scope));
   return {
@@ -2126,7 +2179,7 @@ export async function getServiceLineMargin(scope: Scope, month: MonthValue): Pro
 // fees, supplies, contract labor); fixed costs are the rest (rent, insurance,
 // utilities, repairs, etc.). Break-even revenue = fixed ÷ contribution margin.
 export async function getBreakeven(scope: Scope, month: MonthValue): Promise<Breakeven> {
-  const fr = franposRange(month);
+  const fr = franposRange(month, await booksOpenFirst());
   const [d, byStore] = await Promise.all([moneyFor(scope, month), loadDailyRange(fr?.start ?? null, fr?.end ?? null)]);
   const a = sumScope(byStore, scopeIds(scope));
   const months = Math.max(1, d.monthsIncluded);
@@ -2146,7 +2199,7 @@ export async function getBreakeven(scope: Scope, month: MonthValue): Promise<Bre
 
 // ── public: cost spikes (MoM jumps in expense categories) for the AI brief ──
 export async function getCostSpikes(scope: Scope = "all", minPct = 0.25, minAbs = 400): Promise<CostSpike[]> {
-  const base = new Date(`${curMonthFirst()}T00:00:00Z`);
+  const base = new Date(`${await booksOpenFirst()}T00:00:00Z`);
   const ym = (back: number) => new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth() - back, 1)).toISOString().slice(0, 10);
   const curM = ym(1), prevM = ym(2); // the two most recent CLOSED months
   const supabase = createAdminClient();
