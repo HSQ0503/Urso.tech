@@ -19,10 +19,23 @@ type Admin = { name: string; scope: AdminScope };
 const ADMINS: Record<string, Admin> = {
   "canespressurewashing@gmail.com": { name: "Sebastian", scope: "canes" },
   "han@urso.ws": { name: "Han", scope: "admin" },
+  "han@urso.tech": { name: "Han", scope: "admin" },
+  "guga@urso.ws": { name: "Guga", scope: "admin" },
 };
 
+// Additional platform operators can be provisioned without shipping another
+// mobile binary. Email addresses identify accounts; the emailed challenge,
+// server passcode and signed token remain the actual authentication factors.
+const ENV_PLATFORM_ADMINS = new Set(
+  (process.env.URSO_PLATFORM_ADMIN_EMAILS ?? "")
+    .split(",")
+    .map((email) => email.trim().toLowerCase())
+    .filter(Boolean),
+);
+
 export function getAdmin(email: string): Admin | null {
-  return ADMINS[email.trim().toLowerCase()] ?? null;
+  const address = email.trim().toLowerCase();
+  return ADMINS[address] ?? (ENV_PLATFORM_ADMINS.has(address) ? { name: address.split("@")[0], scope: "admin" } : null);
 }
 export function isAdminEmail(email: string): boolean {
   return getAdmin(email) !== null;
@@ -168,7 +181,8 @@ function escapeHtml(s: string): string {
 // ── Passcode ─────────────────────────────────────────────────────────────────
 
 export function checkPasscode(input: string): boolean {
-  const expected = process.env.URSO_ADMIN_PASSCODE ?? "790108";
+  const expected = process.env.URSO_ADMIN_PASSCODE;
+  if (!expected) return false;
   return safeEqual(input.trim(), expected);
 }
 

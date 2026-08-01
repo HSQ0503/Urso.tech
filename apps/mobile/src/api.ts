@@ -240,6 +240,15 @@ export type CustomerPatch = Partial<
 export type JobDetailsPatch = Partial<Record<"notes" | "gateCode" | "siteNotes", string>>;
 export type CallOutcome = "closed" | "follow_up" | "no_answer" | "lost";
 
+// Click-to-call through the Twilio bridge. NOT a tel: link: this rings
+// Sebastian first and dials the customer with the BUSINESS number as caller ID,
+// writing a call row and a lead event. The tel: links elsewhere in the app stay
+// — they are the fast path when the record does not matter.
+export const callActions = {
+  bridge: (phone: string, leadId?: string) =>
+    act("/canes/calls/bridge", { phone, leadId }),
+};
+
 export const leadActions = {
   setStatus: (id: string, status: string, lostReason?: string) =>
     act(`/canes/leads/${id}/actions`, { action: "setStatus", status, lostReason }),
@@ -308,6 +317,20 @@ export const jobActions = {
   delete: (id: string) => act(`/canes/jobs/${id}/actions`, { action: "delete" }),
   recordDeposit: (id: string, amountCents: number, method: string) =>
     act(`/canes/jobs/${id}/actions`, { action: "recordDeposit", amountCents, method }),
+  // A job with no estimate behind it — the neighbour who walks up mid-driveway.
+  // Posts to the jobs COLLECTION, not a job's actions, because there is no job
+  // yet. Returns the new id so the caller can land on its sheet.
+  createManual: (input: {
+    contactId?: string;
+    customerName: string;
+    customerPhone?: string;
+    jobAddress?: string;
+    jobName: string;
+    totalCents: number;
+    scheduledAtIso?: string;
+    crewId?: string;
+    notes?: string;
+  }) => act<{ jobId?: string }>("/canes/jobs", { action: "createManual", ...input }),
 };
 
 export type InvoiceLineInput = {

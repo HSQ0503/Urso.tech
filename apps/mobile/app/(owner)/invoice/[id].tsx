@@ -10,8 +10,13 @@
 // computes nothing — the single display subtraction (balance due) goes through
 // the same shared helper the web uses. The one dollars-to-cents conversion is
 // the cash-payment input at the edge, via the web's own inputToCents contract.
+//
+// Two things arrived late and both are about what the OWNER checks before money
+// moves: the customer pay link (the page the customer actually pays on, safe to
+// surface here — see customerUrl), and the reward VERIFY step, which puts the
+// review's own destination in front of the Approve button.
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -19,6 +24,7 @@ import {
   Pressable,
   RefreshControl,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TextInput,
@@ -36,10 +42,14 @@ import {
   INVOICE_STATUS_LABEL,
   PAYMENT_METHOD_LABEL,
   REWARD_KIND_LABEL,
+  type CanesSettings,
   type InvoiceReward,
+  type InvoiceRewardKind,
   type InvoiceRewardStatus,
 } from "@urso/types";
-import { invoiceActions, owner } from "@/api";
+import { API_BASE, invoiceActions, owner } from "@/api";
+import { getAccessToken } from "@/auth";
+import { getAdminToken } from "@/session";
 import { Avatar } from "@/components/avatar";
 import { NavigateButton } from "@/components/navigate";
 import { Notice } from "@/components/notice";
@@ -72,6 +82,60 @@ const REWARD_STATUS_LABEL: Record<InvoiceRewardStatus, string> = {
   approved: "Approved",
   declined: "Declined",
 };
+
+// ── The verify step's destinations ──────────────────────────────────────────
+//
+// Approving a reward takes money off the bill, so the web offers "Check Google"
+// / "Check Facebook" / "Check profiles" BEFORE Approve: the owner confirms the
+// review actually exists first. Those destinations live in settings, under
+// review_rewards.
+//
+// GET /canes/settings is denyUnlessOwner — an ops manager holding `invoices`
+// can approve a reward but cannot read settings at all. So it is fetched
+// LAZILY, only once a claimed reward is actually sitting on this bill, the same
+// shape as the team roster fetched at tap time for the Credit picker below. A
+// refusal degrades to no Check buttons; showing an ops manager a notice about a
+// settings page they can't open would be noise about someone else's permission.
+//
+// It goes straight through fetch rather than the api client or the query cache
+// on purpose: a one-off, best-effort side read whose failure is invisible by
+// design. A 401 is deliberately NOT escalated here either — the invoice reads
+// own the session-death path, and an optional side read must never be the thing
+// that signs Sebastian out mid-approval.
+type ReviewLink = { label: string; url: string };
+type ReviewLinks = Record<InvoiceRewardKind, ReviewLink[]>;
+
+// The url sets mirror rewardConfigFrom (lib/canes/rewards.ts) exactly. The web
+// labels every social_follow link "Check profiles", which renders the same word
+// twice when both profiles are configured; naming the platform is the phone's
+// version of that, because two identical buttons is not a choice.
+function reviewLinksFrom(r: CanesSettings["review_rewards"]): ReviewLinks {
+  return {
+    google_review: r.google_url ? [{ label: "Check Google", url: r.google_url }] : [],
+    facebook_review: r.facebook_url ? [{ label: "Check Facebook", url: r.facebook_url }] : [],
+    social_follow: [
+      ...(r.instagram_url ? [{ label: "Check Instagram", url: r.instagram_url }] : []),
+      ...(r.facebook_url ? [{ label: "Check Facebook", url: r.facebook_url }] : []),
+    ],
+  };
+}
+
+async function fetchReviewLinks(): Promise<ReviewLinks | null> {
+  // Same identity resolution the api client uses: an owner carries the admin
+  // token, a crew account a Supabase one, and whichever exists is the actor.
+  const token = (await getAdminToken()) ?? (await getAccessToken());
+  if (token === null) return null;
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/canes/settings`, {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    const body = (await res.json()) as { ok?: boolean; data?: CanesSettings } | null;
+    if (!body || body.ok !== true || body.data === undefined) return null;
+    return reviewLinksFrom(body.data.review_rewards);
+  } catch {
+    return null;
+  }
+}
 
 // The green sibling of Notice — same shape, good colours. Qualified successes
 // and confirmations land here.
@@ -162,6 +226,7 @@ export default function InvoiceScreen(): React.ReactElement {
   const [actionGood, setActionGood] = useState<string | null>(null);
   const [dangerNotice, setDangerNotice] = useState<string | null>(null);
 
+  const [linkNotice, setLinkNotice] = useState<string | null>(null);
   const [cashOpen, setCashOpen] = useState(false);
   const [contactOpen, setContactOpen] = useState(false);
   const [contactName, setContactName] = useState("");
@@ -173,6 +238,34 @@ export default function InvoiceScreen(): React.ReactElement {
   const notice = noticeFrom(invoiceQuery.error);
   const rewardsNotice = noticeFrom(rewardsQuery.error);
   const rewards = rewardsQuery.data ?? [];
+
+  // The lazy settings read: nothing is claimed on most bills, and those never
+  // touch the owner-only endpoint at all. Asked once per screen — a ref rather
+  // than a state flag so a second claimed reward landing in a refetch cannot
+  // start a second request. Must sit above the early returns below, like every
+  // other hook here.
+  const [reviewLinks, setReviewLinks] = useState<ReviewLinks | null>(null);
+  // Latched only on SUCCESS. Latching on attempt meant one transient failure of
+  // this best-effort side read — a dropped bar in a driveway — permanently
+  // suppressed the Check buttons for every invoice for the rest of the session,
+  // on a Tabs route the navigator never unmounts. A failure now simply leaves
+  // the flag down, so the next bill with a claimed reward tries again.
+  const linksLoaded = useRef(false);
+  const hasClaimedReward = rewards.some((r) => r.status === "claimed");
+  useEffect(() => {
+    if (!hasClaimedReward || linksLoaded.current) return;
+    let alive = true;
+    void (async () => {
+      const links = await fetchReviewLinks();
+      if (alive && links !== null) {
+        linksLoaded.current = true;
+        setReviewLinks(links);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [hasClaimedReward]);
 
   const loading = invoiceQuery.isPending || rewardsQuery.isPending;
 
@@ -241,6 +334,37 @@ export default function InvoiceScreen(): React.ReactElement {
   const goCustomer = () => {
     if (invoice.contact_id === null) return;
     router.push({ pathname: "/(owner)/customer/[id]", params: { id: invoice.contact_id } });
+  };
+
+  // The customer's own pay page — the web console's "Customer link", built off
+  // API_BASE so a dev build links at the dev origin. Distinct from payUrl above:
+  // that one is Square's hosted checkout, this is the Canes page the customer is
+  // texted, which carries the bill, the reward offers and the pay button.
+  //
+  // public_token is a CREDENTIAL, not an identifier: /CanesPressure/i/<token> is
+  // an unauthenticated page anyone holding the value can open. Safe to surface
+  // HERE because this screen only renders behind the `invoices` permission — the
+  // same gate the token sits behind on the web invoice page — and redacted from
+  // GET /canes/customers/:id for the mirrored reason, since `customers` is a
+  // lower bar than `invoices`. Never logged, never put in a notice, never drawn
+  // as text; the share sheet hands it to the OS without it appearing on screen.
+  const customerUrl = `${API_BASE}/CanesPressure/i/${invoice.public_token}`;
+
+  const onOpenLink = () => {
+    setLinkNotice(null);
+    open(customerUrl, setLinkNotice);
+  };
+
+  // Sharing IS the job — the link exists to reach the customer, and the OS sheet
+  // is how a phone hands something to Messages or Mail. Share is a core
+  // react-native export; no dependency was added to reach it.
+  const onShareLink = async () => {
+    setLinkNotice(null);
+    try {
+      await Share.share({ message: customerUrl });
+    } catch {
+      setLinkNotice("This phone couldn't share that.");
+    }
   };
 
   const onSend = async () => {
@@ -458,6 +582,10 @@ export default function InvoiceScreen(): React.ReactElement {
   // non-paid, non-void bill, and the actions claim those statuses themselves.
   const openBill = invoice.status !== "paid" && invoice.status !== "void";
   const canDelete = invoice.status === "draft" || invoice.status === "void";
+  // The web's `isPublic`, mirrored exactly: a draft's token 404s and a void's
+  // page is dead, so the customer link shows for everything else — a PAID bill
+  // included, where the customer's receipt is what they ask for.
+  const isPublic = invoice.status !== "draft" && invoice.status !== "void";
   const rewardBusy = rewardApproval.isPending || rewardOffer.isPending;
 
   return (
@@ -690,34 +818,62 @@ export default function InvoiceScreen(): React.ReactElement {
                     </View>
 
                     {reward.status === "claimed" ? (
-                      <View style={styles.buttonRow}>
-                        <Pressable
-                          accessibilityRole="button"
-                          onPress={() => onApproveReward(reward)}
-                          disabled={rewardBusy}
-                          style={({ pressed }) => [
-                            styles.primary,
-                            styles.grow,
-                            pressed && styles.primaryPressed,
-                            rewardBusy && styles.disabled,
-                          ]}
-                        >
-                          <Text style={styles.primaryText}>Approve</Text>
-                        </Pressable>
-                        <Pressable
-                          accessibilityRole="button"
-                          onPress={() => onDeclineReward(reward)}
-                          disabled={rewardBusy}
-                          style={({ pressed }) => [
-                            styles.button,
-                            styles.grow,
-                            pressed && styles.pressed,
-                            rewardBusy && styles.disabled,
-                          ]}
-                        >
-                          <Text style={styles.buttonText}>Decline</Text>
-                        </Pressable>
-                      </View>
+                      <>
+                        {/* The verify step, in the web's own words: the review
+                            is a claim by the customer until Sebastian has seen
+                            it, and Approve is what takes the money off. */}
+                        <Text style={styles.muted}>
+                          Verify it exists, then approve to take{" "}
+                          {fmtMoney(reward.amount_cents)} off.
+                        </Text>
+                        {(reviewLinks?.[reward.kind] ?? []).length > 0 ? (
+                          <View style={styles.buttonRow}>
+                            {(reviewLinks?.[reward.kind] ?? []).map((link) => (
+                              <Pressable
+                                key={link.url}
+                                accessibilityRole="button"
+                                accessibilityLabel={link.label}
+                                onPress={() => open(link.url, setRewardNotice)}
+                                style={({ pressed }) => [
+                                  styles.button,
+                                  styles.grow,
+                                  pressed && styles.pressed,
+                                ]}
+                              >
+                                <Text style={styles.buttonText}>{link.label}</Text>
+                              </Pressable>
+                            ))}
+                          </View>
+                        ) : null}
+                        <View style={styles.buttonRow}>
+                          <Pressable
+                            accessibilityRole="button"
+                            onPress={() => onApproveReward(reward)}
+                            disabled={rewardBusy}
+                            style={({ pressed }) => [
+                              styles.primary,
+                              styles.grow,
+                              pressed && styles.primaryPressed,
+                              rewardBusy && styles.disabled,
+                            ]}
+                          >
+                            <Text style={styles.primaryText}>Approve</Text>
+                          </Pressable>
+                          <Pressable
+                            accessibilityRole="button"
+                            onPress={() => onDeclineReward(reward)}
+                            disabled={rewardBusy}
+                            style={({ pressed }) => [
+                              styles.button,
+                              styles.grow,
+                              pressed && styles.pressed,
+                              rewardBusy && styles.disabled,
+                            ]}
+                          >
+                            <Text style={styles.buttonText}>Decline</Text>
+                          </Pressable>
+                        </View>
+                      </>
                     ) : null}
 
                     {canSend && reward.status === "offered" ? (
@@ -940,6 +1096,36 @@ export default function InvoiceScreen(): React.ReactElement {
                     <Text style={styles.buttonText}>Open pay page</Text>
                   </Pressable>
                 ) : null}
+              </View>
+            </View>
+          </Section>
+        ) : null}
+
+        {isPublic ? (
+          <Section label="Customer link">
+            <View style={styles.card}>
+              <View style={[styles.pad, styles.actions]}>
+                <Text style={styles.muted}>
+                  The page the customer pays on. Anyone holding this link can open the bill, so
+                  it goes to the customer and no one else.
+                </Text>
+                <Notice text={linkNotice} />
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Open the customer's invoice page"
+                  onPress={onOpenLink}
+                  style={({ pressed }) => [styles.button, pressed && styles.pressed]}
+                >
+                  <Text style={styles.buttonText}>Open customer view</Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Share the customer's invoice link"
+                  onPress={() => void onShareLink()}
+                  style={({ pressed }) => [styles.button, pressed && styles.pressed]}
+                >
+                  <Text style={styles.buttonText}>Share link</Text>
+                </Pressable>
               </View>
             </View>
           </Section>

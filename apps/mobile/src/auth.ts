@@ -2,6 +2,7 @@ import "react-native-url-polyfill/auto";
 import * as SecureStore from "expo-secure-store";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { clearAdminSession, saveAdminSession } from "./session";
+import { clearWgSession } from "./wg-auth";
 
 // Technician authentication.
 //
@@ -104,6 +105,18 @@ export async function getAccessToken(): Promise<string | null> {
   if (!authConfigured()) return null;
   const { data } = await supabase().auth.getSession();
   return data.session?.access_token ?? null;
+}
+
+// Kept separate from signOut() so a successful login into a different client
+// can clear only Canes credentials without creating a dependency cycle.
+export async function clearCanesCrewSession(): Promise<void> {
+  if (!authConfigured()) return;
+  await supabase().auth.signOut();
+}
+
+export async function clearCanesSessions(): Promise<void> {
+  await clearAdminSession();
+  await clearCanesCrewSession();
 }
 
 // Passwordless: a code, not a magic link. A link has to survive the mail app,
@@ -225,7 +238,11 @@ export async function signOut(): Promise<void> {
   // Clear both identities regardless of which one is active: a stale token in
   // the Keychain would otherwise send the launch gate to the wrong surface.
   await clearAdminSession();
-  if (!authConfigured()) return;
-  // Revokes server-side too, unlike the stateless admin token.
-  await supabase().auth.signOut();
+  // Revokes server-side too, unlike the stateless admin token. Sign out of
+  // Woof Gang at the same time: this is a device-level Urso sign-out, not only
+  // a Canes screen exit, so a previous client session cannot reappear later.
+  await Promise.all([
+    authConfigured() ? supabase().auth.signOut() : Promise.resolve(),
+    clearWgSession(),
+  ]);
 }

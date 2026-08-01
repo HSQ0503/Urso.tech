@@ -244,11 +244,15 @@ export function isIsoInstant(value: unknown): value is string {
 
 // ── Handler wrapper ──────────────────────────────────────────────────────────
 
-export type ApiHandler<P = Record<string, string>> = (ctx: {
+export type ApiHandler<P = Record<string, string>, A = ApiActor> = (ctx: {
   req: NextRequest;
-  actor: ApiActor;
+  actor: A;
   params: P;
 }) => Promise<NextResponse>;
+
+export type ApiRouteOptions<A> = {
+  authenticate: (req: NextRequest) => Promise<A | null>;
+};
 
 export type CrewHandler<P = Record<string, string>> = (ctx: {
   req: NextRequest;
@@ -263,8 +267,12 @@ export type CrewHandler<P = Record<string, string>> = (ctx: {
 // deliberately serves fixtures when CANES_DEMO=1, but a mobile client has no
 // visible "demo" affordance and a technician looking at seeded jobs in a real
 // yard is a genuinely bad failure. Fail closed and say why.
-export function apiRoute<P extends Record<string, string> = Record<string, string>>(
-  handler: ApiHandler<P>,
+export function apiRoute<
+  P extends Record<string, string> = Record<string, string>,
+  A = ApiActor,
+>(
+  handler: ApiHandler<P, A>,
+  options?: ApiRouteOptions<A>,
 ) {
   return async (
     req: NextRequest,
@@ -274,7 +282,7 @@ export function apiRoute<P extends Record<string, string> = Record<string, strin
       return apiFail("This deployment is in demo mode — the mobile API is disabled.", 503);
     }
     try {
-      const actor = await authenticate(req);
+      const actor = options ? await options.authenticate(req) : await authenticate(req) as A | null;
       if (!actor) return apiFail("Sign in again.", 401);
       const params = await ctx.params;
       return await handler({ req, actor, params });

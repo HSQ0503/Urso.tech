@@ -288,7 +288,15 @@ export async function runWeekly(): Promise<{ briefs: number; actions: number; we
     }),
   ]);
 
-  const { data: client, error: clientErr } = await supabase.from("clients").select("id").limit(1).single();
+  // This runner is the Woof Gang analyst, not a generic "first tenant" job.
+  // Selecting an arbitrary row becomes cross-tenant corruption as soon as a
+  // second client is added to this project: the brief prose and actions would
+  // be written under whichever client Postgres happened to return first.
+  const { data: client, error: clientErr } = await supabase
+    .from("clients")
+    .select("id")
+    .eq("slug", "woof-gang")
+    .single();
   if (clientErr || !client) throw new Error(`clients read failed: ${clientErr?.message ?? "no client row"}`);
 
   const scopes: Scope[] = ["all", ...stores.map((s) => s.id)];

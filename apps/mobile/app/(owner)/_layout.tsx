@@ -1,6 +1,9 @@
-import { StyleSheet } from "react-native";
-import { Tabs } from "expo-router";
+import { useEffect, useState } from "react";
+import { ActivityIndicator, StyleSheet, View } from "react-native";
+import { Tabs, useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
+import { validateCanesSession } from "@/platform/session";
+import { SupportGate } from "@/platform/support-lock";
 import { color, font } from "@/theme";
 
 // The owner console's shell.
@@ -16,8 +19,35 @@ import { color, font } from "@/theme";
 // the rest.
 
 export default function OwnerLayout(): React.ReactElement {
+  const router = useRouter();
+  const [supportMode, setSupportMode] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void validateCanesSession().then((session) => {
+      if (cancelled) return;
+      if (!session) {
+        router.replace("/login");
+        return;
+      }
+      setSupportMode(session.workspace === "admin");
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [router]);
+
+  if (supportMode === null) {
+    return (
+      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: color.bg }}>
+        <ActivityIndicator color={color.brand} />
+      </View>
+    );
+  }
+
   return (
-    <Tabs
+    <SupportGate required={supportMode}>
+      <Tabs
       // The detail screens (lead/job/customer) are hidden tabs, and a tab
       // navigator's default backBehavior is firstRoute — so back from a job
       // opened off the Schedule jumped to Today, severing the exact
@@ -79,6 +109,7 @@ export default function OwnerLayout(): React.ReactElement {
       <Tabs.Screen name="customers" options={{ href: null }} />
       <Tabs.Screen name="lead/[id]" options={{ href: null }} />
       <Tabs.Screen name="job/[id]" options={{ href: null }} />
+      <Tabs.Screen name="job/new" options={{ href: null }} />
       <Tabs.Screen name="customer/[id]" options={{ href: null }} />
       <Tabs.Screen name="invoices" options={{ href: null }} />
       <Tabs.Screen name="invoice/[id]" options={{ href: null }} />
@@ -88,6 +119,7 @@ export default function OwnerLayout(): React.ReactElement {
       <Tabs.Screen name="web/[surface]" options={{ href: null }} />
       <Tabs.Screen name="estimate/build" options={{ href: null }} />
       <Tabs.Screen name="invoice/lines" options={{ href: null }} />
-    </Tabs>
+      </Tabs>
+    </SupportGate>
   );
 }

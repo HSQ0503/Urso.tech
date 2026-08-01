@@ -45,7 +45,13 @@ import {
   type Lead,
   type LeadStatus,
 } from "@urso/types";
-import { estimateActions, leadActions, type CallOutcome, type LeadPatch } from "@/api";
+import {
+  callActions,
+  estimateActions,
+  leadActions,
+  type CallOutcome,
+  type LeadPatch,
+} from "@/api";
 import { AddressInput } from "@/components/address-input";
 import { isCompleteWhen, SlotPicker } from "@/components/slot-picker";
 import { Avatar } from "@/components/avatar";
@@ -59,6 +65,10 @@ import { color, font, HIT, radius, space, type } from "@/theme";
 // Funnel order comes from the label map's own key order — one source of truth,
 // no second copy of the status union to drift.
 const STATUSES = Object.keys(STATUS_LABEL) as LeadStatus[];
+
+// Below this, the parse is worth a second look before the name, phone, and
+// service on the lead are believed. Same threshold the web list marks rows at.
+const LOW_CONFIDENCE = 0.8;
 
 const OUTCOMES: ReadonlyArray<{ outcome: CallOutcome; label: string }> = [
   { outcome: "closed", label: "Closed" },
@@ -343,11 +353,19 @@ export default function LeadScreen(): React.ReactElement {
   const [statusNotice, setStatusNotice] = useState<string | null>(null);
   const [snoozeNotice, setSnoozeNotice] = useState<string | null>(null);
   const [callNotice, setCallNotice] = useState<string | null>(null);
+  // The two dial affordances answer separately: the bridge can be refused by
+  // the server (no credentials, no owner phone, no number) and can succeed WITH
+  // a sentence, while the tel: link can only fail on this handset.
+  const [bridgeNotice, setBridgeNotice] = useState<string | null>(null);
+  const [bridgeGood, setBridgeGood] = useState<string | null>(null);
+  const [dialNotice, setDialNotice] = useState<string | null>(null);
   const [sendNotice, setSendNotice] = useState<string | null>(null);
   const [sheetNotice, setSheetNotice] = useState<string | null>(null);
   const [deleteNotice, setDeleteNotice] = useState<string | null>(null);
   const [estimateNotice, setEstimateNotice] = useState<string | null>(null);
   const [estimateGood, setEstimateGood] = useState<string | null>(null);
+  const [resendNotice, setResendNotice] = useState<string | null>(null);
+  const [resendGood, setResendGood] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [editing, setEditing] = useState(false);
   const [visitOpen, setVisitOpen] = useState(false);
@@ -391,6 +409,14 @@ export default function LeadScreen(): React.ReactElement {
       keys.overview(),
       keys.agenda(),
     ],
+  });
+  // Click-to-call through the Twilio bridge. The number is a VARIABLE rather
+  // than a closure over lead.phone because this hook runs above the loading
+  // gate, where the lead may not have landed yet — the call sites below only
+  // exist once it has. The action writes a call row and a lead event before it
+  // returns, which is exactly what the tel: link cannot do.
+  const bridgeRun = useAction((peerPhone: string) => callActions.bridge(peerPhone, id), {
+    invalidates: [keys.leads.calls(id), keys.leads.events(id), keys.leads.one(id)],
   });
   // An outcome writes a call row and can move the status, so both the call
   // surfaces (thread + this lead's list) and the status surfaces refresh.
@@ -437,12 +463,19 @@ export default function LeadScreen(): React.ReactElement {
   const buildEstimateRun = useAction((_: void) => estimateActions.createFromLead(id), {
     invalidates: [keys.estimates(), keys.leads.one(id), keys.leads.events(id)],
   });
+  // The same confirmation text the scheduler sends, fired NOW. It writes an
+  // outbound message on the thread and an automation event on the lead, so
+  // both refresh; no status moves, so the attention queues are left alone.
+  //
+  // A2P: the 10DLC campaign has not cleared, so an outbound text is accepted by
+  // Twilio and then dropped carrier-side — the customer may never see it. The
+  // send still succeeds and still logs against the lead, which is exactly what
+  // this button claims to do, and what the web claims too.
+  const resendRun = useAction((_: void) => leadActions.sendConfirmationNow(id), {
+    invalidates: [keys.leads.one(id), keys.leads.events(id), keys.threads.all()],
+  });
 
   const loading = leadQuery.isPending || eventsQuery.isPending || callsQuery.isPending;
-
-  const open = (url: string) => {
-    Linking.openURL(url).catch(() => setActionNotice("This phone couldn't open that."));
-  };
 
   const header = (
     <View style={[styles.chrome, { paddingTop: insets.top + space.sm }]}>
@@ -513,6 +546,10 @@ export default function LeadScreen(): React.ReactElement {
   }
 
   const phone = lead.phone;
+  // Hoisted out of the JSX so the narrowing survives into the render — and so
+  // the threshold is read once, next to the value it judges.
+  const parseConfidence = lead.parse_confidence;
+  const lowConfidence = parseConfidence !== null && parseConfidence < LOW_CONFIDENCE;
   const snoozedUntil =
     lead.snoozed_until !== null && new Date(lead.snoozed_until).getTime() > Date.now()
       ? lead.snoozed_until
@@ -534,6 +571,31 @@ export default function LeadScreen(): React.ReactElement {
   const snoozeTo = async (untilIso: string) => {
     const r = await snoozeRun.mutateAsync(untilIso);
     setSnoozeNotice(r.ok ? null : r.notice);
+  };
+
+  // The bridge returns once Twilio has ACCEPTED the call, which is before any
+  // phone has rung — the server's own sentence says so ("Calling your phone now
+  // — answer to connect"), and it is shown verbatim. The fallback below is this
+  // screen's words, used only if a success arrives with nothing said, and it
+  // makes the same promise: his handset rings next, not the customer's.
+  const startBridge = async (peerPhone: string) => {
+    setBridgeNotice(null);
+    setBridgeGood(null);
+    const r = await bridgeRun.mutateAsync(peerPhone);
+    if (r.ok) {
+      setBridgeGood(
+        successNotice(r.data) ?? "Your phone should ring in a moment — answer to connect.",
+      );
+    } else {
+      setBridgeNotice(r.notice);
+    }
+  };
+
+  const directDial = (peerPhone: string) => {
+    setDialNotice(null);
+    Linking.openURL(`tel:${peerPhone}`).catch(() =>
+      setDialNotice("This phone couldn't start a call."),
+    );
   };
 
   const applyOutcome = async (outcome: CallOutcome, detail?: string) => {
@@ -604,6 +666,18 @@ export default function LeadScreen(): React.ReactElement {
     router.push({ pathname: "/(owner)/estimate/build", params: { id: estimateId } });
   };
 
+  // Not one precondition is tested here. The action owns all of them — no
+  // number, opted out, no appointment on the lead — and each one comes back as
+  // a sentence the reader gets to read; a hidden or greyed-out button would
+  // replace that sentence with a guess.
+  const resendConfirmation = async () => {
+    setResendNotice(null);
+    setResendGood(null);
+    const r = await resendRun.mutateAsync();
+    if (r.ok) setResendGood(successNotice(r.data) ?? "Confirmation text sent.");
+    else setResendNotice(r.notice);
+  };
+
   const confirmDelete = () => {
     Alert.alert("Delete lead?", undefined, [
       { text: "Cancel", style: "cancel" },
@@ -649,14 +723,56 @@ export default function LeadScreen(): React.ReactElement {
                   <Text style={styles.fieldLabel}>Phone</Text>
                   <Text style={styles.big}>{fmtPhone(phone)}</Text>
                 </View>
+                {/* Two ways to dial, and they are NOT the same call. The bridge
+                    keeps the prominence the single "Call" button had because it
+                    is the one that leaves a record: Twilio rings this phone,
+                    then dials the lead from the business line, and the shop
+                    ends up with a call row, a lead event and a duration. The
+                    tel: link below is the fast path for when none of that
+                    matters — it dials from Sebastian's personal number and the
+                    shop learns nothing, which is why it says so. */}
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel={`Call ${leadTitle(lead)}`}
-                  onPress={() => open(`tel:${phone}`)}
-                  style={({ pressed }) => [styles.call, pressed && styles.callPressed]}
+                  accessibilityLabel={`Call ${leadTitle(lead)} on the business line`}
+                  accessibilityHint="Rings this phone first, then dials the lead"
+                  disabled={bridgeRun.isPending}
+                  onPress={() => void startBridge(phone)}
+                  style={({ pressed }) => [
+                    styles.call,
+                    bridgeRun.isPending && styles.disabled,
+                    pressed && styles.callPressed,
+                  ]}
                 >
-                  <Text style={styles.callText}>Call</Text>
+                  <Text style={styles.callText}>
+                    {bridgeRun.isPending ? "Starting the call…" : "Call via business line"}
+                  </Text>
+                  <Text style={styles.callSub}>
+                    Rings your phone first. They see the shop’s number, and it’s recorded.
+                  </Text>
                 </Pressable>
+
+                <View style={[styles.pad, styles.divided]}>
+                  <Notice text={bridgeNotice} />
+                  <GoodNotice text={bridgeGood} />
+                  <View style={styles.dialGroup}>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Dial ${leadTitle(lead)} from this phone`}
+                      onPress={() => directDial(phone)}
+                      style={({ pressed }) => [
+                        styles.button,
+                        styles.wide,
+                        pressed && styles.pressed,
+                      ]}
+                    >
+                      <Text style={styles.buttonText}>Dial from this phone</Text>
+                    </Pressable>
+                    <Text style={styles.muted}>
+                      Goes out from your own number. Nothing is recorded.
+                    </Text>
+                  </View>
+                  <Notice text={dialNotice} />
+                </View>
               </>
             ) : null}
 
@@ -804,12 +920,67 @@ export default function LeadScreen(): React.ReactElement {
                   </Pressable>
                 </View>
               ) : null}
+
+              {/* Directly under the booking controls, because the appointment
+                  is what the text is about. The customer replies YES to this
+                  message and the lead moves itself to confirmed; when the
+                  scheduled one never arrived — or the customer deleted it the
+                  day before the visit — this is how it goes again.
+
+                  Only while the lead is actually WAITING on that reply, which
+                  is the single branch the web offers it in. sendConfirmationNow
+                  has no status guard of its own, so an always-visible button
+                  would happily text a won or lost customer a confirmation for a
+                  visit that already happened — and under A2P nobody would see
+                  the bounce. This is not client-gating a server rule; there is
+                  no server rule here to duplicate. */}
+              {lead.status === "appointment_set" ? (
+                <>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Resend the appointment confirmation text"
+                    disabled={resendRun.isPending}
+                    onPress={() => void resendConfirmation()}
+                    style={({ pressed }) => [
+                      styles.button,
+                      resendRun.isPending && styles.disabled,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <Text style={styles.buttonText}>
+                      {resendRun.isPending ? "Sending…" : "Resend confirmation"}
+                    </Text>
+                  </Pressable>
+                  <Notice text={resendNotice} />
+                  <GoodNotice text={resendGood} />
+                </>
+              ) : null}
             </View>
 
             {lead.notes !== null ? (
               <View style={[styles.pad, styles.divided]}>
                 <Text style={styles.fieldLabel}>Notes</Text>
                 <Text style={styles.body}>{lead.notes}</Text>
+              </View>
+            ) : null}
+
+            {/* The source of every parsed field above it. A vendor text is
+                parsed into name/phone/service by a machine, and when that
+                parse is wrong the lead is quietly wrong — this is the only
+                place the original survives, so it sits in the same card as
+                the fields it produced, not in the activity trail. */}
+            {lead.raw_message !== null ? (
+              <View style={[styles.pad, styles.divided]}>
+                <Text style={styles.fieldLabel}>Original vendor text</Text>
+                <View style={styles.quote}>
+                  <Text style={styles.quoteText}>{lead.raw_message}</Text>
+                </View>
+                {parseConfidence !== null ? (
+                  <Text style={[styles.muted, lowConfidence && styles.dangerInk]}>
+                    {`Parsed at ${Math.round(parseConfidence * 100)}% confidence`}
+                    {lowConfidence ? " — check the name, phone, and service above." : null}
+                  </Text>
+                ) : null}
               </View>
             ) : null}
           </View>
@@ -1128,6 +1299,18 @@ const styles = StyleSheet.create({
     gap: space.sm,
   },
 
+  // The blockquote for the untouched vendor text: inset, hairline, on the page
+  // ground rather than the card's white, so it reads as quoted material and
+  // never as another editable field.
+  quote: {
+    padding: space.md,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.line,
+    backgroundColor: color.bg,
+  },
+  quoteText: { ...type.small, color: color.muted },
+
   goodNotice: {
     backgroundColor: color.goodBg,
     borderRadius: radius.md,
@@ -1139,10 +1322,17 @@ const styles = StyleSheet.create({
     minHeight: 56,
     alignItems: "center",
     justifyContent: "center",
+    gap: 2,
+    paddingHorizontal: space.lg,
+    paddingVertical: space.md,
     backgroundColor: color.brandFill,
   },
   callPressed: { backgroundColor: color.brandDown },
   callText: { ...type.title, color: color.chromeInk },
+  // Light-on-orange, the same muted step the dark chrome uses for second-rank
+  // text — the caption has to be readable in sunlight, not decorative.
+  callSub: { ...type.small, color: color.chromeMuted, textAlign: "center" },
+  dialGroup: { gap: space.xs },
 
   chipRow: { flexDirection: "row", gap: space.sm, paddingVertical: space.xs },
   chip: {

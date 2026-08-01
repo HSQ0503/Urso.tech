@@ -1,9 +1,8 @@
 import { useEffect } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import { api } from "@/api";
-import { authConfigured } from "@/auth";
-import { getAdminToken } from "@/session";
+import { detectWorkspaceSession, platformConfigured } from "@/platform/session";
+import { workspaceHref } from "@/platform/types";
 import { checkEtSupport } from "@/intl-guard";
 import { color, radius, space, type } from "@/theme";
 
@@ -11,18 +10,13 @@ import { color, radius, space, type } from "@/theme";
 // login before any of them is visible, because someone who sees the login screen
 // blink past on every cold start stops trusting that they are actually signed in.
 //
-// Two identities, checked in order of certainty:
-//   admin token in the Keychain -> owner console
-//   Supabase session that api.me() accepts -> crew portal
-//   neither -> login
-//
-// The admin token is checked first and locally, so an owner never waits on a
-// network round trip that is going to fail: api.me() is a CREW endpoint and
-// correctly answers 403 for them.
+// Every configured client is checked directly. We do not feed the crew check
+// through the shared Canes API client because its generic bearer fallback can
+// let an unrelated/stale admin token shadow a real crew session.
 
 export default function Index(): React.ReactElement {
   const router = useRouter();
-  const configured = authConfigured();
+  const configured = platformConfigured();
   // Proven once at launch, not assumed. Hermes gets its timezone data from the
   // platform, and a build without it renders every job time in the device's own
   // zone instead of the shop's. Wrong times sent a crew to the wrong place is
@@ -35,16 +29,9 @@ export default function Index(): React.ReactElement {
 
     void (async () => {
       try {
-        if (await getAdminToken()) {
-          if (!cancelled) router.replace("/(owner)");
-          return;
-        }
-        // me() is the cheapest call that proves a stored crew session is still
-        // one the server will honour — an expired or revoked token fails here
-        // rather than three screens deep.
-        const result = await api.me();
+        const session = await detectWorkspaceSession();
         if (cancelled) return;
-        router.replace(result.ok ? "/(crew)" : "/login");
+        router.replace(session ? workspaceHref(session.workspace) : "/login");
       } catch {
         // SessionExpiredError, or anything else this early: send them to login.
         if (cancelled) return;

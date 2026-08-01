@@ -27,9 +27,10 @@
 // which is what this screen shows — and a carrier failure surfaces later as
 // that message's "Not delivered" marker.
 
-import { useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  AppState,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -41,7 +42,7 @@ import {
   View,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
-import { router, useLocalSearchParams } from "expo-router";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   fmtCallDuration,
@@ -54,7 +55,7 @@ import {
   type Thread,
   type ThreadKind,
 } from "@urso/types";
-import { leadActions, threadActions } from "@/api";
+import { callActions, leadActions, threadActions } from "@/api";
 import { Notice } from "@/components/notice";
 import { keys, useThreadCalls, useThreadMessages, useThreads } from "@/queries";
 import { noticeFrom, useAction, usePullToRefresh } from "@/query";
@@ -70,6 +71,11 @@ const KIND_LABEL: Record<ThreadKind, string> = {
 // only the newest slice so a very long thread opens at its latest activity —
 // the same rationale as the web conversation's MAX_STREAM_ITEMS.
 const MAX_STREAM_ITEMS = 300;
+
+// Same cadence as the inbox list and as the web (InboxPoll's 30s) — see the
+// poll's own note inside the screen for why the interval lives here rather than
+// as a refetchInterval on the shared hooks.
+const POLL_MS = 30_000;
 
 // What ET calendar day an instant fell on, decided by comparing fmtEt output
 // to fmtEt output — never by parsing a formatted string back apart.
@@ -164,6 +170,26 @@ function CallRow({ call }: { call: Call }) {
   );
 }
 
+// A success payload can carry a sentence of its own — the bridge's does, and it
+// is the sentence that matters most here ("Calling your phone now — answer to
+// connect"). Read it without claiming a shape the action types don't promise.
+function successNotice(data: unknown): string | null {
+  if (typeof data !== "object" || data === null) return null;
+  const notice = (data as { notice?: unknown }).notice;
+  return typeof notice === "string" && notice.length > 0 ? notice : null;
+}
+
+// The green sibling of Notice — same shape, good colours — for the ok:true
+// sentences. Local to the screen, same as lead/[id] and invoice/[id].
+function GoodNotice({ text }: { text: string | null }) {
+  if (text === null) return null;
+  return (
+    <View style={styles.goodNotice}>
+      <Text style={styles.goodNoticeText}>{text}</Text>
+    </View>
+  );
+}
+
 function threadTitle(thread: Thread | null, phone: string): string {
   const name = thread?.display_name?.trim();
   return name ? name : fmtPhone(phone);
@@ -185,12 +211,39 @@ export default function ThreadScreen(): React.ReactElement {
   // Three reads: the stream's two halves, plus the threads list — already
   // cached by the inbox this screen was pushed from — to name the peer and
   // find its lead / customer. Like the other pushed detail screens, no focus
-  // refetch: pull-to-refresh is the reader's explicit refresh.
+  // refetch: pull-to-refresh is the reader's explicit refresh, and the poll
+  // below is what arrives while he is still reading.
   const messagesQuery = useThreadMessages(phone);
   const callsQuery = useThreadCalls(phone);
   const threadsQuery = useThreads();
   const { refreshing, onRefresh } = usePullToRefresh(() =>
     Promise.all([messagesQuery.refetch(), callsQuery.refetch(), threadsQuery.refetch()]),
+  );
+
+  // A reply that lands while this conversation is OPEN has to appear on its
+  // own — the web page polls every 30 seconds and this is the same poll, since
+  // the alternative is Sebastian staring at a thread pulling down to find out
+  // whether anyone answered him.
+  //
+  // Only the stream's two halves: a new message or a new call is the whole of
+  // what can change here. The threads list is left out on purpose — it is read
+  // for the header's name and stage, which do not move mid-conversation, and
+  // the inbox refetches it on its own focus the moment this screen is popped.
+  //
+  // useFocusEffect's cleanup fires on blur and on unmount, so the timer cannot
+  // outlive the screen; the AppState check stops a backgrounded app from
+  // polling from a pocket, which is the battery this is meant to protect. See
+  // inbox.tsx's POLL_MS note for why the interval lives in the screen rather
+  // than as a refetchInterval on the shared hook.
+  useFocusEffect(
+    useCallback(() => {
+      const id = setInterval(() => {
+        if (AppState.currentState !== "active") return;
+        void messagesQuery.refetch();
+        void callsQuery.refetch();
+      }, POLL_MS);
+      return () => clearInterval(id);
+    }, [messagesQuery.refetch, callsQuery.refetch]),
   );
 
   const thread = (threadsQuery.data ?? []).find((t) => t.peer_phone === phone) ?? null;
@@ -199,6 +252,33 @@ export default function ThreadScreen(): React.ReactElement {
 
   const [draft, setDraft] = useState("");
   const [sendNotice, setSendNotice] = useState<string | null>(null);
+  // The bridge answers in two directions: a refusal (no Twilio credentials, no
+  // owner phone, no number) and a success that still has something to say.
+  const [callNotice, setCallNotice] = useState<string | null>(null);
+  const [callGood, setCallGood] = useState<string | null>(null);
+
+  // Click-to-call through the Twilio bridge — what the web conversation header
+  // has offered all along. NOT a tel: link: this rings Sebastian's handset
+  // first, then dials the peer with the BUSINESS number as caller ID, and
+  // writes a call row against the phone (and a lead event when there is a
+  // lead). The thread key IS the peer phone, so that is what gets dialled; the
+  // lead id rides along only when the thread has one, exactly like the composer
+  // above it.
+  const bridgeRun = useAction((leadId: string | undefined) => callActions.bridge(phone, leadId), {
+    // The call lands in this stream and moves the thread's last activity, so
+    // the inbox refreshes with it; a lead-bound call also writes the event and
+    // the lead's own call list.
+    invalidates:
+      lead !== null
+        ? [
+            keys.threads.calls(phone),
+            keys.threads.all(),
+            keys.leads.calls(lead.id),
+            keys.leads.events(lead.id),
+            keys.leads.one(lead.id),
+          ]
+        : [keys.threads.calls(phone), keys.threads.all()],
+  });
 
   // A sent text lands in this stream and reorders the inbox; it also writes a
   // lead event when the thread has a lead. The lead-free path is the thread
@@ -263,6 +343,23 @@ export default function ThreadScreen(): React.ReactElement {
   };
   const navigable = contactId !== null || lead !== null;
 
+  // The action returns once Twilio has ACCEPTED the call — before any phone has
+  // rung. The server's sentence says exactly that and is shown verbatim; the
+  // fallback is this screen's own words for the same fact, used only if a
+  // success arrives with nothing said. Neither implies the peer is connected.
+  const startBridge = async () => {
+    setCallNotice(null);
+    setCallGood(null);
+    const r = await bridgeRun.mutateAsync(lead?.id);
+    if (r.ok) {
+      setCallGood(
+        successNotice(r.data) ?? "Your phone should ring in a moment — answer to connect.",
+      );
+    } else {
+      setCallNotice(r.notice);
+    }
+  };
+
   const send = async () => {
     const r = await sendRun.mutateAsync({ leadId: lead?.id ?? null, message: draft.trim() });
     if (r.ok) {
@@ -276,38 +373,74 @@ export default function ThreadScreen(): React.ReactElement {
   const meta = threadMeta(thread, phone);
 
   const header = (
-    <View style={[styles.chrome, { paddingTop: insets.top + space.sm }]}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Back"
-        onPress={() => router.back()}
-        hitSlop={space.sm}
-        style={({ pressed }) => [styles.back, pressed && styles.backPressed]}
-      >
-        <Feather name="chevron-left" size={20} color={color.chromeMuted} />
-        <Text style={styles.backText}>Back</Text>
-      </Pressable>
-      <Pressable
-        accessibilityRole={navigable ? "button" : undefined}
-        accessibilityLabel={
-          navigable
-            ? `Open ${contactId !== null ? "customer" : "lead"} ${threadTitle(thread, phone)}`
-            : undefined
-        }
-        disabled={!navigable}
-        onPress={goPeer}
-        hitSlop={space.sm}
-        style={({ pressed }) => [styles.peer, pressed && navigable && styles.backPressed]}
-      >
-        <Text style={styles.chromeName} numberOfLines={1}>
-          {threadTitle(thread, phone)}
-        </Text>
-        {navigable ? (
-          <Feather name="chevron-right" size={18} color={color.chromeFaint} />
-        ) : null}
-      </Pressable>
-      {meta !== null ? <Text style={styles.chromeMeta}>{meta}</Text> : null}
-    </View>
+    <>
+      <View style={[styles.chrome, { paddingTop: insets.top + space.sm }]}>
+        <View style={styles.chromeRow}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Back"
+            onPress={() => router.back()}
+            hitSlop={space.sm}
+            style={({ pressed }) => [styles.back, pressed && styles.backPressed]}
+          >
+            <Feather name="chevron-left" size={20} color={color.chromeMuted} />
+            <Text style={styles.backText}>Back</Text>
+          </Pressable>
+          {/* The conversation's call affordance, where the web puts it. The
+              peer phone is the route param, so this works before the threads
+              list has landed — there is nothing else it needs to know. */}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Call ${threadTitle(thread, phone)} on the business line`}
+            accessibilityHint="Rings this phone first, then dials them from the shop’s number"
+            disabled={bridgeRun.isPending}
+            onPress={() => void startBridge()}
+            style={({ pressed }) => [
+              styles.callChip,
+              bridgeRun.isPending && styles.disabled,
+              pressed && styles.backPressed,
+            ]}
+          >
+            <Feather name="phone-call" size={15} color={color.brand} />
+            <Text style={styles.callChipText} numberOfLines={1}>
+              {bridgeRun.isPending ? "Starting the call…" : "Call via business line"}
+            </Text>
+          </Pressable>
+        </View>
+        <Pressable
+          accessibilityRole={navigable ? "button" : undefined}
+          accessibilityLabel={
+            navigable
+              ? `Open ${contactId !== null ? "customer" : "lead"} ${threadTitle(thread, phone)}`
+              : undefined
+          }
+          disabled={!navigable}
+          onPress={goPeer}
+          hitSlop={space.sm}
+          style={({ pressed }) => [styles.peer, pressed && navigable && styles.backPressed]}
+        >
+          <Text style={styles.chromeName} numberOfLines={1}>
+            {threadTitle(thread, phone)}
+          </Text>
+          {navigable ? (
+            <Feather name="chevron-right" size={18} color={color.chromeFaint} />
+          ) : null}
+        </Pressable>
+        {meta !== null ? <Text style={styles.chromeMeta}>{meta}</Text> : null}
+      </View>
+
+      {/* What the bridge said, directly under the control that said it, and
+          OUTSIDE the stream — the stream is pinned to its newest message, so a
+          notice placed in it would scroll away the moment it appeared. It sits
+          in the header so it also shows while the thread is still loading; the
+          call button does not wait for the reads. */}
+      {callNotice !== null || callGood !== null ? (
+        <View style={styles.callBand}>
+          <Notice text={callNotice} />
+          <GoodNotice text={callGood} />
+        </View>
+      ) : null}
+    </>
   );
 
   if (messagesQuery.isPending || callsQuery.isPending || threadsQuery.isPending) {
@@ -419,6 +552,12 @@ const styles = StyleSheet.create({
     paddingBottom: space.md,
     gap: space.xs,
   },
+  chromeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: space.sm,
+  },
   back: {
     minHeight: HIT,
     flexDirection: "row",
@@ -427,6 +566,33 @@ const styles = StyleSheet.create({
   },
   backPressed: { opacity: 0.6 },
   backText: { ...type.body, color: color.chromeMuted },
+  // On the black chrome: raised fill, hairline, orange ink — the accent marks
+  // it as the one action in the bar without becoming a second brand colour.
+  callChip: {
+    minHeight: HIT,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xs,
+    flexShrink: 1,
+    paddingHorizontal: space.md,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.chromeLine,
+    backgroundColor: color.chromeRaise,
+  },
+  callChipText: { ...type.body, color: color.brand, flexShrink: 1 },
+  callBand: {
+    backgroundColor: color.bg,
+    paddingHorizontal: space.lg,
+    paddingTop: space.sm,
+    gap: space.sm,
+  },
+  goodNotice: {
+    backgroundColor: color.goodBg,
+    borderRadius: radius.md,
+    padding: space.md,
+  },
+  goodNoticeText: { ...type.small, color: color.good },
   peer: {
     flexDirection: "row",
     alignItems: "center",

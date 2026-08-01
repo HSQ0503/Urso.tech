@@ -507,7 +507,12 @@ export async function getStoreDayLineItems(
   endDate: string,
   includePassthrough = false,
 ): Promise<DayTickets | null> {
-  const supabase = await createClient();
+  // The underlying RPC is SECURITY DEFINER over raw FranPOS staging rows. It
+  // is service-role only after tenant hardening; the request-scoped AI tool
+  // has already resolved and locked `scope` from the signed-in membership.
+  // Keeping the privileged client here prevents an authenticated browser from
+  // calling the raw RPC directly with another store id.
+  const supabase = createAdminClient();
   const { data, error } = await supabase.rpc("store_day_lineitems", {
     p_store_ids: scopeIds(scope),
     p_start: startDate,

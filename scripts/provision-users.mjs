@@ -33,6 +33,7 @@ const BRAIN_TWINS = process.argv.includes("--brain-twins");
 // The account directory — same people as the old mock identities.
 const DIRECTORY = [
   { email: "han@urso.tech", name: "Han · Urso", role: "urso_admin", store: null },
+  { email: "guga@urso.ws", name: "Guga · Urso", role: "urso_admin", store: null },
   { email: "rubens@woofgangbakery.com", name: "Rubens Campos", role: "owner", store: null },
   { email: "winterpark@woofgangbakery.com", name: "Winter Park manager", role: "manager", store: "wp" },
   { email: "wintergarden@woofgangbakery.com", name: "Winter Garden manager", role: "manager", store: "wg" },

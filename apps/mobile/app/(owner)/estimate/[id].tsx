@@ -10,6 +10,11 @@
 // under the totals (draft only — the action refuses anything else). Expiry,
 // message and terms are still web-only surfaces.
 //
+// The customer link — the page the customer actually approves from — is here
+// too, because sending it again from the driveway is the job. See the note on
+// customerUrl for why the token behind it is safe to hand to the share sheet
+// on THIS screen and nowhere else.
+//
 // Money is integer cents formatted with fmtMoney; nothing here computes. Every
 // timestamp is America/New_York via fmtEt. Mutation refusals are the server's
 // own sentences, shown verbatim in the section where the tap happened — and so
@@ -24,6 +29,7 @@ import {
   Pressable,
   RefreshControl,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   View,
@@ -41,7 +47,7 @@ import {
   PAYMENT_METHOD_LABEL,
   type EstimateItem,
 } from "@urso/types";
-import { estimateActions } from "@/api";
+import { API_BASE, estimateActions } from "@/api";
 import { Avatar } from "@/components/avatar";
 import { NavigateButton } from "@/components/navigate";
 import { Notice } from "@/components/notice";
@@ -143,6 +149,7 @@ export default function EstimateScreen(): React.ReactElement {
   // One refusal surface per section, so the sentence lands next to the tap
   // that earned it instead of at the top of a long scroll.
   const [customerNotice, setCustomerNotice] = useState<string | null>(null);
+  const [linkNotice, setLinkNotice] = useState<string | null>(null);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
   const [goodNotice, setGoodNotice] = useState<string | null>(null);
   const [dangerNotice, setDangerNotice] = useState<string | null>(null);
@@ -217,6 +224,60 @@ export default function EstimateScreen(): React.ReactElement {
   const goCustomer = () => {
     if (estimate.contact_id === null) return;
     router.push({ pathname: "/(owner)/customer/[id]", params: { id: estimate.contact_id } });
+  };
+
+  // The customer's own page, the same URL the web console shows as "Customer
+  // link". Built off API_BASE so a dev build points at the dev origin instead
+  // of quietly linking a tester at production.
+  //
+  // public_token is a CREDENTIAL, not an identifier. /CanesPressure/e/<token>
+  // is an unauthenticated page and whoever holds the value can APPROVE this
+  // estimate from it — create the job, commit the deposit. It is safe to
+  // surface here because this screen only renders behind the `estimates`
+  // permission, the same gate the token sits behind on the web estimate page;
+  // it is redacted from GET /canes/customers/:id precisely because `customers`
+  // is a lower bar, and that response would hand the token to someone the
+  // system never granted estimate access. So: never logged, never written into
+  // a notice, and never rendered as text — the share sheet passes it to the OS
+  // without it ever appearing on a screen the customer is standing next to.
+  const customerUrl = `${API_BASE}/CanesPressure/e/${estimate.public_token}`;
+
+  // Opening this page is NOT a neutral read: /e/[token] calls markViewed, which
+  // flips a sent estimate to `viewed`, stamps viewed_at, and writes "viewed by
+  // customer" onto the lead's timeline. That strip is exactly what Sebastian
+  // reads to decide whether a quote needs chasing, so an owner previewing his
+  // own quote would tell himself the customer had opened it. The web has the
+  // same behaviour behind a "Customer link" anchor; a stray tap is far likelier
+  // on a phone, so here it says so first.
+  const onOpenLink = () => {
+    setLinkNotice(null);
+    Alert.alert(
+      "Open the customer's page?",
+      "This marks the estimate as viewed and adds it to the timeline, exactly as if the customer had opened it.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Open anyway",
+          onPress: () => {
+            Linking.openURL(customerUrl).catch(() =>
+              setLinkNotice("This phone couldn't open that."),
+            );
+          },
+        },
+      ],
+    );
+  };
+
+  // Sharing IS the job — the link's whole purpose is to reach the customer, and
+  // the OS sheet is where a phone hands something to Messages or Mail. Share is
+  // a core react-native export; nothing new was added to reach it.
+  const onShareLink = async () => {
+    setLinkNotice(null);
+    try {
+      await Share.share({ message: customerUrl });
+    } catch {
+      setLinkNotice("This phone couldn't share that.");
+    }
   };
 
   const onSend = async () => {
@@ -497,6 +558,40 @@ export default function EstimateScreen(): React.ReactElement {
             </View>
           </View>
         </Section>
+
+        {/* Same condition the web page uses: a draft's token 404s, so the link
+            appears the moment the quote is sendable and stays afterwards —
+            declined and expired quotes included, where re-reading exactly what
+            the customer saw is the point. */}
+        {estimate.status !== "draft" ? (
+          <Section label="Customer link">
+            <View style={styles.card}>
+              <View style={[styles.pad, styles.actions]}>
+                <Text style={styles.muted}>
+                  The page the customer sees. Anyone holding this link can approve the estimate,
+                  so it goes to the customer and no one else.
+                </Text>
+                <Notice text={linkNotice} />
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Open the customer's estimate page"
+                  onPress={onOpenLink}
+                  style={({ pressed }) => [styles.button, pressed && styles.pressed]}
+                >
+                  <Text style={styles.buttonText}>Open customer view</Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Share the customer's estimate link"
+                  onPress={() => void onShareLink()}
+                  style={({ pressed }) => [styles.button, pressed && styles.pressed]}
+                >
+                  <Text style={styles.buttonText}>Share link</Text>
+                </Pressable>
+              </View>
+            </View>
+          </Section>
+        ) : null}
 
         {showActions ? (
           <Section label="Actions">

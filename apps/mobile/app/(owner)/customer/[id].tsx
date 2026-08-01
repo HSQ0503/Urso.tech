@@ -193,6 +193,9 @@ export default function CustomerScreen(): React.ReactElement {
   const { contact, addresses, lead, estimates, jobs, invoices } = detail;
   const phone = contact.phone;
   const email = contact.email;
+  // The job form opens on the address the work most likely happens at — the
+  // same default the web's CreateWork sheet picks.
+  const primaryLine = addresses.find((a) => a.is_primary)?.line ?? addresses[0]?.line ?? "";
 
   const makePrimary = async (addressId: string) => {
     setAddressNotice(null);
@@ -503,6 +506,32 @@ export default function CustomerScreen(): React.ReactElement {
                 <Text style={styles.mutedText}>No jobs yet.</Text>
               </View>
             )}
+
+            {/* Repeat work for someone already on the books, with no quote in
+                between — the neighbour who walks up while he is on site. The
+                contact rides along so the job files itself under this profile
+                instead of minting a second copy of the same person.
+                NOTE: a plain string href, not {pathname, params}. Typed routes
+                are generated from the file tree into .expo/types, which is a
+                dev artifact — the object form does not typecheck until someone
+                runs the app, and this string form is valid before and after. */}
+            <View style={[styles.pad, styles.divided]}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Create a job for this customer"
+                onPress={() =>
+                  router.push(
+                    `/(owner)/job/new?contactId=${encodeURIComponent(contact.id)}&name=${encodeURIComponent(contact.name ?? "")}&phone=${encodeURIComponent(contact.phone ?? "")}&address=${encodeURIComponent(primaryLine)}`,
+                  )
+                }
+                style={({ pressed }) => [styles.neutralBtn, pressed && styles.rowPressed]}
+              >
+                <Text style={styles.body}>New job</Text>
+              </Pressable>
+              <Text style={styles.mutedText}>
+                Books work straight onto the schedule — no estimate needed.
+              </Text>
+            </View>
           </View>
         </Section>
 

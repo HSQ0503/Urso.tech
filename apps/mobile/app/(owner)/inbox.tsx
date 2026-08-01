@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AppState,
   ActivityIndicator,
@@ -10,7 +10,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import {
@@ -36,6 +36,8 @@ import { color, font, HIT, radius, space, type } from "@/theme";
 //
 // Times are America/New_York, always, through fmtEt. Nothing on this screen
 // reads the device calendar — see the note on recentEtDayKeys.
+//
+// New inbound texts arrive on their own — see POLL_MS.
 
 // ── Eastern-time day arithmetic ─────────────────────────────────────────────
 //
@@ -76,6 +78,22 @@ function relativeEt(iso: string, dayKeys: string[]): string {
   // actual day rather than guess at a relative phrase.
   return fmtEt(iso, { month: "short", day: "numeric" });
 }
+
+// ── The poll ────────────────────────────────────────────────────────────────
+//
+// The web inbox refreshes itself every 30 seconds (InboxPoll → router.refresh()).
+// Without it here, a text that lands while Sebastian is looking at this list
+// stays invisible until he pulls down or leaves and comes back — on the one
+// screen whose entire job is making the person waiting on him impossible to
+// miss. Same 30s, so the two consoles agree on how stale "now" can be.
+//
+// refetchInterval is TanStack's own mechanism and would be the obvious answer,
+// but it is declared on the hook, and the hooks live in src/queries.ts where
+// useThreads is shared — thread/[phone] mounts it too, just to name the peer in
+// its header. An interval set there would poll from every screen that happens to
+// read the query. Driving refetch() from an interval owned by the screen keeps
+// polling a property of the SCREEN, which is what it actually is.
+const POLL_MS = 30_000;
 
 // ── Thread reading ──────────────────────────────────────────────────────────
 
@@ -279,6 +297,26 @@ export default function InboxScreen(): React.ReactElement {
   // sitting in "Waiting on you".
   useRefetchOnFocus(threadsQuery.refetch);
   const { refreshing, onRefresh } = usePullToRefresh(threadsQuery.refetch);
+
+  // The poll itself. useFocusEffect's cleanup runs on blur AND on unmount, so
+  // the timer can never outlive this screen — tab away and it stops, come back
+  // and a fresh one starts (after useRefetchOnFocus has already refreshed).
+  //
+  // Focus alone is not enough on a phone: a backgrounded app keeps its focused
+  // screen focused, so a phone face-down in a truck would keep waking the radio
+  // every 30 seconds for a list nobody is reading. Checking AppState at tick
+  // time costs nothing and needs no second subscription — and the existing
+  // "active" listener below re-stamps the day labels on return anyway, with the
+  // next tick refreshing the data right behind it.
+  useFocusEffect(
+    useCallback(() => {
+      const id = setInterval(() => {
+        if (AppState.currentState !== "active") return;
+        void threadsQuery.refetch();
+      }, POLL_MS);
+      return () => clearInterval(id);
+    }, [threadsQuery.refetch]),
+  );
 
   const threads = threadsQuery.data ?? null;
   const notice = noticeFrom(threadsQuery.error);

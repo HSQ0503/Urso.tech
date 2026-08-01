@@ -10,25 +10,19 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { sendLoginCode, verifyLoginCode } from "@/auth";
+import {
+  sendWorkspaceCode,
+  signInWorkspaceWithPassword,
+  verifyWorkspaceCode,
+} from "@/platform/auth";
+import { workspaceHref } from "@/platform/types";
+import { queryClient } from "@/query";
 import { color, font, HIT, radius, space, type } from "@/theme";
 
-// Passwordless sign-in for BOTH identities, in two steps on one screen.
-//
-// Owners and technicians authenticate against different systems, but nobody
-// should have to know that. One email field; auth.ts asks both backends and only
-// the one that owns the address delivers anything. The verify step reports which
-// system accepted the code, and that decides where the app lands.
-//
-// A code, not a magic link: a link has to survive the mail app, the browser and
-// a universal-link association, and every break in that chain strands someone
-// standing at a customer's driveway. Numbers they can read off a phone always
-// work.
-//
-// The copy is written for whoever is holding the phone, not a developer — no
-// "OTP", no "auth", no error codes.
-
-type Step = "email" | "code";
+// One neutral entry point across clients. The method is selected by the person,
+// never guessed from their email, so this screen cannot become a membership
+// lookup tool.
+type Step = "choice" | "code" | "password";
 
 const FALLBACK_NOTICE = "That didn’t go through. Try again in a moment.";
 
@@ -43,23 +37,30 @@ export default function Login(): React.ReactElement {
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
-  const [step, setStep] = useState<Step>("email");
+  const [step, setStep] = useState<Step>("choice");
   const [email, setEmail] = useState<string>("");
   const [code, setCode] = useState<string>("");
+  const [password, setPassword] = useState<string>("");
   const [busy, setBusy] = useState<boolean>(false);
   const [notice, setNotice] = useState<string | null>(null);
 
-  async function handleSendCode(): Promise<void> {
-    if (busy) return;
+  function requireEmail(): string | null {
     const address = email.trim();
     if (!address) {
       setNotice("Enter your work email first.");
-      return;
+      return null;
     }
+    return address;
+  }
+
+  async function handleSendCode(): Promise<void> {
+    if (busy) return;
+    const address = requireEmail();
+    if (!address) return;
 
     setBusy(true);
     setNotice(null);
-    const result = await sendLoginCode(address);
+    const result = await sendWorkspaceCode(address);
     setBusy(false);
 
     if (!result.ok) {
@@ -70,7 +71,7 @@ export default function Login(): React.ReactElement {
     setStep("code");
   }
 
-  async function handleSignIn(): Promise<void> {
+  async function handleVerifyCode(): Promise<void> {
     if (busy) return;
     const entered = code.trim();
     // Supabase's OTP length is a PROJECT SETTING (6–10 digits), not a constant.
@@ -84,23 +85,53 @@ export default function Login(): React.ReactElement {
 
     setBusy(true);
     setNotice(null);
-    const result = await verifyLoginCode(email.trim(), entered);
+    const result = await verifyWorkspaceCode(email.trim(), entered);
     setBusy(false);
 
     if (!result.ok) {
       setNotice(result.notice ?? FALLBACK_NOTICE);
       return;
     }
-    // The verify step reports which identity system accepted the code, so the
-    // user never has to say whether they are an owner or crew — they type one
-    // email, get one code, and land in the right place.
-    router.replace(result.identity === "owner" ? "/(owner)" : "/(crew)");
+    if (result.workspace) {
+      queryClient.clear();
+      router.replace(workspaceHref(result.workspace));
+    }
   }
 
-  function handleChangeEmail(): void {
+  async function handlePasswordSignIn(): Promise<void> {
     if (busy) return;
-    setStep("email");
+    const address = requireEmail();
+    if (!address) return;
+    if (!password) {
+      setNotice("Enter your password.");
+      return;
+    }
+
+    setBusy(true);
+    setNotice(null);
+    const result = await signInWorkspaceWithPassword(address, password);
+    setBusy(false);
+
+    if (!result.ok || !result.workspace) {
+      setNotice(result.notice ?? FALLBACK_NOTICE);
+      return;
+    }
+    queryClient.clear();
+    router.replace(workspaceHref(result.workspace));
+  }
+
+  function handleChoose(method: Extract<Step, "code" | "password">): void {
+    if (busy || !requireEmail()) return;
+    setNotice(null);
+    setStep(method);
+    if (method === "code") void handleSendCode();
+  }
+
+  function handleChangeMethod(): void {
+    if (busy) return;
+    setStep("choice");
     setCode("");
+    setPassword("");
     setNotice(null);
   }
 
@@ -108,9 +139,9 @@ export default function Login(): React.ReactElement {
     <View style={styles.screen}>
       <View style={[styles.header, { paddingTop: insets.top + space.lg }]}>
         <Text style={styles.wordmark}>
-          Canes<Text style={styles.wordmarkDot}>.</Text>
+          Urso<Text style={styles.wordmarkDot}>.</Text>
         </Text>
-        <Text style={styles.wordmarkLabel}>Canes Pressure Washing</Text>
+        <Text style={styles.wordmarkLabel}>Client operations</Text>
       </View>
 
       <KeyboardAvoidingView
@@ -118,12 +149,12 @@ export default function Login(): React.ReactElement {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         <View style={styles.card}>
-          {step === "email" ? (
+          {step === "choice" ? (
             <>
               <Text style={styles.title}>Sign in</Text>
               <Text style={styles.lede}>
-                We send a code to your work email — the address the office set up for you.
-                No password to remember.
+                Use the sign-in method your office gave you. Your email works across Urso
+                workspaces.
               </Text>
 
               <Text style={styles.label}>Work email</Text>
@@ -140,11 +171,11 @@ export default function Login(): React.ReactElement {
                 returnKeyType="send"
                 editable={!busy}
                 onSubmitEditing={() => {
-                  void handleSendCode();
+                  handleChoose("password");
                 }}
               />
             </>
-          ) : (
+          ) : step === "code" ? (
             <>
               <Text style={styles.title}>Check your email</Text>
               <Text style={styles.lede}>
@@ -166,7 +197,33 @@ export default function Login(): React.ReactElement {
                 editable={!busy}
                 autoFocus
                 onSubmitEditing={() => {
-                  void handleSignIn();
+                  void handleVerifyCode();
+                }}
+              />
+            </>
+          ) : (
+            <>
+              <Text style={styles.title}>Enter your password</Text>
+              <Text style={styles.lede}>
+                Use the password your office set up. You can return and get an email code instead.
+              </Text>
+
+              <Text style={styles.label}>Password</Text>
+              <TextInput
+                style={styles.input}
+                value={password}
+                onChangeText={setPassword}
+                placeholder="Password"
+                placeholderTextColor={color.faint}
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoComplete="password"
+                secureTextEntry
+                returnKeyType="go"
+                editable={!busy}
+                autoFocus
+                onSubmitEditing={() => {
+                  void handlePasswordSignIn();
                 }}
               />
             </>
@@ -178,29 +235,58 @@ export default function Login(): React.ReactElement {
             </View>
           )}
 
-          <Pressable
-            accessibilityRole="button"
-            disabled={busy}
-            onPress={() => {
-              void (step === "email" ? handleSendCode() : handleSignIn());
-            }}
-            style={({ pressed }) => [
-              styles.primary,
-              pressed && styles.primaryDown,
-              busy && styles.primaryOff,
-            ]}
-          >
-            <Text style={styles.primaryLabel}>{primaryLabel(step, busy)}</Text>
-          </Pressable>
-
-          {step === "code" && (
+          {step === "choice" ? (
+            <View style={styles.actions}>
+              <Pressable
+                accessibilityRole="button"
+                disabled={busy}
+                onPress={() => handleChoose("password")}
+                style={({ pressed }) => [
+                  styles.primary,
+                  pressed && styles.primaryDown,
+                  busy && styles.primaryOff,
+                ]}
+              >
+                <Text style={styles.primaryLabel}>Continue with password</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                disabled={busy}
+                onPress={() => handleChoose("code")}
+                style={({ pressed }) => [
+                  styles.secondary,
+                  pressed && styles.secondaryDown,
+                  busy && styles.primaryOff,
+                ]}
+              >
+                <Text style={styles.secondaryLabel}>Email me a code</Text>
+              </Pressable>
+            </View>
+          ) : (
             <Pressable
               accessibilityRole="button"
               disabled={busy}
-              onPress={handleChangeEmail}
+              onPress={() => {
+                void (step === "code" ? handleVerifyCode() : handlePasswordSignIn());
+              }}
+              style={({ pressed }) => [
+                styles.primary,
+                pressed && styles.primaryDown,
+                busy && styles.primaryOff,
+              ]}
+            >
+              <Text style={styles.primaryLabel}>{primaryLabel(step, busy)}</Text>
+            </Pressable>
+          )}
+
+          {step !== "choice" && (
+            <Pressable
+              accessibilityRole="button"
+              disabled={busy}
+              onPress={handleChangeMethod}
               style={styles.textButton}
             >
-              <Text style={styles.textButtonLabel}>Use a different email</Text>
+              <Text style={styles.textButtonLabel}>Use a different sign-in method</Text>
             </Pressable>
           )}
         </View>
@@ -209,8 +295,8 @@ export default function Login(): React.ReactElement {
   );
 }
 
-function primaryLabel(step: Step, busy: boolean): string {
-  if (step === "email") return busy ? "Sending…" : "Send code";
+function primaryLabel(step: Exclude<Step, "choice">, busy: boolean): string {
+  if (step === "code") return busy ? "Signing in…" : "Sign in";
   return busy ? "Signing in…" : "Sign in";
 }
 
@@ -315,6 +401,26 @@ const styles = StyleSheet.create({
     fontFamily: font.bodySemi,
     fontSize: 15,
     color: color.surface,
+  },
+  actions: {
+    marginTop: space.lg,
+    gap: space.sm,
+  },
+  secondary: {
+    minHeight: HIT,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.lineStrong,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  secondaryDown: {
+    backgroundColor: color.hover,
+  },
+  secondaryLabel: {
+    fontFamily: font.bodySemi,
+    fontSize: 15,
+    color: color.brandDeep,
   },
   textButton: {
     minHeight: HIT,
