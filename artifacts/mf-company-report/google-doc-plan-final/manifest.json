@@ -1,0 +1,1993 @@
+{
+  "source_html": "/Users/han/Desktop/Urso.tech/artifacts/mf-company-report/report-for-google-doc.html",
+  "title": "Minerbo-Fuchs: How the Company Actually Works",
+  "skeleton_text": "Data Analytics report\nMinerbo-Fuchs: How the Company Actually Works\nMeeting-ready company briefing verified against current first-party sources on August 1, 2026.\nAug 1, 2026, 6:33 PM UTC\nExecutive Summary\nMF is an industrial-engineering services company, not merely an architecture studio or construction contractor. It sells the reduction of risk in capital projects: defining the right facility, coordinating technical disciplines, protecting cost and schedule, supervising execution and—when contracted—delivering construction or turnkey responsibility.\nIts public operating model has three commercial pillars: Architecture & Engineering, Construction Management/Inspection, and Construction. A client can buy one piece, combine design with owner's-engineer oversight, or place broader responsibility with MF.\nThe “15 internal disciplines” combine different kinds of work. Five are project governance and control functions, four establish the site's/building's physical base, and six design the utilities and operating systems. Their competitive advantage depends less on any single discipline than on coordinating decisions across all 15.\nThe central operating challenge is information continuity. A production premise becomes architectural space, structural loads, electrical capacity, HVAC demand, piping routes, automation logic, cost and schedule. If one change fails to reach one discipline, the error can survive until procurement or construction, where correction is expensive.\n\nMF in one sentence\nMinerbo-Fuchs Engenharia S.A. is a privately held, second-generation Brazilian industrial-engineering company that designs, coordinates, manages, inspects and sometimes constructs complex industrial facilities.\nVerified profile\nLegal entity: Minerbo-Fuchs Engenharia S.A.; CNPJ 46.158.481/0001-69.\nFounded: May 28, 1974; 52 years old in 2026.\nHeadquarters: Alphaville, Barueri, São Paulo.\nScale claimed by MF: 1,000+ delivered projects, 17M+ m² designed, and 15 internal disciplines.\nCurrent workforce evidence: LinkedIn classifies MF as 201–500 employees and exposes 154 associated profiles; MF's 2025 anniversary post said it had more than 200 professionals.\nGeography: primarily Brazil, with public international evidence including a 49,000 m² BRF basic-design project in Saudi Arabia.\nSectors: automotive, food and beverage, pharmaceutical, hospitals, cosmetics, equipment, technology, paper and pulp, mining, steel, cement, data centers, airports, commercial buildings and urban infrastructure.\n\nWhat it is not\nMF does not manufacture factory equipment and is not simply a labor contractor. It sits between the client's business/operations team, architects and engineers, equipment vendors, construction contractors, regulators, certification partners and the final operating plant. Its product is a technically coordinated, buildable and governable capital project.\nMF can occupy four different positions in the same kind of project\nThe contract determines whether MF is a designer, the owner's technical representative, the builder, or an integrated combination. This matters in the meeting because each position has different workflows, documents, permissions and liability.\nPublic portfolio pages show many engagements where MF designed and managed/inspected while another company performed construction. Its website also markets an internal construction unit and full turnkey delivery. Therefore, do not assume every MF project uses the same contract model—or that “project,” “management,” “inspection” and “construction” are interchangeable.\nMF engagement and contract modes\nSource for MF engagement and contract modes\nSource: MF engagement modes compiled from official services and project pages\nTable: MF engagement modes compiled from official services and project pages\nReproduces the reviewed table of MF engagement modes. Commercial logic is Urso interpretation and is labeled as such.\nSELECT * FROM (VALUES ('Design only', 'Feasibility, basic design, executive/detailed design or selected disciplines', 'Multidisciplinary designer/consultant', 'BRF Saudi Arabia — Phase 1 basic design, 49,000 m²', 'Professional-service fee tied to scope, hours, deliverables and milestones'), ('Design + management/inspection', 'Design plus schedule, cost, quality, supplier and field oversight', 'Designer and/or owner''s engineer', 'SEW-Eurodrive, Nice Brasil, Jacto, Daiichi and Uberlândia Refrescos', 'Design fee plus management/inspection scope over the project duration'), ('Management/inspection only', 'Client-side governance of an existing design and contractors', 'Technical representative protecting the owner''s CAPEX', 'MF markets this as a strategic business unit; exact revenue mix is not public', 'Time-based or milestone-based project-management services'), ('Construction / turnkey', 'Civil works, industrial/electromechanical assembly, finishes, commissioning and single-point responsibility', 'Builder or integrated turnkey partner', 'Official construction and turnkey offering; public project pages often show separate construction partners', 'Construction contract with materially greater delivery, supplier and field risk') ) AS engagement_modes(mode, what_mf_sells, mf_role, public_example, commercial_logic) ORDER BY mode\n[[TABLE_01]]\n\nThe operating model is a chain of decisions, not a chain of drawings\nA successful MF project progressively converts a business requirement into an operating industrial asset. The exact sequence varies by contract and project type, but the public workflow consistently points to ten stages.\nThe most important concept is the design basis or set of premises. A statement such as “the line must produce 80,000 bottles per hour” affects area, foundations, equipment, electrical demand, cooling, water, piping, controls, logistics, cost and schedule. MF itself identifies undefined or outdated premises and weak discipline integration as causes of expensive dimensioning errors.\nMF describes three review moments: when premises are closed with operations, at the end of basic design, and before executive design is released to construction. Those gates are cheap opportunities to catch errors before they become concrete, steel or purchased equipment.\nTypical MF project lifecycle\nSource for Typical MF project lifecycle\nSource: Synthesized MF project lifecycle\nTable: Synthesized MF project lifecycle\nReproduces the lifecycle synthesis from MF's official workflow, dimensioning, cost-management, construction and commissioning material.\nSELECT * FROM (VALUES (1, 'Lead, referral or tender', 'A client approaches MF directly, through a recurring relationship/referral, or via a competitive bid.', 'Leadership, commercial/BID', 'Whether MF pursues and what service model it offers', 'Wrong qualification, scope or commercial assumptions'), (2, 'Feasibility and diagnosis', 'MF studies technical, financial, environmental, legal and site constraints; brownfield work requires field verification.', 'Feasibility, architecture, infrastructure, client operations', 'Go/no-go and preferred concept', 'The project begins on unrealistic capacity, cost or site assumptions'), (3, 'Scope and premises', 'Required production, process, utilities, standards, responsibilities and boundaries are defined with the client—especially operations and maintenance.', 'Project manager, discipline leads, client operations', 'Approved design basis', 'Every downstream calculation inherits the wrong premise'), (4, 'Basic design', 'The concept becomes coordinated enough to validate layout, capacity, major systems, cost and technical direction.', 'Architecture, infrastructure, structures, systems, planning, BIM', 'Basic-design review and authorization to detail', 'Gaps remain hidden until detailed design or construction'), (5, 'Executive/detailed design', 'Each discipline develops construction-ready calculations, models, specifications and drawings.', 'All technical disciplines', 'Discipline packages ready for integrated review', 'Rework, inconsistent documents and procurement errors'), (6, 'BIM coordination and design gates', 'Models are federated, clashes and interfaces are reviewed, and premises are checked before release.', 'BIM coordination, discipline leads, quality', 'Approved-for-construction release', 'Physical clashes or outdated premises reach the site'), (7, 'Procurement and supplier coordination', 'Equipment/material requirements, quotations, approvals, fabrication and deliveries are aligned with design and schedule.', 'BID/procurement interfaces, planning, discipline leads, suppliers', 'Approved vendor data and on-time purchase/fabrication', 'Late equipment data, emergency freight or idle field teams'), (8, 'Construction, management and inspection', 'MF may build, manage the builder, or act as the client''s technical inspector depending on the contract.', 'Director of Works, site management, quality, planning, contractors', 'Work acceptance, corrective action and change approval', 'Schedule/cost drift, unsafe work, nonconformity or blame between parties'), (9, 'Commissioning and acceptance', 'Systems are tested individually and together; data-center examples include FAT, SAT and integrated systems testing.', 'Technical disciplines, quality, operations, vendors', 'System accepted for operation', 'A completed-looking asset cannot perform safely under real conditions'), (10, 'Handover, as-built and lessons learned', 'Documentation is updated, the client receives operating evidence, and learning should be transferred into future projects.', 'Project manager, quality, BIM/document teams, operations', 'Formal closeout and reusable organizational learning', 'Future teams repeat mistakes or operate from stale documentation') ) AS project_lifecycle(step, stage, what_happens, primary_owners, decision_that_moves_work, risk_if_information_breaks) ORDER BY step\n[[TABLE_02]]\n\nThe 15 disciplines form three operating layers\nMF's list mixes management functions, design coordination and technical trades. Treating all 15 as equivalent departments hides how the company actually produces work.\nProject governance and controls determine whether the project should proceed, how it is contracted, how it is scheduled, how quality is controlled and how models are coordinated.\nThe physical base model defines the site, building, foundations and structural frame.\nPlant and building systems make the facility operate: water, drainage, climate, power, process transport, controls and fire safety.\n\nThe grouping below is Urso's analytical classification of MF's official list—not a published MF organization chart.\nMF’s 15 internal disciplines by operating role\nThe official list contains five control functions, four base-model disciplines and six operating-system disciplines.\n[[CHART_DATA_03]]\n\nSource: Urso classification of MF’s official 15-discipline list · Table: Minerbo-Fuchs official discipline catalog · Reproduces the three operating-role counts after classifying MF’s official discipline list.\nCoordination—not headcount—is the value of having the disciplines inside MF\nThe six plant/building-system disciplines depend on decisions made by the physical-base teams, while every team depends on project controls. For example, MF explicitly says hydraulic design begins from Architecture, Civil and Steel models. Electrical capacity depends on loads from production equipment, HVAC, pumps and automation. Concrete foundations depend on mechanical equipment loads. BIM is the layer that exposes these interfaces before the site does.\nSo “15 internal disciplines” is a commercial promise of reduced interface risk. The meeting should test whether MF's actual information systems let it realize that promise consistently across projects, offices, suppliers and construction sites.\nThe 15 internal disciplines\nSource for The 15 internal disciplines\nSource: MF 15-discipline operating map\nTable: MF 15-discipline operating map\nReproduces the 15-discipline table compiled from MF's official catalog and linked discipline pages. Inputs, outputs and dependencies are clearly bounded as synthesis where not explicitly stated by MF.\nSELECT * FROM (VALUES (1, 'Estudo de Viabilidade', 'Project governance & controls', 'Determines whether the proposed investment is technically, economically, financially, environmentally and legally viable.', 'Business objective, site constraints, required capacity, CAPEX/OPEX assumptions, regulation', 'Options, risk register, cost/ROI basis, recommended concept, go/no-go evidence', 'Feeds scope, commercial strategy, architecture, infrastructure and planning', 'Function stated by MF; deliverable names are industry interpretation'), (2, 'BID / Editais de Concorrência', 'Project governance & controls', 'Structures or responds to competitive procurement processes and evaluates technical, financial, legal and sustainability requirements.', 'Scope, qualification requirements, schedule, budget, legal documentation', 'Tender package, bidder questions, technical/commercial comparison, compliant proposal', 'Connects commercial decisions to engineering, suppliers, legal compliance and execution', 'Function stated by MF; exact internal ownership is not public'), (3, 'Planejamento e Controle', 'Project governance & controls', 'Builds and monitors the schedule, resources, cost trajectory and project risks.', 'Scope, quantities, construction sequence, supplier dates, workforce and equipment availability', 'Baseline schedule, resource plan, Curva S, variance analysis, contingency actions', 'Coordinates every discipline with procurement, site management and client milestones', 'MF states resource, deadline, risk and predictive-control responsibilities'), (4, 'Qualidade', 'Project governance & controls', 'Sets process controls, handles nonconformities and checks technical, regulatory, material and training compliance.', 'Standards, approved designs, inspection plans, material certificates, field records', 'Quality plan, inspection records, nonconformity actions, acceptance evidence', 'Cross-cuts design, procurement, construction, commissioning and handover', 'Responsibilities directly stated by MF'), (5, 'Metodologia BIM', 'Project governance & controls', 'Coordinates the shared digital model and uses it to identify clashes, integrate disciplines and connect geometry with schedule and cost.', 'Models from all design disciplines, naming/version standards, schedule and cost data', 'Federated model, clash reports, coordinated views, 4D sequence, quantity/cost links', 'The coordination layer between every design team, planning, procurement and field', 'MF confirms Revit/DWG, integrated disciplines and BIM 4D; exact CDE and authoring workflow are unknown'), (6, 'Arquitetura', 'Physical base model', 'Defines the industrial layout, spaces, circulation, functionality, envelope, people experience and architectural sustainability.', 'Production flow, equipment layout, people/material movement, site, regulations and client standards', 'Master plan, floor plans, sections, room/area definitions, finishes and design criteria', 'Sets the spatial frame used by structures, utilities, fire, HVAC, electrical and automation', 'Function stated by MF; detailed output list is industry interpretation'), (7, 'Infraestrutura', 'Physical base model', 'Designs the site systems that support the facility: terrain, access, roads, drainage, external utilities and civil networks.', 'Survey, geotechnical data, logistics, site boundaries, capacity and environmental constraints', 'Grading/earthworks, drainage, roads, external networks, utility corridors and site access', 'Interfaces with architecture, concrete, hydraulics, electrical, logistics and construction phasing', 'MF page is broad; industrial-project outputs are contextual interpretation'), (8, 'Estruturas de Concreto', 'Physical base model', 'Designs foundations and reinforced/precast concrete systems that carry buildings and equipment loads.', 'Geotechnical data, architectural geometry, equipment loads, dynamic loads and durability requirements', 'Foundation plans, structural calculations, reinforcement/precast details and load criteria', 'Must align with architecture, steel, mechanical equipment and underground services', 'Function stated by MF; specific deliverables are industry interpretation'), (9, 'Estruturas Metálicas', 'Physical base model', 'Designs steel or aluminum frames, platforms, supports and industrial structural systems.', 'Architecture, equipment and piping loads, spans, erection strategy and corrosion environment', 'Structural model, member sizing, connections, fabrication/erection criteria and support frames', 'Coordinates with concrete foundations, architecture, piping, HVAC, electrical trays and construction', 'Function stated by MF; specific deliverables are industry interpretation'), (10, 'Instalações Hidráulicas', 'Plant & building systems', 'Designs rainwater, sanitary and industrial drainage, potable/reuse water and certain building gas systems.', 'Architecture, civil/steel models, occupancy, production areas, elevations and environmental rules', 'Water and drainage networks, sizing calculations, equipment schedules and connection details', 'MF explicitly says work begins from Architecture, Civil and Steel models; also interfaces with process and fire systems', 'Systems and upstream dependency directly stated by MF'), (11, 'Instalações de HVAC', 'Plant & building systems', 'Controls temperature, ventilation, humidity, air quality and process/environmental conditions.', 'Room uses, occupancy, process heat loads, clean-area requirements, envelope and energy targets', 'Cooling/heating loads, equipment selection, duct/piping layouts, controls intent and energy strategy', 'Needs architecture and electrical capacity; competes for space with structures, piping and cable routes', 'Function and technology themes stated by MF; deliverable list is industry interpretation'), (12, 'Instalações Elétricas', 'Plant & building systems', 'Provides safe and reliable power for equipment, lighting, HVAC and other plant systems.', 'Equipment loads, process criticality, utility supply, architecture, expansion margin and applicable standards', 'Load list, single-line diagrams, substations, distribution, lighting, grounding and cable routes', 'Depends on mechanical/HVAC/automation loads and supplies nearly every operating discipline', 'MF confirms scope from simple installations to complex industrial networks and NBR 5410 compliance'), (13, 'Mecânica e Tubulação', 'Plant & building systems', 'Designs systems that transport process fluids, gases, steam and sometimes solids under pressure, temperature and corrosion constraints.', 'Process requirements, equipment/vendor data, flow conditions, materials, maintenance access and safety rules', 'Process/mechanical layouts, line lists, piping models, supports, specifications and maintenance clearances', 'Drives loads for structures and demand for electrical/automation; clashes heavily with HVAC and other utilities', 'Function stated by MF; detailed deliverables are industry interpretation'), (14, 'Sistemas Especiais e Automação', 'Plant & building systems', 'Integrates sensors, monitoring, control, energy management, security and industrial/building automation.', 'Process control philosophy, equipment I/O, operating scenarios, network/security constraints and energy goals', 'Control architecture, points/I-O lists, system integration requirements, monitoring and alarm strategy', 'Connects operations with electrical, mechanical, HVAC, fire, IT/OT and commissioning', 'MF states IoT, monitoring, energy and security integration; actual platforms are not public'), (15, 'Proteção e Combate a Incêndio', 'Plant & building systems', 'Assesses fire risk and designs protection systems that preserve people, assets and operational continuity.', 'Occupancy/hazard classification, stored materials, process risk, architecture, water supply and fire-code requirements', 'Risk basis, hydrant/sprinkler or special-suppression layouts, alarm interfaces and approval package', 'Coordinates with architecture/egress, hydraulics, electrical, automation, insurers and authorities', 'MF confirms risk analysis, custom system design, maintenance and technology integration') ) AS disciplines(order, discipline, group, plain_english, key_inputs, typical_outputs, key_handoffs, evidence_boundary) ORDER BY order\n[[TABLE_04]]\n\nThree examples show how work crosses the disciplines\nExample 1 — A production-capacity increase\nIf a client increases required throughput, Mechanical/Piping and equipment data change first. That can increase electrical load, cooling demand, water demand, structural loads, space, fire risk, cost and schedule. Planning must reforecast; architecture and structures may need redesign; automation I/O changes; BIM must re-coordinate; quality must ensure the approved change reaches released documents.\nExample 2 — A brownfield expansion\nMF must first understand the existing plant through drawings, surveys, scanning and interviews with operations/maintenance. Infrastructure, architecture and structures determine what can physically fit. Systems teams determine tie-ins to live power, water, drainage, HVAC, piping and controls. Planning must fit critical connections into shutdown windows, while site management separates construction logistics from ongoing production.\nExample 3 — A late supplier change\nA vendor's revised equipment footprint or utility requirement can alter foundations, access clearances, cable routes, pipe connections, HVAC loads and delivery dates. The change must move from supplier approval into every affected model, drawing, procurement record, schedule and field instruction. If any artifact remains stale, the site can build the wrong condition.\nThese examples explain why MF repeatedly uses the words integração, compatibilização, rastreabilidade and previsibilidade.\nGreenfield, brownfield and retrofit require different operating behavior\nGreenfield: a new facility on a new site. The early decisions are geotechnical conditions, site preparation, master planning, utilities, logistics, scalability and the complete design basis.\nBrownfield expansion: new capacity inside or adjacent to an operating plant. Existing information may be incomplete; space is constrained; tie-ins and shutdowns must be planned; construction cannot disrupt production.\nRetrofit: modernization of existing systems, structures or processes. The team must understand what exists, preserve safe operation, meet current standards and integrate new technology with old assets.\nTechnology/plant innovation: changes focused on process, automation, energy performance or Industry 4.0 rather than only building area.\n\nBrownfield is generally the most information-sensitive case because the “current truth” is split across old drawings, field conditions, maintenance knowledge, supplier records and the memories of experienced employees.\nBIM is MF's coordination method, but the public tool picture is incomplete\nMF states that projects are modeled in Revit 3D and documented in DWG 2D. It presents BIM as a shared model for discipline integration, clash reduction, schedule/cost linkage and lifecycle information.\n3D: coordinated geometry and clash visibility.\n4D: the 3D model connected to construction sequence and schedule; recent MF material describes using it to validate execution strategy and identify risks before field work.\n5D and beyond: MF marketing discusses cost, quantities and wider lifecycle/sustainability dimensions, but the exact production implementation is not publicly documented.\nConstruction control: MF discusses Curva S, Curva ABC, value engineering, planned-versus-actual analysis and formal change control.\nReality capture: its brownfield material references surveys and scanning; the exact hardware/software stack is unknown.\nCommissioning: public material describes validation, inspections, updated documentation and structured handover; data-center content specifically mentions FAT, SAT and integrated-system testing.\n\nUnknowns that matter: Revit version, common data environment, model federation/clash software, document-management platform, naming/version rules, approval workflow, source of truth, use of Primavera or other schedulers, and how field changes reach as-built records.\nThe portfolio shows breadth across both design and delivery responsibility\nMF's public evidence is strongest when individual project pages state the scope, area and status. The examples below demonstrate that the company handles basic design, detailed design, project management, inspection, large phased facilities, brownfield expansion, regulated pharmaceutical work and sustainability-led plants.\nClient logos or social posts alone should not be treated as proof of a specific scope. In particular, Heineken remains unverified in the reviewed first-party material. Hyundai appeared in earlier/legacy research, but it is not needed for the meeting because stronger current examples exist.\nRepresentative public projects\nSource for Representative public projects\nSource: Representative MF public projects\nTable: Representative MF public projects\nReproduces the reviewed project sample compiled from MF's official portfolio and individual project pages.\nSELECT * FROM (VALUES ('Uberlândia Refrescos — Phase 3', 'Food & beverage / Coca-Cola system', 'Uberlândia, MG', 'Design, construction management and inspection for factory expansion', '49,350 m²; 80,000 bottles/hour; +69% production', 'Official page says in progress; Construcione is listed as builder'), ('Daiichi Sankyo — Projeto Rocket', 'Pharmaceutical', 'Brazil', 'Basic and executive design plus construction management and inspection', '16,590 m²', 'Groundbreaking announced July 2024'), ('Toyota SOR#2 — Package 3', 'Automotive', 'Sorocaba region, SP', 'Project participation with Teixeira Duarte', 'Package referenced 780 precast pieces', 'First pillar announced December 2024; exact MF scope is not public'), ('SEW-Eurodrive', 'Industrial equipment / gearmotors', 'Indaiatuba, SP', 'Design, construction management and inspection', '109,157 m² across three phases', 'Completed'), ('Jacto', 'Agricultural machinery', 'Pompéia, SP', 'Detailed design, construction management and inspection', '106,000 m²', 'Completed'), ('BRF — New Unit Phase 1', 'Food', 'Saudi Arabia', 'Basic design', '49,000 m²', 'Completed; evidence MF can deliver internationally'), ('Bridgestone expansion', 'Automotive / tires', 'Camaçari, BA', 'Design and technical assistance for plant expansion and new Banbury system', '26,692 m²', 'Completed brownfield-style expansion'), ('Nice Brasil', 'Automation and electronics', 'Limeira, SP', 'Design, management and inspection; architecture by Mario Cucinella Architects', '20,090 m²', 'Completed; LEED Silver; includes international R&D center') ) AS portfolio(project, sector, location, scope, scale, status_or_note) ORDER BY project\n[[TABLE_05]]\n\nMF is a second-generation family company professionalizing its operating system\nThe official leadership page identifies:\nMarcelo Fuchs — Diretor Presidente / CEO\nMarco Minerbo — Sócio Diretor\nRenato Simões — Diretor de Engenharia\nFernando Aguiar — Diretor de Obras and construction management/inspection\nÉrika Fuchs — Gerenciamento\n\nRecent official posts also use the name Luiz Fernando Aguiar, so confirm the preferred full name in person.\nThe company explicitly describes Marcelo Fuchs and Marco Minerbo as the second generation. Its culture emphasizes unity, commitment, results, technical excellence, speed, ethics and innovation. It highlights professionals with 20+ years at the company; its anniversary material described several employees with 50+ years of tenure still contributing.\nThat continuity is a strength and a risk. It creates deep tacit knowledge and trusted client relationships, but also makes knowledge transfer, succession and repeatable project learning strategically important.\nMF says it practices lessons learned and systemic thinking. It also maintains a code of conduct and whistleblower channel. Its quality page says ISO 9001, ISO 14001 and EcoVadis certification processes are in progress. Do not describe those certifications as completed. LEED work is performed with certified partners; MF manages/integrates the effort but does not present itself as the certifying body.\nWhat this means for your meeting\nThe most credible way to speak to MF is to frame Urso as infrastructure for project continuity across disciplines. Their business promise is predictability. Their operational exposure is that a decision can be correct in one document, model or person's head and still fail to reach every dependent discipline.\nYou should understand these distinctions before proposing anything:\n“Engineering” is not one team; it is a coordinated network of design and control functions.\nA project's truth changes over time: premise, basic design, executive design, approved change and as-built state are not interchangeable.\nThe same client may require strict project isolation because designs, costs and processes are confidential.\nSenior-engineer knowledge is valuable because historical projects shape today's judgment.\nBIM solves geometric coordination; it does not automatically govern meeting decisions, approvals, standards, emails, lessons learned or who may access them.\nThe first Urso pilot should target one live information flow—such as approved premises and change propagation—not “AI for all 15 disciplines.”\n\nA meeting-ready explanation\nMF takes an industrial investment from feasibility to an operating asset. Its 15 internal disciplines turn business premises into coordinated architecture, structures, utilities, controls, construction and commissioning. The company makes money by designing that system, governing its execution, and sometimes constructing it. Its advantage is integration; its risk is any break in the information chain between those disciplines.\nQuestions the public record cannot answer\nAre the 15 disciplines separate permanent departments, shared capability pools, or project-assigned teams?\nHow many employees sit in Engineering versus Works/Field, Commercial, Quality and Administration?\nWho is the executive sponsor for becoming AI-native, and who controls budget?\nWhat is the actual project-management hierarchy: account director, project manager, discipline coordinator, lead engineer and document controller?\nWhat system is authoritative for documents and models: file server, SharePoint, Autodesk Construction Cloud, another CDE, email or a mixture?\nWhich scheduler and cost tools are used? Public recruiting suggests Primavera experience may matter, but MF should confirm.\nHow are design premises, RFIs, technical queries, vendor data, changes and approvals numbered and versioned?\nHow are BIM models federated, checked and released? What is the exact Revit/clash stack?\nWhere do project teams lose the most time: finding information, waiting for approvals, rework, vendor coordination, client changes or field feedback?\nHow are lessons learned captured today, and can engineers find them by project type, discipline and current applicability?\nWhat is the revenue and margin mix across design, management/inspection, construction and turnkey work?\nWhich ongoing project can support a pilot without violating client NDAs?\n\nEvidence boundaries and caveats\nThis briefing was checked on August 1, 2026, primarily against MF's own website, official LinkedIn page, individual project records and code of conduct.\nOfficial pages are authoritative for how MF presents its services, but much of the prose is marketing content rather than an internal operating manual. The lifecycle and handoff model is a synthesis from MF's published workflow plus standard industrial-engineering dependencies.\nPublic sources do not disclose the internal org chart, discipline staffing, financial performance, project margins, detailed software architecture, document repositories, approval matrices or actual delay data.\nCompany scale is inconsistent across public materials: older notes and pages were stale; current LinkedIn says 201–500 employees, shows 154 associated profiles, and MF's anniversary post says more than 200 professionals.\nThe main institutional website names Franz Fuchs and Salvator Minerbo as founders; MF's official anniversary post also names Mário Philippsen. Keep the fuller three-founder version while recognizing the website discrepancy.\nMF's stated vision of R$100M annual revenue is a target, not evidence that current revenue has reached that amount.\nClaims about current customer engagements should be limited to what individual project pages or current official posts establish.\n\nSources\nMinerbo-Fuchs official website — company, solutions and scale 2026-08-01T18:33:12.430Z Official corporate overview covering positioning, service lines, sectors, project types, scale claims and address.\nMinerbo-Fuchs official institutional history 2026-08-01T18:33:12.430Z Official history, mission, vision, values and culture page.\nMinerbo-Fuchs official LinkedIn company page 2026-08-01T18:33:12.430Z Current company-size range, discoverable employee profiles and recent operating updates from MF's official company page.\nMinerbo-Fuchs official 51st-anniversary post 2026-08-01T18:33:12.430Z Official anniversary post naming the three founders, stating a workforce above 200 and identifying senior leaders.\nMinerbo-Fuchs official 15-discipline catalog 2026-08-01T18:33:12.430Z Official list of MF's 15 internal disciplines and links to each discipline page. Functional summaries are synthesized from those linked pages; grouping and handoff interpretation are Urso analysis.\nMinerbo-Fuchs official leadership and differentiators page 2026-08-01T18:33:12.430Z Official leadership titles, second-generation ownership, lessons-learned culture, internal disciplines, BIM and LEED positioning.\nMinerbo-Fuchs official integrated solutions page 2026-08-01T18:33:12.430Z Official architecture and engineering, project management, and construction service map.\nMinerbo-Fuchs official industrial-expansion workflow 2026-08-01T18:33:12.430Z Official description of diagnosis, scope definition, integrated design, phased planning, procurement, construction and operations coordination in industrial expansions.\nMinerbo-Fuchs official dimensioning-risk guidance 2026-08-01T18:33:12.430Z Official explanation of premise risk, cross-discipline integration and three design-review gates.\nMinerbo-Fuchs official construction cost-management guidance 2026-08-01T18:33:12.430Z Official description of cost planning, Curva ABC, Curva S, value engineering, change control and integration of engineering, procurement and field.\nMinerbo-Fuchs official project portfolio 2026-08-01T18:33:12.430Z Official project archive; representative rows also use individual official project pages.\nMinerbo-Fuchs Code of Conduct 2026-08-01T18:33:12.430Z Official code of conduct, approved March 14, 2024, covering mission, vision, values, scope and ethical governance.\n",
+  "headings": [
+    {
+      "start": 22,
+      "end": 67,
+      "level": 1,
+      "text": "Minerbo-Fuchs: How the Company Actually Works"
+    },
+    {
+      "start": 188,
+      "end": 205,
+      "level": 2,
+      "text": "Executive Summary"
+    },
+    {
+      "start": 1491,
+      "end": 1509,
+      "level": 2,
+      "text": "MF in one sentence"
+    },
+    {
+      "start": 1721,
+      "end": 1737,
+      "level": 3,
+      "text": "Verified profile"
+    },
+    {
+      "start": 2511,
+      "end": 2525,
+      "level": 3,
+      "text": "What it is not"
+    },
+    {
+      "start": 2882,
+      "end": 2948,
+      "level": 2,
+      "text": "MF can occupy four different positions in the same kind of project"
+    },
+    {
+      "start": 3563,
+      "end": 3595,
+      "level": 2,
+      "text": "MF engagement and contract modes"
+    },
+    {
+      "start": 5273,
+      "end": 5341,
+      "level": 2,
+      "text": "The operating model is a chain of decisions, not a chain of drawings"
+    },
+    {
+      "start": 6220,
+      "end": 6248,
+      "level": 2,
+      "text": "Typical MF project lifecycle"
+    },
+    {
+      "start": 9867,
+      "end": 9913,
+      "level": 2,
+      "text": "The 15 disciplines form three operating layers"
+    },
+    {
+      "start": 10988,
+      "end": 11063,
+      "level": 2,
+      "text": "Coordination—not headcount—is the value of having the disciplines inside MF"
+    },
+    {
+      "start": 11769,
+      "end": 11796,
+      "level": 2,
+      "text": "The 15 internal disciplines"
+    },
+    {
+      "start": 20410,
+      "end": 20462,
+      "level": 2,
+      "text": "Three examples show how work crosses the disciplines"
+    },
+    {
+      "start": 20463,
+      "end": 20505,
+      "level": 3,
+      "text": "Example 1 — A production-capacity increase"
+    },
+    {
+      "start": 20909,
+      "end": 20943,
+      "level": 3,
+      "text": "Example 2 — A brownfield expansion"
+    },
+    {
+      "start": 21380,
+      "end": 21414,
+      "level": 3,
+      "text": "Example 3 — A late supplier change"
+    },
+    {
+      "start": 21908,
+      "end": 21980,
+      "level": 2,
+      "text": "Greenfield, brownfield and retrofit require different operating behavior"
+    },
+    {
+      "start": 22948,
+      "end": 23022,
+      "level": 2,
+      "text": "BIM is MF's coordination method, but the public tool picture is incomplete"
+    },
+    {
+      "start": 24330,
+      "end": 24404,
+      "level": 2,
+      "text": "The portfolio shows breadth across both design and delivery responsibility"
+    },
+    {
+      "start": 25021,
+      "end": 25051,
+      "level": 2,
+      "text": "Representative public projects"
+    },
+    {
+      "start": 26963,
+      "end": 27042,
+      "level": 2,
+      "text": "MF is a second-generation family company professionalizing its operating system"
+    },
+    {
+      "start": 28369,
+      "end": 28401,
+      "level": 2,
+      "text": "What this means for your meeting"
+    },
+    {
+      "start": 29509,
+      "end": 29536,
+      "level": 3,
+      "text": "A meeting-ready explanation"
+    },
+    {
+      "start": 29968,
+      "end": 30009,
+      "level": 2,
+      "text": "Questions the public record cannot answer"
+    },
+    {
+      "start": 31355,
+      "end": 31386,
+      "level": 2,
+      "text": "Evidence boundaries and caveats"
+    },
+    {
+      "start": 32722,
+      "end": 32729,
+      "level": 2,
+      "text": "Sources"
+    }
+  ],
+  "inline_styles": [
+    {
+      "start": 206,
+      "end": 317,
+      "style": "bold",
+      "text": "MF is an industrial-engineering services company, not merely an architecture studio or construction contractor."
+    },
+    {
+      "start": 558,
+      "end": 614,
+      "style": "bold",
+      "text": "Its public operating model has three commercial pillars:"
+    },
+    {
+      "start": 814,
+      "end": 876,
+      "style": "bold",
+      "text": "The “15 internal disciplines” combine different kinds of work."
+    },
+    {
+      "start": 1144,
+      "end": 1202,
+      "style": "bold",
+      "text": "The central operating challenge is information continuity."
+    },
+    {
+      "start": 1510,
+      "end": 1720,
+      "style": "bold",
+      "text": "Minerbo-Fuchs Engenharia S.A. is a privately held, second-generation Brazilian industrial-engineering company that designs, coordinates, manages, inspects and sometimes constructs complex industrial facilities."
+    },
+    {
+      "start": 2949,
+      "end": 3079,
+      "style": "bold",
+      "text": "The contract determines whether MF is a designer, the owner's technical representative, the builder, or an integrated combination."
+    },
+    {
+      "start": 3640,
+      "end": 3717,
+      "style": "bold",
+      "text": "Source: MF engagement modes compiled from official services and project pages"
+    },
+    {
+      "start": 3913,
+      "end": 5258,
+      "style": "code",
+      "text": "SELECT * FROM (VALUES ('Design only', 'Feasibility, basic design, executive/detailed design or selected disciplines', 'Multidisciplinary designer/consultant', 'BRF Saudi Arabia — Phase 1 basic design, 49,000 m²', 'Professional-service fee tied to scope, hours, deliverables and milestones'), ('Design + management/inspection', 'Design plus schedule, cost, quality, supplier and field oversight', 'Designer and/or owner''s engineer', 'SEW-Eurodrive, Nice Brasil, Jacto, Daiichi and Uberlândia Refrescos', 'Design fee plus management/inspection scope over the project duration'), ('Management/inspection only', 'Client-side governance of an existing design and contractors', 'Technical representative protecting the owner''s CAPEX', 'MF markets this as a strategic business unit; exact revenue mix is not public', 'Time-based or milestone-based project-management services'), ('Construction / turnkey', 'Civil works, industrial/electromechanical assembly, finishes, commissioning and single-point responsibility', 'Builder or integrated turnkey partner', 'Official construction and turnkey offering; public project pages often show separate construction partners', 'Construction contract with materially greater delivery, supplier and field risk') ) AS engagement_modes(mode, what_mf_sells, mf_role, public_example, commercial_logic) ORDER BY mode"
+    },
+    {
+      "start": 5342,
+      "end": 5447,
+      "style": "bold",
+      "text": "A successful MF project progressively converts a business requirement into an operating industrial asset."
+    },
+    {
+      "start": 5597,
+      "end": 5628,
+      "style": "bold",
+      "text": "design basis or set of premises"
+    },
+    {
+      "start": 6289,
+      "end": 6329,
+      "style": "bold",
+      "text": "Source: Synthesized MF project lifecycle"
+    },
+    {
+      "start": 6506,
+      "end": 9852,
+      "style": "code",
+      "text": "SELECT * FROM (VALUES (1, 'Lead, referral or tender', 'A client approaches MF directly, through a recurring relationship/referral, or via a competitive bid.', 'Leadership, commercial/BID', 'Whether MF pursues and what service model it offers', 'Wrong qualification, scope or commercial assumptions'), (2, 'Feasibility and diagnosis', 'MF studies technical, financial, environmental, legal and site constraints; brownfield work requires field verification.', 'Feasibility, architecture, infrastructure, client operations', 'Go/no-go and preferred concept', 'The project begins on unrealistic capacity, cost or site assumptions'), (3, 'Scope and premises', 'Required production, process, utilities, standards, responsibilities and boundaries are defined with the client—especially operations and maintenance.', 'Project manager, discipline leads, client operations', 'Approved design basis', 'Every downstream calculation inherits the wrong premise'), (4, 'Basic design', 'The concept becomes coordinated enough to validate layout, capacity, major systems, cost and technical direction.', 'Architecture, infrastructure, structures, systems, planning, BIM', 'Basic-design review and authorization to detail', 'Gaps remain hidden until detailed design or construction'), (5, 'Executive/detailed design', 'Each discipline develops construction-ready calculations, models, specifications and drawings.', 'All technical disciplines', 'Discipline packages ready for integrated review', 'Rework, inconsistent documents and procurement errors'), (6, 'BIM coordination and design gates', 'Models are federated, clashes and interfaces are reviewed, and premises are checked before release.', 'BIM coordination, discipline leads, quality', 'Approved-for-construction release', 'Physical clashes or outdated premises reach the site'), (7, 'Procurement and supplier coordination', 'Equipment/material requirements, quotations, approvals, fabrication and deliveries are aligned with design and schedule.', 'BID/procurement interfaces, planning, discipline leads, suppliers', 'Approved vendor data and on-time purchase/fabrication', 'Late equipment data, emergency freight or idle field teams'), (8, 'Construction, management and inspection', 'MF may build, manage the builder, or act as the client''s technical inspector depending on the contract.', 'Director of Works, site management, quality, planning, contractors', 'Work acceptance, corrective action and change approval', 'Schedule/cost drift, unsafe work, nonconformity or blame between parties'), (9, 'Commissioning and acceptance', 'Systems are tested individually and together; data-center examples include FAT, SAT and integrated systems testing.', 'Technical disciplines, quality, operations, vendors', 'System accepted for operation', 'A completed-looking asset cannot perform safely under real conditions'), (10, 'Handover, as-built and lessons learned', 'Documentation is updated, the client receives operating evidence, and learning should be transferred into future projects.', 'Project manager, quality, BIM/document teams, operations', 'Formal closeout and reusable organizational learning', 'Future teams repeat mistakes or operate from stale documentation') ) AS project_lifecycle(step, stage, what_happens, primary_owners, decision_that_moves_work, risk_if_information_breaks) ORDER BY step"
+    },
+    {
+      "start": 9914,
+      "end": 9993,
+      "style": "bold",
+      "text": "MF's list mixes management functions, design coordination and technical trades."
+    },
+    {
+      "start": 10082,
+      "end": 10113,
+      "style": "bold",
+      "text": "Project governance and controls"
+    },
+    {
+      "start": 10261,
+      "end": 10284,
+      "style": "bold",
+      "text": "The physical base model"
+    },
+    {
+      "start": 10347,
+      "end": 10373,
+      "style": "bold",
+      "text": "Plant and building systems"
+    },
+    {
+      "start": 11524,
+      "end": 11603,
+      "style": "bold",
+      "text": "So “15 internal disciplines” is a commercial promise of reduced interface risk."
+    },
+    {
+      "start": 11836,
+      "end": 11874,
+      "style": "bold",
+      "text": "Source: MF 15-discipline operating map"
+    },
+    {
+      "start": 12114,
+      "end": 20395,
+      "style": "code",
+      "text": "SELECT * FROM (VALUES (1, 'Estudo de Viabilidade', 'Project governance & controls', 'Determines whether the proposed investment is technically, economically, financially, environmentally and legally viable.', 'Business objective, site constraints, required capacity, CAPEX/OPEX assumptions, regulation', 'Options, risk register, cost/ROI basis, recommended concept, go/no-go evidence', 'Feeds scope, commercial strategy, architecture, infrastructure and planning', 'Function stated by MF; deliverable names are industry interpretation'), (2, 'BID / Editais de Concorrência', 'Project governance & controls', 'Structures or responds to competitive procurement processes and evaluates technical, financial, legal and sustainability requirements.', 'Scope, qualification requirements, schedule, budget, legal documentation', 'Tender package, bidder questions, technical/commercial comparison, compliant proposal', 'Connects commercial decisions to engineering, suppliers, legal compliance and execution', 'Function stated by MF; exact internal ownership is not public'), (3, 'Planejamento e Controle', 'Project governance & controls', 'Builds and monitors the schedule, resources, cost trajectory and project risks.', 'Scope, quantities, construction sequence, supplier dates, workforce and equipment availability', 'Baseline schedule, resource plan, Curva S, variance analysis, contingency actions', 'Coordinates every discipline with procurement, site management and client milestones', 'MF states resource, deadline, risk and predictive-control responsibilities'), (4, 'Qualidade', 'Project governance & controls', 'Sets process controls, handles nonconformities and checks technical, regulatory, material and training compliance.', 'Standards, approved designs, inspection plans, material certificates, field records', 'Quality plan, inspection records, nonconformity actions, acceptance evidence', 'Cross-cuts design, procurement, construction, commissioning and handover', 'Responsibilities directly stated by MF'), (5, 'Metodologia BIM', 'Project governance & controls', 'Coordinates the shared digital model and uses it to identify clashes, integrate disciplines and connect geometry with schedule and cost.', 'Models from all design disciplines, naming/version standards, schedule and cost data', 'Federated model, clash reports, coordinated views, 4D sequence, quantity/cost links', 'The coordination layer between every design team, planning, procurement and field', 'MF confirms Revit/DWG, integrated disciplines and BIM 4D; exact CDE and authoring workflow are unknown'), (6, 'Arquitetura', 'Physical base model', 'Defines the industrial layout, spaces, circulation, functionality, envelope, people experience and architectural sustainability.', 'Production flow, equipment layout, people/material movement, site, regulations and client standards', 'Master plan, floor plans, sections, room/area definitions, finishes and design criteria', 'Sets the spatial frame used by structures, utilities, fire, HVAC, electrical and automation', 'Function stated by MF; detailed output list is industry interpretation'), (7, 'Infraestrutura', 'Physical base model', 'Designs the site systems that support the facility: terrain, access, roads, drainage, external utilities and civil networks.', 'Survey, geotechnical data, logistics, site boundaries, capacity and environmental constraints', 'Grading/earthworks, drainage, roads, external networks, utility corridors and site access', 'Interfaces with architecture, concrete, hydraulics, electrical, logistics and construction phasing', 'MF page is broad; industrial-project outputs are contextual interpretation'), (8, 'Estruturas de Concreto', 'Physical base model', 'Designs foundations and reinforced/precast concrete systems that carry buildings and equipment loads.', 'Geotechnical data, architectural geometry, equipment loads, dynamic loads and durability requirements', 'Foundation plans, structural calculations, reinforcement/precast details and load criteria', 'Must align with architecture, steel, mechanical equipment and underground services', 'Function stated by MF; specific deliverables are industry interpretation'), (9, 'Estruturas Metálicas', 'Physical base model', 'Designs steel or aluminum frames, platforms, supports and industrial structural systems.', 'Architecture, equipment and piping loads, spans, erection strategy and corrosion environment', 'Structural model, member sizing, connections, fabrication/erection criteria and support frames', 'Coordinates with concrete foundations, architecture, piping, HVAC, electrical trays and construction', 'Function stated by MF; specific deliverables are industry interpretation'), (10, 'Instalações Hidráulicas', 'Plant & building systems', 'Designs rainwater, sanitary and industrial drainage, potable/reuse water and certain building gas systems.', 'Architecture, civil/steel models, occupancy, production areas, elevations and environmental rules', 'Water and drainage networks, sizing calculations, equipment schedules and connection details', 'MF explicitly says work begins from Architecture, Civil and Steel models; also interfaces with process and fire systems', 'Systems and upstream dependency directly stated by MF'), (11, 'Instalações de HVAC', 'Plant & building systems', 'Controls temperature, ventilation, humidity, air quality and process/environmental conditions.', 'Room uses, occupancy, process heat loads, clean-area requirements, envelope and energy targets', 'Cooling/heating loads, equipment selection, duct/piping layouts, controls intent and energy strategy', 'Needs architecture and electrical capacity; competes for space with structures, piping and cable routes', 'Function and technology themes stated by MF; deliverable list is industry interpretation'), (12, 'Instalações Elétricas', 'Plant & building systems', 'Provides safe and reliable power for equipment, lighting, HVAC and other plant systems.', 'Equipment loads, process criticality, utility supply, architecture, expansion margin and applicable standards', 'Load list, single-line diagrams, substations, distribution, lighting, grounding and cable routes', 'Depends on mechanical/HVAC/automation loads and supplies nearly every operating discipline', 'MF confirms scope from simple installations to complex industrial networks and NBR 5410 compliance'), (13, 'Mecânica e Tubulação', 'Plant & building systems', 'Designs systems that transport process fluids, gases, steam and sometimes solids under pressure, temperature and corrosion constraints.', 'Process requirements, equipment/vendor data, flow conditions, materials, maintenance access and safety rules', 'Process/mechanical layouts, line lists, piping models, supports, specifications and maintenance clearances', 'Drives loads for structures and demand for electrical/automation; clashes heavily with HVAC and other utilities', 'Function stated by MF; detailed deliverables are industry interpretation'), (14, 'Sistemas Especiais e Automação', 'Plant & building systems', 'Integrates sensors, monitoring, control, energy management, security and industrial/building automation.', 'Process control philosophy, equipment I/O, operating scenarios, network/security constraints and energy goals', 'Control architecture, points/I-O lists, system integration requirements, monitoring and alarm strategy', 'Connects operations with electrical, mechanical, HVAC, fire, IT/OT and commissioning', 'MF states IoT, monitoring, energy and security integration; actual platforms are not public'), (15, 'Proteção e Combate a Incêndio', 'Plant & building systems', 'Assesses fire risk and designs protection systems that preserve people, assets and operational continuity.', 'Occupancy/hazard classification, stored materials, process risk, architecture, water supply and fire-code requirements', 'Risk basis, hydrant/sprinkler or special-suppression layouts, alarm interfaces and approval package', 'Coordinates with architecture/egress, hydraulics, electrical, automation, insurers and authorities', 'MF confirms risk analysis, custom system design, maintenance and technology integration') ) AS disciplines(order, discipline, group, plain_english, key_inputs, typical_outputs, key_handoffs, evidence_boundary) ORDER BY order"
+    },
+    {
+      "start": 21841,
+      "end": 21906,
+      "style": "bold",
+      "text": "integração, compatibilização, rastreabilidade and previsibilidade"
+    },
+    {
+      "start": 21981,
+      "end": 21992,
+      "style": "bold",
+      "text": "Greenfield:"
+    },
+    {
+      "start": 22172,
+      "end": 22193,
+      "style": "bold",
+      "text": "Brownfield expansion:"
+    },
+    {
+      "start": 22390,
+      "end": 22399,
+      "style": "bold",
+      "text": "Retrofit:"
+    },
+    {
+      "start": 22592,
+      "end": 22620,
+      "style": "bold",
+      "text": "Technology/plant innovation:"
+    },
+    {
+      "start": 23062,
+      "end": 23070,
+      "style": "bold",
+      "text": "Revit 3D"
+    },
+    {
+      "start": 23089,
+      "end": 23095,
+      "style": "bold",
+      "text": "DWG 2D"
+    },
+    {
+      "start": 23225,
+      "end": 23228,
+      "style": "bold",
+      "text": "3D:"
+    },
+    {
+      "start": 23272,
+      "end": 23275,
+      "style": "bold",
+      "text": "4D:"
+    },
+    {
+      "start": 23445,
+      "end": 23459,
+      "style": "bold",
+      "text": "5D and beyond:"
+    },
+    {
+      "start": 23615,
+      "end": 23636,
+      "style": "bold",
+      "text": "Construction control:"
+    },
+    {
+      "start": 23747,
+      "end": 23763,
+      "style": "bold",
+      "text": "Reality capture:"
+    },
+    {
+      "start": 23867,
+      "end": 23881,
+      "style": "bold",
+      "text": "Commissioning:"
+    },
+    {
+      "start": 24405,
+      "end": 24502,
+      "style": "bold",
+      "text": "MF's public evidence is strongest when individual project pages state the scope, area and status."
+    },
+    {
+      "start": 25094,
+      "end": 25135,
+      "style": "bold",
+      "text": "Source: Representative MF public projects"
+    },
+    {
+      "start": 25284,
+      "end": 26948,
+      "style": "code",
+      "text": "SELECT * FROM (VALUES ('Uberlândia Refrescos — Phase 3', 'Food & beverage / Coca-Cola system', 'Uberlândia, MG', 'Design, construction management and inspection for factory expansion', '49,350 m²; 80,000 bottles/hour; +69% production', 'Official page says in progress; Construcione is listed as builder'), ('Daiichi Sankyo — Projeto Rocket', 'Pharmaceutical', 'Brazil', 'Basic and executive design plus construction management and inspection', '16,590 m²', 'Groundbreaking announced July 2024'), ('Toyota SOR#2 — Package 3', 'Automotive', 'Sorocaba region, SP', 'Project participation with Teixeira Duarte', 'Package referenced 780 precast pieces', 'First pillar announced December 2024; exact MF scope is not public'), ('SEW-Eurodrive', 'Industrial equipment / gearmotors', 'Indaiatuba, SP', 'Design, construction management and inspection', '109,157 m² across three phases', 'Completed'), ('Jacto', 'Agricultural machinery', 'Pompéia, SP', 'Detailed design, construction management and inspection', '106,000 m²', 'Completed'), ('BRF — New Unit Phase 1', 'Food', 'Saudi Arabia', 'Basic design', '49,000 m²', 'Completed; evidence MF can deliver internationally'), ('Bridgestone expansion', 'Automotive / tires', 'Camaçari, BA', 'Design and technical assistance for plant expansion and new Banbury system', '26,692 m²', 'Completed brownfield-style expansion'), ('Nice Brasil', 'Automation and electronics', 'Limeira, SP', 'Design, management and inspection; architecture by Mario Cucinella Architects', '20,090 m²', 'Completed; LEED Silver; includes international R&D center') ) AS portfolio(project, sector, location, scope, scale, status_or_note) ORDER BY project"
+    },
+    {
+      "start": 27084,
+      "end": 27124,
+      "style": "bold",
+      "text": "Marcelo Fuchs — Diretor Presidente / CEO"
+    },
+    {
+      "start": 27125,
+      "end": 27154,
+      "style": "bold",
+      "text": "Marco Minerbo — Sócio Diretor"
+    },
+    {
+      "start": 27155,
+      "end": 27192,
+      "style": "bold",
+      "text": "Renato Simões — Diretor de Engenharia"
+    },
+    {
+      "start": 27193,
+      "end": 27266,
+      "style": "bold",
+      "text": "Fernando Aguiar — Diretor de Obras and construction management/inspection"
+    },
+    {
+      "start": 27267,
+      "end": 27294,
+      "style": "bold",
+      "text": "Érika Fuchs — Gerenciamento"
+    },
+    {
+      "start": 27336,
+      "end": 27356,
+      "style": "bold",
+      "text": "Luiz Fernando Aguiar"
+    },
+    {
+      "start": 28402,
+      "end": 28516,
+      "style": "bold",
+      "text": "The most credible way to speak to MF is to frame Urso as infrastructure for project continuity across disciplines."
+    },
+    {
+      "start": 32730,
+      "end": 32791,
+      "style": "link",
+      "text": "Minerbo-Fuchs official website — company, solutions and scale",
+      "url": "https://minerbo-fuchs.com.br/"
+    },
+    {
+      "start": 32730,
+      "end": 32791,
+      "style": "bold",
+      "text": "Minerbo-Fuchs official website — company, solutions and scale"
+    },
+    {
+      "start": 32932,
+      "end": 32976,
+      "style": "link",
+      "text": "Minerbo-Fuchs official institutional history",
+      "url": "https://minerbo-fuchs.com.br/sobre-minerbo/"
+    },
+    {
+      "start": 32932,
+      "end": 32976,
+      "style": "bold",
+      "text": "Minerbo-Fuchs official institutional history"
+    },
+    {
+      "start": 33062,
+      "end": 33106,
+      "style": "link",
+      "text": "Minerbo-Fuchs official LinkedIn company page",
+      "url": "https://www.linkedin.com/company/minerbo-fuchs-engenharia-s-a"
+    },
+    {
+      "start": 33062,
+      "end": 33106,
+      "style": "bold",
+      "text": "Minerbo-Fuchs official LinkedIn company page"
+    },
+    {
+      "start": 33253,
+      "end": 33297,
+      "style": "link",
+      "text": "Minerbo-Fuchs official 51st-anniversary post",
+      "url": "https://pt.linkedin.com/posts/minerbo-fuchs-engenharia-s-a_minerbofuchs-51anos-hist%C3%B3ria-activity-7334314995771453440-XoRk"
+    },
+    {
+      "start": 33253,
+      "end": 33297,
+      "style": "bold",
+      "text": "Minerbo-Fuchs official 51st-anniversary post"
+    },
+    {
+      "start": 33438,
+      "end": 33482,
+      "style": "link",
+      "text": "Minerbo-Fuchs official 15-discipline catalog",
+      "url": "https://minerbo-fuchs.com.br/atuacao/"
+    },
+    {
+      "start": 33438,
+      "end": 33482,
+      "style": "bold",
+      "text": "Minerbo-Fuchs official 15-discipline catalog"
+    },
+    {
+      "start": 33706,
+      "end": 33764,
+      "style": "link",
+      "text": "Minerbo-Fuchs official leadership and differentiators page",
+      "url": "https://minerbo-fuchs.com.br/diferencial/"
+    },
+    {
+      "start": 33706,
+      "end": 33764,
+      "style": "bold",
+      "text": "Minerbo-Fuchs official leadership and differentiators page"
+    },
+    {
+      "start": 33920,
+      "end": 33968,
+      "style": "link",
+      "text": "Minerbo-Fuchs official integrated solutions page",
+      "url": "https://minerbo-fuchs.com.br/solucoes/"
+    },
+    {
+      "start": 33920,
+      "end": 33968,
+      "style": "bold",
+      "text": "Minerbo-Fuchs official integrated solutions page"
+    },
+    {
+      "start": 34083,
+      "end": 34135,
+      "style": "link",
+      "text": "Minerbo-Fuchs official industrial-expansion workflow",
+      "url": "https://minerbo-fuchs.com.br/engenharia-industrial/ampliacao-de-planta-industrial/"
+    },
+    {
+      "start": 34083,
+      "end": 34135,
+      "style": "bold",
+      "text": "Minerbo-Fuchs official industrial-expansion workflow"
+    },
+    {
+      "start": 34330,
+      "end": 34379,
+      "style": "link",
+      "text": "Minerbo-Fuchs official dimensioning-risk guidance",
+      "url": "https://minerbo-fuchs.com.br/engenharia-industrial/erro-de-dimensionamento-em-plantas-industriais/"
+    },
+    {
+      "start": 34330,
+      "end": 34379,
+      "style": "bold",
+      "text": "Minerbo-Fuchs official dimensioning-risk guidance"
+    },
+    {
+      "start": 34503,
+      "end": 34563,
+      "style": "link",
+      "text": "Minerbo-Fuchs official construction cost-management guidance",
+      "url": "https://minerbo-fuchs.com.br/administracao-e-fiscalizacao-de-obras/gestao-de-custo-da-obra/"
+    },
+    {
+      "start": 34503,
+      "end": 34563,
+      "style": "bold",
+      "text": "Minerbo-Fuchs official construction cost-management guidance"
+    },
+    {
+      "start": 34737,
+      "end": 34777,
+      "style": "link",
+      "text": "Minerbo-Fuchs official project portfolio",
+      "url": "https://minerbo-fuchs.com.br/projetos/"
+    },
+    {
+      "start": 34737,
+      "end": 34777,
+      "style": "bold",
+      "text": "Minerbo-Fuchs official project portfolio"
+    },
+    {
+      "start": 34893,
+      "end": 34922,
+      "style": "link",
+      "text": "Minerbo-Fuchs Code of Conduct",
+      "url": "https://minerbo-fuchs.com.br/wp-content/uploads/2024/12/2024-03-14-CODIGO-CONDUTA.pdf"
+    },
+    {
+      "start": 34893,
+      "end": 34922,
+      "style": "bold",
+      "text": "Minerbo-Fuchs Code of Conduct"
+    }
+  ],
+  "blocks": [
+    {
+      "start": 10596,
+      "end": 10643,
+      "type": "chart_data_title"
+    },
+    {
+      "start": 10643,
+      "end": 10760,
+      "type": "muted"
+    },
+    {
+      "start": 10779,
+      "end": 10988,
+      "type": "muted"
+    }
+  ],
+  "lists": [
+    {
+      "start": 206,
+      "end": 1490,
+      "ordered": false
+    },
+    {
+      "start": 1738,
+      "end": 2510,
+      "ordered": false
+    },
+    {
+      "start": 10082,
+      "end": 10479,
+      "ordered": true
+    },
+    {
+      "start": 21981,
+      "end": 22728,
+      "ordered": false
+    },
+    {
+      "start": 23225,
+      "end": 24062,
+      "ordered": false
+    },
+    {
+      "start": 27084,
+      "end": 27295,
+      "ordered": false
+    },
+    {
+      "start": 28780,
+      "end": 29508,
+      "ordered": false
+    },
+    {
+      "start": 30010,
+      "end": 31354,
+      "ordered": true
+    },
+    {
+      "start": 31387,
+      "end": 32721,
+      "ordered": false
+    },
+    {
+      "start": 32730,
+      "end": 35063,
+      "ordered": true
+    }
+  ],
+  "placeholders": [
+    {
+      "id": "TABLE_01",
+      "kind": "table",
+      "text_to_find": "[[TABLE_01]]",
+      "start": 5259,
+      "end": 5271
+    },
+    {
+      "id": "TABLE_02",
+      "kind": "table",
+      "text_to_find": "[[TABLE_02]]",
+      "start": 9853,
+      "end": 9865
+    },
+    {
+      "id": "CHART_DATA_03",
+      "kind": "chart_data",
+      "text_to_find": "[[CHART_DATA_03]]",
+      "start": 10760,
+      "end": 10777
+    },
+    {
+      "id": "TABLE_04",
+      "kind": "table",
+      "text_to_find": "[[TABLE_04]]",
+      "start": 20396,
+      "end": 20408
+    },
+    {
+      "id": "TABLE_05",
+      "kind": "table",
+      "text_to_find": "[[TABLE_05]]",
+      "start": 26949,
+      "end": 26961
+    }
+  ],
+  "tables": [
+    {
+      "id": "TABLE_01",
+      "kind": "table",
+      "rows": [
+        [
+          "Mode",
+          "What MF sells",
+          "MF’s role",
+          "Public evidence",
+          "Likely commercial logic"
+        ],
+        [
+          "Construction / turnkey",
+          "Civil works, industrial/electromechanical assembly, finishes, commissioning and single-point responsibility",
+          "Builder or integrated turnkey partner",
+          "Official construction and turnkey offering; public project pages often show separate construction partners",
+          "Construction contract with materially greater delivery, supplier and field risk"
+        ],
+        [
+          "Design + management/inspection",
+          "Design plus schedule, cost, quality, supplier and field oversight",
+          "Designer and/or owner's engineer",
+          "SEW-Eurodrive, Nice Brasil, Jacto, Daiichi and Uberlândia Refrescos",
+          "Design fee plus management/inspection scope over the project duration"
+        ],
+        [
+          "Design only",
+          "Feasibility, basic design, executive/detailed design or selected disciplines",
+          "Multidisciplinary designer/consultant",
+          "BRF Saudi Arabia — Phase 1 basic design, 49,000 m²",
+          "Professional-service fee tied to scope, hours, deliverables and milestones"
+        ],
+        [
+          "Management/inspection only",
+          "Client-side governance of an existing design and contractors",
+          "Technical representative protecting the owner's CAPEX",
+          "MF markets this as a strategic business unit; exact revenue mix is not public",
+          "Time-based or milestone-based project-management services"
+        ]
+      ],
+      "cell_styles": [
+        [
+          [
+            "bold"
+          ],
+          [
+            "bold"
+          ],
+          [
+            "bold"
+          ],
+          [
+            "bold"
+          ],
+          [
+            "bold"
+          ]
+        ],
+        [
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [],
+          [],
+          [],
+          [],
+          []
+        ]
+      ],
+      "cell_links": [
+        [
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [],
+          [],
+          [],
+          [],
+          []
+        ]
+      ],
+      "placeholder": "[[TABLE_01]]",
+      "placeholder_start": 5259,
+      "placeholder_end": 5271
+    },
+    {
+      "id": "TABLE_02",
+      "kind": "table",
+      "rows": [
+        [
+          "#",
+          "Stage",
+          "What happens",
+          "Primary owners",
+          "Decision/output",
+          "Failure risk"
+        ],
+        [
+          "1",
+          "Lead, referral or tender",
+          "A client approaches MF directly, through a recurring relationship/referral, or via a competitive bid.",
+          "Leadership, commercial/BID",
+          "Whether MF pursues and what service model it offers",
+          "Wrong qualification, scope or commercial assumptions"
+        ],
+        [
+          "2",
+          "Feasibility and diagnosis",
+          "MF studies technical, financial, environmental, legal and site constraints; brownfield work requires field verification.",
+          "Feasibility, architecture, infrastructure, client operations",
+          "Go/no-go and preferred concept",
+          "The project begins on unrealistic capacity, cost or site assumptions"
+        ],
+        [
+          "3",
+          "Scope and premises",
+          "Required production, process, utilities, standards, responsibilities and boundaries are defined with the client—especially operations and maintenance.",
+          "Project manager, discipline leads, client operations",
+          "Approved design basis",
+          "Every downstream calculation inherits the wrong premise"
+        ],
+        [
+          "4",
+          "Basic design",
+          "The concept becomes coordinated enough to validate layout, capacity, major systems, cost and technical direction.",
+          "Architecture, infrastructure, structures, systems, planning, BIM",
+          "Basic-design review and authorization to detail",
+          "Gaps remain hidden until detailed design or construction"
+        ],
+        [
+          "5",
+          "Executive/detailed design",
+          "Each discipline develops construction-ready calculations, models, specifications and drawings.",
+          "All technical disciplines",
+          "Discipline packages ready for integrated review",
+          "Rework, inconsistent documents and procurement errors"
+        ],
+        [
+          "6",
+          "BIM coordination and design gates",
+          "Models are federated, clashes and interfaces are reviewed, and premises are checked before release.",
+          "BIM coordination, discipline leads, quality",
+          "Approved-for-construction release",
+          "Physical clashes or outdated premises reach the site"
+        ],
+        [
+          "7",
+          "Procurement and supplier coordination",
+          "Equipment/material requirements, quotations, approvals, fabrication and deliveries are aligned with design and schedule.",
+          "BID/procurement interfaces, planning, discipline leads, suppliers",
+          "Approved vendor data and on-time purchase/fabrication",
+          "Late equipment data, emergency freight or idle field teams"
+        ],
+        [
+          "8",
+          "Construction, management and inspection",
+          "MF may build, manage the builder, or act as the client's technical inspector depending on the contract.",
+          "Director of Works, site management, quality, planning, contractors",
+          "Work acceptance, corrective action and change approval",
+          "Schedule/cost drift, unsafe work, nonconformity or blame between parties"
+        ],
+        [
+          "9",
+          "Commissioning and acceptance",
+          "Systems are tested individually and together; data-center examples include FAT, SAT and integrated systems testing.",
+          "Technical disciplines, quality, operations, vendors",
+          "System accepted for operation",
+          "A completed-looking asset cannot perform safely under real conditions"
+        ],
+        [
+          "10",
+          "Handover, as-built and lessons learned",
+          "Documentation is updated, the client receives operating evidence, and learning should be transferred into future projects.",
+          "Project manager, quality, BIM/document teams, operations",
+          "Formal closeout and reusable organizational learning",
+          "Future teams repeat mistakes or operate from stale documentation"
+        ]
+      ],
+      "cell_styles": [
+        [
+          [
+            "bold"
+          ],
+          [
+            "bold"
+          ],
+          [
+            "bold"
+          ],
+          [
+            "bold"
+          ],
+          [
+            "bold"
+          ],
+          [
+            "bold"
+          ]
+        ],
+        [
+          [
+            "bold"
+          ],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [
+            "bold"
+          ],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [
+            "bold"
+          ],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [
+            "bold"
+          ],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [
+            "bold"
+          ],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [
+            "bold"
+          ],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [
+            "bold"
+          ],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [
+            "bold"
+          ],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [
+            "bold"
+          ],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [
+            "bold"
+          ],
+          [],
+          [],
+          [],
+          [],
+          []
+        ]
+      ],
+      "cell_links": [
+        [
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ]
+      ],
+      "placeholder": "[[TABLE_02]]",
+      "placeholder_start": 9853,
+      "placeholder_end": 9865
+    },
+    {
+      "id": "CHART_DATA_03",
+      "kind": "chart_data",
+      "rows": [
+        [
+          "Operating role",
+          "Disciplines"
+        ],
+        [
+          "Project governance & controls",
+          "5"
+        ],
+        [
+          "Physical base model",
+          "4"
+        ],
+        [
+          "Plant & building systems",
+          "6"
+        ]
+      ],
+      "cell_styles": [
+        [
+          [
+            "bold"
+          ],
+          [
+            "bold"
+          ]
+        ],
+        [
+          [],
+          []
+        ],
+        [
+          [],
+          []
+        ],
+        [
+          [],
+          []
+        ]
+      ],
+      "cell_links": [
+        [
+          [],
+          []
+        ],
+        [
+          [],
+          []
+        ],
+        [
+          [],
+          []
+        ],
+        [
+          [],
+          []
+        ]
+      ],
+      "placeholder": "[[CHART_DATA_03]]",
+      "placeholder_start": 10760,
+      "placeholder_end": 10777,
+      "semantic_label": "MF’s 15 internal disciplines by operating role",
+      "source_kind": "portable_chart_summary"
+    },
+    {
+      "id": "TABLE_04",
+      "kind": "table",
+      "rows": [
+        [
+          "#",
+          "Discipline",
+          "Operating layer",
+          "What it does",
+          "Key inputs",
+          "Typical outputs",
+          "Critical handoffs",
+          "Evidence boundary"
+        ],
+        [
+          "1",
+          "Estudo de Viabilidade",
+          "Project governance & controls",
+          "Determines whether the proposed investment is technically, economically, financially, environmentally and legally viable.",
+          "Business objective, site constraints, required capacity, CAPEX/OPEX assumptions, regulation",
+          "Options, risk register, cost/ROI basis, recommended concept, go/no-go evidence",
+          "Feeds scope, commercial strategy, architecture, infrastructure and planning",
+          "Function stated by MF; deliverable names are industry interpretation"
+        ],
+        [
+          "2",
+          "BID / Editais de Concorrência",
+          "Project governance & controls",
+          "Structures or responds to competitive procurement processes and evaluates technical, financial, legal and sustainability requirements.",
+          "Scope, qualification requirements, schedule, budget, legal documentation",
+          "Tender package, bidder questions, technical/commercial comparison, compliant proposal",
+          "Connects commercial decisions to engineering, suppliers, legal compliance and execution",
+          "Function stated by MF; exact internal ownership is not public"
+        ],
+        [
+          "3",
+          "Planejamento e Controle",
+          "Project governance & controls",
+          "Builds and monitors the schedule, resources, cost trajectory and project risks.",
+          "Scope, quantities, construction sequence, supplier dates, workforce and equipment availability",
+          "Baseline schedule, resource plan, Curva S, variance analysis, contingency actions",
+          "Coordinates every discipline with procurement, site management and client milestones",
+          "MF states resource, deadline, risk and predictive-control responsibilities"
+        ],
+        [
+          "4",
+          "Qualidade",
+          "Project governance & controls",
+          "Sets process controls, handles nonconformities and checks technical, regulatory, material and training compliance.",
+          "Standards, approved designs, inspection plans, material certificates, field records",
+          "Quality plan, inspection records, nonconformity actions, acceptance evidence",
+          "Cross-cuts design, procurement, construction, commissioning and handover",
+          "Responsibilities directly stated by MF"
+        ],
+        [
+          "5",
+          "Metodologia BIM",
+          "Project governance & controls",
+          "Coordinates the shared digital model and uses it to identify clashes, integrate disciplines and connect geometry with schedule and cost.",
+          "Models from all design disciplines, naming/version standards, schedule and cost data",
+          "Federated model, clash reports, coordinated views, 4D sequence, quantity/cost links",
+          "The coordination layer between every design team, planning, procurement and field",
+          "MF confirms Revit/DWG, integrated disciplines and BIM 4D; exact CDE and authoring workflow are unknown"
+        ],
+        [
+          "6",
+          "Arquitetura",
+          "Physical base model",
+          "Defines the industrial layout, spaces, circulation, functionality, envelope, people experience and architectural sustainability.",
+          "Production flow, equipment layout, people/material movement, site, regulations and client standards",
+          "Master plan, floor plans, sections, room/area definitions, finishes and design criteria",
+          "Sets the spatial frame used by structures, utilities, fire, HVAC, electrical and automation",
+          "Function stated by MF; detailed output list is industry interpretation"
+        ],
+        [
+          "7",
+          "Infraestrutura",
+          "Physical base model",
+          "Designs the site systems that support the facility: terrain, access, roads, drainage, external utilities and civil networks.",
+          "Survey, geotechnical data, logistics, site boundaries, capacity and environmental constraints",
+          "Grading/earthworks, drainage, roads, external networks, utility corridors and site access",
+          "Interfaces with architecture, concrete, hydraulics, electrical, logistics and construction phasing",
+          "MF page is broad; industrial-project outputs are contextual interpretation"
+        ],
+        [
+          "8",
+          "Estruturas de Concreto",
+          "Physical base model",
+          "Designs foundations and reinforced/precast concrete systems that carry buildings and equipment loads.",
+          "Geotechnical data, architectural geometry, equipment loads, dynamic loads and durability requirements",
+          "Foundation plans, structural calculations, reinforcement/precast details and load criteria",
+          "Must align with architecture, steel, mechanical equipment and underground services",
+          "Function stated by MF; specific deliverables are industry interpretation"
+        ],
+        [
+          "9",
+          "Estruturas Metálicas",
+          "Physical base model",
+          "Designs steel or aluminum frames, platforms, supports and industrial structural systems.",
+          "Architecture, equipment and piping loads, spans, erection strategy and corrosion environment",
+          "Structural model, member sizing, connections, fabrication/erection criteria and support frames",
+          "Coordinates with concrete foundations, architecture, piping, HVAC, electrical trays and construction",
+          "Function stated by MF; specific deliverables are industry interpretation"
+        ],
+        [
+          "10",
+          "Instalações Hidráulicas",
+          "Plant & building systems",
+          "Designs rainwater, sanitary and industrial drainage, potable/reuse water and certain building gas systems.",
+          "Architecture, civil/steel models, occupancy, production areas, elevations and environmental rules",
+          "Water and drainage networks, sizing calculations, equipment schedules and connection details",
+          "MF explicitly says work begins from Architecture, Civil and Steel models; also interfaces with process and fire systems",
+          "Systems and upstream dependency directly stated by MF"
+        ],
+        [
+          "11",
+          "Instalações de HVAC",
+          "Plant & building systems",
+          "Controls temperature, ventilation, humidity, air quality and process/environmental conditions.",
+          "Room uses, occupancy, process heat loads, clean-area requirements, envelope and energy targets",
+          "Cooling/heating loads, equipment selection, duct/piping layouts, controls intent and energy strategy",
+          "Needs architecture and electrical capacity; competes for space with structures, piping and cable routes",
+          "Function and technology themes stated by MF; deliverable list is industry interpretation"
+        ],
+        [
+          "12",
+          "Instalações Elétricas",
+          "Plant & building systems",
+          "Provides safe and reliable power for equipment, lighting, HVAC and other plant systems.",
+          "Equipment loads, process criticality, utility supply, architecture, expansion margin and applicable standards",
+          "Load list, single-line diagrams, substations, distribution, lighting, grounding and cable routes",
+          "Depends on mechanical/HVAC/automation loads and supplies nearly every operating discipline",
+          "MF confirms scope from simple installations to complex industrial networks and NBR 5410 compliance"
+        ],
+        [
+          "13",
+          "Mecânica e Tubulação",
+          "Plant & building systems",
+          "Designs systems that transport process fluids, gases, steam and sometimes solids under pressure, temperature and corrosion constraints.",
+          "Process requirements, equipment/vendor data, flow conditions, materials, maintenance access and safety rules",
+          "Process/mechanical layouts, line lists, piping models, supports, specifications and maintenance clearances",
+          "Drives loads for structures and demand for electrical/automation; clashes heavily with HVAC and other utilities",
+          "Function stated by MF; detailed deliverables are industry interpretation"
+        ],
+        [
+          "14",
+          "Sistemas Especiais e Automação",
+          "Plant & building systems",
+          "Integrates sensors, monitoring, control, energy management, security and industrial/building automation.",
+          "Process control philosophy, equipment I/O, operating scenarios, network/security constraints and energy goals",
+          "Control architecture, points/I-O lists, system integration requirements, monitoring and alarm strategy",
+          "Connects operations with electrical, mechanical, HVAC, fire, IT/OT and commissioning",
+          "MF states IoT, monitoring, energy and security integration; actual platforms are not public"
+        ],
+        [
+          "15",
+          "Proteção e Combate a Incêndio",
+          "Plant & building systems",
+          "Assesses fire risk and designs protection systems that preserve people, assets and operational continuity.",
+          "Occupancy/hazard classification, stored materials, process risk, architecture, water supply and fire-code requirements",
+          "Risk basis, hydrant/sprinkler or special-suppression layouts, alarm interfaces and approval package",
+          "Coordinates with architecture/egress, hydraulics, electrical, automation, insurers and authorities",
+          "MF confirms risk analysis, custom system design, maintenance and technology integration"
+        ]
+      ],
+      "cell_styles": [
+        [
+          [
+            "bold"
+          ],
+          [
+            "bold"
+          ],
+          [
+            "bold"
+          ],
+          [
+            "bold"
+          ],
+          [
+            "bold"
+          ],
+          [
+            "bold"
+          ],
+          [
+            "bold"
+          ],
+          [
+            "bold"
+          ]
+        ],
+        [
+          [
+            "bold"
+          ],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [
+            "bold"
+          ],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [
+            "bold"
+          ],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [
+            "bold"
+          ],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [
+            "bold"
+          ],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [
+            "bold"
+          ],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [
+            "bold"
+          ],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [
+            "bold"
+          ],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [
+            "bold"
+          ],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [
+            "bold"
+          ],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [
+            "bold"
+          ],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [
+            "bold"
+          ],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [
+            "bold"
+          ],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [
+            "bold"
+          ],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [
+            "bold"
+          ],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ]
+      ],
+      "cell_links": [
+        [
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ]
+      ],
+      "placeholder": "[[TABLE_04]]",
+      "placeholder_start": 20396,
+      "placeholder_end": 20408
+    },
+    {
+      "id": "TABLE_05",
+      "kind": "table",
+      "rows": [
+        [
+          "Project",
+          "Sector",
+          "Location",
+          "MF scope",
+          "Scale",
+          "Status / note"
+        ],
+        [
+          "BRF — New Unit Phase 1",
+          "Food",
+          "Saudi Arabia",
+          "Basic design",
+          "49,000 m²",
+          "Completed; evidence MF can deliver internationally"
+        ],
+        [
+          "Bridgestone expansion",
+          "Automotive / tires",
+          "Camaçari, BA",
+          "Design and technical assistance for plant expansion and new Banbury system",
+          "26,692 m²",
+          "Completed brownfield-style expansion"
+        ],
+        [
+          "Daiichi Sankyo — Projeto Rocket",
+          "Pharmaceutical",
+          "Brazil",
+          "Basic and executive design plus construction management and inspection",
+          "16,590 m²",
+          "Groundbreaking announced July 2024"
+        ],
+        [
+          "Jacto",
+          "Agricultural machinery",
+          "Pompéia, SP",
+          "Detailed design, construction management and inspection",
+          "106,000 m²",
+          "Completed"
+        ],
+        [
+          "Nice Brasil",
+          "Automation and electronics",
+          "Limeira, SP",
+          "Design, management and inspection; architecture by Mario Cucinella Architects",
+          "20,090 m²",
+          "Completed; LEED Silver; includes international R&D center"
+        ],
+        [
+          "SEW-Eurodrive",
+          "Industrial equipment / gearmotors",
+          "Indaiatuba, SP",
+          "Design, construction management and inspection",
+          "109,157 m² across three phases",
+          "Completed"
+        ],
+        [
+          "Toyota SOR#2 — Package 3",
+          "Automotive",
+          "Sorocaba region, SP",
+          "Project participation with Teixeira Duarte",
+          "Package referenced 780 precast pieces",
+          "First pillar announced December 2024; exact MF scope is not public"
+        ],
+        [
+          "Uberlândia Refrescos — Phase 3",
+          "Food & beverage / Coca-Cola system",
+          "Uberlândia, MG",
+          "Design, construction management and inspection for factory expansion",
+          "49,350 m²; 80,000 bottles/hour; +69% production",
+          "Official page says in progress; Construcione is listed as builder"
+        ]
+      ],
+      "cell_styles": [
+        [
+          [
+            "bold"
+          ],
+          [
+            "bold"
+          ],
+          [
+            "bold"
+          ],
+          [
+            "bold"
+          ],
+          [
+            "bold"
+          ],
+          [
+            "bold"
+          ]
+        ],
+        [
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ]
+      ],
+      "cell_links": [
+        [
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        [
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ]
+      ],
+      "placeholder": "[[TABLE_05]]",
+      "placeholder_start": 26949,
+      "placeholder_end": 26961
+    }
+  ],
+  "chart_images": [],
+  "counts": {
+    "headings": 26,
+    "inline_styles": 66,
+    "blocks": 3,
+    "lists": 10,
+    "tables": 5,
+    "portable_metric_source_cards": 0,
+    "portable_metric_table_cells": 0,
+    "portable_chart_source_blocks": 1,
+    "portable_chart_data_tables": 1,
+    "chart_images": 0,
+    "two_col_source_blocks": 0,
+    "two_col_image_blocks": 0,
+    "two_col_text_blocks": 0,
+    "embedded_image_blocks": 0,
+    "svg_image_blocks": 0,
+    "bar_source_blocks": 0,
+    "bar_image_blocks": 0,
+    "bar_table_blocks": 0,
+    "images": 0,
+    "svgs": 2,
+    "portable_static_chart_svgs": 2,
+    "canvas": 0
+  },
+  "source_flags": {
+    "auth_page_detected": false
+  }
+}

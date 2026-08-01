@@ -1,0 +1,113 @@
+{
+  "status": "passed",
+  "doc_content_width_pt": 511.2,
+  "summary": {
+    "checks": 10,
+    "errors": 0,
+    "warnings": 0,
+    "tables": 5,
+    "chart_images": 0
+  },
+  "errors": [],
+  "warnings": [],
+  "checks": [
+    {
+      "name": "source_is_report_html",
+      "status": "passed",
+      "severity": "error",
+      "message": "Source HTML must be the report, not an auth/login page.",
+      "details": {}
+    },
+    {
+      "name": "two_col_blocks_preserved",
+      "status": "passed",
+      "severity": "error",
+      "message": "Every source .two-col block should map to either one rendered multi-column block or preserved native text blocks.",
+      "details": {
+        "source_two_col_blocks": 0,
+        "rendered_two_col_blocks": 0,
+        "native_text_two_col_blocks": 0
+      }
+    },
+    {
+      "name": "svg_blocks_preserved",
+      "status": "passed",
+      "severity": "error",
+      "message": "Every source SVG visual outside a portable chart summary should map to one rendered DOCX image.",
+      "details": {
+        "source_svgs": 2,
+        "portable_static_chart_svgs": 2,
+        "render_required_svgs": 0,
+        "rendered_svg_images": 0
+      }
+    },
+    {
+      "name": "bar_chart_blocks_preserved",
+      "status": "passed",
+      "severity": "error",
+      "message": "Every source bar-chart block should map to one rendered DOCX image or native table fallback.",
+      "details": {
+        "source_bar_blocks": 0,
+        "rendered_bar_images": 0,
+        "native_bar_tables": 0
+      }
+    },
+    {
+      "name": "portable_metric_cards_preserved",
+      "status": "passed",
+      "severity": "error",
+      "message": "Every portable fallback metric card should map to one native DOCX metric cell.",
+      "details": {
+        "source_metric_cards": 0,
+        "native_metric_cells": 0
+      }
+    },
+    {
+      "name": "portable_chart_summaries_preserved",
+      "status": "passed",
+      "severity": "error",
+      "message": "Every portable fallback chart summary should map to one labeled chart-data table.",
+      "details": {
+        "source_chart_summaries": 1,
+        "labeled_chart_data_tables": 1
+      }
+    },
+    {
+      "name": "portable_chart_data_is_labeled",
+      "status": "passed",
+      "severity": "error",
+      "message": "Portable chart-data representations must retain a label, header, and data row.",
+      "details": {
+        "unlabeled_or_empty_table_ids": []
+      }
+    },
+    {
+      "name": "native_table_width_cap",
+      "status": "passed",
+      "severity": "error",
+      "message": "Native table column widths do not exceed the report text column.",
+      "details": {
+        "failures": []
+      }
+    },
+    {
+      "name": "docx_images_have_explicit_sizes",
+      "status": "passed",
+      "severity": "error",
+      "message": "DOCX image entries carry explicit text-width object sizes.",
+      "details": {
+        "failures": []
+      }
+    },
+    {
+      "name": "docx_image_count_matches_manifest",
+      "status": "passed",
+      "severity": "error",
+      "message": "Every rendered image has the metadata needed for one DOCX image.",
+      "details": {
+        "manifest_chart_images": 0,
+        "docx_image_entries": 0
+      }
+    }
+  ]
+}

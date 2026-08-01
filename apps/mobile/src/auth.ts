@@ -119,66 +119,28 @@ export async function clearCanesSessions(): Promise<void> {
   await clearCanesCrewSession();
 }
 
-// Passwordless: a code, not a magic link. A link has to survive the mail app,
-// Safari, and a universal-link association, and any break in that chain strands
-// the user outside the app.
-//
-// ── One email field for two different identity systems ──────────────────────
-//
-// Owners are the server's provisioned ADMINS map; technicians are Supabase Auth
-// accounts. Different backends, different credentials. The obvious solution —
-// ask "are you an owner or crew?" — is a bad question: nobody should have to
-// know which authentication system their employer uses.
-//
-// We also cannot detect it from the response, and that is deliberate: the admin
-// endpoint answers identically for provisioned and unknown addresses so it can't
-// be used to discover who has owner access. That anti-enumeration property is
-// worth keeping, so the client works around it rather than weakening it.
-//
-// So both are asked. Exactly one will actually deliver an email, because each
-// backend silently ignores an address it doesn't own. The user types the code
-// they received and the verify step figures out which system issued it.
+// Passwordless: a code, not a magic link. The Urso API resolves the provisioned
+// identity server-side, asks the correct auth system to mint a challenge, and
+// delivers exactly one branded email through Resend. The mobile bundle never
+// learns which workspace owns an address before the code proves control of it.
 
 const API_BASE: string = process.env.EXPO_PUBLIC_API_BASE ?? "https://urso.ws";
 
 export type LoginResult = { ok: boolean; notice?: string };
 
-async function requestAdminCode(email: string): Promise<void> {
+export async function sendLoginCode(email: string): Promise<LoginResult> {
   try {
-    await fetch(`${API_BASE}/api/v1/auth/request-code`, {
+    const response = await fetch(`${API_BASE}/api/v1/auth/request-code`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ email: email.trim().toLowerCase() }),
     });
+    const body = (await response.json()) as { ok?: boolean; notice?: string };
+    if (response.ok && body.ok === true) return { ok: true };
+    return { ok: false, notice: body.notice ?? "We couldn’t send that email. Try again." };
   } catch {
-    // A network failure here must not block the crew path below.
+    return { ok: false, notice: "We couldn’t reach Urso. Check your connection and try again." };
   }
-}
-
-export async function sendLoginCode(email: string): Promise<LoginResult> {
-  if (!authConfigured()) return { ok: false, notice: "The app is not configured yet." };
-  const address = email.trim().toLowerCase();
-
-  const [, crew] = await Promise.all([
-    requestAdminCode(address),
-    supabase()
-      .auth.signInWithOtp({
-        email: address,
-        // Provisioning stays allowlist-only and server-side: the crew_accounts
-        // row must already exist. Never let a login create an account.
-        options: { shouldCreateUser: false },
-      })
-      .then((r) => r.error),
-  ]);
-
-  // "Signups not allowed" just means this address is not a technician — it may
-  // still be an owner, whose code went out through the admin path. Surfacing
-  // Supabase's wording here would tell an owner their own email is invalid.
-  if (crew && !/signup|not allowed|not found/i.test(crew.message)) {
-    // A real fault (rate limit, outage) is worth showing.
-    return { ok: false, notice: crew.message };
-  }
-  return { ok: true };
 }
 
 export type VerifiedIdentity = "owner" | "crew";

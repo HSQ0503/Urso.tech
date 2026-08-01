@@ -86,7 +86,7 @@ async function casTries(key: string, expectedTries: number, next: CodeRecord): P
 }
 
 export type IssueResult =
-  | { ok: true; code: string; name: string }
+  | { ok: true; code: string; name: string; scope: "canes" | "admin" }
   | { ok: false; notice: string };
 
 // Mint a code for a provisioned admin. Returns the plaintext ONCE, for the
@@ -123,7 +123,7 @@ export async function issueMobileCode(email: string): Promise<IssueResult> {
     created_at: new Date().toISOString(),
   });
 
-  return { ok: true, code, name: admin.name };
+  return { ok: true, code, name: admin.name, scope: admin.scope };
 }
 
 export type VerifyResult =

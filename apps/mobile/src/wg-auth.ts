@@ -44,20 +44,6 @@ export async function getWgAccessToken(): Promise<string | null> {
   return data.session?.access_token ?? null;
 }
 
-export async function sendWgLoginCode(email: string): Promise<WgLoginResult> {
-  if (!wgAuthConfigured()) return { ok: false, notice: "The app is not configured yet." };
-  const { error } = await wgSupabase().auth.signInWithOtp({
-    email: email.trim().toLowerCase(),
-    options: { shouldCreateUser: false },
-  });
-  // The screen deliberately uses the same response for an unknown account and
-  // a configured password account. Supabase's raw message would be an oracle.
-  if (error && !/signup|not allowed|not found/i.test(error.message)) {
-    return { ok: false, notice: error.message };
-  }
-  return { ok: true };
-}
-
 export async function verifyWgLoginCode(email: string, token: string): Promise<WgLoginResult> {
   if (!wgAuthConfigured()) return { ok: false, notice: "The app is not configured yet." };
   const { error } = await wgSupabase().auth.verifyOtp({

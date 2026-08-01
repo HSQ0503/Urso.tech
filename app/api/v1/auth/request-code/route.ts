@@ -1,20 +1,28 @@
+import { render } from "@react-email/components";
 import { NextResponse, type NextRequest } from "next/server";
 import { Resend } from "resend";
-import { render } from "@react-email/components";
-import { issueMobileCode } from "@/lib/canes/mobile-auth";
 import { SignInCodeEmail, CODE_COPY } from "@/emails/canes/signin-code-email";
+import {
+  UrsoSignInCodeEmail,
+  URSO_SIGN_IN_CODE_SUBJECT,
+} from "@/emails/urso/signin-code-email";
+import { issueMobileCode } from "@/lib/canes/mobile-auth";
 import { isDemo } from "@/lib/canes/data";
+import { canesDb } from "@/lib/canes/supabase";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { getAdmin } from "@/lib/urso-auth";
 
-// POST /api/v1/auth/request-code — email a sign-in code to a provisioned admin.
+// POST /api/v1/auth/request-code — the single mobile email-auth broker.
 //
-// UNAUTHENTICATED by design: it is the front door. Everything that could be
-// abused through it is handled inside issueMobileCode — the address must
-// already be in the ADMINS map, codes are CSPRNG-generated and stored only as a
-// scrypt hash, and repeated failures lock the address out.
+// Supabase remains the session authority for Canes crew and Woof Gang users,
+// but it never sends their mobile login email. Its admin generateLink method
+// mints an OTP without delivery; this route sends that OTP through Resend. That
+// gives the app one branded email per request and prevents the default
+// noreply@mail.app.supabase.io message from leaking into any mobile flow.
 //
-// The response is deliberately IDENTICAL whether or not the address is an
-// admin. Distinguishing them would turn this into an oracle for discovering who
-// has owner access to a client's business.
+// The response is identical for every validly-shaped email. Membership checks,
+// provider choice, and delivery failures stay server-side so this endpoint
+// cannot be used to enumerate clients, technicians, owners, or Urso admins.
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +30,85 @@ const SAME_ANSWER = {
   ok: true,
   data: { sent: true },
 } as const;
+
+type EmailBrand = "canes" | "urso";
+
+async function sendCode({
+  resend,
+  email,
+  code,
+  brand,
+}: {
+  resend: Resend;
+  email: string;
+  code: string;
+  brand: EmailBrand;
+}): Promise<boolean> {
+  const message =
+    brand === "canes" ? SignInCodeEmail({ code, purpose: "login" }) : UrsoSignInCodeEmail({ code });
+  const html = await render(message);
+  const text = await render(message, { plainText: true });
+  const subject = brand === "canes" ? CODE_COPY.login.subject : URSO_SIGN_IN_CODE_SUBJECT;
+  const from =
+    brand === "canes"
+      ? (process.env.CANES_AUTH_EMAIL_FROM ?? "Canes Pressure Washing <server@urso.ws>")
+      : (process.env.URSO_AUTH_EMAIL_FROM ?? process.env.URSO_LOGIN_FROM ?? "Urso <hello@urso.ws>");
+
+  try {
+    const { error } = await resend.emails.send({
+      from,
+      to: [email],
+      subject,
+      html,
+      text,
+      tags: [
+        { name: "email_type", value: "mobile_login_code" },
+        { name: "workspace", value: brand },
+      ],
+    });
+    if (!error) return true;
+    const message = typeof error === "string" ? error : error.message;
+    console.error(`[mobile auth] Resend rejected a ${brand} login email: ${message}`);
+  } catch (error) {
+    console.error(
+      `[mobile auth] Resend threw for a ${brand} login email: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  return false;
+}
+
+async function findWorkspace(email: string): Promise<"canes" | "woof-gang" | null> {
+  const [canesAccount, wgMember] = await Promise.all([
+    canesDb().from("crew_accounts").select("id").eq("email", email).eq("active", true).maybeSingle(),
+    createAdminClient().from("app_users").select("user_id").eq("email", email).maybeSingle(),
+  ]);
+
+  if (canesAccount.error) {
+    console.error(`[mobile auth] Canes membership lookup failed: ${canesAccount.error.message}`);
+  }
+  if (wgMember.error) {
+    console.error(`[mobile auth] Woof Gang membership lookup failed: ${wgMember.error.message}`);
+  }
+
+  if (canesAccount.data) return "canes";
+  if (wgMember.data) return "woof-gang";
+  return null;
+}
+
+async function generateSupabaseCode(
+  workspace: "canes" | "woof-gang",
+  email: string,
+): Promise<string | null> {
+  const client = workspace === "canes" ? canesDb() : createAdminClient();
+  const { data, error } = await client.auth.admin.generateLink({ type: "magiclink", email });
+  if (error || !data.properties?.email_otp) {
+    console.error(
+      `[mobile auth] ${workspace} OTP generation failed: ${error?.message ?? "no OTP returned"}`,
+    );
+    return null;
+  }
+  return data.properties.email_otp;
+}
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   if (isDemo()) {
@@ -34,67 +121,62 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   let email: string;
   try {
     const body = (await req.json()) as { email?: unknown };
-    if (typeof body.email !== "string") throw new Error("bad");
-    email = body.email;
+    if (typeof body.email !== "string") throw new Error("invalid");
+    email = body.email.trim().toLowerCase();
+    if (!/^\S+@\S+\.\S+$/.test(email)) throw new Error("invalid");
   } catch {
-    return NextResponse.json({ ok: false, notice: "Enter your email." }, { status: 422 });
+    return NextResponse.json({ ok: false, notice: "Enter a valid email." }, { status: 422 });
   }
 
-  // Configuration is checked BEFORE the admin lookup, on purpose. With the
-  // order reversed a deployment missing RESEND_API answered 500 for a real
-  // admin and 200 for everyone else — which told an attacker exactly which
-  // addresses are provisioned. Now a misconfigured server fails identically for
-  // every caller and reveals nothing.
+  // Check global delivery configuration before identity lookup so a missing
+  // Resend key produces the same result for every address.
   const apiKey = process.env.RESEND_API;
   if (!apiKey) {
-    console.error("[canes mobile auth] RESEND_API is not set — cannot send the code");
+    console.error("[mobile auth] RESEND_API is not set");
     return NextResponse.json(
       { ok: false, notice: "Sign-in email isn’t configured yet." },
       { status: 500 },
     );
   }
+  const resend = new Resend(apiKey);
 
-  const issued = await issueMobileCode(email);
-  if (!issued.ok) {
-    // Only a lockout is worth telling the caller about — it is about their own
-    // behaviour, not about who exists. An unknown address gets SAME_ANSWER.
-    if (issued.notice.startsWith("Too many")) {
-      return NextResponse.json({ ok: false, notice: issued.notice }, { status: 429 });
-    }
-    return NextResponse.json(SAME_ANSWER, { status: 200 });
-  }
-
-  const html = await render(SignInCodeEmail({ code: issued.code, purpose: "login" }));
   try {
-    const resend = new Resend(apiKey);
-    const { error } = await resend.emails.send({
-      from: process.env.CANES_AUTH_EMAIL_FROM ?? "Canes Pressure Washing <server@urso.ws>",
-      to: [email.trim().toLowerCase()],
-      subject: CODE_COPY.login.subject,
-      html,
-    });
-    if (error) {
-      // Never log `issued.code`.
-      const message = typeof error === "string" ? error : error.message;
-      console.error(`[canes mobile auth] resend failed: ${message}`);
+    const admin = getAdmin(email);
+    if (admin) {
+      const issued = await issueMobileCode(email);
+      if (!issued.ok) {
+        if (issued.notice.startsWith("Too many")) {
+          return NextResponse.json({ ok: false, notice: issued.notice }, { status: 429 });
+        }
+        return NextResponse.json(SAME_ANSWER, { status: 200 });
+      }
+      await sendCode({
+        resend,
+        email,
+        code: issued.code,
+        brand: issued.scope === "canes" ? "canes" : "urso",
+      });
+      return NextResponse.json(SAME_ANSWER, { status: 200 });
     }
-  } catch (e) {
-    console.error(`[canes mobile auth] threw: ${e instanceof Error ? e.message : String(e)}`);
-  }
 
-  // Deliberately SAME_ANSWER even when the send failed.
-  //
-  // Reporting the failure would be friendlier, but it only ever happens for an
-  // address that passed the ADMINS check — so a Resend outage, a rate limit or a
-  // bad key would turn this endpoint into a live oracle for who has owner access
-  // to a client's business, exactly when the system is least healthy. The
-  // acceptance suite caught precisely that.
-  //
-  // The trade-off is real and accepted: if Resend is down, the caller is told to
-  // check their email and nothing arrives. That is a server fault, it is logged
-  // loudly above, and it belongs in monitoring rather than in a response body
-  // that doubles as an identity disclosure. This is the same reason password-
-  // reset endpoints answer identically whether or not the account exists.
+    const workspace = await findWorkspace(email);
+    if (!workspace) return NextResponse.json(SAME_ANSWER, { status: 200 });
+
+    // generateLink returns an email OTP for custom delivery and sends nothing
+    // itself. The mobile client redeems the same challenge with verifyOtp.
+    const code = await generateSupabaseCode(workspace, email);
+    if (code) {
+      await sendCode({
+        resend,
+        email,
+        code,
+        brand: workspace === "canes" ? "canes" : "urso",
+      });
+    }
+  } catch (error) {
+    // Do not let a provider outage turn this endpoint into an identity oracle.
+    console.error(`[mobile auth] code request failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
 
   return NextResponse.json(SAME_ANSWER, { status: 200 });
 }

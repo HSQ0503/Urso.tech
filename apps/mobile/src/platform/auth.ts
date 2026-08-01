@@ -4,10 +4,8 @@ import { getAdminProfile, saveAdminSession } from "@/session";
 import {
   clearWgSession,
   getWgAccessToken,
-  sendWgLoginCode,
   signInWgWithPassword,
   verifyWgLoginCode,
-  wgAuthConfigured,
 } from "@/wg-auth";
 import { rememberWorkspace, validateWgSession } from "@/platform/session";
 import type { Workspace } from "@/platform/types";
@@ -48,12 +46,7 @@ async function exchangeWgAdminSession(): Promise<WorkspaceLoginResult> {
 }
 
 export async function sendWorkspaceCode(email: string): Promise<WorkspaceLoginResult> {
-  const attempts = await Promise.all([
-    sendLoginCode(email),
-    wgAuthConfigured() ? sendWgLoginCode(email) : Promise.resolve({ ok: false }),
-  ]);
-  if (attempts.some((attempt) => attempt.ok)) return { ok: true };
-  return { ok: false, notice: "The app is not configured yet." };
+  return sendLoginCode(email);
 }
 
 export async function verifyWorkspaceCode(

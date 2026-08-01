@@ -1,0 +1,22 @@
+{
+  "title": "Minerbo-Fuchs: How the Company Actually Works",
+  "source_html": "/Users/han/Desktop/Urso.tech/artifacts/mf-company-report/report.html",
+  "docx_file": "/Users/han/Desktop/Urso.tech/artifacts/mf-company-report/google-doc-plan-rendered/report.docx",
+  "preflight_status": "passed",
+  "doc_content_width_pt": 511.2,
+  "sequence": [
+    {
+      "tool": "mcp__codex_apps__google_drive._upload_file",
+      "file_uri": "/Users/han/Desktop/Urso.tech/artifacts/mf-company-report/google-doc-plan-rendered/report.docx",
+      "file_name": "report.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  ],
+  "expected_drive_result": "A Drive-hosted DOCX file is acceptable. The file does not need to be converted to the native Google Docs MIME type.",
+  "verification": [
+    "fetch or open the uploaded Drive file and confirm it is readable",
+    "compare extracted text against manifest.json headings, lists, source notes, and links",
+    "inspect local report.docx structure for expected headings, tables, lists, and image relationships",
+    "compare generated chart_images/*.png against the HTML report visuals when visual fidelity matters"
+  ]
+}

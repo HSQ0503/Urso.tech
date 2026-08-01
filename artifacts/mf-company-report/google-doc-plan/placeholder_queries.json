@@ -1,0 +1,37 @@
+[
+  {
+    "id": "TABLE_01",
+    "kind": "table",
+    "text_to_find": "[[TABLE_01]]",
+    "start": 5259,
+    "end": 5271
+  },
+  {
+    "id": "TABLE_02",
+    "kind": "table",
+    "text_to_find": "[[TABLE_02]]",
+    "start": 9853,
+    "end": 9865
+  },
+  {
+    "id": "CHART_DATA_03",
+    "kind": "chart_data",
+    "text_to_find": "[[CHART_DATA_03]]",
+    "start": 10760,
+    "end": 10777
+  },
+  {
+    "id": "TABLE_04",
+    "kind": "table",
+    "text_to_find": "[[TABLE_04]]",
+    "start": 20396,
+    "end": 20408
+  },
+  {
+    "id": "TABLE_05",
+    "kind": "table",
+    "text_to_find": "[[TABLE_05]]",
+    "start": 26949,
+    "end": 26961
+  }
+]
