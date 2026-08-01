@@ -61,6 +61,7 @@ import {
   API_BASE,
   callActions,
   estimateActions,
+  jobActions,
   SessionExpiredError,
   type ApiResult,
 } from "@/api";
@@ -145,8 +146,12 @@ function nextDayKey(ymd: string): string {
 // change shifts the wall clock by an hour, which lands at 11am or 1pm and still
 // inside the intended calendar day. Stepping from midnight would slide onto the
 // day before. The window itself is ET midnight to ET midnight seven days on.
-function buildWindow(): Window {
-  const todayKey = etDateKey(new Date().toISOString());
+// `fromKey` anchors the strip somewhere other than today. It defaults to today,
+// which is what every existing caller wants and what the app opens on; the
+// parameter exists so the week arrows can move the window without a second
+// window-building path to keep in step with this one.
+function buildWindow(fromKey?: string): Window {
+  const todayKey = fromKey ?? etDateKey(new Date().toISOString());
   const noon = Date.parse(etLocalToIso(`${todayKey}T12:00`));
 
   const days: DayCell[] = [];
@@ -172,11 +177,14 @@ function toBoardJobs(value: unknown): BoardJob[] {
   return Array.isArray(value) ? (value as BoardJob[]) : [];
 }
 
-// The week list's day headers. Index 0 is always today (buildWindow starts
-// there), so the two friendly names are positional rather than a date compare.
-function weekLabel(index: number, cell: DayCell): string {
-  if (index === 0) return "Today";
-  if (index === 1) return "Tomorrow";
+// The week list's day headers. This USED to be positional — index 0 was always
+// today because buildWindow started there. The week arrows broke that: a window
+// anchored three weeks out still has an index 0, and calling it "Today" would
+// be a confident lie about a date. Compare the day key instead.
+function weekLabel(cell: DayCell): string {
+  const todayKey = etDateKey(new Date().toISOString());
+  if (cell.key === todayKey) return "Today";
+  if (cell.key === nextDayKey(todayKey)) return "Tomorrow";
   return fmtEt(cell.instant, { weekday: "short", month: "short", day: "numeric" });
 }
 
@@ -279,6 +287,83 @@ const KINDS: { value: CalendarEventKind; label: string }[] = [
   { value: "holiday", label: "Holiday" },
   { value: "note", label: "Note" },
 ];
+
+// ── Book from the tray ───────────────────────────────────────────────────────
+//
+// The unscheduled pile is the biggest thing on this screen and, until now, the
+// only thing on it he could not act on: booking meant tapping into the job
+// sheet, finding Schedule, picking, and coming back. Four screens to move sold
+// work onto a day, on the screen whose entire job is deciding which day.
+//
+// Deliberately NOT a crew picker. The tray row's question is "when", and the
+// job already carries a crew (or does not, which is a normal way to book).
+// jobActions.schedule's crewId is required-and-nullable, so passing the job's
+// own value means booking from here can never silently unassign — crew changes
+// stay on the job sheet, where they are the point rather than a side effect.
+function BookSheet({ job, onClose }: { job: Job; onClose: () => void }) {
+  const [slot, setSlot] = useState("");
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const book = useAction(
+    (vars: { iso: string }) =>
+      jobActions.schedule(job.id, vars.iso, job.duration_minutes ?? 120, job.crew_id ?? null),
+    { invalidates: [["owner", "schedule"], keys.schedule.unscheduled(), keys.agenda(), keys.overview()] },
+  );
+
+  const ready = isCompleteWhen(slot);
+  const busy = book.isPending;
+
+  const onBook = async () => {
+    setNotice(null);
+    const r = await book.mutateAsync({ iso: etLocalToIso(slot) });
+    if (!r.ok) {
+      setNotice(r.notice);
+      return;
+    }
+    // The job has left the tray, so the sheet has nothing left to act on.
+    onClose();
+  };
+
+  return (
+    <Modal visible animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <View style={styles.sheet}>
+        <View style={styles.sheetHead}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={onClose} hitSlop={8}>
+            <Text style={styles.sheetCancel}>Cancel</Text>
+          </Pressable>
+          <Text style={styles.sheetTitle}>Book</Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Book this job"
+            disabled={!ready || busy}
+            onPress={() => void onBook()}
+            hitSlop={8}
+          >
+            <Text style={[styles.sheetSave, (!ready || busy) && styles.sheetSaveOff]}>
+              {busy ? "Booking…" : "Book"}
+            </Text>
+          </Pressable>
+        </View>
+
+        <ScrollView contentContainerStyle={styles.sheetBody} keyboardShouldPersistTaps="handled">
+          <Notice text={notice} />
+          <View style={styles.fieldGroup}>
+            <Text style={styles.fieldLabel}>Job</Text>
+            <Text style={styles.body}>{job.customer_name ?? "Customer"}</Text>
+            <Text style={styles.muted}>{job.job_address ?? "Address pending"}</Text>
+          </View>
+          <View style={styles.fieldGroup}>
+            <Text style={styles.fieldLabel}>When</Text>
+            {/* No allowPast: sold work being booked is future work. Back-dating
+                belongs on the job sheet, where reopening and back-dating a
+                completed job is a deliberate, separate act. */}
+            <SlotPicker value={slot} onChange={setSlot} />
+          </View>
+        </ScrollView>
+      </View>
+    </Modal>
+  );
+}
 
 // ── Create event ─────────────────────────────────────────────────────────────
 //
@@ -816,30 +901,53 @@ function VisitRow({ visit, onPress }: { visit: Visit; onPress: () => void }) {
   );
 }
 
-function TrayRow({ job, onPress }: { job: Job; onPress: () => void }) {
+function TrayRow({
+  job,
+  onPress,
+  onBook,
+}: {
+  job: Job;
+  onPress: () => void;
+  onBook: () => void;
+}) {
   // The name leads, not the amount. Every row in this section is by definition
   // unscheduled, so repeating "UNSCHEDULED" on each one said nothing the section
   // header had not already said, while the customer — the thing being scanned
   // for — sat second. A zero total is left blank rather than shown as $0.00:
   // an unpriced job is not a nothing job, and rendering it as money reads as one.
   const total = job.total_cents > 0 ? fmtMoney(job.total_cents) : null;
+  // The card and the Book button are SIBLINGS, not parent and child. Nesting a
+  // Pressable inside a Pressable looked tidier and lost the tap to the outer
+  // one — tapping Book opened the job sheet, which is the screen this button
+  // exists to save him from. Two targets side by side cannot be ambiguous
+  // about which one was pressed, to the runtime or to the reader.
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={job.customer_name ?? "Customer"}
-      onPress={onPress}
-      style={({ pressed }) => [styles.row, pressed && styles.pressedSurface]}
-    >
-      <View style={styles.rowTop}>
-        <Text style={styles.customerLead} numberOfLines={1}>
-          {job.customer_name ?? "Customer"}
+    <View style={styles.trayRow}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={job.customer_name ?? "Customer"}
+        onPress={onPress}
+        style={({ pressed }) => [styles.trayBody, pressed && styles.pressedSurface]}
+      >
+        <View style={styles.rowTop}>
+          <Text style={styles.customerLead} numberOfLines={1}>
+            {job.customer_name ?? "Customer"}
+          </Text>
+          {total !== null && <Text style={styles.money}>{total}</Text>}
+        </View>
+        <Text style={styles.address} numberOfLines={1}>
+          {job.job_address ?? "Address pending"}
         </Text>
-        {total !== null && <Text style={styles.money}>{total}</Text>}
-      </View>
-      <Text style={styles.address} numberOfLines={1}>
-        {job.job_address ?? "Address pending"}
-      </Text>
-    </Pressable>
+      </Pressable>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`Book ${job.customer_name ?? "this job"}`}
+        onPress={onBook}
+        style={({ pressed }) => [styles.trayBook, pressed && styles.pressedSurface]}
+      >
+        <Text style={styles.trayBookText}>Book</Text>
+      </Pressable>
+    </View>
   );
 }
 
@@ -858,17 +966,38 @@ export default function ScheduleScreen(): React.ReactElement {
   const [selectedKey, setSelectedKey] = useState<string>(() => win.days[0].key);
   const [view, setView] = useState<ViewMode>("day");
   const [eventOpen, setEventOpen] = useState(false);
+  // The job whose "Book" was tapped, held by value rather than by id: the tray
+  // it came from re-reads the moment the booking lands, and looking the job up
+  // again through a list it has just left would find nothing.
+  const [bookJob, setBookJob] = useState<Job | null>(null);
   const [visitId, setVisitId] = useState<string | null>(null);
 
   // Recomputed on every focus and every pull so an app left open overnight
   // rolls onto the new day the moment it is picked back up. The board's query
   // key carries the window, so a rolled window fetches itself.
+  // null means "anchored on today, and rolling" — the original behaviour. A
+  // week arrow pins it, and the pin is what stops a focus (coming back from a
+  // job sheet he opened three weeks out) snapping the board back to today under
+  // him. "Today" clears the pin and resumes rolling.
+  const [anchorKey, setAnchorKey] = useState<string | null>(null);
+
   const rollWindow = useCallback(() => {
-    const next = buildWindow();
+    const next = buildWindow(anchorKey ?? undefined);
     setWin(next);
     setSelectedKey((key) => (next.days.some((d) => d.key === key) ? key : next.days[0].key));
-  }, []);
+  }, [anchorKey]);
   useFocusEffect(rollWindow);
+
+  // Seven days at a time, matching the window the board already fetches — so a
+  // jump is one read, not a scroll through reads. Three weeks out is three
+  // taps rather than a long swipe on a strip that only moves a day at a time.
+  const shiftWeeks = useCallback((weeks: number) => {
+    setAnchorKey((current) => {
+      const from = current ?? etDateKey(new Date().toISOString());
+      const noon = Date.parse(etLocalToIso(`${from}T12:00`));
+      return etDateKey(new Date(noon + weeks * DAYS * DAY_MS).toISOString());
+    });
+  }, []);
 
   // One trip each, in parallel: the board covers the whole week, so switching
   // days — or switching to the WEEK view — is instant and offline-friendly. The
@@ -1010,7 +1139,7 @@ export default function ScheduleScreen(): React.ReactElement {
           out.push({
             kind: "section",
             key: `section-${cell.key}`,
-            label: weekLabel(index, cell),
+            label: weekLabel(cell),
             meta: String(entries.length),
           });
           out.push(...entries);
@@ -1129,11 +1258,54 @@ export default function ScheduleScreen(): React.ReactElement {
   // past the 48pt floor even on a 375pt phone, where seven columns leave ~47pt
   // of width each.
   const strip = (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={styles.strip}
-    >
+    <>
+      {/* Week arrows either side of a Today reset. The strip itself still
+          scrolls a day at a time; this is for the question it could not answer
+          — "what does the week after next look like" — which used to mean
+          swiping seven cells at a time forever. */}
+      <View style={styles.weekNav}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Previous week"
+          onPress={() => shiftWeeks(-1)}
+          style={({ pressed }) => [styles.weekNavBtn, pressed && styles.pressedSurface]}
+        >
+          <Text style={styles.weekNavText}>‹ Prev</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Back to today"
+          disabled={anchorKey === null}
+          onPress={() => setAnchorKey(null)}
+          style={({ pressed }) => [
+            styles.weekNavToday,
+            anchorKey === null && styles.weekNavTodayOff,
+            pressed && styles.pressedSurface,
+          ]}
+        >
+          <Text
+            style={[
+              styles.weekNavText,
+              anchorKey !== null && styles.weekNavTodayOn,
+            ]}
+          >
+            Today
+          </Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Next week"
+          onPress={() => shiftWeeks(1)}
+          style={({ pressed }) => [styles.weekNavBtn, pressed && styles.pressedSurface]}
+        >
+          <Text style={styles.weekNavText}>Next ›</Text>
+        </Pressable>
+      </View>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.strip}
+      >
       {win.days.map((cell) => {
         // In week view nothing is "the selected day" — the list shows them all —
         // so no cell is marked, and a tap means "show me THIS one", which is what
@@ -1168,14 +1340,26 @@ export default function ScheduleScreen(): React.ReactElement {
           </Pressable>
         );
       })}
-    </ScrollView>
+      </ScrollView>
+    </>
   );
 
   // Mounted in every branch: a refused board is exactly the moment he still
   // wants to block out the afternoon.
-  const eventSheet = eventOpen ? (
-    <CreateEventSheet crews={crews} crewsNotice={crewsNotice} onClose={() => setEventOpen(false)} />
-  ) : null;
+  const eventSheet = (
+    <>
+      {eventOpen ? (
+        <CreateEventSheet
+          crews={crews}
+          crewsNotice={crewsNotice}
+          onClose={() => setEventOpen(false)}
+        />
+      ) : null}
+      {bookJob !== null ? (
+        <BookSheet job={bookJob} onClose={() => setBookJob(null)} />
+      ) : null}
+    </>
+  );
 
   if (showSpinner) {
     return (
@@ -1247,7 +1431,13 @@ export default function ScheduleScreen(): React.ReactElement {
           }
           if (item.kind === "calm") return <Text style={styles.calm}>{item.text}</Text>;
           if (item.kind === "tray") {
-            return <TrayRow job={item.job} onPress={() => openJob(item.job.id)} />;
+            return (
+              <TrayRow
+                job={item.job}
+                onPress={() => openJob(item.job.id)}
+                onBook={() => setBookJob(item.job)}
+              />
+            );
           }
           if (item.kind === "visit") {
             return <VisitRow visit={item.visit} onPress={() => setVisitId(item.visit.id)} />;
@@ -1474,6 +1664,65 @@ const styles = StyleSheet.create({
   sheetTitle: { ...type.title, color: color.ink },
   sheetCancel: { ...type.body, color: color.muted },
   sheetSave: { ...type.body, fontFamily: font.bodySemi, color: color.brand },
+  sheetSaveOff: { color: color.faint },
+  weekNav: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: space.lg,
+    paddingTop: space.sm,
+    gap: space.sm,
+  },
+  weekNavBtn: {
+    minHeight: HIT - 14,
+    justifyContent: "center",
+    paddingHorizontal: space.md,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.line,
+    backgroundColor: color.surface,
+  },
+  weekNavToday: {
+    minHeight: HIT - 14,
+    justifyContent: "center",
+    paddingHorizontal: space.md,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.brand,
+    backgroundColor: color.brandSoft,
+  },
+  // Off when it would do nothing: the board is already on today.
+  weekNavTodayOff: { borderColor: color.line, backgroundColor: color.surface, opacity: 0.5 },
+  weekNavTodayOn: { color: color.brand, fontFamily: font.bodyMedium },
+  weekNavText: { ...type.small, color: color.muted },
+  // Card and button side by side; the card takes the slack so the button keeps
+  // a constant, thumb-sized width down the whole list.
+  trayRow: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: space.sm,
+    marginBottom: space.sm,
+  },
+  trayBody: {
+    flex: 1,
+    minHeight: HIT,
+    backgroundColor: color.surface,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.line,
+    borderRadius: radius.lg,
+    padding: space.md,
+  },
+  trayBook: {
+    minWidth: 72,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: space.md,
+    borderRadius: radius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.brand,
+    backgroundColor: color.brandSoft,
+  },
+  trayBookText: { ...type.small, color: color.brand, fontFamily: font.bodyMedium },
   sheetBody: { padding: space.lg, gap: space.lg },
 
   body: { ...type.body, color: color.ink },
