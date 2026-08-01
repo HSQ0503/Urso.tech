@@ -191,6 +191,15 @@ export type NormalizedPaymentEvent = {
   amountCents: number | null; // amount actually paid, in cents
   currency: string | null;
   paid: boolean; // true when this event represents a completed payment
+  // Set ONLY by refund.* events. Kept as its own object rather than folded into
+  // the flat fields above because a refund is not a payment with a sign — it
+  // points AT a payment we already recorded, and every other consumer of this
+  // type must keep ignoring it.
+  refund: {
+    paymentId: string | null; // Square payment being refunded — our ledger key
+    amountCents: number | null;
+    completed: boolean; // money actually left the account
+  } | null;
 };
 
 // Square invoice-paid events carry the invoice under data.object.invoice with a
@@ -203,6 +212,33 @@ export function parseSquareEvent(payload: Record<string, unknown>): NormalizedPa
 
   const data = (payload.data ?? {}) as Record<string, unknown>;
   const object = (data.object ?? {}) as Record<string, unknown>;
+
+  // Refund-shaped event (refund.created / refund.updated). FIRST, because a
+  // refund payload carries no `payment` key and would otherwise fall all the
+  // way through to the inert tail return — which is exactly what made
+  // subscribing to refund.* a silent no-op before this branch existed.
+  const refund = object.refund as Record<string, unknown> | undefined;
+  if (refund) {
+    const money = (refund.amount_money ?? {}) as Record<string, unknown>;
+    const status = typeof refund.status === "string" ? refund.status : "";
+    return {
+      eventId,
+      eventType,
+      squareInvoiceId: null,
+      squarePaymentId: null,
+      squareOrderId: typeof refund.order_id === "string" ? refund.order_id : null,
+      amountCents: null,
+      currency: typeof money.currency === "string" ? money.currency : null,
+      paid: false,
+      refund: {
+        paymentId: typeof refund.payment_id === "string" ? refund.payment_id : null,
+        amountCents: typeof money.amount === "number" ? money.amount : null,
+        // PENDING refunds are an intent, not money movement, and REJECTED /
+        // FAILED are the opposite of one. Only COMPLETED touches the ledger.
+        completed: status === "COMPLETED",
+      },
+    };
+  }
 
   // Payment-shaped event (payment.updated / payment.created).
   const payment = object.payment as Record<string, unknown> | undefined;
@@ -218,6 +254,7 @@ export function parseSquareEvent(payload: Record<string, unknown>): NormalizedPa
       amountCents: typeof money.amount === "number" ? money.amount : null,
       currency: typeof money.currency === "string" ? money.currency : null,
       paid: status === "COMPLETED" || status === "CAPTURED",
+      refund: null,
     };
   }
 
@@ -252,10 +289,11 @@ export function parseSquareEvent(payload: Record<string, unknown>): NormalizedPa
       // total_completed_money must NOT be treated as a payment (it would settle
       // with a fabricated amount and bypass amount verification).
       paid: status === "PAID" && completed > 0,
+      refund: null,
     };
   }
 
-  return { eventId, eventType, squareInvoiceId: null, squarePaymentId: null, squareOrderId: null, amountCents: null, currency: null, paid: false };
+  return { eventId, eventType, squareInvoiceId: null, squarePaymentId: null, squareOrderId: null, amountCents: null, currency: null, paid: false, refund: null };
 }
 
 // ── Create + publish a Square invoice ────────────────────────────────────────
@@ -467,7 +505,7 @@ function squareErr(json: Record<string, unknown>, status: number): string {
 // TOCTOU-safe. Never throws into the route.
 
 export type ReconcileOutcome = {
-  handled: "duplicate" | "unmatched" | "amount_mismatch" | "recorded" | "ignored" | "unconfigured";
+  handled: "duplicate" | "unmatched" | "amount_mismatch" | "recorded" | "refunded" | "ignored" | "unconfigured";
   invoiceId?: string;
   // Set when the event settled a booking DEPOSIT (0013) instead of an invoice.
   depositJobId?: string;
@@ -493,6 +531,16 @@ export async function handleSquarePaymentEvent(
     )
     .select("event_id");
   if (!seen || seen.length === 0) return { handled: "duplicate" };
+
+  // Refund path. Runs before everything below because a refund event carries no
+  // invoice id and no payment object, so every gate further down would read it
+  // as noise and drop it. Sebastian refunds from the Square Dashboard — that is
+  // the documented v1 procedure and what our own overpay alert tells him to do —
+  // so this is the only way the money leaving ever reaches our books.
+  if (event.refund) {
+    const refunded = await recordRefund(event);
+    if (refunded) return refunded;
+  }
 
   // Deposit path (0013): a Payment Link (quick-pay) payment NEVER fires
   // invoice.* events — its only signal is payment.created/updated carrying the
@@ -597,6 +645,140 @@ export async function handleSquarePaymentEvent(
     return { handled: "amount_mismatch", invoiceId: invoice.id };
   }
   return { handled: "recorded", invoiceId: invoice.id };
+}
+
+// ── Refund reconciliation — money leaving, recorded where money arrived ──────
+// The ledger is append-only for INSERTS, but a refunded row is not a deleted
+// row: `payments.status` has carried a 'refunded' value since 0005 and
+// recomputeInvoicePaid has always summed only 'completed' rows. Every piece of
+// this was in place except the writer, so a Square-side refund silently left
+// revenue overstated forever. This is the writer.
+//
+// Returns null only when the refund is not ours to record, so the caller falls
+// through to the ordinary gates.
+async function recordRefund(event: NormalizedPaymentEvent): Promise<ReconcileOutcome | null> {
+  const refund = event.refund;
+  if (!refund) return null;
+  const db = canesDb();
+  const { alertOwner } = await import("@/lib/canes/twilio");
+
+  // An intent to refund is not a refund. Ack and wait for the COMPLETED event.
+  if (!refund.completed || !refund.paymentId) {
+    await markEventProcessed(event.eventId);
+    return { handled: "ignored" };
+  }
+
+  const { data: paymentRow } = await db
+    .from("payments")
+    .select("id, invoice_id, job_id, amount_cents, status, kind")
+    .eq("square_payment_id", refund.paymentId)
+    .maybeSingle();
+  // A refund against something we never recorded — a POS sale, or a deposit
+  // taken before the payment.* events were subscribed. Nothing to correct.
+  if (!paymentRow) {
+    await markEventProcessed(event.eventId);
+    return { handled: "unmatched" };
+  }
+  const payment = paymentRow as {
+    id: string;
+    invoice_id: string | null;
+    job_id: string | null;
+    amount_cents: number;
+    status: string;
+    kind: string;
+  };
+
+  // PARTIAL refunds are deliberately NOT recorded. `payments.status` is binary
+  // — completed or refunded — and amount_cents carries a `> 0` CHECK, so there
+  // is no honest way to represent "half of this came back" without a schema
+  // change. Marking the whole row refunded would understate revenue by exactly
+  // as much as doing nothing overstates it, and silently. Tell the human
+  // instead; a partial refund is rare and a wrong ledger is not.
+  if (refund.amountCents !== payment.amount_cents) {
+    await markEventProcessed(event.eventId);
+    await alertOwner(
+      `⚠️ Partial refund of ${fmtMoney(refund.amountCents ?? 0)} against a ${fmtMoney(payment.amount_cents)} payment. The books still show the full amount — correct it by hand.`,
+    );
+    return { handled: "amount_mismatch", invoiceId: payment.invoice_id ?? undefined };
+  }
+
+  // Claimed: only a still-completed row flips. A redelivered refund.updated
+  // after refund.created finds zero rows and stops here rather than re-alerting.
+  const { data: claimed } = await db
+    .from("payments")
+    .update({ status: "refunded" })
+    .eq("id", payment.id)
+    .eq("status", "completed")
+    .select("id");
+  if (!claimed?.length) {
+    await markEventProcessed(event.eventId);
+    return { handled: "ignored" };
+  }
+
+  // A refunded deposit is not a paid deposit. Clearing the stamp is what lets
+  // the job be deposit-chased again and stops createInvoiceFromJob crediting
+  // money that went back.
+  if (payment.kind === "deposit" && payment.job_id) {
+    await db.from("jobs").update({ deposit_paid_at: null }).eq("id", payment.job_id);
+  }
+
+  if (payment.invoice_id) {
+    await recomputeInvoicePaid(payment.invoice_id);
+    await unsettleIfUncovered(payment.invoice_id);
+  }
+
+  await markEventProcessed(event.eventId);
+  await alertOwner(
+    `↩️ Refund of ${fmtMoney(payment.amount_cents)} recorded from Square. The books have been corrected.`,
+  );
+  return {
+    handled: "refunded",
+    invoiceId: payment.invoice_id ?? undefined,
+    amountCents: payment.amount_cents,
+  };
+}
+
+// recomputeInvoicePaid only ever settles FORWARD — it flips an invoice to paid
+// when the ledger covers it and otherwise just refreshes the cache. That was
+// complete while nothing could reduce the ledger. A refund can, and without
+// this an invoice keeps reading "paid" with an amount_paid_cents that no longer
+// covers it. Deliberately kept out of recomputeInvoicePaid so the shared
+// function's contract is unchanged for the cash and card paths that call it.
+async function unsettleIfUncovered(invoiceId: string): Promise<void> {
+  const db = canesDb();
+  const { data: row } = await db
+    .from("invoices")
+    .select("id, status, total_cents, amount_paid_cents, job_id")
+    .eq("id", invoiceId)
+    .maybeSingle();
+  if (!row) return;
+  const invoice = row as {
+    status: string;
+    total_cents: number;
+    amount_paid_cents: number;
+    job_id: string | null;
+  };
+  if (invoice.status !== "paid") return;
+  if (invoice.amount_paid_cents >= invoice.total_cents) return;
+
+  // Back to `sent`, not to whatever it was before: the bill is outstanding
+  // again and the customer has been sent it. `viewed` would claim knowledge of
+  // an event that may never have happened.
+  const { data: claimed } = await db
+    .from("invoices")
+    .update({ status: "sent", paid_at: null, updated_at: new Date().toISOString() })
+    .eq("id", invoiceId)
+    .eq("status", "paid")
+    .select("id");
+  if (claimed?.length && invoice.job_id) {
+    // The inverse of the settle, which moved the job to `paid`. A canceled job
+    // stays canceled.
+    await db
+      .from("jobs")
+      .update({ status: "completed" })
+      .eq("id", invoice.job_id)
+      .eq("status", "paid");
+  }
 }
 
 // ── Deposit reconciliation — record the booking deposit, mark the job ─────────

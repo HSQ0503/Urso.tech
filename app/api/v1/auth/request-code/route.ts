@@ -8,6 +8,7 @@ import {
 } from "@/emails/urso/signin-code-email";
 import { issueMobileCode } from "@/lib/canes/mobile-auth";
 import { isDemo } from "@/lib/canes/data";
+import { ensureApprovedTechnicianAccount } from "@/lib/canes/crew-auth";
 import { canesDb } from "@/lib/canes/supabase";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getAdmin } from "@/lib/urso-auth";
@@ -78,19 +79,29 @@ async function sendCode({
 }
 
 async function findWorkspace(email: string): Promise<"canes" | "woof-gang" | null> {
+  // The Canes side PROVISIONS rather than merely looking up. Adding a
+  // technician in Settings writes a team_members row and nothing else, and
+  // generateLink({type:"magiclink"}) below needs an auth user that already
+  // exists — so a newly hired tech used to fall through to the same silent
+  // "we sent it" as a stranger, forever, until somebody thought to sign them in
+  // on the WEB portal once. The roster is the authorization record either way;
+  // ensureApprovedTechnicianAccount returns null for anyone not on it, so this
+  // reads exactly as strictly as the lookup it replaces.
   const [canesAccount, wgMember] = await Promise.all([
-    canesDb().from("crew_accounts").select("id").eq("email", email).eq("active", true).maybeSingle(),
+    ensureApprovedTechnicianAccount(email).catch((error: unknown) => {
+      console.error(
+        `[mobile auth] Canes technician provisioning failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return null;
+    }),
     createAdminClient().from("app_users").select("user_id").eq("email", email).maybeSingle(),
   ]);
 
-  if (canesAccount.error) {
-    console.error(`[mobile auth] Canes membership lookup failed: ${canesAccount.error.message}`);
-  }
   if (wgMember.error) {
     console.error(`[mobile auth] Woof Gang membership lookup failed: ${wgMember.error.message}`);
   }
 
-  if (canesAccount.data) return "canes";
+  if (canesAccount) return "canes";
   if (wgMember.data) return "woof-gang";
   return null;
 }

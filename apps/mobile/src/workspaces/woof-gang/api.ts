@@ -79,6 +79,10 @@ export type WgHome = {
   watchlist: WgAction[];
 };
 
+export type WgAiPart = { type: string; text?: string; [key: string]: unknown };
+export type WgAiMessage = { id: string; role: "user" | "assistant"; parts: WgAiPart[] };
+export type WgAiThread = { id: string; title: string; updatedAt: string };
+
 export class WgApiError extends Error {
   readonly transient: boolean;
 
@@ -368,6 +372,25 @@ function normaliseHome(value: unknown): WgHome {
   };
 }
 
+function normaliseAiThread(value: unknown): WgAiThread | null {
+  const item = record(value);
+  const id = text(item.id, "");
+  if (!id) return null;
+  return { id, title: text(item.title, "New conversation"), updatedAt: text(item.updated_at ?? item.updatedAt, "") };
+}
+
+function normaliseAiMessage(value: unknown): WgAiMessage | null {
+  const item = record(value);
+  const id = text(item.id, "");
+  const role = item.role === "user" || item.role === "assistant" ? item.role : null;
+  if (!id || !role) return null;
+  const parts = array(item.parts)
+    .map(record)
+    .filter((part) => typeof part.type === "string")
+    .map((part) => ({ ...part, type: part.type as string, text: typeof part.text === "string" ? part.text : undefined }));
+  return { id, role, parts };
+}
+
 type Credential = { token: string; source: "woof-gang" | "admin" };
 
 async function credentials(): Promise<Credential[]> {
@@ -411,19 +434,19 @@ async function get(path: string): Promise<unknown> {
   throw new WgApiError("Sign in again.");
 }
 
-async function post(path: string, payload: unknown): Promise<unknown> {
+async function write(method: "POST" | "PATCH" | "DELETE", path: string, payload?: unknown): Promise<unknown> {
   const available = await credentials();
   for (let index = 0; index < available.length; index += 1) {
     const credential = available[index];
     let response: Response;
     try {
       response = await fetch(`${API_BASE}/api/v1${path}`, {
-        method: "POST",
+        method,
         headers: {
           authorization: `Bearer ${credential.token}`,
           "content-type": "application/json",
         },
-        body: JSON.stringify(payload),
+        body: payload === undefined ? undefined : JSON.stringify(payload),
       });
     } catch {
       throw new WgApiError("No connection. Try again when you're back online.", true);
@@ -445,6 +468,67 @@ async function post(path: string, payload: unknown): Promise<unknown> {
   throw new WgApiError("Sign in again.");
 }
 
+const post = (path: string, payload: unknown) => write("POST", path, payload);
+const patch = (path: string, payload: unknown) => write("PATCH", path, payload);
+const remove = (path: string) => write("DELETE", path);
+
+async function responseNotice(response: Response): Promise<string> {
+  try {
+    const body = JSON.parse(await response.text()) as Envelope;
+    return body.notice ?? "The analyst request could not be completed.";
+  } catch {
+    return "The analyst request could not be completed.";
+  }
+}
+
+async function stream(path: string, payload: unknown, onChunk: (chunk: string) => void, signal?: AbortSignal): Promise<string> {
+  const available = await credentials();
+  for (let index = 0; index < available.length; index += 1) {
+    const credential = available[index];
+    let response: Response;
+    try {
+      response = await fetch(`${API_BASE}/api/v1${path}`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${credential.token}`, "content-type": "application/json" },
+        body: JSON.stringify(payload),
+        signal,
+      });
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") throw error;
+      throw new WgApiError("No connection. Try again when you're back online.", true);
+    }
+    if (response.status === 401 && credential.source === "woof-gang") {
+      await clearWgSession();
+      if (index + 1 < available.length) continue;
+    }
+    if (!response.ok) throw new WgApiError(await responseNotice(response), response.status >= 500);
+
+    const reader = response.body?.getReader();
+    if (!reader) {
+      const answer = await response.text();
+      if (answer) onChunk(answer);
+      return answer;
+    }
+    const decoder = new TextDecoder();
+    let answer = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = decoder.decode(value, { stream: true });
+      if (!chunk) continue;
+      answer += chunk;
+      onChunk(chunk);
+    }
+    const tail = decoder.decode();
+    if (tail) {
+      answer += tail;
+      onChunk(tail);
+    }
+    return answer;
+  }
+  throw new WgApiError("Sign in again.");
+}
+
 export const woofGangApi = {
   session: async (): Promise<WgSession> => normaliseSession(await get("/mobile/session")),
   home: async (storeId: string | null, month: string): Promise<WgHome> => {
@@ -456,6 +540,34 @@ export const woofGangApi = {
     const data = record(await post("/workspaces/woof-gang/ai/chat", { message, store: storeId, month, topic }));
     return text(data.answer, "The analyst did not return an answer.");
   },
+  aiThreads: async (): Promise<WgAiThread[]> => {
+    const data = record(await get("/workspaces/woof-gang/ai/threads"));
+    return pickArray(data, "threads").map(normaliseAiThread).filter((thread): thread is WgAiThread => thread !== null);
+  },
+  createAiThread: async (scope: string): Promise<WgAiThread> => {
+    const data = record(await post("/workspaces/woof-gang/ai/threads", { scope }));
+    const thread = normaliseAiThread(data.thread);
+    if (!thread) throw new WgApiError("The server did not return a conversation.", true);
+    return thread;
+  },
+  aiMessages: async (threadId: string): Promise<WgAiMessage[]> => {
+    const data = record(await get(`/workspaces/woof-gang/ai/threads/${encodeURIComponent(threadId)}`));
+    return pickArray(data, "messages").map(normaliseAiMessage).filter((message): message is WgAiMessage => message !== null);
+  },
+  renameAiThread: async (threadId: string, title: string): Promise<void> => {
+    await patch(`/workspaces/woof-gang/ai/threads/${encodeURIComponent(threadId)}`, { title });
+  },
+  deleteAiThread: async (threadId: string): Promise<void> => {
+    await remove(`/workspaces/woof-gang/ai/threads/${encodeURIComponent(threadId)}`);
+  },
+  streamAi: (
+    messages: WgAiMessage[],
+    threadId: string | null,
+    storeId: string | null,
+    month: string,
+    onChunk: (chunk: string) => void,
+    signal?: AbortSignal,
+  ): Promise<string> => stream("/workspaces/woof-gang/ai/agent", { messages, threadId: threadId ?? undefined, store: storeId ?? undefined, month }, onChunk, signal),
   section: async (
     section: WgDashboardSection,
     storeId: string | null,

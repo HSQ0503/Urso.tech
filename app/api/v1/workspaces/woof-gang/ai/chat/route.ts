@@ -5,8 +5,7 @@ import { apiFail, apiOk, apiRoute } from "@/lib/api/v1";
 import { buildSystemPrompt } from "@/lib/ai/analyst";
 import { assertChatKey, markChatModelDown, resolveChatModel } from "@/lib/ai/models";
 import { buildAnalystTools } from "@/lib/ai/tools";
-import type { SessionUser } from "@/lib/auth";
-import { getWgMobileActor, type WgMobileActor } from "@/lib/mobile/woof-gang";
+import { getWgMobileActor, sessionUserForWgActor, type WgMobileActor } from "@/lib/mobile/woof-gang";
 
 export const maxDuration = 60;
 
@@ -18,18 +17,6 @@ type ChatBody = {
 };
 
 const pct = (value: number) => `${(value * 100).toFixed(0)}%`;
-
-function sessionUser(actor: WgMobileActor): SessionUser {
-  return {
-    ...actor.user,
-    role: actor.role,
-    clientId: actor.role === "urso_admin" ? "*" : "woof-gang",
-    clientName: "Woof Gang Bakery & Grooming",
-    storeId: actor.role === "manager" ? actor.storeId : null,
-    streak: 0,
-    memberSince: "",
-  };
-}
 
 export const POST = apiRoute<Record<string, string>, WgMobileActor>(async ({ req, actor }) => {
   let body: ChatBody;
@@ -56,7 +43,7 @@ export const POST = apiRoute<Record<string, string>, WgMobileActor>(async ({ req
   const cross: Scope = actor.role === "manager" && actor.storeId ? actor.storeId : "all";
   const month = parseMonth(typeof body.month === "string" ? body.month : undefined);
   const topic = typeof body.topic === "string" ? body.topic.trim().slice(0, 120) : undefined;
-  const user = sessionUser(actor);
+  const user = sessionUserForWgActor(actor);
 
   try {
     const modelPromise = resolveChatModel();

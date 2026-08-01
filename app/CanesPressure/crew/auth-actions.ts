@@ -5,22 +5,11 @@ import { redirect } from "next/navigation";
 import { Resend } from "resend";
 import { canesDb } from "@/lib/canes/supabase";
 import { createCanesAuthClient } from "@/lib/canes/crew-auth-client";
+// Shared with the mobile auth broker (/api/v1/auth/request-code). It cannot be
+// exported from this file — "use server" would publish it as an endpoint.
+import { ensureApprovedTechnicianAccount } from "@/lib/canes/crew-auth";
 
 export type TechnicianLoginResult = { ok: boolean; notice?: string };
-
-type ApprovedMember = {
-  id: string;
-  email: string;
-  crew_id: string | null;
-  active: boolean;
-  role: string;
-};
-
-type CrewAccount = {
-  id: string;
-  auth_user_id: string;
-  active: boolean;
-};
 
 function normalizedEmail(value: FormDataEntryValue | null): string {
   return String(value ?? "").trim().toLowerCase();
@@ -62,106 +51,6 @@ Open your assigned jobs, schedule, job details, and checklists:
 ${url}
 
 This secure link expires shortly and can only be used once. If you did not request it, you can ignore this email.`;
-}
-
-async function ensureApprovedTechnicianAccount(
-  email: string,
-): Promise<CrewAccount | null> {
-  const db = canesDb();
-  // Workers and ops managers may sign in (0015). A worker still needs a crew;
-  // an ops manager runs every crew, so crew_id is optional for them.
-  const { data: rawMember, error: memberError } = await db
-    .from("team_members")
-    .select("id, email, crew_id, active, role")
-    .eq("email", email)
-    .in("role", ["worker", "ops_manager"])
-    .maybeSingle();
-  if (memberError) throw new Error(memberError.message);
-  const member = rawMember as ApprovedMember | null;
-  if (!member?.active) return null;
-  const isOps = member.role === "ops_manager";
-  if (!isOps && !member.crew_id) return null;
-
-  const { data: rawExisting } = await db
-    .from("crew_accounts")
-    .select("id, auth_user_id, active")
-    .eq("team_member_id", member.id)
-    .maybeSingle();
-  const existing = rawExisting as CrewAccount | null;
-  if (existing) {
-    if (!existing.active) return null;
-    // Keep the account's role in sync with the roster: promoting/demoting on
-    // the roster takes effect at the next sign-in. Metadata — a failed update
-    // (0015 not yet migrated) must not block login.
-    const { error: roleErr } = await db
-      .from("crew_accounts")
-      .update({ account_role: isOps ? "ops_manager" : "technician" })
-      .eq("id", existing.id);
-    if (roleErr) console.error(`[canes crew auth] account_role sync failed: ${roleErr.message}`);
-    if (!isOps && member.crew_id) {
-      await db
-        .from("crew_account_access")
-        .delete()
-        .eq("account_id", existing.id)
-        .neq("crew_id", member.crew_id);
-      await db.from("crew_account_access").upsert(
-        { account_id: existing.id, crew_id: member.crew_id },
-        { onConflict: "account_id,crew_id", ignoreDuplicates: true },
-      );
-    }
-    return existing;
-  }
-
-  const { data: usersData, error: listError } = await db.auth.admin.listUsers({
-    page: 1,
-    perPage: 1000,
-  });
-  if (listError) throw new Error(listError.message);
-  let user = usersData.users.find(
-    (candidate) => candidate.email?.toLowerCase() === email,
-  );
-  if (!user) {
-    const { data, error } = await db.auth.admin.createUser({
-      email,
-      email_confirm: true,
-      user_metadata: { canes_role: "technician" },
-    });
-    if (error) throw new Error(error.message);
-    user = data.user;
-  }
-  if (!user) throw new Error("Could not provision the technician Auth user.");
-
-  const { data: rawCreated, error: accountError } = await db
-    .from("crew_accounts")
-    .insert({
-      auth_user_id: user.id,
-      team_member_id: member.id,
-      email,
-      active: true,
-      // account_role only when ops: the column default covers technicians, and
-      // omitting it keeps worker logins working before 0015 widens the check.
-      ...(isOps ? { account_role: "ops_manager" } : {}),
-    })
-    .select("id, auth_user_id, active")
-    .single();
-  if (accountError) {
-    // A simultaneous first-login request may have won the unique insert.
-    const { data: raced } = await db
-      .from("crew_accounts")
-      .select("id, auth_user_id, active")
-      .eq("team_member_id", member.id)
-      .maybeSingle();
-    if (!raced) throw new Error(accountError.message);
-    return raced as CrewAccount;
-  }
-  const created = rawCreated as CrewAccount;
-  if (!isOps && member.crew_id) {
-    await db.from("crew_account_access").upsert(
-      { account_id: created.id, crew_id: member.crew_id },
-      { onConflict: "account_id,crew_id", ignoreDuplicates: true },
-    );
-  }
-  return created;
 }
 
 export async function sendTechnicianSignInLink(

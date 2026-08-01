@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getAdmin, readMobileToken } from "@/lib/urso-auth";
 import { technicianActorFromAuthUserId, verifyCrewAccessToken } from "@/lib/canes/crew-auth";
 import type { TechnicianActor } from "@urso/types";
+import type { SessionUser } from "@/lib/auth";
 import type {
   MobilePlatformRole,
   MobileSession,
@@ -32,6 +33,18 @@ export type WgMobileActor = {
   role: WgDashboardRole | "owner";
   storeId: WgStoreId | null;
 };
+
+export function sessionUserForWgActor(actor: WgMobileActor): SessionUser {
+  return {
+    ...actor.user,
+    role: actor.role,
+    clientId: actor.role === "urso_admin" ? "*" : "woof-gang",
+    clientName: "Woof Gang Bakery & Grooming",
+    storeId: actor.role === "manager" ? actor.storeId : null,
+    streak: 0,
+    memberSince: "",
+  };
+}
 
 function bearerToken(authorization: string | null): string | null {
   if (!authorization) return null;

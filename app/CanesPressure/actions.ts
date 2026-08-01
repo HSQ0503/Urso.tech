@@ -580,7 +580,14 @@ export async function bridgeCall(
   if (!canesConfigured()) return DEMO;
   const denied = await denyUnlessPermitted("calls");
   if (denied) return denied;
-  const to = phone?.trim();
+  // Normalize BEFORE dialing, not after. The TwiML leg runs `to` through
+  // toE164 and answers 400 on anything it cannot parse — so an unnormalized
+  // number rings Sebastian, tells him to answer, and then dies when Twilio
+  // fetches the TwiML. That was latent while every caller passed a stored
+  // phone; POST /api/v1/canes/calls/bridge takes one from the client, so it
+  // is reachable now. Normalizing here also keeps the calls row's peer_phone
+  // on the same E.164 key the thread view groups by.
+  const to = toE164(phone ?? "");
   if (!to) return { ok: false, notice: "No phone number to call." };
   const owner = process.env.CANES_OWNER_PHONE;
   const { accountSid, authToken, from } = canesTwilioCreds();
@@ -593,12 +600,36 @@ export async function bridgeCall(
       Authorization: `Basic ${Buffer.from(`${accountSid}:${authToken}`).toString("base64")}`,
       "Content-Type": "application/x-www-form-urlencoded",
     },
-    body: new URLSearchParams({ To: owner, From: from, Url: twimlUrl }),
+    // Twilio reports how a call ended only if asked to. Without StatusCallback
+    // the row below is the last thing anyone ever writes about this call, so it
+    // stays "initiated" forever and the inbox reads a ten-minute conversation
+    // as "No answer".
+    body: new URLSearchParams({
+      To: owner,
+      From: from,
+      Url: twimlUrl,
+      StatusCallback: `${base}/api/canes/twilio/status`,
+    }),
   });
   if (!res.ok) return { ok: false, notice: `Twilio responded ${res.status}` };
-  await canesDb()
-    .from("calls")
-    .insert({ lead_id: opts?.leadId ?? null, peer_phone: to, direction: "out", status: "initiated" });
+  // The SID is the ONLY key the status callback can match on, so read it before
+  // writing the row. A row stored without one can never be completed and cannot
+  // be repaired afterwards — there is nothing to match it by.
+  const sid = await res
+    .json()
+    .then((body: unknown) =>
+      body && typeof body === "object" && typeof (body as { sid?: unknown }).sid === "string"
+        ? ((body as { sid: string }).sid)
+        : null,
+    )
+    .catch(() => null);
+  await canesDb().from("calls").insert({
+    lead_id: opts?.leadId ?? null,
+    peer_phone: to,
+    direction: "out",
+    status: "initiated",
+    twilio_sid: sid,
+  });
   if (opts?.leadId) await logEvent(opts.leadId, "call", "Click-to-call started (bridging your phone)");
   return { ok: true, notice: "Calling your phone now — answer to connect." };
 }
@@ -1191,16 +1222,38 @@ export async function voidEstimate(estimateId: string): Promise<ActionResult> {
   if (denied) return denied;
   const estimate = await getEstimate(estimateId);
   if (!estimate) return { ok: false, notice: "Estimate not found." };
+  // Voiding takes a LIVE quote off the table. Its terminal siblings are not
+  // live, and each one loses something real if it is overwritten with
+  // "expired" — the same reasoning deleteEstimate uses below, in the same
+  // order.
+  if (estimate.status === "approved") {
+    return { ok: false, notice: "This estimate was approved and has a job — void the job instead." };
+  }
+  if (estimate.status === "declined") {
+    return { ok: false, notice: "Declined estimates are part of your win-rate record — keep this one." };
+  }
+  if (estimate.status === "expired") return { ok: true, notice: "That estimate was already voided." };
   const db = canesDb();
   const now = new Date().toISOString();
   // Expired is the terminal "no longer live" status the schema allows for a
   // voided estimate; cancel any pending reminder/send tasks so the customer is
   // never texted about a dead estimate.
-  const { error } = await db
+  //
+  // CLAIMED, and the status filter is the claim rather than a re-check: the
+  // read above cannot hold. approveEstimate is one of the seven deliberately
+  // unguarded actions the public /e/ token page calls, so a customer tapping
+  // Approve between the read and this write is an ordinary Saturday, not a
+  // race worth ignoring. Zero rows means they got there first.
+  const { data: claimed, error } = await db
     .from("estimates")
     .update({ status: "expired", updated_at: now })
-    .eq("id", estimateId);
+    .eq("id", estimateId)
+    .in("status", ["draft", "sent", "viewed"])
+    .select("id");
   if (error) return { ok: false, notice: error.message };
+  if (!claimed?.length) {
+    return { ok: false, notice: "That estimate changed while you were looking at it — refresh and try again." };
+  }
   await db
     .from("tasks")
     .update({ status: "canceled" })
