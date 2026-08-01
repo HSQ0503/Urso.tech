@@ -124,9 +124,21 @@ export default function CustomersScreen(): React.ReactElement {
     <View style={styles.screen}>
       <View style={[styles.chrome, { paddingTop: insets.top + space.md }]}>
         <Text style={styles.chromeTitle}>Customers</Text>
-        <View style={styles.chromeStat}>
-          <Text style={styles.chromeStatValue}>{visible.length}</Text>
-          <Text style={styles.chromeStatLabel}>{searching ? "Matches" : "Total"}</Text>
+        <View style={styles.chromeRight}>
+          <View style={styles.chromeStat}>
+            <Text style={styles.chromeStatValue}>{visible.length}</Text>
+            <Text style={styles.chromeStatLabel}>{searching ? "Matches" : "Total"}</Text>
+          </View>
+          {/* A referral he already knows is a customer from the first word.
+              Making him invent a lead to reach the record is paperwork. */}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="New customer"
+            onPress={() => router.push("/(owner)/customer/new")}
+            style={({ pressed }) => [styles.newButton, pressed && styles.pressed]}
+          >
+            <Text style={styles.newButtonText}>+ New</Text>
+          </Pressable>
         </View>
       </View>
 
@@ -181,7 +193,7 @@ export default function CustomersScreen(): React.ReactElement {
                 <Text style={styles.emptyText}>
                   {searching
                     ? "Nobody here matches that."
-                    : "No customers yet. They appear once a lead turns into work."}
+                    : "No customers yet. They appear once a lead turns into work — or tap New to add someone yourself."}
                 </Text>
               </View>
             ) : null
@@ -209,6 +221,16 @@ const styles = StyleSheet.create({
     paddingBottom: space.md,
   },
   chromeTitle: { ...type.display, color: color.chromeInk },
+  chromeRight: { flexDirection: "row", alignItems: "center", gap: space.md },
+  newButton: {
+    minHeight: HIT - 12,
+    justifyContent: "center",
+    paddingHorizontal: space.md,
+    borderRadius: radius.md,
+    backgroundColor: color.brandFill,
+  },
+  newButtonText: { ...type.small, color: "#ffffff", fontFamily: font.bodyMedium },
+  pressedButton: { opacity: 0.72 },
   chromeStat: { alignItems: "flex-end" },
   chromeStatValue: {
     fontFamily: font.bodySemi,

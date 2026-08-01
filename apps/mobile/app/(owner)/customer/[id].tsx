@@ -532,6 +532,27 @@ export default function CustomerScreen(): React.ReactElement {
                 Books work straight onto the schedule — no estimate needed.
               </Text>
             </View>
+
+            {/* Billing that skipped the board entirely: work already done, for
+                someone already on the books. The contact rides in so the bill
+                files itself under them rather than minting a stray name. */}
+            <View style={[styles.pad, styles.divided]}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Bill this customer"
+                onPress={() =>
+                  router.push(
+                    `/(owner)/invoice/new?contactId=${encodeURIComponent(contact.id)}&name=${encodeURIComponent(contact.name ?? "")}&phone=${encodeURIComponent(contact.phone ?? "")}`,
+                  )
+                }
+                style={({ pressed }) => [styles.neutralBtn, pressed && styles.rowPressed]}
+              >
+                <Text style={styles.body}>New invoice</Text>
+              </Pressable>
+              <Text style={styles.mutedText}>
+                Bills work that never went on the schedule. Raises a draft — nothing sends yet.
+              </Text>
+            </View>
           </View>
         </Section>
 

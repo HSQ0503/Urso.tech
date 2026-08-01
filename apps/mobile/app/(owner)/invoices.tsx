@@ -104,9 +104,21 @@ export default function InvoicesScreen(): React.ReactElement {
     <View style={styles.screen}>
       <View style={[styles.chrome, { paddingTop: insets.top + space.md }]}>
         <Text style={styles.chromeTitle}>Invoices</Text>
-        <View style={styles.chromeStat}>
-          <Text style={styles.chromeStatValue}>{visible.length}</Text>
-          <Text style={styles.chromeStatLabel}>{searching ? "Matches" : "Total"}</Text>
+        <View style={styles.chromeRight}>
+          <View style={styles.chromeStat}>
+            <Text style={styles.chromeStatValue}>{visible.length}</Text>
+            <Text style={styles.chromeStatLabel}>{searching ? "Matches" : "Total"}</Text>
+          </View>
+          {/* Work that never went through the board — a repeat customer, a
+              fix-up, a Saturday referral — could not be billed from here. */}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="New invoice"
+            onPress={() => router.push("/(owner)/invoice/new")}
+            style={({ pressed }) => [styles.newButton, pressed && styles.pressedButton]}
+          >
+            <Text style={styles.newButtonText}>+ New</Text>
+          </Pressable>
         </View>
       </View>
 
@@ -161,7 +173,7 @@ export default function InvoicesScreen(): React.ReactElement {
                 <Text style={styles.emptyText}>
                   {searching
                     ? "No invoices match that."
-                    : "No invoices yet. Completing a job creates its bill."}
+                    : "No invoices yet. Completing a job creates its bill — or tap New to bill work that never went on the board."}
                 </Text>
               </View>
             ) : null
@@ -189,6 +201,16 @@ const styles = StyleSheet.create({
     paddingBottom: space.md,
   },
   chromeTitle: { ...type.display, color: color.chromeInk },
+  chromeRight: { flexDirection: "row", alignItems: "center", gap: space.md },
+  newButton: {
+    minHeight: HIT - 12,
+    justifyContent: "center",
+    paddingHorizontal: space.md,
+    borderRadius: radius.md,
+    backgroundColor: color.brandFill,
+  },
+  newButtonText: { ...type.small, color: "#ffffff", fontFamily: font.bodyMedium },
+  pressedButton: { opacity: 0.72 },
   chromeStat: { alignItems: "flex-end" },
   chromeStatValue: {
     fontFamily: font.bodySemi,

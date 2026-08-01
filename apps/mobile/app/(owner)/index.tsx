@@ -358,13 +358,21 @@ export default function TodayScreen(): React.ReactElement {
 
   return (
     <View style={styles.screen}>
+      {/* Two lines, not three. The wordmark used to own a line of its own above
+          the date and the greeting, which spent about a quarter of a 874pt
+          screen on saying hello before a single piece of work appeared — on the
+          one screen whose entire job is to show him what needs him now. The
+          brand and the date share a rule now, and the greeting keeps its
+          moment; nothing was cut, it was folded. */}
       <View style={[styles.chrome, { paddingTop: insets.top + space.md }]}>
-        <Text style={styles.wordmark}>
-          Canes<Text style={styles.wordmarkStop}>.</Text>
-        </Text>
-        <Text style={styles.date}>
-          {fmtEt(new Date().toISOString(), { weekday: "long", month: "long", day: "numeric" })}
-        </Text>
+        <View style={styles.chromeTop}>
+          <Text style={styles.wordmark}>
+            Canes<Text style={styles.wordmarkStop}>.</Text>
+          </Text>
+          <Text style={styles.date}>
+            {fmtEt(new Date().toISOString(), { weekday: "short", month: "long", day: "numeric" })}
+          </Text>
+        </View>
         <Text style={styles.greeting}>
           {greetingWord()}
           {name ? `, ${name}` : ""}
@@ -584,12 +592,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.lg,
     paddingBottom: space.lg,
   },
-  wordmark: { ...type.display, fontSize: 20, color: color.chromeInk },
+  chromeTop: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+    gap: space.md,
+  },
+  wordmark: { ...type.display, fontSize: 18, color: color.chromeInk },
   wordmarkStop: { color: color.brand },
   // chromeMuted, not chromeFaint: this is the date, read outdoors. The crew
   // screen uses chromeMuted for its equivalent chrome sub-label.
-  date: { ...type.micro, color: color.chromeMuted, marginTop: space.md },
-  greeting: { ...type.display, color: color.chromeInk, marginTop: space.xs },
+  date: { ...type.micro, color: color.chromeMuted },
+  greeting: { ...type.display, fontSize: 24, color: color.chromeInk, marginTop: space.sm },
 
   body: { padding: space.lg, gap: space.xl },
 

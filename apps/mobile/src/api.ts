@@ -367,6 +367,23 @@ export type InvoiceLineInput = {
 };
 
 export const invoiceActions = {
+  // A bill for work that never went through the schedule — a repeat customer, a
+  // fix-up, a referral he did on a Saturday. Until this existed the phone could
+  // only mint an invoice as a side effect of completing a job, so any billing
+  // that skipped the board meant walking to a desk.
+  createManual: (input: {
+    customerName: string;
+    jobName: string;
+    totalCents: number;
+    contactId?: string;
+    customerPhone?: string;
+    customerEmail?: string;
+    jobAddress?: string;
+  }) => act<{ invoiceId?: string }>("/canes/invoices", { action: "createManual", ...input }),
+  // Insert-only against the partial unique index on job_id, so a second call
+  // returns the existing bill rather than a duplicate.
+  createFromJob: (jobId: string) =>
+    act<{ invoiceId?: string }>("/canes/invoices", { action: "createFromJob", jobId }),
   // Replace-all, but NEVER to empty and never once money or Square has touched
   // the bill — the action owns those refusals. New in O3c: invoice_items were
   // write-once until now.
