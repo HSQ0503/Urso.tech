@@ -26,7 +26,7 @@ export default function AdminLayout(): React.ReactElement {
   if (!allowed) {
     return (
       <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: wgColor.bg }}>
-        <ActivityIndicator color={wgColor.mint} />
+        <ActivityIndicator color={wgColor.orange} />
       </View>
     );
   }

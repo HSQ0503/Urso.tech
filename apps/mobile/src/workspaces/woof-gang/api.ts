@@ -1,5 +1,6 @@
 import { getAdminToken } from "@/session";
 import { clearWgSession, getWgAccessToken } from "@/wg-auth";
+import type { WgDashboardSection, WgMobileSectionData } from "@urso/types";
 
 // This adapter is deliberately separate from src/api.ts. Woof Gang has its own
 // identity, tenant routes, and data contract; the Urso token is only a verified
@@ -23,6 +24,7 @@ export type WgKpi = {
   value: string;
   change: string | null;
   tone: "good" | "bad" | "neutral";
+  accent?: boolean;
 };
 
 export type WgTrendPoint = { label: string; value: number };
@@ -42,14 +44,36 @@ export type WgAction = {
   severity: "urgent" | "watch" | "normal";
 };
 
+export type WgStorePerformance = {
+  id: string;
+  name: string;
+  revenue: string;
+  avgTicket: string;
+  rebook: number;
+  attach: number;
+};
+
+export type WgFeed = {
+  live: boolean;
+  primary: string;
+  secondary: string;
+};
+
 export type WgHome = {
   periodLabel: string;
   source: "ready" | "pending" | "unavailable";
   sourceNotice: string | null;
+  headlineRevenue: string;
+  headlineRevenueChange: string | null;
+  revenueSource: "books" | "mixed" | "register";
   kpis: WgKpi[];
   trend: WgTrendPoint[];
+  calls: WgFeed;
+  web: WgFeed;
   rankings: WgRanking[];
   actions: WgAction[];
+  brief: { headline: string; recommendation: string; actionsOpen: number } | null;
+  stores: WgStorePerformance[];
   focus: string | null;
   team: WgRanking[];
   watchlist: WgAction[];
@@ -198,6 +222,9 @@ function normaliseHome(value: unknown): WgHome {
   const deltas = record(data.deltas);
   const series = record(data.revenueSeries);
   const owner = record(data.owner);
+  const ownerRevenue = record(data.ownerRevenue);
+  const callStats = record(data.calls);
+  const webStats = record(data.web);
   const manager = record(data.manager);
   const focus = record(manager.focus);
   const topAction = record(data.topAction);
@@ -225,12 +252,24 @@ function normaliseHome(value: unknown): WgHome {
     const percent = value * 100;
     return `${percent > 0 ? "+" : ""}${Math.round(percent)}% vs prior month`;
   };
+  const revenueSource = text(ownerRevenue.source, "register");
+  // Closed-books revenue must only use its like-for-like books delta. Mixed or
+  // open periods intentionally fall back to the register comparison, matching
+  // the web dashboard's accounting-basis rule.
+  const revenueDeltaValue = revenueSource === "books" ? number(ownerRevenue.delta) : number(deltas.revenue);
   const exactKpis: WgKpi[] = [
-    { label: "Revenue", value: money(metrics.revenue), change: delta("revenue"), tone: (number(deltas.revenue) ?? 0) >= 0 ? "good" : "bad" },
+    { label: "Revenue", value: money(ownerRevenue.total ?? metrics.revenue), change: revenueDeltaValue === null ? null : `${revenueDeltaValue > 0 ? "+" : ""}${Math.round(revenueDeltaValue * 100)}% vs prior month`, tone: (revenueDeltaValue ?? 0) >= 0 ? "good" : "bad" },
     { label: "Bookings", value: text(metrics.bookings), change: delta("bookings"), tone: (number(deltas.bookings) ?? 0) >= 0 ? "good" : "bad" },
-    { label: "Average ticket", value: money(metrics.avgTicket), change: delta("avgTicket"), tone: (number(deltas.avgTicket) ?? 0) >= 0 ? "good" : "bad" },
-    { label: "Rebook rate", value: percentage(metrics.rebook), change: delta("rebook"), tone: (number(deltas.rebook) ?? 0) >= 0 ? "good" : "bad" },
+    { label: "Avg visit", value: money(metrics.avgTicket), change: delta("avgTicket"), tone: (number(deltas.avgTicket) ?? 0) >= 0 ? "good" : "bad" },
+    { label: "Return rate", value: percentage(metrics.rebook), change: delta("rebook"), tone: (number(deltas.rebook) ?? 0) >= 0 ? "good" : "bad" },
+    { label: "Retail attach", value: percentage(metrics.attach), change: delta("attach"), tone: (number(deltas.attach) ?? 0) >= 0 ? "good" : "bad" },
+    { label: "Grooming share", value: percentage(metrics.groomingShare), change: delta("groomingShare"), tone: (number(deltas.groomingShare) ?? 0) >= 0 ? "good" : "bad" },
   ];
+  const strongestGain = exactKpis
+    .map((item, index) => ({ index, value: index === 0 ? revenueDeltaValue : number(deltas[["revenue", "bookings", "avgTicket", "rebook", "attach", "groomingShare"][index]]) }))
+    .filter((item): item is { index: number; value: number } => item.value !== null && item.value > 0)
+    .sort((a, b) => b.value - a.value)[0];
+  if (strongestGain) exactKpis[strongestGain.index].accent = true;
   const managerScorecard = pickArray(manager, "scorecard").map((item) => {
     const score = record(item);
     const change = number(score.delta);
@@ -254,6 +293,18 @@ function normaliseHome(value: unknown): WgHome {
       score: ratioPercent(store.rebook),
     };
   });
+  const ownerStores: WgStorePerformance[] = pickArray(owner, "stores").map((item, index) => {
+    const store = record(item);
+    return {
+      id: text(store.id, `store-${index}`),
+      name: text(store.name, "Store"),
+      revenue: money(store.revenue),
+      avgTicket: money(store.avgTicket),
+      rebook: ratioPercent(store.rebook) ?? 0,
+      attach: ratioPercent(store.attach) ?? 0,
+    };
+  });
+  const brief = record(owner.brief);
   const managerTeam = pickArray(manager, "team").map((item, index) => {
     const member = record(item);
     return {
@@ -288,10 +339,29 @@ function normaliseHome(value: unknown): WgHome {
     periodLabel,
     source: sourceStatus === "pending" ? "pending" : sourceStatus === "ready" ? "ready" : "unavailable",
     sourceNotice: text(source.notice ?? source.message ?? data.sourceNotice, "") || (sourceStatus === "pending" ? "An automated recommendation is still being prepared; current performance figures are available." : null),
+    headlineRevenue: money(ownerRevenue.total ?? metrics.revenue),
+    headlineRevenueChange: revenueDeltaValue === null ? null : `${revenueDeltaValue > 0 ? "+" : ""}${Math.round(revenueDeltaValue * 100)}%`,
+    revenueSource: revenueSource === "books" || revenueSource === "mixed" ? revenueSource : "register",
     kpis: managerScorecard.length ? managerScorecard : exactKpis,
     trend: array(series.revenue).map((amount, index) => ({ label: text(array(series.labels)[index], String(index + 1)), value: number(amount) ?? 0 })),
+    calls: {
+      live: (number(callStats.total) ?? 0) > 0,
+      primary: `${text(callStats.total, "0")} calls`,
+      secondary: `${Math.round((ratioPercent(callStats.missedPct) ?? 0))}% missed`,
+    },
+    web: {
+      live: (number(webStats.visits) ?? 0) > 0,
+      primary: `${text(webStats.visits, "0")} visits`,
+      secondary: `${Math.round((ratioPercent(webStats.convRate) ?? 0))}% book online`,
+    },
     rankings: ownerRankings.length ? ownerRankings : pickArray(manager, "rankings").map(normaliseRanking),
     actions: topAction.title ? [normaliseAction({ id: "top-action", title: topAction.title, detail: topAction.detail, severity: topAction.pending ? "watch" : "normal" }, 0)] : managerActions,
+    brief: brief.headline ? {
+      headline: text(brief.headline),
+      recommendation: text(brief.recommendation, ""),
+      actionsOpen: number(brief.actionsOpen) ?? 0,
+    } : null,
+    stores: ownerStores,
     focus: focus.title ? `${text(focus.title)}${focus.detail ? ` — ${text(focus.detail)}` : ""}` : null,
     team: managerTeam,
     watchlist: managerWatchlist.length ? managerWatchlist : managerActions,
@@ -341,11 +411,72 @@ async function get(path: string): Promise<unknown> {
   throw new WgApiError("Sign in again.");
 }
 
+async function post(path: string, payload: unknown): Promise<unknown> {
+  const available = await credentials();
+  for (let index = 0; index < available.length; index += 1) {
+    const credential = available[index];
+    let response: Response;
+    try {
+      response = await fetch(`${API_BASE}/api/v1${path}`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${credential.token}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+    } catch {
+      throw new WgApiError("No connection. Try again when you're back online.", true);
+    }
+
+    let body: Envelope;
+    try {
+      body = (await response.json()) as Envelope;
+    } catch {
+      throw new WgApiError("The workspace sent an unexpected response.", true);
+    }
+    if (response.ok && body.ok === true) return body.data;
+    if (response.status === 401 && credential.source === "woof-gang") {
+      await clearWgSession();
+      if (index + 1 < available.length) continue;
+    }
+    throw new WgApiError(body.notice ?? "The request could not be completed.", response.status >= 500);
+  }
+  throw new WgApiError("Sign in again.");
+}
+
 export const woofGangApi = {
   session: async (): Promise<WgSession> => normaliseSession(await get("/mobile/session")),
   home: async (storeId: string | null, month: string): Promise<WgHome> => {
     const params = new URLSearchParams({ month });
     if (storeId) params.set("store", storeId);
     return normaliseHome(await get(`/workspaces/woof-gang/home?${params.toString()}`));
+  },
+  askAi: async (message: string, storeId: string | null, month: string, topic?: string): Promise<string> => {
+    const data = record(await post("/workspaces/woof-gang/ai/chat", { message, store: storeId, month, topic }));
+    return text(data.answer, "The analyst did not return an answer.");
+  },
+  section: async (
+    section: WgDashboardSection,
+    storeId: string | null,
+    month: string,
+    options: Record<string, string | number | undefined> = {},
+  ): Promise<WgMobileSectionData> => {
+    const params = new URLSearchParams({ section, month });
+    if (storeId) params.set("store", storeId);
+    for (const [key, value] of Object.entries(options)) if (value !== undefined) params.set(key, String(value));
+    const value = await get(`/workspaces/woof-gang/dashboard?${params.toString()}`);
+    const data = record(value);
+    if (data.section !== section || !Array.isArray(data.blocks)) throw new WgApiError("The dashboard sent an unexpected response.", true);
+    return value as WgMobileSectionData;
+  },
+  updateAction: async (id: string, status: "approved" | "dismissed"): Promise<void> => {
+    await post("/workspaces/woof-gang/actions", { id, status });
+  },
+  createEvent: async (input: { store: string; eventType: string; title: string; detail: string; start: string; end: string }): Promise<void> => {
+    await post("/workspaces/woof-gang/events", input);
+  },
+  deleteEvent: async (id: string): Promise<void> => {
+    await post("/workspaces/woof-gang/events", { action: "delete", id });
   },
 };

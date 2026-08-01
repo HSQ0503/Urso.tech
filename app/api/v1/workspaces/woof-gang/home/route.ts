@@ -1,14 +1,17 @@
 import {
   getAgentActionsForStore,
   getCustomersNeedingAttention,
+  getCallStats,
   getKpiDeltas,
   getManagerFocus,
   getManagerScorecard,
   getMetrics,
+  getOwnerRevenue,
   getSeries,
   getStoreRanking,
   getTeamRoster,
   getTopAction,
+  getWebStats,
   getWeeklyBrief,
   storeComparison,
 } from "@/components/dashboard/data.server";
@@ -29,11 +32,14 @@ export const GET = apiRoute<Record<string, string>, WgMobileActor>(async ({ req,
   const month = parseMonth(req.nextUrl.searchParams.get("month"));
 
   try {
-    const [metrics, deltas, series, topAction] = await Promise.all([
+    const [metrics, deltas, series, topAction, ownerRevenue, calls, web] = await Promise.all([
       getMetrics(scope, month),
       getKpiDeltas(scope, month),
       getSeries(scope, month),
       getTopAction(scope, month),
+      getOwnerRevenue(scope, month),
+      getCallStats(scope, month),
+      getWebStats(scope, month),
     ]);
 
     const home: WgMobileHome = {
@@ -43,7 +49,15 @@ export const GET = apiRoute<Record<string, string>, WgMobileActor>(async ({ req,
       month,
       metrics,
       deltas,
-      revenueSeries: { labels: series.labels, revenue: series.revenue },
+      // Managers get the same register-sales basis as their web scorecard. The
+      // owner-only books uplift (tips + commission income) never crosses the
+      // manager mobile contract.
+      ownerRevenue: actor.role === "manager"
+        ? { total: metrics.revenue, source: "register", delta: deltas.revenue }
+        : { total: ownerRevenue.total, source: ownerRevenue.source, delta: ownerRevenue.delta },
+      calls,
+      web,
+      revenueSeries: series,
       topAction: {
         title: topAction.title,
         detail: topAction.detail,
@@ -107,6 +121,7 @@ export const GET = apiRoute<Record<string, string>, WgMobileActor>(async ({ req,
           name: ({ wp: "Winter Park", wg: "Winter Garden", lv: "Lakeside Village", wm: "Windermere" })[id] ?? id,
           revenue: store.revenue,
           bookings: store.bookings,
+          avgTicket: store.avgTicket,
           rebook: store.rebook,
           attach: store.attach,
           missedPct: store.missedPct,

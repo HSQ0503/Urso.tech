@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { space } from "@/theme";
 import { WgApiError, woofGangApi, type WgSession } from "@/workspaces/woof-gang/api";
 import { currentEasternMonth, shiftMonth } from "@/workspaces/woof-gang/period";
-import { ActionList, IconButton, KpiGrid, Notice, RankingList, ScreenHeader, Section, Trend, wgColor, wgStyles } from "@/workspaces/woof-gang/ui";
+import { ActionList, BriefCard, FeedCard, IconButton, KpiGrid, Notice, RankingList, ScreenHeader, Section, StorePerformance, Trend, wgColor, wgStyles } from "@/workspaces/woof-gang/ui";
 
 function nextStore(session: WgSession, selected: string | null): string | null {
   if (!session.stores.length) return null;
@@ -35,7 +35,7 @@ export default function WoofGangToday(): React.ReactElement {
   }, [homeQuery, sessionQuery]);
 
   if (sessionQuery.isLoading || homeQuery.isLoading) {
-    return <View style={wgStyles.centre}><ActivityIndicator color={wgColor.mint} size="large" /></View>;
+    return <View style={wgStyles.centre}><ActivityIndicator color={wgColor.orange} size="large" /></View>;
   }
 
   const error = sessionQuery.error ?? homeQuery.error;
@@ -61,9 +61,9 @@ export default function WoofGangToday(): React.ReactElement {
     <View style={wgStyles.screen}>
       <ScrollView
         contentContainerStyle={[wgStyles.content, { paddingTop: insets.top + space.lg, paddingBottom: insets.bottom + space.xxl }]}
-        refreshControl={<RefreshControl refreshing={sessionQuery.isRefetching || homeQuery.isRefetching} onRefresh={() => void refresh()} tintColor={wgColor.mint} colors={[wgColor.mint]} />}
+        refreshControl={<RefreshControl refreshing={sessionQuery.isRefetching || homeQuery.isRefetching} onRefresh={() => void refresh()} tintColor={wgColor.orange} colors={[wgColor.orange]} />}
       >
-        <ScreenHeader eyebrow="WOOF GANG BAKERY" title={manager ? "My Store" : "Today"} right={<IconButton icon="refresh-cw" label="Refresh dashboard" onPress={() => void refresh()} />} />
+        <ScreenHeader eyebrow={`OVERVIEW · ${storeName.toUpperCase()} · ${home.periodLabel.toUpperCase()}`} title={manager ? "My Store" : `Welcome${session.name ? `, ${session.name.split(" ")[0]}` : ""}`} right={<IconButton icon="refresh-cw" label="Refresh dashboard" onPress={() => void refresh()} />} />
         {session.supportMode ? <Notice text="Urso support mode is active. The server is enforcing platform-admin access for this workspace." /> : null}
         {home.source === "pending" ? <Notice tone="pending" text={home.sourceNotice ?? "Source data is still syncing. Figures will appear when the source is ready."} /> : null}
         {home.source === "unavailable" ? <Notice tone="error" text={home.sourceNotice ?? "Source data is unavailable. Pull down to retry."} /> : null}
@@ -76,21 +76,22 @@ export default function WoofGangToday(): React.ReactElement {
             <Text style={wgStyles.controlLabel}>Period</Text>
             <View style={styles.periodRow}>
               <Pressable accessibilityRole="button" accessibilityLabel="Show previous month" onPress={() => setMonth(shiftMonth(month, -1))} style={({ pressed }) => [styles.periodStep, pressed && styles.pressed]}>
-                <Feather name="chevron-left" size={18} color={wgColor.mint} />
+                <Feather name="chevron-left" size={18} color={wgColor.orange} />
               </Pressable>
               <Pressable accessibilityRole="button" accessibilityLabel="Return to current month" onPress={() => setMonth(currentMonth)} style={({ pressed }) => [styles.periodLabel, pressed && styles.pressed]}>
                 <Text style={wgStyles.controlValue} numberOfLines={1}>{home.periodLabel}</Text>
               </Pressable>
               <Pressable accessibilityRole="button" accessibilityLabel="Show next month" accessibilityState={{ disabled: month >= currentMonth }} disabled={month >= currentMonth} onPress={() => setMonth(shiftMonth(month, 1))} style={({ pressed }) => [styles.periodStep, month >= currentMonth && styles.disabled, pressed && month < currentMonth && styles.pressed]}>
-                <Feather name="chevron-right" size={18} color={wgColor.mint} />
+                <Feather name="chevron-right" size={18} color={wgColor.orange} />
               </Pressable>
             </View>
           </View>
         </View>
 
         {manager && home.focus ? <View style={wgStyles.primary}><Feather name="target" size={18} color={wgColor.bg} /><Text style={wgStyles.primaryText}> {home.focus}</Text></View> : null}
-        <Section label={manager ? "Store scorecard" : "Performance"}><KpiGrid items={home.kpis} /></Section>
-        <Section label="Revenue trend" action={home.periodLabel}><Trend points={home.trend} /></Section>
+        {!manager && home.brief ? <BriefCard {...home.brief} /> : null}
+        <Section label={manager ? "Store scorecard" : "Performance overview"}><KpiGrid items={home.kpis} /></Section>
+        <Section label="Revenue" action={home.periodLabel}><Trend points={home.trend} total={home.headlineRevenue} delta={home.headlineRevenueChange} /></Section>
         {manager ? (
           <>
             <Section label="Team"><RankingList items={home.team} empty="No team scorecard is available for this period." /></Section>
@@ -99,7 +100,8 @@ export default function WoofGangToday(): React.ReactElement {
         ) : (
           <>
             <Section label="Top action"><ActionList items={home.actions} empty="No action needs attention right now." /></Section>
-            <Section label="Store rankings"><RankingList rank items={home.rankings} empty="Store rankings will appear after source data arrives." /></Section>
+            <View style={styles.feedGrid}><FeedCard kind="calls" data={home.calls} /><FeedCard kind="web" data={home.web} /></View>
+            <Section label="Store performance" action="COMPARE"><StorePerformance items={home.stores} /></Section>
           </>
         )}
       </ScrollView>
@@ -108,6 +110,7 @@ export default function WoofGangToday(): React.ReactElement {
 }
 
 const styles = StyleSheet.create({
+  feedGrid: { gap: space.sm },
   periodRow: { flexDirection: "row", alignItems: "center", marginHorizontal: -space.sm },
   periodStep: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
   periodLabel: { minHeight: 44, flex: 1, alignItems: "center", justifyContent: "center" },

@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { signOutPlatform } from "@/platform/session";
 import { markSupportModeUnlocked } from "@/platform/support-lock";
 import { queryClient } from "@/query";
-import { font, HIT, radius, space, type } from "@/theme";
+import { font, HIT, space, type } from "@/theme";
 import { Notice, ScreenHeader, wgColor, wgStyles } from "@/workspaces/woof-gang/ui";
 
 type Destination = "woof-gang" | "canes";
@@ -76,26 +76,26 @@ export default function UrsoControl(): React.ReactElement {
 function WorkspaceButton({ title, detail, icon, loading, disabled, onPress }: { title: string; detail: string; icon: "activity" | "briefcase"; loading: boolean; disabled: boolean; onPress: () => void }): React.ReactElement {
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={`Unlock ${title}`} accessibilityState={{ disabled }} disabled={disabled} onPress={onPress} style={({ pressed }) => [styles.workspace, pressed && !disabled && { opacity: 0.74 }, disabled && styles.disabled]}>
-      <View style={styles.workspaceIcon}><Feather name={icon} size={21} color={wgColor.mint} /></View>
+      <View style={styles.workspaceIcon}><Feather name={icon} size={21} color={wgColor.orange} /></View>
       <View style={{ flex: 1 }}><Text style={styles.workspaceTitle}>{title}</Text><Text style={styles.workspaceDetail}>{detail}</Text></View>
-      {loading ? <ActivityIndicator color={wgColor.mint} /> : <Feather name="chevron-right" size={20} color={wgColor.mint} />}
+      {loading ? <ActivityIndicator color={wgColor.orange} /> : <Feather name="chevron-right" size={20} color={wgColor.orange} />}
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   content: { flex: 1, paddingHorizontal: space.lg, gap: space.md },
-  hero: { padding: space.lg, borderRadius: radius.lg, backgroundColor: "#15352a", borderWidth: 1, borderColor: "rgba(120,213,165,0.32)", flexDirection: "row", alignItems: "center", gap: space.md },
-  mark: { width: 48, height: 48, borderRadius: radius.md, alignItems: "center", justifyContent: "center", backgroundColor: wgColor.mint },
+  hero: { padding: space.lg, backgroundColor: wgColor.orangeWash, borderWidth: 1, borderColor: wgColor.lineStrong, flexDirection: "row", alignItems: "center", gap: space.md },
+  mark: { width: 48, height: 48, alignItems: "center", justifyContent: "center", backgroundColor: wgColor.orange },
   markText: { color: wgColor.bg, fontFamily: font.display, fontSize: 27 },
   heroTitle: { color: wgColor.ink, fontFamily: font.bodySemi, fontSize: 17 },
-  heroCopy: { color: "#c4d7cf", ...type.small, marginTop: 3 },
-  label: { color: wgColor.mint, ...type.micro, marginTop: space.sm },
-  workspace: { minHeight: 86, padding: space.md, borderRadius: radius.lg, backgroundColor: wgColor.surface, borderColor: wgColor.line, borderWidth: 1, flexDirection: "row", gap: space.md, alignItems: "center" },
-  workspaceIcon: { width: 44, height: 44, borderRadius: radius.md, backgroundColor: wgColor.mintDeep, alignItems: "center", justifyContent: "center" },
+  heroCopy: { color: wgColor.muted, ...type.small, marginTop: 3 },
+  label: { color: wgColor.orange, ...type.micro, marginTop: space.sm },
+  workspace: { minHeight: 86, padding: space.md, backgroundColor: wgColor.surface, borderColor: wgColor.line, borderWidth: 1, flexDirection: "row", gap: space.md, alignItems: "center" },
+  workspaceIcon: { width: 44, height: 44, backgroundColor: wgColor.orangeSoft, alignItems: "center", justifyContent: "center" },
   workspaceTitle: { color: wgColor.ink, fontFamily: font.bodySemi, fontSize: 16 },
   workspaceDetail: { color: wgColor.muted, ...type.small, marginTop: 3 },
   disabled: { opacity: 0.6 },
-  signOut: { minHeight: HIT, borderRadius: radius.md, borderWidth: 1, borderColor: "rgba(243,141,136,0.3)", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: space.sm, marginTop: "auto" },
+  signOut: { minHeight: HIT, borderWidth: 1, borderColor: "rgba(243,141,136,0.3)", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: space.sm, marginTop: "auto" },
   signOutText: { color: wgColor.red, fontFamily: font.bodySemi, fontSize: 15 },
 });
