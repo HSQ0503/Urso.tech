@@ -59,7 +59,32 @@ export async function mintHandoffTicket(email: string): Promise<string | null> {
       { onConflict: "key" },
     );
   if (error) throw new Error(`[canes] handoff ticket write failed: ${error.message}`);
+
+  await sweepExpired();
   return ticket;
+}
+
+// A redeemed ticket deletes itself, but an ABANDONED one does not: the app can
+// mint a URL and never load it (no signal, or the reader backs out before the
+// WebView starts). Those rows would sit in `settings` forever — and getSettings()
+// does `select("key, value")` across the WHOLE table on every call, which the
+// automations make constantly. So each mint sweeps the dead ones.
+//
+// Bounded by `updated_at`, not by parsing every row's payload, so the delete is
+// one indexed statement. Failure is swallowed on purpose: a sweep that could not
+// run is housekeeping, and refusing to hand a signed-in owner their Insights page
+// over it would be the wrong trade.
+async function sweepExpired(): Promise<void> {
+  try {
+    const cutoff = new Date(Date.now() - TICKET_TTL_MS * 5).toISOString();
+    await canesDb()
+      .from("settings")
+      .delete()
+      .like("key", "wvticket:%")
+      .lt("updated_at", cutoff);
+  } catch {
+    // Housekeeping only.
+  }
 }
 
 // Redeems a ticket, returning the admin's email exactly once.

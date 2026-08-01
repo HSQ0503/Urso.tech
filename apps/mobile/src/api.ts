@@ -199,6 +199,12 @@ export const owner = {
 
   job: (id: string) => request<JobWithItems>(`/canes/jobs/${id}`),
 
+  // Mints a single-use, 60-second URL that opens a web console surface inside
+  // the WebView already signed in. `to` is whitelisted SERVER side — the app
+  // names a destination, it does not get to choose an arbitrary one.
+  webviewUrl: (to: string) =>
+    request<{ url: string }>("/canes/webview-ticket", { method: "POST", body: { to } }),
+
   // OWNER ONLY server-side (the roster carries pay terms). Fetched lazily at
   // the moments that need a name — never on screen mount — so an ops manager
   // simply proceeds without it instead of reading a refusal about payroll.
