@@ -55,7 +55,14 @@ export function SupportGate({
   useEffect(() => {
     if (!required) return;
     const subscription = AppState.addEventListener("change", (nextState) => {
-      if (nextState !== "active") lockSupportMode();
+      // "background" ONLY — never "inactive". iOS reports inactive for every
+      // transient interruption: the notification shade, Control Centre, an
+      // incoming call, the app switcher preview, and the system biometric sheet
+      // itself. Locking on those meant glancing at a notification mid-job threw
+      // the operator back to the Urso Control gate for another Face ID, and it
+      // is why the prompt appeared to fire over and over. Leaving the app is
+      // still leaving; being briefly interrupted is not.
+      if (nextState === "background") lockSupportMode();
     });
     return () => subscription.remove();
   }, [required]);

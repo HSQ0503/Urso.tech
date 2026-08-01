@@ -18,27 +18,59 @@ export default function UrsoControl(): React.ReactElement {
   const [opening, setOpening] = useState<Destination | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  const openWorkspace = useCallback(async (destination: Destination) => {
-    setNotice(null);
-    setOpening(destination);
-    try {
-      const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: "Unlock Urso Control",
-        promptDescription: "Verify before opening a client workspace.",
-        cancelLabel: "Not now",
-        disableDeviceFallback: false,
-      });
-      if (!result.success) {
-        setNotice(result.error === "not_enrolled" ? "Set up Face ID, Touch ID, or a device passcode to open client workspaces." : "Verification was not completed. Client workspaces remain locked.");
-        return;
-      }
+  const enter = useCallback(
+    (destination: Destination) => {
       markSupportModeUnlocked();
       if (destination === "woof-gang") router.push("/(woof-gang)");
       else router.push("/(owner)");
-    } finally {
-      setOpening(null);
-    }
-  }, [router]);
+    },
+    [router],
+  );
+
+  const openWorkspace = useCallback(
+    async (destination: Destination) => {
+      setNotice(null);
+      setOpening(destination);
+      try {
+        // A device that CANNOT authenticate locally cannot be protected by
+        // being asked to. No enrolled biometric AND no passcode means the phone
+        // is already open to anyone holding it, so this prompt adds nothing —
+        // it only locks the operator out of their own tool with no way through,
+        // which is exactly what it did on a simulator. `disableDeviceFallback:
+        // false` is not the escape hatch it looks like: the passcode fallback
+        // only exists if a passcode is set.
+        //
+        // getEnrolledLevelAsync is the right question, not isEnrolledAsync —
+        // the latter is biometrics-only and would send a passcode-protected
+        // phone with no Face ID down this path even though it can verify fine.
+        const level = await LocalAuthentication.getEnrolledLevelAsync();
+        if (level === LocalAuthentication.SecurityLevel.NONE) {
+          setNotice(
+            "This device has no Face ID, Touch ID or passcode, so it can’t verify you. Opening anyway — set a device passcode to turn the lock back on.",
+          );
+          enter(destination);
+          return;
+        }
+
+        const result = await LocalAuthentication.authenticateAsync({
+          promptMessage: "Unlock Urso Control",
+          promptDescription: "Verify before opening a client workspace.",
+          cancelLabel: "Not now",
+          disableDeviceFallback: false,
+        });
+        if (!result.success) {
+          // A device that CAN verify and did not is a real refusal — a cancel
+          // or a failed match keeps the workspaces locked, as intended.
+          setNotice("Verification was not completed. Client workspaces remain locked.");
+          return;
+        }
+        enter(destination);
+      } finally {
+        setOpening(null);
+      }
+    },
+    [enter],
+  );
 
   return (
     <View style={wgStyles.screen}>
