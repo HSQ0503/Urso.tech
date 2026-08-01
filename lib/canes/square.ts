@@ -668,18 +668,7 @@ async function recordRefund(event: NormalizedPaymentEvent): Promise<ReconcileOut
     return { handled: "ignored" };
   }
 
-  const { data: paymentRow } = await db
-    .from("payments")
-    .select("id, invoice_id, job_id, amount_cents, status, kind")
-    .eq("square_payment_id", refund.paymentId)
-    .maybeSingle();
-  // A refund against something we never recorded — a POS sale, or a deposit
-  // taken before the payment.* events were subscribed. Nothing to correct.
-  if (!paymentRow) {
-    await markEventProcessed(event.eventId);
-    return { handled: "unmatched" };
-  }
-  const payment = paymentRow as {
+  type PaymentRow = {
     id: string;
     invoice_id: string | null;
     job_id: string | null;
@@ -687,6 +676,69 @@ async function recordRefund(event: NormalizedPaymentEvent): Promise<ReconcileOut
     status: string;
     kind: string;
   };
+  const COLS = "id, invoice_id, job_id, amount_cents, status, kind";
+
+  // Resolving the ledger row needs TWO keys, because the two money paths store
+  // two DIFFERENT things in square_payment_id:
+  //   deposits → the real Square payment id (recordDepositPayment stores it)
+  //   invoices → a synthetic `evt:<event_id>`, because the only event allowed
+  //              to settle an invoice is invoice.payment_made, and that payload
+  //              carries no payment id at all — parseSquareEvent hard-codes
+  //              squarePaymentId: null on the invoice branch.
+  // A refund names the REAL payment id, so the deposit lookup hits and the
+  // invoice one structurally cannot. Matching only on it made refunding the
+  // main revenue path — a customer paying a hosted invoice — a silent no-op.
+  const { data: byPaymentId } = await db
+    .from("payments")
+    .select(COLS)
+    .eq("square_payment_id", refund.paymentId)
+    .maybeSingle();
+  let payment = byPaymentId as PaymentRow | null;
+
+  // The invoice fallback goes through the ORDER: a refund carries order_id, and
+  // the invoice row stored square_order_id when Square created it.
+  if (!payment && event.squareOrderId) {
+    const { data: invoiceRow } = await db
+      .from("invoices")
+      .select("id")
+      .eq("square_order_id", event.squareOrderId)
+      .maybeSingle();
+    if (invoiceRow) {
+      const { data: candidates } = await db
+        .from("payments")
+        .select(COLS)
+        .eq("invoice_id", (invoiceRow as { id: string }).id)
+        .eq("status", "completed");
+      const rows = (candidates ?? []) as PaymentRow[];
+      if (rows.length === 1) payment = rows[0];
+      else if (rows.length > 1) {
+        // A bill can carry a deposit AND a balance. The refund alone cannot say
+        // which came back, so fall to the amount — and if that is still
+        // ambiguous, refuse rather than refund the wrong row.
+        const exact = rows.filter((r) => r.amount_cents === refund.amountCents);
+        if (exact.length === 1) payment = exact[0];
+        else {
+          await markEventProcessed(event.eventId);
+          await alertOwner(
+            `⚠️ A Square refund came back against an invoice with ${rows.length} recorded payments and no single match. Correct the books by hand.`,
+          );
+          return { handled: "amount_mismatch" };
+        }
+      }
+    }
+  }
+
+  // A refund against something we never recorded — a POS sale, or a deposit
+  // taken before the payment.* events were subscribed. SAY SO: money left the
+  // account and nothing here can account for it, and silence on exactly this
+  // path is what let the ledger drift in the first place.
+  if (!payment) {
+    await markEventProcessed(event.eventId);
+    await alertOwner(
+      `⚠️ A Square refund of ${fmtMoney(refund.amountCents ?? 0)} did not match any payment on record. Check the books.`,
+    );
+    return { handled: "unmatched" };
+  }
 
   // PARTIAL refunds are deliberately NOT recorded. `payments.status` is binary
   // — completed or refunded — and amount_cents carries a `> 0` CHECK, so there
@@ -715,11 +767,20 @@ async function recordRefund(event: NormalizedPaymentEvent): Promise<ReconcileOut
     return { handled: "ignored" };
   }
 
-  // A refunded deposit is not a paid deposit. Clearing the stamp is what lets
-  // the job be deposit-chased again and stops createInvoiceFromJob crediting
-  // money that went back.
+  // A refunded deposit is not a paid deposit. Clearing the stamp is what stops
+  // createInvoiceFromJob crediting money that went back.
+  //
+  // The link columns go with it, and that is not tidiness. recordDepositPayment
+  // DELETED the quick-pay link at Square when it was paid but left the columns
+  // populated, so clearing deposit_paid_at alone would put the public estimate
+  // page back to offering `deposit_link_url` — a URL that 404s. Nulling them
+  // mirrors what the manual deposit path already does (actions.ts). No online
+  // re-collection after a refund; a dead payment page is worse than none.
   if (payment.kind === "deposit" && payment.job_id) {
-    await db.from("jobs").update({ deposit_paid_at: null }).eq("id", payment.job_id);
+    await db
+      .from("jobs")
+      .update({ deposit_paid_at: null, deposit_link_id: null, deposit_link_url: null })
+      .eq("id", payment.job_id);
   }
 
   if (payment.invoice_id) {
@@ -771,11 +832,14 @@ async function unsettleIfUncovered(invoiceId: string): Promise<void> {
     .eq("status", "paid")
     .select("id");
   if (claimed?.length && invoice.job_id) {
-    // The inverse of the settle, which moved the job to `paid`. A canceled job
-    // stays canceled.
+    // The exact inverse of the settle, which moved the job `invoiced → paid`.
+    // NOT `completed`: sending the bill is what moves a job `completed →
+    // invoiced` (actions.ts), and this path is only ever reached through a
+    // payment that HAS an invoice — so the bill still exists and the job is
+    // still invoiced, merely unpaid again. A canceled job stays canceled.
     await db
       .from("jobs")
-      .update({ status: "completed" })
+      .update({ status: "invoiced" })
       .eq("id", invoice.job_id)
       .eq("status", "paid");
   }
