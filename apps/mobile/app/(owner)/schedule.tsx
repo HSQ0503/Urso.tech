@@ -1023,11 +1023,16 @@ export default function ScheduleScreen(): React.ReactElement {
     }
 
     if (tray !== null) {
+      // The count alone understates the pile. Six unscheduled jobs reads as a
+      // tidy list; $15,400 of sold work with no date on it reads as the problem
+      // it is, and it is the number that decides whether he books today or
+      // keeps scrolling. Jobs with no total simply do not add to it.
+      const trayCents = tray.reduce((sum, job) => sum + Math.max(0, job.total_cents), 0);
       out.push({
         kind: "section",
         key: "section-tray",
         label: "Unscheduled",
-        meta: String(tray.length),
+        meta: trayCents > 0 ? `${tray.length} · ${fmtMoney(trayCents)}` : String(tray.length),
       });
       if (tray.length === 0) {
         out.push({ kind: "calm", key: "calm-tray", text: "Every sold job has a slot." });

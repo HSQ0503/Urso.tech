@@ -22,6 +22,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { useRouter } from "expo-router";
@@ -53,9 +54,11 @@ const FILTER_LABEL: Record<Filter, string> = {
   lost: "Lost",
 };
 
-// The web's empty copy, minus its "button above" — this list has no add button.
+// The web's empty copy. "New ones land here on their own" was true when this
+// list had no add button; it now has one, and a lead he takes in a driveway is
+// the whole reason it exists.
 const EMPTY_COPY: Record<Filter, string> = {
-  all: "No leads yet. New ones land here on their own.",
+  all: "No leads yet. New ones land here on their own — or tap New to take one down yourself.",
   new: "Nobody is waiting on a first call. New requests land here the moment they arrive.",
   working: "Nothing in progress. Leads move here once you have made contact.",
   won: "No won jobs on the board yet.",
@@ -66,6 +69,20 @@ const EMPTY_COPY: Record<Filter, string> = {
 // service on the row may not be the ones in the original message. Same number
 // the web marks rows at; the original text itself is on the lead screen.
 const LOW_CONFIDENCE = 0.8;
+
+// Name, phone and service — the three things he actually remembers about a
+// person he spoke to once. Digits-only on the phone so "5615375674" finds a
+// number stored and displayed as (561) 537-5674.
+function matchesQuery(lead: Lead, query: string): boolean {
+  const text = query.trim().toLowerCase();
+  if (!text) return true;
+  const digits = text.replace(/\D/g, "");
+  return (
+    (lead.name ?? "").toLowerCase().includes(text) ||
+    (lead.service ?? "").toLowerCase().includes(text) ||
+    (digits.length > 0 && (lead.phone ?? "").replace(/\D/g, "").includes(digits))
+  );
+}
 
 function ageLabel(iso: string): string {
   const minutes = minutesSince(iso);
@@ -145,6 +162,11 @@ export default function LeadsScreen(): React.ReactElement {
   // hide leads with no sign that it had.
   const [filter, setFilter] = useState<Filter>("all");
 
+  // Search filters what is already loaded, like the customers list — no second
+  // read, and it composes with the pipeline tabs rather than replacing them.
+  // This was the only list screen without it, and it is the fastest-growing one.
+  const [query, setQuery] = useState("");
+
   // Every count comes off the one page of leads already loaded — no second
   // read, and no count that claims to know about rows this screen has not seen.
   const subsets = useMemo<Record<Filter, Lead[]>>(() => {
@@ -159,7 +181,11 @@ export default function LeadsScreen(): React.ReactElement {
     };
   }, [leads]);
 
-  const rows = subsets[filter];
+  const searching = query.trim().length > 0;
+  const rows = useMemo(
+    () => subsets[filter].filter((lead) => matchesQuery(lead, query)),
+    [subsets, filter, query],
+  );
 
   const openLead = useCallback(
     (id: string) => {
@@ -174,10 +200,39 @@ export default function LeadsScreen(): React.ReactElement {
     <View style={styles.screen}>
       <View style={[styles.chrome, { paddingTop: insets.top + space.md }]}>
         <Text style={styles.chromeTitle}>Leads</Text>
-        <View style={styles.chromeStat}>
-          <Text style={styles.chromeStatValue}>{leads?.length ?? 0}</Text>
-          <Text style={styles.chromeStatLabel}>Total</Text>
+        <View style={styles.chromeRight}>
+          <View style={styles.chromeStat}>
+            <Text style={styles.chromeStatValue}>
+              {searching ? rows.length : (leads?.length ?? 0)}
+            </Text>
+            <Text style={styles.chromeStatLabel}>{searching ? "Matches" : "Total"}</Text>
+          </View>
+          {/* The leak this closes: a neighbour who walks up while a crew is
+              working had nowhere to go except Sebastian's memory. */}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="New lead"
+            onPress={() => router.push("/(owner)/lead/new")}
+            style={({ pressed }) => [styles.newButton, pressed && styles.pressed]}
+          >
+            <Text style={styles.newButtonText}>+ New</Text>
+          </Pressable>
         </View>
+      </View>
+
+      <View style={styles.searchBar}>
+        <TextInput
+          value={query}
+          onChangeText={setQuery}
+          placeholder="Search by name, phone or service"
+          placeholderTextColor={color.faint}
+          autoCapitalize="none"
+          autoCorrect={false}
+          clearButtonMode="while-editing"
+          returnKeyType="search"
+          accessibilityLabel="Search leads"
+          style={styles.search}
+        />
       </View>
 
       {/* Pinned under the chrome rather than scrolling with the rows: the tab
@@ -253,7 +308,12 @@ export default function LeadsScreen(): React.ReactElement {
             // nothing under it are different pieces of news.
             leads !== null ? (
               <View style={styles.empty}>
-                <Text style={styles.emptyText}>{EMPTY_COPY[filter]}</Text>
+                {/* A search that found nothing is not an empty pipeline, and
+                    saying "No leads yet" to someone holding 40 leads reads as
+                    data loss. */}
+                <Text style={styles.emptyText}>
+                  {searching ? `Nobody matching “${query.trim()}”.` : EMPTY_COPY[filter]}
+                </Text>
               </View>
             ) : null
           }
@@ -278,6 +338,36 @@ const styles = StyleSheet.create({
     paddingBottom: space.md,
   },
   chromeTitle: { ...type.display, color: color.chromeInk },
+  chromeRight: { flexDirection: "row", alignItems: "center", gap: space.md },
+  newButton: {
+    minHeight: HIT - 12,
+    justifyContent: "center",
+    paddingHorizontal: space.md,
+    borderRadius: radius.md,
+    backgroundColor: color.brandFill,
+  },
+  newButtonText: { ...type.small, color: "#ffffff", fontFamily: font.bodyMedium },
+  searchBar: {
+    backgroundColor: color.surface,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: color.line,
+    paddingHorizontal: space.lg,
+    paddingVertical: space.sm,
+  },
+  search: {
+    // Deliberately NOT ...type.body: that spread carries lineHeight, and iOS
+    // renders a TextInput placeholder with visibly wrong tracking when a
+    // lineHeight is combined with a custom font. Height comes from minHeight.
+    fontFamily: font.body,
+    fontSize: 15,
+    color: color.ink,
+    minHeight: HIT,
+    paddingHorizontal: space.md,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.line,
+    backgroundColor: color.bg,
+  },
   chromeStat: { alignItems: "flex-end" },
   chromeStatValue: {
     fontFamily: font.bodySemi,

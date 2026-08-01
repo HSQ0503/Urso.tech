@@ -871,7 +871,10 @@ export default function LeadScreen(): React.ReactElement {
                   })}
                 />
               ) : null}
-              <Field label="Arrived" value={fmtEt(lead.created_at)} />
+              {/* Not "Arrived": on a screen that also carries an appointment
+                  and a crew, that reads as the crew arriving on site. This is
+                  when the lead reached us. */}
+              <Field label="Came in" value={fmtEt(lead.created_at)} />
 
               <Pressable
                 accessibilityRole="button"

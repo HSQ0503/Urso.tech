@@ -16,6 +16,7 @@ import type {
   JobWithItems,
   Lead,
   LeadEvent,
+  LeadSource,
   Message,
   Overview,
   TeamMember,
@@ -249,7 +250,24 @@ export const callActions = {
     act("/canes/calls/bridge", { phone, leadId }),
 };
 
+// Creating a lead and creating a customer post to the COLLECTION, not to a
+// resource's actions route, because there is no resource yet — the same shape
+// jobActions.createManual uses. Both return the new id so the caller can land
+// on the record instead of on a list the owner then has to search.
+//
+// Field names mirror the routes' own validation exactly (leads/route.ts and
+// customers/route.ts): the route refuses shape, the action refuses meaning, and
+// nothing here re-validates.
 export const leadActions = {
+  create: (input: {
+    name: string;
+    phone: string;
+    type: "hot" | "cold";
+    source: LeadSource;
+    email?: string;
+    service?: string;
+    address?: string;
+  }) => act<{ leadId?: string }>("/canes/leads", { action: "create", ...input }),
   setStatus: (id: string, status: string, lostReason?: string) =>
     act(`/canes/leads/${id}/actions`, { action: "setStatus", status, lostReason }),
   snooze: (id: string, untilIso: string) =>
@@ -282,6 +300,14 @@ export const threadActions = {
 };
 
 export const customerActions = {
+  create: (input: {
+    name: string;
+    phone?: string;
+    email?: string;
+    address?: string;
+    notes?: string;
+    source?: LeadSource;
+  }) => act<{ contactId?: string }>("/canes/customers", { action: "create", ...input }),
   update: (id: string, fields: CustomerPatch) =>
     act(`/canes/customers/${id}/actions`, { action: "update", fields }),
   addAddress: (id: string, line: string, siteNotes?: string) =>

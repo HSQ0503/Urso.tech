@@ -13,7 +13,8 @@
       "infoPlist": {
         "NSFaceIDUsageDescription": "Unlock Urso with Face ID instead of re-entering your PIN.",
         "NSCameraUsageDescription": "Take before and after photos of a job.",
-        "NSPhotoLibraryUsageDescription": "Attach existing photos to a job."
+        "NSPhotoLibraryUsageDescription": "Attach existing photos to a job.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
