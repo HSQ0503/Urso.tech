@@ -7,11 +7,20 @@
 // the inbox.tsx parsing ban applies here too, because the platform formatter's
 // invisible punctuation cannot fool string equality.
 //
-// The composer texts through the LEAD's sendMessage action — that action
-// requires a lead id, so a thread with no lead gets a plain sentence instead
-// of a composer that would dead-end. The peer phone rides in the body, the
-// same way the web composer is handed it, so mobile can never text a
-// different number than web does for the same thread.
+// The composer sends on EVERY thread, the way the web one does. Both paths end
+// in the same sendMessage action; they differ only in where the peer phone
+// rides and what bookkeeping the send implies:
+//
+//   with a lead → POST /canes/leads/:id/actions, phone in the body (exactly
+//     how the web composer is handed it, so mobile can never text a different
+//     number than web does for the same thread). A send can flip a "new" lead
+//     to "contacted" and writes a lead event, so the lead's surfaces refresh.
+//   without a lead → POST /canes/threads/:phone/messages, phone in the path.
+//     Nothing lead-shaped to invalidate because nothing lead-shaped moved.
+//
+// A thread with no lead — a contact created outside the lead flow, or one whose
+// lead was deleted — used to get a muted sentence where the input belongs. That
+// was a phone refusing to text a number the console texts fine.
 //
 // A2P NOTE: until the campaign clears, an outbound SMS still lands
 // undelivered carrier-side. The send itself succeeds and logs to the thread —
@@ -45,7 +54,7 @@ import {
   type Thread,
   type ThreadKind,
 } from "@urso/types";
-import { leadActions } from "@/api";
+import { leadActions, threadActions } from "@/api";
 import { Notice } from "@/components/notice";
 import { keys, useThreadCalls, useThreadMessages, useThreads } from "@/queries";
 import { noticeFrom, useAction, usePullToRefresh } from "@/query";
@@ -192,10 +201,13 @@ export default function ThreadScreen(): React.ReactElement {
   const [sendNotice, setSendNotice] = useState<string | null>(null);
 
   // A sent text lands in this stream and reorders the inbox; it also writes a
-  // lead event when the thread has a lead.
+  // lead event when the thread has a lead. The lead-free path is the thread
+  // route, which the same action backs — never a client-side refusal.
   const sendRun = useAction(
-    (vars: { leadId: string; message: string }) =>
-      leadActions.sendMessage(vars.leadId, phone, vars.message),
+    (vars: { leadId: string | null; message: string }) =>
+      vars.leadId === null
+        ? threadActions.sendMessage(phone, vars.message)
+        : leadActions.sendMessage(vars.leadId, phone, vars.message),
     {
       // A successful send can flip a "new" lead to "contacted" server-side, so
       // the lead's own record and every attention surface refresh with the
@@ -252,8 +264,7 @@ export default function ThreadScreen(): React.ReactElement {
   const navigable = contactId !== null || lead !== null;
 
   const send = async () => {
-    if (lead === null) return; // the composer never renders without one
-    const r = await sendRun.mutateAsync({ leadId: lead.id, message: draft.trim() });
+    const r = await sendRun.mutateAsync({ leadId: lead?.id ?? null, message: draft.trim() });
     if (r.ok) {
       setDraft(""); // cleared ONLY on ok — a refused message stays put for a retry
       setSendNotice(null);
@@ -358,38 +369,32 @@ export default function ThreadScreen(): React.ReactElement {
         </ScrollView>
 
         <View style={[styles.composerBar, { paddingBottom: insets.bottom + space.sm }]}>
-          {lead !== null ? (
-            <View style={styles.composerRow}>
-              <TextInput
-                value={draft}
-                onChangeText={setDraft}
-                editable={!sendRun.isPending}
-                multiline
-                placeholder="Type a message"
-                placeholderTextColor={color.faint}
-                accessibilityLabel={`Message ${threadTitle(thread, phone)}`}
-                onFocus={() => scrollRef.current?.scrollToEnd({ animated: true })}
-                style={styles.composerInput}
-              />
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Send message"
-                disabled={sendRun.isPending || draft.trim().length === 0}
-                onPress={() => void send()}
-                style={({ pressed }) => [
-                  styles.send,
-                  pressed && styles.sendPressed,
-                  (sendRun.isPending || draft.trim().length === 0) && styles.disabled,
-                ]}
-              >
-                <Text style={styles.sendText}>{sendRun.isPending ? "Sending…" : "Send"}</Text>
-              </Pressable>
-            </View>
-          ) : (
-            <Text style={styles.noLead}>
-              This number has no lead yet — texting starts from a lead.
-            </Text>
-          )}
+          <View style={styles.composerRow}>
+            <TextInput
+              value={draft}
+              onChangeText={setDraft}
+              editable={!sendRun.isPending}
+              multiline
+              placeholder="Type a message"
+              placeholderTextColor={color.faint}
+              accessibilityLabel={`Message ${threadTitle(thread, phone)}`}
+              onFocus={() => scrollRef.current?.scrollToEnd({ animated: true })}
+              style={styles.composerInput}
+            />
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Send message"
+              disabled={sendRun.isPending || draft.trim().length === 0}
+              onPress={() => void send()}
+              style={({ pressed }) => [
+                styles.send,
+                pressed && styles.sendPressed,
+                (sendRun.isPending || draft.trim().length === 0) && styles.disabled,
+              ]}
+            >
+              <Text style={styles.sendText}>{sendRun.isPending ? "Sending…" : "Send"}</Text>
+            </Pressable>
+          </View>
           <Notice text={sendNotice} />
         </View>
       </KeyboardAvoidingView>
@@ -508,6 +513,4 @@ const styles = StyleSheet.create({
   sendPressed: { backgroundColor: color.brandDown },
   sendText: { ...type.title, color: color.chromeInk },
   disabled: { opacity: 0.5 },
-
-  noLead: { ...type.small, color: color.muted, textAlign: "center", paddingVertical: space.sm },
 });

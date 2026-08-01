@@ -261,6 +261,17 @@ export const leadActions = {
   delete: (id: string) => act(`/canes/leads/${id}/actions`, { action: "delete" }),
 };
 
+// Texting a thread that has NO lead. The lead route carries the lead id as a
+// path segment, so it cannot express this send at all — but the web composer
+// makes it on any thread, and a contact created outside the lead flow (or one
+// whose lead was deleted) is a real conversation. Same server action either
+// way; only the lead-side bookkeeping differs, which is why the two calls stay
+// separate rather than one call with a nullable id.
+export const threadActions = {
+  sendMessage: (phone: string, message: string) =>
+    act(`/canes/threads/${encodeURIComponent(phone)}/messages`, { message }),
+};
+
 export const customerActions = {
   update: (id: string, fields: CustomerPatch) =>
     act(`/canes/customers/${id}/actions`, { action: "update", fields }),
@@ -357,6 +368,22 @@ export type EstimateLineInput = {
 };
 
 export const estimateActions = {
+  // The three ways a quote begins. All end in createEstimate, which returns the
+  // new id — the caller navigates straight into the builder with it. An estimate
+  // is created EMPTY and priced afterwards through saveItems, so none of these
+  // carries money.
+  createFromLead: (leadId: string) =>
+    act<{ estimateId?: string }>("/canes/estimates", { action: "createFromLead", leadId }),
+  createForCustomer: (contactId: string) =>
+    act<{ estimateId?: string }>("/canes/estimates", { action: "createForCustomer", contactId }),
+  create: (input: {
+    estimateType: string;
+    customerName?: string;
+    customerPhone?: string;
+    customerEmail?: string;
+    jobAddress?: string;
+    jobName?: string;
+  }) => act<{ estimateId?: string }>("/canes/estimates", { action: "create", input }),
   // Replace-all, draft-only. An empty array is a legitimate "clear the lines"
   // on an estimate — it is an offer being shaped, not a demand.
   saveItems: (id: string, items: EstimateLineInput[]) =>

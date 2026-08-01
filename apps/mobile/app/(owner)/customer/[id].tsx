@@ -36,9 +36,10 @@ import {
   INVOICE_STATUS_LABEL,
   JOB_STATUS_LABEL,
 } from "@urso/types";
-import { customerActions, type CustomerPatch } from "@/api";
+import { customerActions, estimateActions, type CustomerPatch } from "@/api";
 import { AddressInput } from "@/components/address-input";
 import { Avatar } from "@/components/avatar";
+import { NavigateButton } from "@/components/navigate";
 import { Notice } from "@/components/notice";
 import { PhoneInput, toPhoneDisplay } from "@/components/phone-input";
 import { keys, useCustomer } from "@/queries";
@@ -50,6 +51,26 @@ function Section({ label, children }: { label: string; children: ReactNode }) {
     <View style={styles.section}>
       <Text style={styles.sectionLabel}>{label}</Text>
       {children}
+    </View>
+  );
+}
+
+// A success payload can carry a sentence of its own (apiResult keeps ok:true
+// notices, several of which are qualified successes rather than confirmations).
+// Read it without claiming a shape the action types don't promise.
+function successNotice(data: unknown): string | null {
+  if (typeof data !== "object" || data === null) return null;
+  const notice = (data as { notice?: unknown }).notice;
+  return typeof notice === "string" && notice.length > 0 ? notice : null;
+}
+
+// The green sibling of Notice — same shape, good colours — for ok:true
+// sentences. Local to the screen, same as estimate/[id] and invoice/[id].
+function GoodNotice({ text }: { text: string | null }) {
+  if (text === null) return null;
+  return (
+    <View style={styles.goodNotice}>
+      <Text style={styles.goodNoticeText}>{text}</Text>
     </View>
   );
 }
@@ -75,6 +96,8 @@ export default function CustomerScreen(): React.ReactElement {
   const [addressNotice, setAddressNotice] = useState<string | null>(null);
   const [editNotice, setEditNotice] = useState<string | null>(null);
   const [manageNotice, setManageNotice] = useState<string | null>(null);
+  const [estimateNotice, setEstimateNotice] = useState<string | null>(null);
+  const [estimateGood, setEstimateGood] = useState<string | null>(null);
 
   // Edit sheet fields, seeded from the contact each time the sheet opens.
   const [editOpen, setEditOpen] = useState(false);
@@ -106,6 +129,14 @@ export default function CustomerScreen(): React.ReactElement {
   const runDelete = useAction<void, Record<string, never>>(() => customerActions.delete(id), {
     invalidates,
   });
+  // The contact id travels as a variable so the call site is literally
+  // contact.id — the record on screen, not a route string that happens to
+  // match it. createEstimateForCustomer files the new quote under this
+  // customer, so their profile refreshes alongside the quote book.
+  const runBuildEstimate = useAction<string, { estimateId?: string }>(
+    (contactId) => estimateActions.createForCustomer(contactId),
+    { invalidates: [keys.estimates(), keys.customers.one(id)] },
+  );
 
   const open = (url: string) => {
     Linking.openURL(url).catch(() => setActionNotice("This phone couldn't open that."));
@@ -216,6 +247,34 @@ export default function CustomerScreen(): React.ReactElement {
       return;
     }
     setEditOpen(false);
+  };
+
+  // The money path for an existing customer. The quote is created EMPTY, so
+  // leaving him on a list would hand him a blank draft to go and find; the only
+  // useful ending is the builder itself, opened on the new id.
+  const buildEstimate = async () => {
+    setEstimateNotice(null);
+    setEstimateGood(null);
+    const r = await runBuildEstimate.mutateAsync(contact.id);
+    if (!r.ok) {
+      setEstimateNotice(r.notice);
+      return;
+    }
+    // ok:true can still carry a sentence. This screen stays mounted behind the
+    // push, so setting it means nothing the server said is thrown away.
+    setEstimateGood(successNotice(r.data));
+    const estimateId = r.data.estimateId;
+    if (estimateId === undefined) {
+      // The draft exists but this payload never named it. Saying so and landing
+      // in the book is the honest ending — going nowhere would leave a real
+      // quote nobody knows was made.
+      setEstimateNotice(
+        "The quote was created, but this phone didn't get its id. Find it in Estimates.",
+      );
+      router.push({ pathname: "/(owner)/estimates" });
+      return;
+    }
+    router.push({ pathname: "/(owner)/estimate/build", params: { id: estimateId } });
   };
 
   const setArchived = async (archived: boolean) => {
@@ -335,19 +394,23 @@ export default function CustomerScreen(): React.ReactElement {
                   {address.site_notes !== null ? (
                     <Text style={styles.mutedText}>{address.site_notes}</Text>
                   ) : null}
-                  {!address.is_primary ? (
-                    <Pressable
-                      accessibilityRole="button"
-                      disabled={runSetPrimary.isPending}
-                      onPress={() => void makePrimary(address.id)}
-                      style={({ pressed }) => [
-                        styles.inlineAction,
-                        (pressed || runSetPrimary.isPending) && styles.dim,
-                      ]}
-                    >
-                      <Text style={styles.inlineActionText}>Make primary</Text>
-                    </Pressable>
-                  ) : null}
+                  {/* The row's actions, on the address they belong to. */}
+                  <View style={styles.addressActions}>
+                    <NavigateButton address={address.line} onFail={setAddressNotice} />
+                    {!address.is_primary ? (
+                      <Pressable
+                        accessibilityRole="button"
+                        disabled={runSetPrimary.isPending}
+                        onPress={() => void makePrimary(address.id)}
+                        style={({ pressed }) => [
+                          styles.inlineAction,
+                          (pressed || runSetPrimary.isPending) && styles.dim,
+                        ]}
+                      >
+                        <Text style={styles.inlineActionText}>Make primary</Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
                 </View>
               ))
             ) : (
@@ -477,6 +540,27 @@ export default function CustomerScreen(): React.ReactElement {
                 <Text style={styles.mutedText}>No estimates yet.</Text>
               </View>
             )}
+
+            {/* Where the money path starts for someone already on the books. */}
+            <View style={[styles.pad, styles.divided]}>
+              <Notice text={estimateNotice} />
+              <GoodNotice text={estimateGood} />
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Build an estimate"
+                disabled={runBuildEstimate.isPending}
+                onPress={() => void buildEstimate()}
+                style={({ pressed }) => [
+                  styles.primaryBtn,
+                  pressed && styles.primaryBtnDown,
+                  runBuildEstimate.isPending && styles.dim,
+                ]}
+              >
+                <Text style={styles.primaryBtnText}>
+                  {runBuildEstimate.isPending ? "Starting…" : "Build an estimate"}
+                </Text>
+              </Pressable>
+            </View>
           </View>
         </Section>
 
@@ -755,6 +839,7 @@ const styles = StyleSheet.create({
   grow: { flex: 1 },
   primaryTag: { ...type.micro, color: color.brandDeep },
 
+  addressActions: { flexDirection: "row", alignItems: "center", gap: space.md },
   inlineAction: { minHeight: HIT, justifyContent: "center", alignSelf: "flex-start" },
   inlineActionText: { ...type.body, fontFamily: font.bodyMedium, color: color.brandDeep },
   linkRow: { minHeight: HIT, justifyContent: "center", paddingHorizontal: space.lg },
@@ -811,4 +896,11 @@ const styles = StyleSheet.create({
   },
   sheetBody: { padding: space.lg, gap: space.md },
   sheetTitle: { ...type.title, color: color.ink },
+
+  goodNotice: {
+    backgroundColor: color.goodBg,
+    borderRadius: radius.md,
+    padding: space.md,
+  },
+  goodNoticeText: { ...type.small, color: color.good },
 });

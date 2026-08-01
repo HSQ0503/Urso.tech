@@ -7,6 +7,7 @@ import {
   RefreshControl,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { useRouter } from "expo-router";
@@ -131,6 +132,25 @@ function previewOf(thread: Thread): string {
   return `${message.automated ? "Auto" : "You"}: ${body}`;
 }
 
+// ── Search ──────────────────────────────────────────────────────────────────
+//
+// The whole thread list arrives in one read, so the box filters what is already
+// in memory rather than asking the server on every keystroke — instant, and it
+// keeps working in a driveway with one bar. Same contract as the customer book.
+//
+// Name matches on plain text; phone matches on digits, so "561" finds a number
+// stored as +15615550123 and typing it with dashes still works. A thread with no
+// saved name shows its number as its name, and the digit branch is what finds
+// it — which is the common case here, since the inbox fills up with strangers.
+function matchesThread(thread: Thread, query: string): boolean {
+  const text = query.trim().toLowerCase();
+  if (!text) return true;
+  const name = thread.display_name?.trim().toLowerCase();
+  if (name && name.includes(text)) return true;
+  const digits = text.replace(/\D/g, "");
+  return digits.length > 0 && thread.peer_phone.includes(digits);
+}
+
 // Kind, plus the lead's stage when there is a lead. Whether the person texting
 // is already booked changes what the owner does about them, and it costs no
 // extra line to say so.
@@ -170,11 +190,16 @@ function toRow(thread: Thread, dayKeys: string[]): Row {
   };
 }
 
-function buildRows(threads: Thread[], nowMs: number): Row[] {
+// `grouped` is false while a search is running — see the note beside the search
+// box for why the urgency split comes off then.
+function buildRows(threads: Thread[], nowMs: number, grouped: boolean): Row[] {
   const dayKeys = recentEtDayKeys(nowMs);
   // Sorted here as well as on the server so the screen's order is its own
   // guarantee rather than a borrowed one.
   const sorted = [...threads].sort((a, b) => b.last_activity_at.localeCompare(a.last_activity_at));
+
+  if (!grouped) return sorted.map((thread) => toRow(thread, dayKeys));
+
   const waiting = sorted.filter(isWaiting);
   const rest = sorted.filter((thread) => !isWaiting(thread));
 
@@ -270,7 +295,32 @@ export default function InboxScreen(): React.ReactElement {
     return () => sub.remove();
   }, []);
 
-  const rows = useMemo(() => (threads ? buildRows(threads, nowMs) : []), [threads, nowMs]);
+  const [query, setQuery] = useState("");
+  const searching = query.trim().length > 0;
+
+  const visible = useMemo(
+    () => (threads ?? []).filter((thread) => matchesThread(thread, query)),
+    [threads, query],
+  );
+
+  // Searching collapses "Waiting on you" / "Everything else" into one
+  // recency-ordered list.
+  //
+  // The split answers "who do I deal with next?". Someone typing has already
+  // answered that and is hunting ONE conversation they can name, so re-imposing
+  // the split spends two headings on three results and hides the hit behind
+  // chrome. Nothing about urgency is lost in the process: each row keeps its
+  // orange left rule and orange timestamp, which is where waiting actually lives
+  // — the headings only ever grouped what the rows already said.
+  const rows = useMemo(
+    () => buildRows(visible, nowMs, !searching),
+    [visible, nowMs, searching],
+  );
+
+  // The backlog count is over everything loaded, not over the matches: it is the
+  // shop's real number, and it would be a lie if a search could shrink it. While
+  // searching the chrome shows the match count instead, so the backlog is one
+  // clear-the-box away.
   const waitingCount = useMemo(
     () => (threads ? threads.filter(isWaiting).length : 0),
     [threads],
@@ -281,7 +331,14 @@ export default function InboxScreen(): React.ReactElement {
       <View style={styles.chromeTop}>
         <Text style={styles.heading}>Inbox</Text>
         {threads !== null &&
-          (waitingCount > 0 ? (
+          (searching ? (
+            <View style={styles.count}>
+              {/* Neutral, not orange: orange on this stat means "owed a reply",
+                  and a match count is not that. */}
+              <Text style={[styles.countValue, styles.countValueNeutral]}>{visible.length}</Text>
+              <Text style={styles.countLabel}>Matches</Text>
+            </View>
+          ) : waitingCount > 0 ? (
             <View style={styles.count}>
               <Text style={styles.countValue}>{waitingCount}</Text>
               <Text style={styles.countLabel}>Waiting</Text>
@@ -293,10 +350,30 @@ export default function InboxScreen(): React.ReactElement {
     </View>
   );
 
+  const searchBar = (
+    <View style={styles.searchBar}>
+      <TextInput
+        value={query}
+        onChangeText={setQuery}
+        placeholder="Search by name or phone"
+        placeholderTextColor={color.faint}
+        autoCapitalize="none"
+        autoCorrect={false}
+        clearButtonMode="while-editing"
+        returnKeyType="search"
+        accessibilityLabel="Search conversations"
+        style={styles.search}
+      />
+    </View>
+  );
+
   if (threadsQuery.isPending) {
     return (
       <View style={styles.screen}>
         {header}
+        {/* The box is live through the load, as it is on the customer book: a
+            search typed while the list is arriving applies the moment it lands. */}
+        {searchBar}
         <View style={styles.centre}>
           <ActivityIndicator color={color.brand} size="large" />
         </View>
@@ -305,7 +382,8 @@ export default function InboxScreen(): React.ReactElement {
   }
 
   // Nothing loaded and a reason why: the notice is the whole screen, with a way
-  // out of it.
+  // out of it. No search box here — there is nothing loaded to search, and a
+  // field that can only ever return nothing reads as a second failure.
   if (threads === null) {
     return (
       <View style={styles.screen}>
@@ -344,9 +422,12 @@ export default function InboxScreen(): React.ReactElement {
   return (
     <View style={styles.screen}>
       {header}
+      {searchBar}
       <FlatList
         data={rows}
         keyExtractor={(item) => item.key}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         contentContainerStyle={[
           styles.list,
           { paddingBottom: insets.bottom + space.xxl },
@@ -371,7 +452,11 @@ export default function InboxScreen(): React.ReactElement {
         }
         ListEmptyComponent={
           <View style={styles.empty}>
-            <Text style={styles.emptyText}>No conversations yet.</Text>
+            <Text style={styles.emptyText}>
+              {searching
+                ? "No conversations match that."
+                : "No conversations yet. They appear when someone texts or calls the shop."}
+            </Text>
           </View>
         }
         renderItem={({ item }) =>
@@ -419,8 +504,31 @@ const styles = StyleSheet.create({
     color: color.brand,
     fontVariant: ["tabular-nums"],
   },
+  countValueNeutral: { color: color.chromeInk },
   countLabel: { ...type.micro, color: color.chromeMuted, marginTop: 2 },
   caughtUp: { ...type.micro, color: color.chromeFaint, paddingBottom: space.xs },
+
+  searchBar: {
+    backgroundColor: color.surface,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: color.line,
+    paddingHorizontal: space.lg,
+    paddingVertical: space.sm,
+  },
+  search: {
+    // Deliberately NOT ...type.body: that spread carries lineHeight, and iOS
+    // renders a TextInput placeholder with visibly wrong tracking when a
+    // lineHeight is combined with a custom font. Height comes from minHeight.
+    fontFamily: font.body,
+    fontSize: 15,
+    color: color.ink,
+    minHeight: HIT,
+    paddingHorizontal: space.md,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.line,
+    backgroundColor: color.bg,
+  },
 
   list: { paddingHorizontal: space.lg, paddingTop: space.md },
   listEmpty: { flexGrow: 1 },

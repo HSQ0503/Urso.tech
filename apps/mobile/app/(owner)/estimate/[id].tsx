@@ -43,6 +43,7 @@ import {
 } from "@urso/types";
 import { estimateActions } from "@/api";
 import { Avatar } from "@/components/avatar";
+import { NavigateButton } from "@/components/navigate";
 import { Notice } from "@/components/notice";
 import { keys, useEstimate } from "@/queries";
 import { noticeFrom, useAction, usePullToRefresh } from "@/query";
@@ -359,9 +360,16 @@ export default function EstimateScreen(): React.ReactElement {
                 <Text style={styles.customerPhone}>{fmtPhone(estimate.customer_phone)}</Text>
               ) : null}
               {estimate.job_address !== null ? (
-                <Text style={styles.customerAddress} numberOfLines={2}>
-                  {estimate.job_address}
-                </Text>
+                <>
+                  <Text style={styles.customerAddress} numberOfLines={2}>
+                    {estimate.job_address}
+                  </Text>
+                  {/* Its own Pressable, like the call glyph below — opening
+                      Maps must never also push the customer screen. */}
+                  <View style={styles.navigate}>
+                    <NavigateButton address={estimate.job_address} onFail={setCustomerNotice} />
+                  </View>
+                </>
               ) : null}
             </View>
             {estimate.customer_phone !== null ? (
@@ -746,6 +754,7 @@ const styles = StyleSheet.create({
   customerName: { ...type.title, color: color.ink },
   customerPhone: { ...type.small, color: color.muted, fontVariant: ["tabular-nums"] },
   customerAddress: { ...type.small, color: color.faint },
+  navigate: { alignSelf: "flex-start", marginTop: space.xs },
   phoneGlyph: {
     width: HIT,
     height: HIT,

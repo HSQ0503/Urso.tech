@@ -25,6 +25,7 @@ import { Feather } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { fmtEt, fmtMoney, fmtPhone, minutesSince, SOURCE_LABEL, type Lead } from "@urso/types";
+import { NavigateButton } from "@/components/navigate";
 import { useAgenda, useOverview } from "@/queries";
 import { noticeFrom, usePullToRefresh, useRefetchOnFocus } from "@/query";
 import { getAdminProfile } from "@/session";
@@ -510,6 +511,10 @@ export default function TodayScreen(): React.ReactElement {
                             {lead.address ?? lead.service ?? "Address pending"}
                           </Text>
                         </View>
+                        {/* Beside the address it acts on, and its own Pressable
+                            so starting directions never also opens the lead.
+                            No notice slot on a queue row, so no onFail. */}
+                        <NavigateButton address={lead.address} compact />
                         <Feather name="chevron-right" size={18} color={color.faint} />
                       </Pressable>
                     ))}

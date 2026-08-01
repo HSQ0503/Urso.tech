@@ -40,6 +40,7 @@ import {
 } from "@urso/types";
 import { jobActions, type JobDetailsPatch } from "@/api";
 import { Avatar } from "@/components/avatar";
+import { NavigateButton } from "@/components/navigate";
 import { Notice } from "@/components/notice";
 import { isCompleteWhen, SlotPicker } from "@/components/slot-picker";
 import { keys, useCrews, useInvoices, useJob } from "@/queries";
@@ -459,9 +460,16 @@ export default function JobScreen(): React.ReactElement {
                 <Text style={styles.customerPhone}>{fmtPhone(job.customer_phone)}</Text>
               ) : null}
               {job.job_address !== null ? (
-                <Text style={styles.customerAddress} numberOfLines={2}>
-                  {job.job_address}
-                </Text>
+                <>
+                  <Text style={styles.customerAddress} numberOfLines={2}>
+                    {job.job_address}
+                  </Text>
+                  {/* Its own Pressable, like the call glyph below — opening
+                      Maps must never also push the customer screen. */}
+                  <View style={styles.navigate}>
+                    <NavigateButton address={job.job_address} onFail={setCustomerNotice} />
+                  </View>
+                </>
               ) : null}
             </View>
             {job.customer_phone !== null ? (
@@ -1019,6 +1027,7 @@ const styles = StyleSheet.create({
   customerName: { ...type.title, color: color.ink },
   customerPhone: { ...type.small, color: color.muted, fontVariant: ["tabular-nums"] },
   customerAddress: { ...type.small, color: color.faint },
+  navigate: { alignSelf: "flex-start", marginTop: space.xs },
   phoneGlyph: {
     width: HIT,
     height: HIT,

@@ -114,9 +114,11 @@ export default function EstimatesScreen(): React.ReactElement {
     <View style={styles.screen}>
       <View style={[styles.chrome, { paddingTop: insets.top + space.md }]}>
         <Text style={styles.chromeTitle}>Estimates</Text>
-        <View style={styles.chromeStat}>
-          <Text style={styles.chromeStatValue}>{visible.length}</Text>
-          <Text style={styles.chromeStatLabel}>{searching ? "Matches" : "Total"}</Text>
+        <View style={styles.chromeRight}>
+          <View style={styles.chromeStat}>
+            <Text style={styles.chromeStatValue}>{visible.length}</Text>
+            <Text style={styles.chromeStatLabel}>{searching ? "Matches" : "Total"}</Text>
+          </View>
         </View>
       </View>
 
@@ -171,7 +173,7 @@ export default function EstimatesScreen(): React.ReactElement {
                 <Text style={styles.emptyText}>
                   {searching
                     ? "No estimates match that."
-                    : "No estimates yet. Quotes are built on the web console and show up here."}
+                    : "No estimates yet. Start one from a lead or a customer."}
                 </Text>
               </View>
             ) : null
@@ -199,6 +201,7 @@ const styles = StyleSheet.create({
     paddingBottom: space.md,
   },
   chromeTitle: { ...type.display, color: color.chromeInk },
+  chromeRight: { flexDirection: "row", alignItems: "center", gap: space.md },
   chromeStat: { alignItems: "flex-end" },
   chromeStatValue: {
     fontFamily: font.bodySemi,
@@ -207,6 +210,7 @@ const styles = StyleSheet.create({
     fontVariant: ["tabular-nums"],
   },
   chromeStatLabel: { ...type.micro, color: color.chromeMuted, marginTop: 2 },
+
 
   searchBar: {
     backgroundColor: color.surface,

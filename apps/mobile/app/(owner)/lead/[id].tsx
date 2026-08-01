@@ -11,7 +11,7 @@
 // appointment at the wrong hour, which on this project already cost a missed
 // visit once.
 
-import { useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -31,10 +31,12 @@ import { router, useLocalSearchParams, type Href } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import {
+  ESTIMATE_STATUS_LABEL,
   ET,
   etLocalToIso,
   fmtCallDuration,
   fmtEt,
+  fmtMoney,
   fmtPhone,
   isMissedCall,
   SOURCE_LABEL,
@@ -43,13 +45,14 @@ import {
   type Lead,
   type LeadStatus,
 } from "@urso/types";
-import { leadActions, type CallOutcome, type LeadPatch } from "@/api";
+import { estimateActions, leadActions, type CallOutcome, type LeadPatch } from "@/api";
 import { AddressInput } from "@/components/address-input";
 import { isCompleteWhen, SlotPicker } from "@/components/slot-picker";
 import { Avatar } from "@/components/avatar";
+import { NavigateButton } from "@/components/navigate";
 import { Notice } from "@/components/notice";
 import { PhoneInput, toPhoneDisplay } from "@/components/phone-input";
-import { keys, useLead, useLeadCalls, useLeadEvents } from "@/queries";
+import { keys, useEstimates, useLead, useLeadCalls, useLeadEvents } from "@/queries";
 import { noticeFrom, useAction, usePullToRefresh } from "@/query";
 import { color, font, HIT, radius, space, type } from "@/theme";
 
@@ -118,6 +121,26 @@ function Field({ label, value }: { label: string; value: string }) {
     <View style={styles.field}>
       <Text style={styles.fieldLabel}>{label}</Text>
       <Text style={styles.fieldValue}>{value}</Text>
+    </View>
+  );
+}
+
+// A success payload can carry a sentence of its own (apiResult keeps ok:true
+// notices, several of which are qualified successes rather than confirmations).
+// Read it without claiming a shape the action types don't promise.
+function successNotice(data: unknown): string | null {
+  if (typeof data !== "object" || data === null) return null;
+  const notice = (data as { notice?: unknown }).notice;
+  return typeof notice === "string" && notice.length > 0 ? notice : null;
+}
+
+// The green sibling of Notice — same shape, good colours — for the ok:true
+// sentences. Local to the screen, same as estimate/[id] and invoice/[id].
+function GoodNotice({ text }: { text: string | null }) {
+  if (text === null) return null;
+  return (
+    <View style={styles.goodNotice}>
+      <Text style={styles.goodNoticeText}>{text}</Text>
     </View>
   );
 }
@@ -285,8 +308,19 @@ export default function LeadScreen(): React.ReactElement {
   const leadQuery = useLead(id);
   const eventsQuery = useLeadEvents(id);
   const callsQuery = useLeadCalls(id);
+  // There is NO per-lead estimates read on the API, so the quote book is
+  // fetched whole and narrowed here on lead_id. It shares the key the estimates
+  // tab already fetched under, so on a warm cache this costs nothing, and it
+  // deliberately stays out of the loading gate below — a lead's contact details
+  // must not wait on the quote book to render.
+  const estimatesQuery = useEstimates();
   const { refreshing, onRefresh } = usePullToRefresh(() =>
-    Promise.all([leadQuery.refetch(), eventsQuery.refetch(), callsQuery.refetch()]),
+    Promise.all([
+      leadQuery.refetch(),
+      eventsQuery.refetch(),
+      callsQuery.refetch(),
+      estimatesQuery.refetch(),
+    ]),
   );
 
   const lead = leadQuery.data ?? null;
@@ -295,6 +329,13 @@ export default function LeadScreen(): React.ReactElement {
   const notice = noticeFrom(leadQuery.error);
   const eventsNotice = noticeFrom(eventsQuery.error);
   const callsNotice = noticeFrom(callsQuery.error);
+  const estimatesNotice = noticeFrom(estimatesQuery.error);
+
+  // The route param IS this lead's id, so it is what the rows are filtered by.
+  const leadEstimates = useMemo(
+    () => (estimatesQuery.data ?? []).filter((estimate) => estimate.lead_id === id),
+    [estimatesQuery.data, id],
+  );
 
   // One notice per affordance, shown beside the control that was tapped —
   // a refusal read next to its cause, not at the top of a scrolled-away page.
@@ -305,6 +346,8 @@ export default function LeadScreen(): React.ReactElement {
   const [sendNotice, setSendNotice] = useState<string | null>(null);
   const [sheetNotice, setSheetNotice] = useState<string | null>(null);
   const [deleteNotice, setDeleteNotice] = useState<string | null>(null);
+  const [estimateNotice, setEstimateNotice] = useState<string | null>(null);
+  const [estimateGood, setEstimateGood] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [editing, setEditing] = useState(false);
   const [visitOpen, setVisitOpen] = useState(false);
@@ -387,6 +430,12 @@ export default function LeadScreen(): React.ReactElement {
   });
   const deleteRun = useAction((_: void) => leadActions.delete(id), {
     invalidates: [keys.leads.all(), keys.overview(), keys.agenda()],
+  });
+  // createEstimateFromLead prefills from this lead, files the quote under its
+  // contact, and logs an event on the lead — so the quote book and the lead's
+  // own reads both refresh.
+  const buildEstimateRun = useAction((_: void) => estimateActions.createFromLead(id), {
+    invalidates: [keys.estimates(), keys.leads.one(id), keys.leads.events(id)],
   });
 
   const loading = leadQuery.isPending || eventsQuery.isPending || callsQuery.isPending;
@@ -527,6 +576,34 @@ export default function LeadScreen(): React.ReactElement {
     }
   };
 
+  // The money path starts here. The quote is created EMPTY, so leaving him on
+  // a list would hand him a blank draft to go and find; the only useful ending
+  // is the builder itself, opened on the new id.
+  const buildEstimate = async () => {
+    setEstimateNotice(null);
+    setEstimateGood(null);
+    const r = await buildEstimateRun.mutateAsync();
+    if (!r.ok) {
+      setEstimateNotice(r.notice);
+      return;
+    }
+    // ok:true can still carry a sentence. This screen stays mounted behind the
+    // push, so setting it means nothing the server said is thrown away.
+    setEstimateGood(successNotice(r.data));
+    const estimateId = r.data.estimateId;
+    if (estimateId === undefined) {
+      // The draft exists but this payload never named it. Saying so and landing
+      // in the book is the honest ending — going nowhere would leave a real
+      // quote nobody knows was made.
+      setEstimateNotice(
+        "The quote was created, but this phone didn't get its id. Find it in Estimates.",
+      );
+      router.push({ pathname: "/(owner)/estimates" });
+      return;
+    }
+    router.push({ pathname: "/(owner)/estimate/build", params: { id: estimateId } });
+  };
+
   const confirmDelete = () => {
     Alert.alert("Delete lead?", undefined, [
       { text: "Cancel", style: "cancel" },
@@ -586,6 +663,14 @@ export default function LeadScreen(): React.ReactElement {
             <View style={[styles.pad, phone !== null && styles.divided]}>
               <Text style={styles.fieldLabel}>Address</Text>
               <Text style={styles.body}>{lead.address ?? "No address on file."}</Text>
+              {/* Directly under the address it acts on. Gone entirely when
+                  there is no address — an empty wrapper would still eat the
+                  card's gap. A failure says so in the screen's link notice. */}
+              {lead.address !== null ? (
+                <View style={styles.navigate}>
+                  <NavigateButton address={lead.address} onFail={setActionNotice} />
+                </View>
+              ) : null}
             </View>
           </View>
         </Section>
@@ -727,6 +812,78 @@ export default function LeadScreen(): React.ReactElement {
                 <Text style={styles.body}>{lead.notes}</Text>
               </View>
             ) : null}
+          </View>
+        </Section>
+
+        {/* The lead → estimate → job → invoice path begins here. */}
+        <Section label="Estimates">
+          <Notice text={estimatesNotice} />
+          <View style={styles.card}>
+            {leadEstimates.length > 0 ? (
+              leadEstimates.map((estimate, index) => (
+                <Pressable
+                  key={estimate.id}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Open estimate ${estimate.number}`}
+                  onPress={() =>
+                    router.push({ pathname: "/(owner)/estimate/[id]", params: { id: estimate.id } })
+                  }
+                  style={({ pressed }) => [
+                    styles.pad,
+                    styles.linkedRow,
+                    index > 0 && styles.divided,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <View style={styles.linkedRowBody}>
+                    <View style={styles.rowBetween}>
+                      <Text style={styles.body}>{estimate.number}</Text>
+                      <Text style={styles.money}>{fmtMoney(estimate.total_cents)}</Text>
+                    </View>
+                    <Text style={styles.fieldLabel}>
+                      {ESTIMATE_STATUS_LABEL[estimate.status]}
+                    </Text>
+                  </View>
+                  <Feather name="chevron-right" size={18} color={color.faint} />
+                </Pressable>
+              ))
+            ) : (
+              <View style={styles.pad}>
+                {/* "No quotes" is a CLAIM, and the quote book is a separate
+                    read that has not necessarily landed — asserting it while
+                    the read is in flight told the reader there was nothing
+                    here right above the button that would create a duplicate.
+                    An unread book says so; a failed one leaves the sentence to
+                    the notice below. */}
+                <Text style={styles.muted}>
+                  {estimatesQuery.isPending
+                    ? "Looking for quotes on this lead…"
+                    : estimatesNotice !== null
+                      ? "Couldn't load this lead's quotes."
+                      : "No quotes on this lead yet."}
+                </Text>
+              </View>
+            )}
+
+            <View style={[styles.pad, styles.divided]}>
+              <Notice text={estimateNotice} />
+              <GoodNotice text={estimateGood} />
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Build an estimate"
+                disabled={buildEstimateRun.isPending}
+                onPress={() => void buildEstimate()}
+                style={({ pressed }) => [
+                  styles.primary,
+                  buildEstimateRun.isPending && styles.disabled,
+                  pressed && styles.primaryPressed,
+                ]}
+              >
+                <Text style={styles.primaryText}>
+                  {buildEstimateRun.isPending ? "Starting…" : "Build an estimate"}
+                </Text>
+              </Pressable>
+            </View>
           </View>
         </Section>
 
@@ -954,10 +1111,29 @@ const styles = StyleSheet.create({
   fieldLabel: { ...type.micro, color: color.faint },
   fieldValue: { ...type.body, color: color.ink },
 
+  navigate: { alignSelf: "flex-start" },
+
   big: { ...type.title, color: color.ink },
   muted: { ...type.small, color: color.muted },
   dangerInk: { color: color.danger },
   missed: { ...type.micro, color: color.danger },
+  money: { ...type.small, color: color.ink, fontVariant: ["tabular-nums"] },
+
+  linkedRow: { flexDirection: "row", alignItems: "center", minHeight: HIT },
+  linkedRowBody: { flex: 1, gap: space.xs },
+  rowBetween: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+    gap: space.sm,
+  },
+
+  goodNotice: {
+    backgroundColor: color.goodBg,
+    borderRadius: radius.md,
+    padding: space.md,
+  },
+  goodNoticeText: { ...type.small, color: color.good },
 
   call: {
     minHeight: 56,
