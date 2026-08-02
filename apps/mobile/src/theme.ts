@@ -69,6 +69,66 @@ export const type = {
     letterSpacing: 0.4,
     textTransform: "uppercase" as const,
   },
+
+  // ── Ledger scale (2026-08-01 redesign) ────────────────────────────────────
+  // The restyle runs on two mono sizes and a serif that gets bigger than
+  // `display` ever went. Kept as named steps rather than inline numbers so a
+  // section rule on Today and one on the lead sheet cannot drift apart.
+
+  // Section rules, field labels, chips. 10.5px tracked to .16em.
+  rule: {
+    fontFamily: font.mono,
+    fontSize: 10.5,
+    letterSpacing: 1.7,
+    textTransform: "uppercase" as const,
+  },
+  // The smaller sibling: row meta, sub-labels, the money strip's captions.
+  ruleSm: {
+    fontFamily: font.mono,
+    fontSize: 9.5,
+    letterSpacing: 1.4,
+    textTransform: "uppercase" as const,
+  },
+  // Figures. Mono so a column of money lines up on the decimal; NOT uppercase
+  // and NOT tracked — tracking a number is how you get $1 7,3 60.
+  //
+  // fontVariant is deliberately absent: this object is `as const`, which would
+  // make the array a readonly tuple, and React Native's TextStyle wants a
+  // mutable one — enough to widen every entry of any StyleSheet that spreads
+  // one of these. Call sites add `fontVariant: ["tabular-nums"]` inline, which
+  // is what the screens already did before this scale existed.
+  figure: { fontFamily: font.bodyMedium, fontSize: 16 },
+  figureSm: { fontFamily: font.mono, fontSize: 13 },
+  figureLg: { fontFamily: font.mono, fontSize: 21 },
+  // Fraunces, three steps. `display` (26) stays what it was; these are the
+  // chrome title and the greeting either side of it.
+  chromeTitle: { fontFamily: font.display, fontSize: 27, letterSpacing: -0.9 },
+  wordmark: { fontFamily: font.display, fontSize: 19, letterSpacing: -0.5 },
+} as const;
+
+// The ghosted bear that bleeds off every black header, and the solid one in a
+// lockup. One import point so a screen cannot invent its own opacity.
+export const mark = {
+  src: require("../assets/urso-mark.png") as number,
+  // Bleeding off the top-right corner of a chrome header.
+  bleed: {
+    position: "absolute" as const,
+    right: -32,
+    top: -28,
+    width: 166,
+    height: 166,
+    opacity: 0.09,
+    resizeMode: "contain" as const,
+  },
+  // The 2px orange rule pinned to the chrome's bottom-left corner — the one
+  // piece of brand that appears on every screen in the app.
+  rail: {
+    position: "absolute" as const,
+    left: 0,
+    bottom: 0,
+    width: 44,
+    height: 2,
+  },
 } as const;
 
 // Minimum tap target. Field crews use this in gloves, in sunlight.

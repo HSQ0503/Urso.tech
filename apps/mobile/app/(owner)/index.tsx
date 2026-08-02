@@ -30,6 +30,7 @@ import { useAgenda, useOverview } from "@/queries";
 import { noticeFrom, usePullToRefresh, useRefetchOnFocus } from "@/query";
 import { getAdminProfile } from "@/session";
 import { color, font, HIT, radius, space, type } from "@/theme";
+import { ChromeGreeting, SectionRule } from "@/components/ledger";
 
 // The ET hour, as a number, without touching the device clock.
 function etHour(): number {
@@ -95,10 +96,10 @@ function Section({
 }): React.ReactElement {
   return (
     <View style={styles.section}>
-      <View style={styles.sectionHead}>
-        <Text style={styles.sectionLabel}>{label}</Text>
-        {meta ? <Text style={styles.sectionMeta}>{meta}</Text> : null}
-      </View>
+      {/* The heading is a RULE now: label, a hairline that eats the rest of the
+          width, and the count pinned right. A free-floating label left the eye
+          hunting for where one section stopped and the next began. */}
+      <SectionRule label={label} meta={meta ?? null} />
       {children}
     </View>
   );
@@ -231,19 +232,39 @@ function LeadRow({
 
 // `divided` rather than a border on every row: a hairline under the last row
 // would double up against the card's own edge.
-function MoneyRow({
-  label,
-  cents,
-  divided,
+// The money strip. Three cells on one white band directly under the chrome —
+// it used to be a stacked block four scrolls down, which is a strange place to
+// keep the answer to "how did this week go". Collected is the figure that
+// actually landed, so it carries the green; the other two are forecasts and
+// stay in ink.
+function MoneyStrip({
+  collectedCents,
+  wonCents,
+  bookedCents,
 }: {
-  label: string;
-  cents: number;
-  divided?: boolean;
+  collectedCents: number;
+  wonCents: number;
+  bookedCents: number;
 }): React.ReactElement {
+  const cells = [
+    { label: "Collected", cents: collectedCents, tint: color.good },
+    { label: "Won", cents: wonCents, tint: color.ink },
+    { label: "Booked 7d", cents: bookedCents, tint: color.ink },
+  ];
   return (
-    <View style={[styles.line, divided && styles.divided]}>
-      <Text style={styles.lineLabel}>{label}</Text>
-      <Text style={styles.lineMoney}>{fmtMoney(cents)}</Text>
+    <View style={styles.stripWrap}>
+      <View style={styles.stripHead}>
+        <Text style={styles.stripHeadLabel}>Money this week</Text>
+        <View style={styles.stripHeadLine} />
+      </View>
+      <View style={styles.strip}>
+        {cells.map((cell, index) => (
+          <View key={cell.label} style={[styles.stripCell, index > 0 && styles.stripCellDivided]}>
+            <Text style={styles.stripLabel}>{cell.label}</Text>
+            <Text style={[styles.stripValue, { color: cell.tint }]}>{fmtMoney(cell.cents)}</Text>
+          </View>
+        ))}
+      </View>
     </View>
   );
 }
@@ -358,27 +379,14 @@ export default function TodayScreen(): React.ReactElement {
 
   return (
     <View style={styles.screen}>
-      {/* Two lines, not three. The wordmark used to own a line of its own above
-          the date and the greeting, which spent about a quarter of a 874pt
-          screen on saying hello before a single piece of work appeared — on the
-          one screen whose entire job is to show him what needs him now. The
-          brand and the date share a rule now, and the greeting keeps its
-          moment; nothing was cut, it was folded. */}
-      <View style={[styles.chrome, { paddingTop: insets.top + space.md }]}>
-        <View style={styles.chromeTop}>
-          <Text style={styles.wordmark}>
-            Canes<Text style={styles.wordmarkStop}>.</Text>
-          </Text>
-          <Text style={styles.date}>
-            {fmtEt(new Date().toISOString(), { weekday: "short", month: "long", day: "numeric" })}
-          </Text>
-        </View>
-        <Text style={styles.greeting}>
-          {greetingWord()}
-          {name ? `, ${name}` : ""}
-          <Text style={styles.wordmarkStop}>.</Text>
-        </Text>
-      </View>
+      {/* The bear carries the chrome now — ghosted off the top-right corner,
+          solid at 22px in the lockup — and the orange rail sits on the bottom
+          edge. Two lines, not three: the wordmark and the date share a rule so
+          the greeting is the last thing before actual work. */}
+      <ChromeGreeting
+        date={fmtEt(new Date().toISOString(), { weekday: "short", month: "long", day: "numeric" })}
+        greeting={`${greetingWord()}${name ? `, ${name}` : ""}`}
+      />
 
       {showSpinner ? (
         <View style={styles.centre}>
@@ -411,6 +419,17 @@ export default function TodayScreen(): React.ReactElement {
             >
               <Text style={styles.buttonText}>Try again</Text>
             </Pressable>
+          ) : null}
+
+          {/* First thing under the greeting, edge to edge. It was four scrolls
+              down, which is a strange place to keep the answer to "how did this
+              week go". */}
+          {overview !== null ? (
+            <MoneyStrip
+              collectedCents={overview.money.collectedThisWeekCents}
+              wonCents={overview.money.wonThisWeekCents}
+              bookedCents={overview.money.bookedNext7DaysCents}
+            />
           ) : null}
 
           {overview !== null ? (
@@ -532,19 +551,6 @@ export default function TodayScreen(): React.ReactElement {
             </Section>
           ) : null}
 
-          {overview !== null ? (
-            <Section label="Money this week">
-              <View style={styles.card}>
-                <MoneyRow label="Collected" cents={overview.money.collectedThisWeekCents} />
-                <MoneyRow label="Won" cents={overview.money.wonThisWeekCents} divided />
-                <MoneyRow
-                  label="Booked next 7 days"
-                  cents={overview.money.bookedNext7DaysCents}
-                  divided
-                />
-              </View>
-            </Section>
-          ) : null}
 
           {overview !== null ? (
             <Section label="Pipeline">
@@ -608,6 +614,31 @@ const styles = StyleSheet.create({
   body: { padding: space.lg, gap: space.xl },
 
   section: { gap: space.sm },
+  // Bleeds out of the body's padding so the band runs edge to edge and sits
+  // flush against the chrome above it.
+  stripWrap: { marginHorizontal: -space.lg, marginTop: -space.lg },
+  stripHead: {
+    backgroundColor: color.surface,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
+    paddingHorizontal: 14,
+    paddingTop: 9,
+    paddingBottom: 8,
+  },
+  stripHeadLabel: { ...type.ruleSm, color: color.faint },
+  stripHeadLine: { flex: 1, height: 1, backgroundColor: color.line },
+  strip: {
+    flexDirection: "row",
+    backgroundColor: color.surface,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: color.line,
+  },
+  stripCell: { flex: 1, paddingHorizontal: 12, paddingTop: 4, paddingBottom: 14 },
+  stripCellDivided: { borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: color.line },
+  stripLabel: { ...type.ruleSm, color: color.faint, lineHeight: 12 },
+  stripValue: { ...type.figure, marginTop: 6, letterSpacing: -0.3, fontVariant: ["tabular-nums"] },
+
   sectionHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   sectionLabel: { ...type.micro, color: color.faint },
   sectionMeta: { ...type.micro, color: color.ink, fontVariant: ["tabular-nums"] },
