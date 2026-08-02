@@ -32,6 +32,28 @@ export default function UrsoControl(): React.ReactElement {
       setNotice(null);
       setOpening(destination);
       try {
+        // DEVELOPMENT BUILDS DO NOT GATE. A simulator cannot satisfy this
+        // prompt from inside the app: with a biometric enrolled it wants a face
+        // that only the Simulator's own Features menu can supply, and with a
+        // passcode set it wants a passcode nobody chose. Both are walls with
+        // the developer on the wrong side, and the workaround — driving
+        // BiometricKit from the host shell — is not something a person testing
+        // their own app should have to know.
+        //
+        // Nothing is weakened by this. __DEV__ is false in every release and
+        // TestFlight build, so the gate ships exactly as written; and a dev
+        // build already implies Metro, the dev menu, and the source. The threat
+        // this gate answers is someone picking up a PRODUCTION phone, which a
+        // development bundle is not.
+        //
+        // The notice is not decoration: an unexplained skip would look like the
+        // gate is broken in production too.
+        if (__DEV__) {
+          setNotice("Development build — the verification gate is off. It stays on in TestFlight and release builds.");
+          enter(destination);
+          return;
+        }
+
         // A device that CANNOT authenticate locally cannot be protected by
         // being asked to. No enrolled biometric AND no passcode means the phone
         // is already open to anyone holding it, so this prompt adds nothing —
