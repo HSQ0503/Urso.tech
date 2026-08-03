@@ -6,7 +6,9 @@ import {
   MF_BRAIN_PROJECT_ID,
   MF_DEMO_CLAIM_IDS,
   MF_DEMO_RELATION_IDS,
+  getMfDemoPersona,
 } from "./brain-config";
+import { mfScenarioManifest } from "./manifest.mjs";
 
 const claimPairs = [
   [MF_DEMO_CLAIM_IDS.revisionC, MF_DEMO_CLAIM_IDS.revisionB, MF_DEMO_RELATION_IDS.revision],
@@ -17,64 +19,69 @@ const claimPairs = [
 
 const baselineIds = claimPairs.map(([, baseline]) => baseline);
 const revisionIds = claimPairs.map(([revision]) => revision);
+const actionByStep = [
+  "mf_demo_reset",
+  "source_event_received",
+  "revision_comparison_completed",
+  "decision_approved",
+  "impact_plan_activated",
+  "work_packages_issued",
+  "draft_artifacts_created",
+  "reviews_recorded",
+  "release_readiness_confirmed",
+] as const;
 
-export async function setMfDemoScenarioStep(admin: SupabaseClient, step: number) {
-  const normalizedStep = Math.max(0, Math.min(8, Math.trunc(step)));
-  const now = new Date().toISOString();
+type ApplyScenarioInput = {
+  step: number;
+  demoSessionId: string;
+  idempotencyKey: string;
+  actorRoleId: string;
+  recordAudit?: boolean;
+};
 
-  if (normalizedStep === 0) {
-    const [{ error: baselineError }, { error: revisionError }, { error: decisionError }, { error: relationError }, { error: conflictError }] =
-      await Promise.all([
-        admin
-          .from("brain_claims")
-          .update({ lifecycle: "active", resolution: "accepted", valid_until: null, updated_at: now })
-          .eq("organization_id", MF_BRAIN_ORGANIZATION_ID)
-          .in("id", baselineIds),
-        admin
-          .from("brain_claims")
-          .update({ lifecycle: "active", resolution: "unresolved", valid_until: null, updated_at: now })
-          .eq("organization_id", MF_BRAIN_ORGANIZATION_ID)
-          .in("id", revisionIds),
-        admin
-          .from("brain_claims")
-          .update({ object_value: "pending", lifecycle: "active", resolution: "accepted", updated_at: now })
-          .eq("organization_id", MF_BRAIN_ORGANIZATION_ID)
-          .eq("id", MF_DEMO_CLAIM_IDS.decisionStatus),
-        admin
-          .from("brain_claim_relations")
-          .delete()
-          .eq("organization_id", MF_BRAIN_ORGANIZATION_ID)
-          .in("id", Object.values(MF_DEMO_RELATION_IDS)),
-        admin
-          .from("brain_claim_conflicts")
-          .update({ status: "open", resolution_note: "", resolved_by: null, resolved_at: null, updated_at: now })
-          .eq("organization_id", MF_BRAIN_ORGANIZATION_ID),
-      ]);
-    const failure = baselineError ?? revisionError ?? decisionError ?? relationError ?? conflictError;
-    if (failure) throw new Error(`MF scenario reset failed: ${failure.message}`);
-  }
+function normalizeScenarioStep(step: number) {
+  return Math.max(0, Math.min(8, Math.trunc(step)));
+}
 
-  if (normalizedStep >= 3) {
-    const [{ error: baselineError }, { error: revisionError }, { error: decisionError }] = await Promise.all([
-      admin
-        .from("brain_claims")
-        .update({ lifecycle: "superseded", resolution: "accepted", valid_until: "2026-08-01", updated_at: now })
-        .eq("organization_id", MF_BRAIN_ORGANIZATION_ID)
-        .in("id", baselineIds),
-      admin
-        .from("brain_claims")
-        .update({ lifecycle: "active", resolution: "accepted", valid_until: null, updated_at: now })
-        .eq("organization_id", MF_BRAIN_ORGANIZATION_ID)
-        .in("id", revisionIds),
-      admin
-        .from("brain_claims")
-        .update({ object_value: "approved", lifecycle: "active", resolution: "accepted", updated_at: now })
-        .eq("organization_id", MF_BRAIN_ORGANIZATION_ID)
-        .eq("id", MF_DEMO_CLAIM_IDS.decisionStatus),
-    ]);
-    const failure = baselineError ?? revisionError ?? decisionError;
-    if (failure) throw new Error(`MF scenario approval failed: ${failure.message}`);
+async function applyClaims(admin: SupabaseClient, approved: boolean, now: string) {
+  const [{ error: baselineError }, { error: revisionError }, { error: decisionError }] = await Promise.all([
+    admin
+      .from("brain_claims")
+      .update({
+        lifecycle: approved ? "superseded" : "active",
+        resolution: "accepted",
+        valid_until: approved ? mfScenarioManifest.decision.effectiveDate : null,
+        updated_at: now,
+      })
+      .eq("organization_id", MF_BRAIN_ORGANIZATION_ID)
+      .in("id", baselineIds),
+    admin
+      .from("brain_claims")
+      .update({
+        lifecycle: "active",
+        resolution: approved ? "accepted" : "unresolved",
+        valid_until: null,
+        updated_at: now,
+      })
+      .eq("organization_id", MF_BRAIN_ORGANIZATION_ID)
+      .in("id", revisionIds),
+    admin
+      .from("brain_claims")
+      .update({
+        object_value: approved ? "approved" : "pending",
+        lifecycle: "active",
+        resolution: "accepted",
+        updated_at: now,
+      })
+      .eq("organization_id", MF_BRAIN_ORGANIZATION_ID)
+      .eq("id", MF_DEMO_CLAIM_IDS.decisionStatus),
+  ]);
+  const failure = baselineError ?? revisionError ?? decisionError;
+  if (failure) throw new Error(`MF claim transition failed: ${failure.message}`);
+}
 
+async function applyRelationsAndConflicts(admin: SupabaseClient, approved: boolean, now: string) {
+  if (approved) {
     const { error: relationError } = await admin.from("brain_claim_relations").upsert(
       claimPairs.map(([current, previous, id]) => ({
         id,
@@ -87,55 +94,73 @@ export async function setMfDemoScenarioStep(admin: SupabaseClient, step: number)
       { onConflict: "id" },
     );
     if (relationError) throw new Error(`MF supersession relation failed: ${relationError.message}`);
-
-    const { error: conflictError } = await admin
-      .from("brain_claim_conflicts")
-      .update({
-        status: "resolved",
-        resolution_note: "DEC-042 approved Revision C and preserved Revision B as historical truth.",
-        resolved_by: "mf-demo:project-manager",
-        resolved_at: now,
-        updated_at: now,
-      })
-      .eq("organization_id", MF_BRAIN_ORGANIZATION_ID);
-    if (conflictError) throw new Error(`MF conflict resolution failed: ${conflictError.message}`);
+  } else {
+    const { error: relationError } = await admin
+      .from("brain_claim_relations")
+      .delete()
+      .eq("organization_id", MF_BRAIN_ORGANIZATION_ID)
+      .in("id", Object.values(MF_DEMO_RELATION_IDS));
+    if (relationError) throw new Error(`MF supersession reset failed: ${relationError.message}`);
   }
 
-  const { data: organization, error: organizationError } = await admin
-    .from("brain_organizations")
-    .select("settings")
-    .eq("id", MF_BRAIN_ORGANIZATION_ID)
-    .single();
-  if (organizationError) throw new Error(`MF scenario settings read failed: ${organizationError.message}`);
-  const settings = typeof organization.settings === "object" && organization.settings
-    ? organization.settings as Record<string, unknown>
-    : {};
-  const { error: settingsError } = await admin
-    .from("brain_organizations")
-    .update({ settings: { ...settings, scenarioStep: normalizedStep, scenarioUpdatedAt: now } })
-    .eq("id", MF_BRAIN_ORGANIZATION_ID);
-  if (settingsError) throw new Error(`MF scenario settings update failed: ${settingsError.message}`);
+  const { error: conflictError } = await admin
+    .from("brain_claim_conflicts")
+    .update(approved ? {
+      status: "resolved",
+      resolution_note: "DEC-042 approved Revision C and preserved Revision B as historical truth.",
+      resolved_by: "mf-demo:project-manager",
+      resolved_at: now,
+      updated_at: now,
+    } : {
+      status: "open",
+      resolution_note: "",
+      resolved_by: null,
+      resolved_at: null,
+      updated_at: now,
+    })
+    .eq("organization_id", MF_BRAIN_ORGANIZATION_ID);
+  if (conflictError) throw new Error(`MF conflict transition failed: ${conflictError.message}`);
+}
 
-  const actionByStep = [
-    "mf_demo_reset",
-    "source_event_received",
-    "revision_comparison_completed",
-    "decision_approved",
-    "impact_plan_activated",
-    "work_packages_issued",
-    "draft_artifacts_created",
-    "reviews_recorded",
-    "release_readiness_confirmed",
-  ];
+async function recordAuditOnce(admin: SupabaseClient, step: number, input: ApplyScenarioInput) {
+  const { data: existing, error: lookupError } = await admin
+    .from("brain_audit_events")
+    .select("id")
+    .eq("organization_id", MF_BRAIN_ORGANIZATION_ID)
+    .eq("resource_type", "project")
+    .eq("resource_id", MF_BRAIN_PROJECT_ID)
+    .eq("metadata->>idempotencyKey", input.idempotencyKey)
+    .limit(1)
+    .maybeSingle();
+  if (lookupError) throw new Error(`MF audit lookup failed: ${lookupError.message}`);
+  if (existing) return;
+
+  const actor = getMfDemoPersona(input.actorRoleId);
   const { error: auditError } = await admin.from("brain_audit_events").insert({
     organization_id: MF_BRAIN_ORGANIZATION_ID,
-    actor_user_id: normalizedStep >= 3 ? "mf-demo:project-manager" : "mf-demo:harness",
-    action: actionByStep[normalizedStep],
+    actor_user_id: actor.userId,
+    action: actionByStep[step],
     resource_type: "project",
     resource_id: MF_BRAIN_PROJECT_ID,
-    metadata: { scenarioStep: normalizedStep, demo: true },
+    metadata: {
+      scenarioStep: step,
+      demo: true,
+      demoSessionId: input.demoSessionId,
+      idempotencyKey: input.idempotencyKey,
+    },
   });
   if (auditError) throw new Error(`MF scenario audit failed: ${auditError.message}`);
+}
 
-  return { step: normalizedStep, truth: normalizedStep >= 3 ? "revision-c" : "revision-b" };
+export async function applyMfBrainScenarioState(
+  admin: SupabaseClient,
+  input: ApplyScenarioInput,
+) {
+  const step = normalizeScenarioStep(input.step);
+  const approved = step > 2;
+  const now = new Date().toISOString();
+  await applyClaims(admin, approved, now);
+  await applyRelationsAndConflicts(admin, approved, now);
+  if (input.recordAudit !== false) await recordAuditOnce(admin, step, input);
+  return { step, truth: approved ? "revision-c" : "revision-b" } as const;
 }

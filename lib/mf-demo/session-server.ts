@@ -13,6 +13,7 @@ import {
   type MfSessionOperation,
   type MfSessionRecord,
 } from "./session-runtime.mjs";
+import { applyMfBrainScenarioState } from "./scenario-server";
 
 type OrganizationSettings = Record<string, unknown> & {
   demoRuntime?: { sessions?: Record<string, MfSessionRecord> };
@@ -109,7 +110,26 @@ export async function transitionMfDemoSession(
 ) {
   const current = await requireMfDemoSession(admin, input);
   const next = transitionMfSessionRecord(current, { ...input, now: new Date().toISOString() });
-  if (next !== current) await writeSession(admin, next);
+  if (next !== current) {
+    await applyMfBrainScenarioState(admin, {
+      step: next.snapshot.step,
+      demoSessionId: current.id,
+      idempotencyKey: input.idempotencyKey,
+      actorRoleId: input.roleId,
+    });
+    try {
+      await writeSession(admin, next);
+    } catch (error) {
+      await applyMfBrainScenarioState(admin, {
+        step: current.snapshot.step,
+        demoSessionId: current.id,
+        idempotencyKey: `rollback-${input.idempotencyKey}`,
+        actorRoleId: input.roleId,
+        recordAudit: false,
+      }).catch(() => undefined);
+      throw error;
+    }
+  }
   return publicSession(next);
 }
 

@@ -152,4 +152,11 @@ assert.match(scenarioRouteSource, /expectedStep/);
 assert.match(scenarioRouteSource, /idempotencyKey/);
 assert.match(scenarioRouteSource, /MfSessionContractError/);
 
+const scenarioServerSource = readFileSync(new URL("../lib/mf-demo/scenario-server.ts", import.meta.url), "utf8");
+assert.match(scenarioServerSource, /applyMfBrainScenarioState/);
+assert.match(scenarioServerSource, /idempotencyKey/);
+assert.match(scenarioServerSource, /demoSessionId/);
+assert.doesNotMatch(scenarioServerSource, /normalizedStep\s*===\s*0/);
+assert.doesNotMatch(scenarioServerSource, /normalizedStep\s*>=\s*3/);
+
 console.log("✓ MF manifest values, references, and impact contract are consistent.");
