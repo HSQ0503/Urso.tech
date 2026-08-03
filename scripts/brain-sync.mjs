@@ -54,7 +54,9 @@ const config = JSON.parse(
     ? readFileSync(resolvePath(process.cwd(), configArg.slice("--config=".length)), "utf8")
     : readFileSync(DEFAULT_CONFIG_URL, "utf8"),
 );
-const VAULT = config.vaultRoot;
+// CI/presenter machines can point the same checked-in sync contract at their
+// local Obsidian mount without committing a machine-specific absolute path.
+const VAULT = process.env.BRAIN_VAULT_ROOT ?? config.vaultRoot;
 const ORGANIZATION_ID = config.organizationId ?? "urso";
 
 // ── Shared-root guard ────────────────────────────────────────────────────────

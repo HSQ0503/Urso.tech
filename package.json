@@ -21,7 +21,9 @@
     "brain:mf:sync": "node scripts/brain-sync.mjs --config=scripts/brain-sync.mf-demo.config.json",
     "brain:mf:provision": "node scripts/brain-mf-provision.mjs",
     "brain:mf:seed": "node scripts/brain-mf-seed.mjs --copy-provider-keys",
+    "brain:mf:providers": "node scripts/brain-mf-refresh-provider-keys.mjs",
     "brain:mf:contracts": "node scripts/brain-mf-demo-contracts.mjs",
+    "brain:mf:preflight": "node scripts/brain-mf-preflight.mjs",
     "brain:mf:isolation": "node scripts/brain-mf-isolation.mjs",
     "brain:mf:acceptance": "node scripts/brain-mf-acceptance.mjs"
   },
