@@ -8,6 +8,7 @@ import {
   createMfSessionRecord,
   hashMfSessionToken,
   MfSessionContractError,
+  selectMfSessionRole,
   transitionMfSessionRecord,
   verifyMfSessionToken,
   type MfSessionOperation,
@@ -142,6 +143,17 @@ export async function consumeMfDemoSessionUsage(
   const current = await requireMfDemoSession(admin, credentials);
   const next = consumeMfSessionUsage(current, operation, limit);
   await writeSession(admin, next);
+  return publicSession(next);
+}
+
+export async function selectMfDemoSessionRole(
+  admin: SupabaseClient,
+  credentials: MfSessionCredentials,
+  roleId: string,
+) {
+  const current = await requireMfDemoSession(admin, credentials);
+  const next = selectMfSessionRole(current, roleId, new Date().toISOString());
+  if (next !== current) await writeSession(admin, next);
   return publicSession(next);
 }
 

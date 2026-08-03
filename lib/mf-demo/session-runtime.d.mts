@@ -36,6 +36,7 @@ export function transitionMfSessionRecord(
     now: string;
   }>,
 ): MfSessionRecord;
+export function selectMfSessionRole(session: MfSessionRecord, roleId: string, now: string): MfSessionRecord;
 export function consumeMfSessionUsage(
   session: MfSessionRecord,
   operation: MfSessionOperation,

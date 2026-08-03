@@ -11,6 +11,7 @@ import {
   consumeMfSessionUsage,
   createMfSessionRecord,
   hashMfSessionToken,
+  selectMfSessionRole,
   transitionMfSessionRecord,
   verifyMfSessionToken,
 } from "../lib/mf-demo/session-runtime.mjs";
@@ -145,6 +146,9 @@ assert.throws(
 let usageSession = session;
 for (let index = 0; index < 10; index += 1) usageSession = consumeMfSessionUsage(usageSession, "chat", 10);
 assert.throws(() => consumeMfSessionUsage(usageSession, "chat", 10), (error) => error.code === "usage_limit");
+const electricalSession = selectMfSessionRole(advancedSession, "electrical", "2026-08-03T12:03:00.000Z");
+assert.equal(electricalSession.selectedRoleId, "electrical");
+assert.equal(electricalSession.snapshot.step, advancedSession.snapshot.step);
 
 const scenarioRouteSource = readFileSync(new URL("../app/api/mf/brain/scenario/route.ts", import.meta.url), "utf8");
 assert.match(scenarioRouteSource, /action\s*===\s*["']create["']/);
@@ -170,5 +174,11 @@ for (const routePath of [
   const routeSource = readFileSync(new URL(routePath, import.meta.url), "utf8");
   assert.match(routeSource, /mfSessionCredentialsFromRequest/, `${routePath} does not require a demo session`);
 }
+
+const demoClientSource = readFileSync(new URL("../components/mf/mf-demo.tsx", import.meta.url), "utf8");
+assert.doesNotMatch(demoClientSource, /void fetch\(["']\/api\/mf\/brain\/scenario/);
+assert.match(demoClientSource, /sessionStorage/);
+assert.match(demoClientSource, /expectedStep/);
+assert.match(demoClientSource, /transitionError/);
 
 console.log("✓ MF manifest values, references, and impact contract are consistent.");

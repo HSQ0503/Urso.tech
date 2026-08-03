@@ -4,12 +4,14 @@ import {
   createMfDemoSession,
   loadMfDemoSession,
   mfSessionErrorResponse,
+  selectMfDemoSessionRole,
   transitionMfDemoSession,
 } from "@/lib/mf-demo/session-server";
 
 type ScenarioRequest =
   | { action: "create" }
   | { action: "load"; sessionId: string; token: string }
+  | { action: "select-role"; sessionId: string; token: string; roleId: string }
   | {
       action: "transition";
       sessionId: string;
@@ -30,6 +32,9 @@ export async function POST(request: Request) {
     if (body.action === "create") return Response.json(await createMfDemoSession(admin));
     if (body.action === "load") {
       return Response.json({ session: await loadMfDemoSession(admin, body) });
+    }
+    if (body.action === "select-role") {
+      return Response.json({ session: await selectMfDemoSessionRole(admin, body, body.roleId) });
     }
     if (body.action === "transition") {
       if (

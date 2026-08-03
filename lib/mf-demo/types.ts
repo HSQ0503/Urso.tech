@@ -77,3 +77,15 @@ export type ActivityEvent = {
 };
 
 export type { MfHarnessSnapshot, MfWorkItem, MfWorkflowReceipt, MfWorkState } from "./harness-runtime.mjs";
+import type { MfHarnessSnapshot } from "./harness-runtime.mjs";
+
+export type MfDemoSessionCredentials = { sessionId: string; token: string };
+export type MfDemoSessionView = {
+  id: string;
+  version: number;
+  selectedRoleId: string;
+  snapshot: MfHarnessSnapshot;
+  usage: Record<"chat" | "thread" | "learning" | "transition", number>;
+  createdAt: string;
+  updatedAt: string;
+};

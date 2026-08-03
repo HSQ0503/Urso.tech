@@ -60,6 +60,8 @@ export type ViewProps = {
   onAdvance: () => void;
   onOpenArtifact: (artifactId: string) => void;
   artifactReviewStates: Record<string, ArtifactReviewState>;
+  sessionId?: string;
+  sessionToken?: string;
 };
 
 const roleArtifactIds: Record<string, string> = {
@@ -730,13 +732,13 @@ export function ArtifactsView({ step, onNavigate, onAdvance, onOpenArtifact, art
   );
 }
 
-export function BrainView({ step, roleId, onNavigate }: ViewProps) {
+export function BrainView({ step, roleId, onNavigate, sessionId, sessionToken }: ViewProps) {
   const { language } = useMfLanguage();
   const l = (pt: string, en: string) => (language === "pt" ? pt : en);
   return (
     <div className="mf-clarity-view is-brain-view">
       <header className="mf-today-header"><div><span className="mf-eyebrow">{l("Urso Brain · verdade do projeto", "Urso Brain · project truth")}</span><h1>{l("Tudo que o projeto sabe, conectado e explicável", "Everything the project knows, connected and explainable")}</h1><p>{l("Explore relações, abra os documentos usados pelo sistema ou converse com o Brain no contexto do seu papel.", "Explore relationships, open the documents used by the system, or talk to the Brain in the context of your role.")}</p></div><button type="button" className="mf-secondary-action" onClick={() => onNavigate("audit")}>{l("Ver histórico de decisões", "View decision history")} <ArrowRight size={14} /></button></header>
-      <ProjectBrainWorkspace step={step} roleId={roleId} />
+      <ProjectBrainWorkspace step={step} roleId={roleId} sessionId={sessionId} sessionToken={sessionToken} />
     </div>
   );
 }

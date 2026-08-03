@@ -72,6 +72,37 @@
   transform: translateY(0);
 }
 
+.mf-session-error {
+  position: fixed;
+  z-index: 120;
+  top: 72px;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(680px, calc(100vw - 32px));
+  padding: 10px 12px;
+  color: #f4f4f1;
+  background: #171717;
+  border: 1px solid #9b5b55;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, .32);
+  transform: translateX(-50%);
+}
+
+.mf-session-error span {
+  flex: 1;
+  font-size: 12px;
+}
+
+.mf-session-error button {
+  padding: 6px 9px;
+  color: inherit;
+  font: inherit;
+  border: 1px solid #5f5f5f;
+  background: #242424;
+  cursor: pointer;
+}
+
 .mf-topbar {
   position: relative;
   z-index: 30;

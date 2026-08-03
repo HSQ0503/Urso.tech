@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
   ArrowLeft,
   ArrowRight,
@@ -41,7 +41,12 @@ import {
   projectRisk,
   scenarioLabels,
 } from "@/lib/mf-demo/scenario";
-import type { ArtifactReviewState, DemoView } from "@/lib/mf-demo/types";
+import type {
+  ArtifactReviewState,
+  DemoView,
+  MfDemoSessionCredentials,
+  MfDemoSessionView,
+} from "@/lib/mf-demo/types";
 import {
   ArtifactsView,
   AuditView,
@@ -87,6 +92,8 @@ const guideKeyForStep = [
   "human-review",
   "project-release",
 ] as const;
+
+const sessionStorageKey = "mf-demo-session-v2";
 
 const presenterCues = {
   pt: [
@@ -171,6 +178,8 @@ function ViewContent({
   onAdvance,
   onOpenArtifact,
   artifactReviewStates,
+  sessionId,
+  sessionToken,
 }: {
   view: DemoView;
   step: number;
@@ -179,8 +188,10 @@ function ViewContent({
   onAdvance: () => void;
   onOpenArtifact: (artifactId: string) => void;
   artifactReviewStates: Record<string, ArtifactReviewState>;
+  sessionId?: string;
+  sessionToken?: string;
 }) {
-  const props = { step, roleId, onNavigate, onAdvance, onOpenArtifact, artifactReviewStates };
+  const props = { step, roleId, onNavigate, onAdvance, onOpenArtifact, artifactReviewStates, sessionId, sessionToken };
   if (view === "control") return <ControlTowerView {...props} />;
   if (view === "changes") return <ChangesView {...props} />;
   if (view === "disciplines") return <DisciplinesView {...props} roleId={roleId} />;
@@ -192,13 +203,16 @@ function ViewContent({
 
 function MfDemoShell() {
   const { language, setLanguage, t } = useMfLanguage();
-  const [step, setStep] = useState(0);
+  const [sessionCredentials, setSessionCredentials] = useState<MfDemoSessionCredentials | null>(null);
+  const [demoSession, setDemoSession] = useState<MfDemoSessionView | null>(null);
+  const [sessionHydrating, setSessionHydrating] = useState(true);
+  const [transitioning, setTransitioning] = useState(false);
+  const [transitionError, setTransitionError] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<DemoView>("control");
   const [roleId, setRoleId] = useState(roles[0].id);
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [selectedArtifactId, setSelectedArtifactId] = useState<string | null>(null);
-  const [artifactReviewStates, setArtifactReviewStates] = useState<Record<string, ArtifactReviewState>>({});
   const [selectedQuestion, setSelectedQuestion] = useState(0);
   const [draftQuestion, setDraftQuestion] = useState("");
   const [presenterMode, setPresenterMode] = useState(false);
@@ -206,6 +220,18 @@ function MfDemoShell() {
   const [presentationSessionActive, setPresentationSessionActive] = useState(false);
   const presentationStartRef = useRef<HTMLButtonElement>(null);
   const mainRef = useRef<HTMLElement>(null);
+  const step = demoSession?.snapshot.step ?? 0;
+  const artifactReviewStates = useMemo<Record<string, ArtifactReviewState>>(() => Object.fromEntries(
+    artifacts.map((artifact) => {
+      const workItem = demoSession?.snapshot.workItems.find((task) => task.artifactId === artifact.id);
+      const reviewState: ArtifactReviewState = workItem?.state === "complete" || step >= 8
+        ? "approved"
+        : step >= 7
+          ? "validated"
+          : "draft";
+      return [artifact.id, reviewState];
+    }),
+  ), [demoSession?.snapshot, step]);
   const risk = projectRisk(step);
   const visibleActivity = activityEvents.filter((event) => step >= event.availableAt).reverse();
   const selectedArtifact = artifacts.find((artifact) => artifact.id === selectedArtifactId) ?? null;
@@ -215,17 +241,128 @@ function MfDemoShell() {
   const selectedRole = roles.find((role) => role.id === roleId) ?? roles[0];
   const activeNavigationItem = navigation.find((item) => item.id === activeView) ?? navigation[0];
 
-  const synchronizeScenarioStep = useCallback((nextStep: number) => {
-    void fetch("/api/mf/brain/scenario", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ step: nextStep }),
-    }).then((response) => {
-      if (!response.ok) console.error("[mf-demo] Brain scenario synchronization failed");
-    }).catch(() => {
-      console.error("[mf-demo] Brain scenario synchronization failed");
-    });
+  useEffect(() => {
+    let cancelled = false;
+
+    async function hydrateSession() {
+      setSessionHydrating(true);
+      setTransitionError(null);
+      try {
+        let credentials: MfDemoSessionCredentials | null = null;
+        const stored = window.sessionStorage.getItem(sessionStorageKey);
+        if (stored) {
+          try {
+            const parsed = JSON.parse(stored) as MfDemoSessionCredentials;
+            if (parsed.sessionId && parsed.token) credentials = parsed;
+          } catch {
+            window.sessionStorage.removeItem(sessionStorageKey);
+          }
+        }
+
+        let response = credentials
+          ? await fetch("/api/mf/brain/scenario", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ action: "load", ...credentials }),
+            })
+          : null;
+
+        if (!response?.ok) {
+          response = await fetch("/api/mf/brain/scenario", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ action: "create" }),
+          });
+          const created = (await response.json()) as {
+            sessionId?: string;
+            token?: string;
+            session?: MfDemoSessionView;
+            error?: string;
+          };
+          if (!response.ok || !created.sessionId || !created.token || !created.session) {
+            throw new Error(created.error ?? "Unable to create the MF demo session.");
+          }
+          credentials = { sessionId: created.sessionId, token: created.token };
+          window.sessionStorage.setItem(sessionStorageKey, JSON.stringify(credentials));
+          if (!cancelled) {
+            setSessionCredentials(credentials);
+            setDemoSession(created.session);
+            setRoleId(created.session.selectedRoleId);
+            setActiveView(viewForStep[created.session.snapshot.step]);
+          }
+          return;
+        }
+
+        const loaded = (await response.json()) as { session?: MfDemoSessionView; error?: string };
+        if (!loaded.session || !credentials) throw new Error(loaded.error ?? "Unable to load the MF demo session.");
+        if (!cancelled) {
+          setSessionCredentials(credentials);
+          setDemoSession(loaded.session);
+          setRoleId(loaded.session.selectedRoleId);
+          setActiveView(viewForStep[loaded.session.snapshot.step]);
+        }
+      } catch (error) {
+        if (!cancelled) setTransitionError(error instanceof Error ? error.message : "MF demo session unavailable.");
+      } finally {
+        if (!cancelled) setSessionHydrating(false);
+      }
+    }
+
+    void hydrateSession();
+    return () => { cancelled = true; };
   }, []);
+
+  const synchronizeScenarioStep = useCallback(async (nextStep: number, nextRoleId = roleId) => {
+    if (!sessionCredentials || !demoSession || transitioning) return false;
+    setTransitioning(true);
+    setTransitionError(null);
+    try {
+      const response = await fetch("/api/mf/brain/scenario", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          action: "transition",
+          ...sessionCredentials,
+          expectedStep: demoSession.snapshot.step,
+          targetStep: nextStep,
+          idempotencyKey: `${sessionCredentials.sessionId}-${demoSession.version}-${nextStep}-${crypto.randomUUID()}`,
+          roleId: nextRoleId,
+        }),
+      });
+      const payload = (await response.json()) as { session?: MfDemoSessionView; error?: string };
+      if (!response.ok || !payload.session) throw new Error(payload.error ?? "Scenario transition failed.");
+      setDemoSession(payload.session);
+      setRoleId(payload.session.selectedRoleId);
+      setActiveView(viewForStep[payload.session.snapshot.step]);
+      return true;
+    } catch (error) {
+      setTransitionError(error instanceof Error ? error.message : "Scenario transition failed.");
+      return false;
+    } finally {
+      setTransitioning(false);
+    }
+  }, [demoSession, roleId, sessionCredentials, transitioning]);
+
+  const selectRole = useCallback(async (nextRoleId: string) => {
+    if (!sessionCredentials || transitioning) return;
+    setTransitioning(true);
+    setTransitionError(null);
+    try {
+      const response = await fetch("/api/mf/brain/scenario", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "select-role", ...sessionCredentials, roleId: nextRoleId }),
+      });
+      const payload = (await response.json()) as { session?: MfDemoSessionView; error?: string };
+      if (!response.ok || !payload.session) throw new Error(payload.error ?? "Role switch failed.");
+      setDemoSession(payload.session);
+      setRoleId(payload.session.selectedRoleId);
+    } catch (error) {
+      setTransitionError(error instanceof Error ? error.message : "Role switch failed.");
+    } finally {
+      setTransitioning(false);
+    }
+  }, [sessionCredentials, transitioning]);
 
   function navigate(view: DemoView) {
     setActiveView(view);
@@ -233,36 +370,30 @@ function MfDemoShell() {
   }
 
   function advance() {
-    if (step >= 8) return;
-    const nextStep = step + 1;
-    synchronizeScenarioStep(nextStep);
-    setStep(nextStep);
-    setActiveView(viewForStep[nextStep]);
+    if (step >= 8 || transitioning) return;
+    void synchronizeScenarioStep(step + 1);
   }
 
   function rewind() {
-    if (step === 0) return;
-    const previousStep = step - 1;
-    synchronizeScenarioStep(previousStep);
-    setStep(previousStep);
-    setActiveView(viewForStep[previousStep]);
+    if (step === 0 || transitioning) return;
+    void synchronizeScenarioStep(step - 1);
   }
 
-  const reset = useCallback(() => {
-    synchronizeScenarioStep(0);
-    setStep(0);
+  const reset = useCallback(async () => {
+    const resetComplete = await synchronizeScenarioStep(0, roles[0].id);
+    if (!resetComplete) return false;
     setActiveView("control");
     setRoleId(roles[0].id);
     setMobileNavigationOpen(false);
     setAssistantOpen(false);
     setSelectedArtifactId(null);
-    setArtifactReviewStates({});
     setSelectedQuestion(0);
     setDraftQuestion("");
+    return true;
   }, [synchronizeScenarioStep]);
 
-  function startPresentation() {
-    reset();
+  async function startPresentation() {
+    if (!await reset()) return;
     setPresenterMode(true);
     setPresentationSessionActive(true);
     setPresentationLobbyOpen(false);
@@ -281,8 +412,9 @@ function MfDemoShell() {
   }
 
   function restartPresentation() {
-    reset();
-    setPresenterMode(true);
+    void reset().then((complete) => {
+      if (complete) setPresenterMode(true);
+    });
   }
 
   function endPresentation() {
@@ -312,19 +444,13 @@ function MfDemoShell() {
 
       if (event.key === "ArrowRight" && step < 8) {
         event.preventDefault();
-        const nextStep = step + 1;
-        synchronizeScenarioStep(nextStep);
-        setStep(nextStep);
-        setActiveView(viewForStep[nextStep]);
+        void synchronizeScenarioStep(step + 1);
       } else if (event.key === "ArrowLeft" && step > 0) {
         event.preventDefault();
-        const previousStep = step - 1;
-        synchronizeScenarioStep(previousStep);
-        setStep(previousStep);
-        setActiveView(viewForStep[previousStep]);
+        void synchronizeScenarioStep(step - 1);
       } else if (event.key.toLocaleLowerCase("pt-BR") === "r") {
         event.preventDefault();
-        reset();
+        void reset();
       } else if (event.key.toLocaleLowerCase("pt-BR") === "g") {
         event.preventDefault();
         setPresenterMode((current) => {
@@ -392,6 +518,16 @@ function MfDemoShell() {
       <a className="mf-skip-link" href="#mf-main">
         {t("Ir para o conteúdo")}
       </a>
+
+      {transitionError ? (
+        <div className="mf-session-error" role="alert">
+          <WifiOff size={15} />
+          <span>{transitionError}</span>
+          <button type="button" onClick={() => void synchronizeScenarioStep(step)} disabled={transitioning || sessionHydrating}>
+            {language === "pt" ? "Tentar novamente" : "Retry"}
+          </button>
+        </div>
+      ) : null}
 
       <header className="mf-topbar">
         <button
@@ -494,7 +630,7 @@ function MfDemoShell() {
             </div>
             <label>
               <span>{t("Trocar papel ou equipe")}</span>
-              <select value={roleId} onChange={(event) => setRoleId(event.target.value)}>
+              <select value={roleId} onChange={(event) => void selectRole(event.target.value)} disabled={sessionHydrating || transitioning}>
                 {roles.map((role) => <option key={role.id} value={role.id}>{t(role.name)}</option>)}
               </select>
               <ChevronDown size={14} aria-hidden="true" />
@@ -586,6 +722,8 @@ function MfDemoShell() {
             onAdvance={advance}
             onOpenArtifact={openArtifact}
             artifactReviewStates={artifactReviewStates}
+            sessionId={sessionCredentials?.sessionId}
+            sessionToken={sessionCredentials?.token}
           />
         </main>
 
@@ -601,7 +739,7 @@ function MfDemoShell() {
                 <span key={index} className={step > index ? "is-complete" : step === index ? "is-current" : ""} />
               ))}
             </div>
-            <button type="button" onClick={advance} disabled={step === 8}>
+            <button type="button" onClick={advance} disabled={step === 8 || sessionHydrating || transitioning}>
               {step === 8 ? <Check size={15} /> : <ArrowRight size={15} />}
               {t(nextActionLabels[step])}
             </button>
@@ -719,7 +857,7 @@ function MfDemoShell() {
             (step >= 8 ? "approved" : step >= 7 ? "validated" : "draft")
           }
           onReviewStateChange={(reviewState) =>
-            setArtifactReviewStates((current) => ({ ...current, [selectedArtifact.id]: reviewState }))
+            reviewState !== "draft" && step < 8 ? void synchronizeScenarioStep(step + 1) : undefined
           }
           onClose={() => setSelectedArtifactId(null)}
         />
@@ -803,7 +941,7 @@ function MfDemoShell() {
                 </div>
 
                 <div className="mf-presentation-actions">
-                  <button ref={presentationStartRef} type="button" className="mf-lobby-primary" onClick={startPresentation}>
+                  <button ref={presentationStartRef} type="button" className="mf-lobby-primary" onClick={() => void startPresentation()} disabled={sessionHydrating || transitioning || !demoSession}>
                     <Play size={17} fill="currentColor" /> {t("Iniciar apresentação")}
                   </button>
                   <button type="button" className="mf-lobby-secondary" onClick={exploreDemo}>
@@ -823,7 +961,7 @@ function MfDemoShell() {
                 </ul>
                 <div className="mf-presentation-meta">
                   <span><Presentation size={15} /><strong>8 {t("cenas")}</strong></span>
-                  <span><Timer size={15} /><strong>7–10 {t("minutos")}</strong></span>
+                  <span><Timer size={15} /><strong>12 {t("minutos")}</strong></span>
                   <span><Keyboard size={15} /><strong>{t("Setas para navegar")}</strong></span>
                 </div>
               </aside>
