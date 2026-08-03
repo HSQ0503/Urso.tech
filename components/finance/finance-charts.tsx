@@ -4,7 +4,6 @@ import { useId } from "react";
 import {
   Area,
   Bar,
-  BarChart,
   CartesianGrid,
   ComposedChart,
   XAxis,
@@ -80,43 +79,48 @@ export function CashFlowChart({ months }: { months: FinanceMonth[] }) {
 
 export function DealAllocationChart({ deals }: { deals: FinanceDeal[] }) {
   const data = deals.filter((deal) => deal.status !== "canceled").map((deal) => ({
-    name: deal.clientName.length > 22 ? `${deal.clientName.slice(0, 21)}…` : deal.clientName,
     fullName: deal.clientName,
     retainedCents: deal.retainedTargetCents,
     hanCents: deal.plannedHanDrawCents,
     gugaCents: deal.plannedGugaDrawCents,
   }));
-  const config = {
-    retainedCents: { label: "Stays in Urso", color: "#fe5100" },
-    hanCents: { label: "Han", color: "var(--color-period-1)" },
-    gugaCents: { label: "Guga", color: "var(--color-period-3)" },
-  } satisfies ChartConfig;
-  const height = Math.max(210, data.length * 54 + 60);
 
   return (
-    <>
-      <ChartContainer config={config} style={{ height }} aria-label="Planned company and founder allocation for every deal">
-        <BarChart data={data} layout="vertical" margin={{ left: 8, right: 16, top: 8, bottom: 0 }}>
-          <CartesianGrid horizontal={false} />
-          <XAxis type="number" tickLine={false} axisLine={false} tickFormatter={axisMoney} />
-          <YAxis type="category" dataKey="name" tickLine={false} axisLine={false} width={118} tickMargin={8} />
-          <ChartTooltip content={<ChartTooltipContent valueFormatter={(value) => money(value)} />} />
-          <Bar dataKey="retainedCents" stackId="allocation" fill="var(--color-retainedCents)" radius={0} isAnimationActive={motion()} />
-          <Bar dataKey="hanCents" stackId="allocation" fill="var(--color-hanCents)" radius={0} isAnimationActive={motion()} />
-          <Bar dataKey="gugaCents" stackId="allocation" fill="var(--color-gugaCents)" radius={0} isAnimationActive={motion()} />
-        </BarChart>
-      </ChartContainer>
-      <div className="sr-only">
-        <table>
-          <caption>Planned deal allocation</caption>
-          <thead><tr><th>Deal</th><th>Stays in Urso</th><th>Han</th><th>Guga</th></tr></thead>
-          <tbody>
-            {data.map((deal) => (
-              <tr key={deal.fullName}><th>{deal.fullName}</th><td>{money(deal.retainedCents)}</td><td>{money(deal.hanCents)}</td><td>{money(deal.gugaCents)}</td></tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </>
+    <div className="mt-5 divide-y divide-edge border-y border-edge" aria-label="Planned company and founder allocation for every deal">
+      {data.map((deal) => {
+        const totalCents = deal.retainedCents + deal.hanCents + deal.gugaCents;
+        const share = (amountCents: number) => totalCents > 0 ? `${(amountCents / totalCents) * 100}%` : "0%";
+
+        return (
+          <section key={deal.fullName} className="py-4 first:pt-3 last:pb-3">
+            <div className="flex items-baseline justify-between gap-4">
+              <h3 className="min-w-0 truncate text-[13px] font-medium text-ink" title={deal.fullName}>{deal.fullName}</h3>
+              <span className="shrink-0 font-mono text-[11.5px] tabular-nums text-ink">{money(totalCents)}</span>
+            </div>
+
+            <div className="mt-3 flex h-2.5 overflow-hidden bg-track" aria-hidden>
+              <span className="bg-orange" style={{ width: share(deal.retainedCents) }} />
+              <span className="bg-[var(--color-period-1)]" style={{ width: share(deal.hanCents) }} />
+              <span className="bg-[var(--color-period-3)]" style={{ width: share(deal.gugaCents) }} />
+            </div>
+
+            <dl className="mt-3 grid grid-cols-3 gap-2">
+              <div className="min-w-0">
+                <dt className="flex items-center gap-1.5 text-[10.5px] text-ink-dimmer"><span className="size-1.5 shrink-0 bg-orange" />Urso</dt>
+                <dd className="mt-1 truncate font-mono text-[10.5px] tabular-nums text-ink">{money(deal.retainedCents)}</dd>
+              </div>
+              <div className="min-w-0">
+                <dt className="flex items-center gap-1.5 text-[10.5px] text-ink-dimmer"><span className="size-1.5 shrink-0 bg-[var(--color-period-1)]" />Han</dt>
+                <dd className="mt-1 truncate font-mono text-[10.5px] tabular-nums text-ink">{money(deal.hanCents)}</dd>
+              </div>
+              <div className="min-w-0">
+                <dt className="flex items-center gap-1.5 text-[10.5px] text-ink-dimmer"><span className="size-1.5 shrink-0 bg-[var(--color-period-3)]" />Guga</dt>
+                <dd className="mt-1 truncate font-mono text-[10.5px] tabular-nums text-ink">{money(deal.gugaCents)}</dd>
+              </div>
+            </dl>
+          </section>
+        );
+      })}
+    </div>
   );
 }

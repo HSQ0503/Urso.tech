@@ -236,10 +236,10 @@ export default async function FinancePage({
           <div className="mt-4"><CashFlowChart months={months} /></div>
         </Card>
         <Card>
-          <Micro>Deal allocation</Micro>
-          <h2 className="mt-1 text-[17px] font-medium tracking-[-0.015em]">Where each contract is meant to go</h2>
-          <p className="mt-2 text-[11.5px] leading-[1.5] text-ink-dimmer">Orange is company capital. Gray is planned founder money.</p>
-          <div className="mt-2"><DealAllocationChart deals={deals} /></div>
+          <Micro>Allocation</Micro>
+          <h2 className="mt-1 text-[17px] font-medium tracking-[-0.015em]">Contract allocation</h2>
+          <p className="mt-2 text-[11.5px] leading-[1.5] text-ink-dimmer">Planned company reserve and founder distributions by deal.</p>
+          <DealAllocationChart deals={deals} />
         </Card>
       </section>
 
