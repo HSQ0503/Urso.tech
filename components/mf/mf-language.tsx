@@ -420,8 +420,8 @@ const english: Record<string, string> = {
   "Rejeitar": "Reject",
   "Recomendado": "Recommended",
   "Reserva": "Fallback",
-  "Cenário B protege as aprovações técnicas e recupera 70% do impacto.":
-    "Scenario B protects technical approvals and recovers 70% of the impact.",
+  "Cenário B protege as aprovações técnicas e recupera oito dias.":
+    "Scenario B protects technical approvals and recovers eight days.",
   "Conforme": "Compliant",
   "Confirmação do Gerente do Projeto": "Project Manager confirmation",
   "Etapa final do gate": "Final gate step",
@@ -571,7 +571,6 @@ const english: Record<string, string> = {
   "2 interferências para revisão": "2 clashes for review",
   "Três cenários comparados por prazo, risco técnico e dependências críticas.":
     "Three scenarios compared by schedule, technical risk, and critical dependencies.",
-  "Opção B recupera 7 dias": "Option B recovers 7 days",
   "Evidências e aprovações requeridas antes da liberação executiva.":
     "Evidence and approvals required before executive release.",
   "6 de 6 revisões concluídas": "6 of 6 reviews completed",
@@ -659,11 +658,9 @@ const english: Record<string, string> = {
   "DEMONSTRAÇÃO · NÃO CONSTRUTIVO": "DEMONSTRATION · NOT FOR CONSTRUCTION",
   "Lista de Cargas Rev. 7": "Load List Rev. 7",
   "Premissa EL-014": "Assumption EL-014",
-  "Carga da linha: 640 → 736 kW": "Line load: 640 → 736 kW",
   "Demanda do painel: 812 → 908 kVA": "Panel demand: 812 → 908 kVA",
   "Reserva atual abaixo do limite MF": "Current reserve below the MF limit",
   "Confirmar alimentador 4×240 mm²": "Confirm 4×240 mm² feeder",
-  "P = 736 kW · fp = 0,92 · V = 380 V": "P = 736 kW · pf = 0.92 · V = 380 V",
   "Registro do fornecedor SUP-118": "Supplier record SUP-118",
   "Envelope +1,2 m": "Envelope +1.2 m",
   "Carga elétrica +15%": "Electrical load +15%",
@@ -684,7 +681,6 @@ const english: Record<string, string> = {
   "Atualizar diagrama unifilar": "Update single-line diagram",
   "Devolver ocupação para coordenação BIM": "Return occupancy data to BIM coordination",
   "Memória HVAC Rev. 5": "HVAC Calculation Report Rev. 5",
-  "Demanda: 420 → 496 kW": "Demand: 420 → 496 kW",
   "Vazão: 20,1 → 23,7 l/s": "Flow: 20.1 → 23.7 l/s",
   "Chiller mantém 8% de reserva": "Chiller retains 8% reserve",
   "Atualizar memória de cálculo": "Update calculation report",
@@ -698,7 +694,6 @@ const english: Record<string, string> = {
   "Emitir modelo federado para coordenação": "Issue federated model for coordination",
   "Cronograma Base Rev. 12": "Baseline Schedule Rev. 12",
   "Cenário A mantém atraso de 10 dias": "Scenario A retains the 10-day delay",
-  "Cenário B recupera 7 dias": "Scenario B recovers 7 days",
   "Cenário C recupera 10 dias com alto risco": "Scenario C recovers 10 days with high risk",
   "Selecionar cenário B": "Select scenario B",
   "Antecipar revisão interdisciplinar": "Bring forward interdisciplinary review",

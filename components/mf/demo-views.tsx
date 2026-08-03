@@ -42,6 +42,7 @@ import {
   disciplines,
   roles,
 } from "@/lib/mf-demo/fixtures";
+import { mfScenarioManifest } from "@/lib/mf-demo/manifest.mjs";
 import { nextActionLabels } from "@/lib/mf-demo/scenario";
 import type {
   ArtifactReviewState,
@@ -508,8 +509,8 @@ export function ChangesView({ step, onNavigate, onAdvance }: ViewProps) {
           <div className="mf-comparison-head"><span>{l("Premissa", "Assumption")}</span><span>REV. B</span><span>REV. C</span><span>{l("O que isso afeta", "What it affects")}</span></div>
           {[
             [l("Comprimento", "Length"), "18,4 m", "19,6 m", l("Layout e circulação", "Layout and circulation")],
-            [l("Carga instalada", "Installed load"), "640 kW", "736 kW", l("Elétrica e BIM", "Electrical and BIM")],
-            [l("Água gelada", "Chilled water"), "420 kW", "496 kW", l("HVAC e tubulação", "HVAC and piping")],
+            [l("Carga instalada", "Installed load"), `${mfScenarioManifest.revisions.B.electricalKw} kW`, `${mfScenarioManifest.revisions.C.electricalKw} kW`, l("Elétrica e BIM", "Electrical and BIM")],
+            [l("Água gelada", "Chilled water"), `${mfScenarioManifest.revisions.B.chilledWaterKw} kW`, `${mfScenarioManifest.revisions.C.chilledWaterKw} kW`, l("HVAC e tubulação", "HVAC and piping")],
             [l("Entrega", "Delivery"), l("06 AGO", "AUG 06"), l("16 AGO", "AUG 16"), l("Caminho crítico", "Critical path")],
           ].map((row) => <div className="mf-comparison-row" key={row[0]}><strong>{row[0]}</strong><span>{row[1]}</span><span>{row[2]} <em>↑</em></span><small>{row[3]}</small></div>)}
         </div>

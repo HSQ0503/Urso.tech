@@ -5,16 +5,20 @@ import type {
   RolePersona,
   WorkflowStep,
 } from "./types";
+import { mfScenarioManifest } from "./manifest.mjs";
+
+const revisionB = mfScenarioManifest.revisions.B;
+const revisionC = mfScenarioManifest.revisions.C;
 
 export const project = {
-  id: "uberlandia-refrescos-f3",
-  name: "Uberlândia Refrescos",
-  phase: "Fase 3",
-  stage: "Projeto executivo",
-  location: "Uberlândia, MG",
-  nextMilestone: "Liberação do projeto executivo",
+  id: mfScenarioManifest.project.id,
+  name: mfScenarioManifest.project.name,
+  phase: mfScenarioManifest.project.phase.pt,
+  stage: mfScenarioManifest.project.stage.pt,
+  location: mfScenarioManifest.project.location,
+  nextMilestone: mfScenarioManifest.project.milestoneName.pt,
   baselineDays: 14,
-  publicFacts: "49.350 m² · 80.000 garrafas/hora · expansão industrial",
+  publicFacts: mfScenarioManifest.project.publicFacts.pt,
 } as const;
 
 export const disciplines: Discipline[] = [
@@ -197,7 +201,7 @@ export const roles: RolePersona[] = [
   {
     id: "electrical",
     name: "Líder de Elétrica",
-    focus: "Absorver o aumento de 15% da carga instalada.",
+    focus: `Absorver o aumento de ${revisionB.electricalKw} para ${revisionC.electricalKw} kW.`,
     assignment: "Atualizar lista de cargas, alimentador e unifilar; devolver para revisão BIM.",
     evidence: ["Data sheet Rev. C §4.2", "Lista de cargas Rev. 7", "Premissa EL-014"],
     deliverable: "Pacote elétrico Rev. 8 — rascunho",
@@ -213,7 +217,7 @@ export const roles: RolePersona[] = [
   {
     id: "planning",
     name: "Engenheiro de Planejamento",
-    focus: "Recuperar o atraso de 10 dias sem mascarar dependências.",
+    focus: `Recuperar ${mfScenarioManifest.outcome.recoveredDays} dos ${mfScenarioManifest.outcome.exposureDays} dias sem mascarar dependências.`,
     assignment: "Simular recuperação, sequenciamento e nova folga do gate executivo.",
     evidence: ["Cronograma base Rev. 12", "Log do fornecedor", "Dependências de revisão"],
     deliverable: "Opções de recuperação — para decisão",
@@ -324,7 +328,7 @@ export const artifacts: Artifact[] = [
     validation: "Carga e alimentador recalculados",
     discipline: "Elétrica",
     sources: ["Data Sheet Rev. C §4.2", "Lista de Cargas Rev. 7", "Premissa EL-014"],
-    findings: ["Carga da linha: 640 → 736 kW", "Demanda do painel: 812 → 908 kVA", "Reserva atual abaixo do limite MF"],
+    findings: [`Carga da linha: ${revisionB.electricalKw} → ${revisionC.electricalKw} kW`, "Aumento verificado: 15%", "Alimentador requer validação humana"],
     actions: ["Confirmar alimentador 4×240 mm²", "Atualizar diagrama unifilar", "Devolver ocupação para coordenação BIM"],
   },
   {
@@ -337,7 +341,7 @@ export const artifacts: Artifact[] = [
     validation: "Balanço e vazão reconciliados",
     discipline: "HVAC",
     sources: ["Data Sheet Rev. C §5.4", "Memória HVAC Rev. 5", "Diagrama CHW-03"],
-    findings: ["Demanda: 420 → 496 kW", "Vazão: 20,1 → 23,7 l/s", "Chiller mantém 8% de reserva"],
+    findings: [`Demanda: ${revisionB.chilledWaterKw} → ${revisionC.chilledWaterKw} kW`, "Aumento verificado: 18%", "Conexão requer coordenação com Mecânica"],
     actions: ["Atualizar memória de cálculo", "Revisar válvula de controle", "Coordenar nova conexão com Mecânica"],
   },
   {
@@ -360,10 +364,10 @@ export const artifacts: Artifact[] = [
     description: "Três cenários comparados por prazo, risco técnico e dependências críticas.",
     owner: "Planejamento e Controle",
     availableAt: 6,
-    validation: "Opção B recupera 7 dias",
+    validation: `Opção B recupera ${mfScenarioManifest.outcome.recoveredDays} dias`,
     discipline: "Planejamento e Controle",
     sources: ["Cronograma Base Rev. 12", "Log do fornecedor", "Matriz de dependências"],
-    findings: ["Cenário A mantém atraso de 10 dias", "Cenário B recupera 7 dias", "Cenário C recupera 10 dias com alto risco"],
+    findings: [`Cenário A mantém atraso de ${mfScenarioManifest.outcome.exposureDays} dias`, `Cenário B recupera ${mfScenarioManifest.outcome.recoveredDays} dias`, `Cenário C recupera ${mfScenarioManifest.outcome.exposureDays} dias com alto risco`],
     actions: ["Selecionar cenário B", "Antecipar revisão interdisciplinar", "Proteger folga do gate EXE-02"],
   },
   {

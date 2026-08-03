@@ -16,6 +16,7 @@ import {
   X,
 } from "lucide-react";
 import type { Artifact, ArtifactReviewState } from "@/lib/mf-demo/types";
+import { mfScenarioManifest } from "@/lib/mf-demo/manifest.mjs";
 import { useMfLanguage } from "./mf-language";
 
 type ArtifactWorkspaceProps = {
@@ -45,8 +46,8 @@ function RevisionPreview() {
       <div className="mf-document-table">
         <div className="mf-document-row is-header"><span>{t("Campo")}</span><span>Rev. B</span><span>Rev. C</span><span>Delta</span></div>
         <div className="mf-document-row"><strong>{t("Comprimento")}</strong><span>18,4 m</span><span>19,6 m</span><em>+1,2 m</em></div>
-        <div className="mf-document-row"><strong>{t("Carga instalada")}</strong><span>640 kW</span><span>736 kW</span><em>+15%</em></div>
-        <div className="mf-document-row"><strong>{t("Água gelada")}</strong><span>420 kW</span><span>496 kW</span><em>+18%</em></div>
+        <div className="mf-document-row"><strong>{t("Carga instalada")}</strong><span>{mfScenarioManifest.revisions.B.electricalKw} kW</span><span>{mfScenarioManifest.revisions.C.electricalKw} kW</span><em>+15%</em></div>
+        <div className="mf-document-row"><strong>{t("Água gelada")}</strong><span>{mfScenarioManifest.revisions.B.chilledWaterKw} kW</span><span>{mfScenarioManifest.revisions.C.chilledWaterKw} kW</span><em>+18%</em></div>
         <div className="mf-document-row"><strong>{t("Entrega")}</strong><span>D+0</span><span>D+10</span><em>+10 {t("dias")}</em></div>
       </div>
       <div className="mf-document-callout">
@@ -67,7 +68,7 @@ function CalculationPreview({ artifact }: { artifact: Artifact }) {
       </div>
       <div className="mf-formula-block">
         <span>{t("ENTRADA APROVADA")}</span>
-        <code>{electrical ? t("P = 736 kW · fp = 0,92 · V = 380 V") : "Q = 496 kW · ΔT = 5 °C"}</code>
+        <code>{electrical ? `P = ${mfScenarioManifest.revisions.C.electricalKw} kW · fp = 0,92 · V = 380 V` : `Q = ${mfScenarioManifest.revisions.C.chilledWaterKw} kW · ΔT = 5 °C`}</code>
       </div>
       <div className="mf-calculation-results">
         {artifact.findings.map((finding, index) => (
@@ -121,7 +122,7 @@ function RecoveryPreview() {
       <div className="mf-scenario-row is-selected"><strong>{t("B · revisão paralela")}</strong><span>7 {t("dias")}</span><span className="is-positive">{t("Controlado")}</span><span>{t("Recomendado")}</span></div>
       <div className="mf-scenario-row"><strong>{t("C · compressão total")}</strong><span>10 {t("dias")}</span><span className="is-warning">{t("Elevado")}</span><span>{t("Reserva")}</span></div>
       <div className="mf-scenario-note">
-        <ShieldCheck size={15} /> {t("Cenário B protege as aprovações técnicas e recupera 70% do impacto.")}
+        <ShieldCheck size={15} /> {t("Cenário B protege as aprovações técnicas e recupera oito dias.")}
       </div>
     </div>
   );
