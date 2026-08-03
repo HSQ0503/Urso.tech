@@ -75,3 +75,5 @@ export type ActivityEvent = {
   availableAt: number;
   tone: "neutral" | "cyan" | "warning" | "positive";
 };
+
+export type { MfHarnessSnapshot, MfWorkItem, MfWorkflowReceipt, MfWorkState } from "./harness-runtime.mjs";

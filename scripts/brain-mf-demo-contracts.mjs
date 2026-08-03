@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { mfScenarioManifest } from "../lib/mf-demo/manifest.mjs";
+import {
+  createMfHarnessSnapshot,
+  deriveMfControlTower,
+  getMfRoleWorkspace,
+  transitionMfHarness,
+} from "../lib/mf-demo/harness-runtime.mjs";
 
 assert.deepEqual(mfScenarioManifest.revisions.B, {
   footprintM: [18.4, 4.8],
@@ -46,5 +52,37 @@ const truthConsumers = [
 for (const contradiction of ["640 kW", "736 kW", "496 kW", "recupera 7 dias", "recovers 7 days"]) {
   assert(!truthConsumers.includes(contradiction), `demo contains contradictory truth: ${contradiction}`);
 }
+
+const baseline = createMfHarnessSnapshot(0);
+assert.equal(baseline.truth.currentRevision, "B");
+assert.equal(baseline.truth.revisionB, "current");
+assert.equal(baseline.truth.revisionC, "unresolved");
+assert.equal(baseline.decision.status, "pending");
+
+const approved = transitionMfHarness(baseline, 3, "approve-3", "project-manager");
+assert.equal(approved.truth.currentRevision, "C");
+assert.equal(approved.truth.revisionB, "superseded");
+assert.equal(approved.truth.revisionC, "current");
+assert.equal(approved.decision.status, "approved");
+assert.equal(approved.receipts.length, 1);
+assert.deepEqual(transitionMfHarness(approved, 3, "approve-3", "project-manager"), approved);
+
+const rewound = transitionMfHarness(approved, 2, "rewind-2", "project-manager");
+assert.equal(rewound.truth.currentRevision, "B");
+assert.equal(rewound.decision.status, "pending");
+
+const execution = createMfHarnessSnapshot(6);
+const electrical = getMfRoleWorkspace(execution, "electrical");
+assert(electrical.tasks.length > 0);
+assert(electrical.tasks.every((task) => task.ownerRoleId === "electrical"));
+assert(electrical.sources.every((source) => source.authorizedRoleIds.includes("electrical")));
+assert(!electrical.sources.some((source) => source.id === "project-schedule"));
+
+const release = createMfHarnessSnapshot(8);
+const tower = deriveMfControlTower(release);
+assert.equal(tower.impactedDisciplines, 10);
+assert.equal(tower.openBlockers, 0);
+assert.equal(tower.daysRecovered, 8);
+assert.equal(tower.releaseReadiness, 100);
 
 console.log("✓ MF manifest values, references, and impact contract are consistent.");
