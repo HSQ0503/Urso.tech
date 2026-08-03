@@ -15,7 +15,7 @@ const nav = [
   { href: "/fi#cash-flow", label: "Cash flow", icon: ArrowLeftRight },
   { href: "/fi#deals", label: "Deals", icon: BriefcaseBusiness },
   { href: "/fi#ledger", label: "Ledger", icon: ReceiptText },
-  { href: "/fi#record", label: "Record money", icon: Banknote },
+  { href: "/fi#record", label: "New transaction", icon: Banknote },
 ] as const;
 
 export function FinanceShell({ email, children }: { email: string; children: React.ReactNode }) {

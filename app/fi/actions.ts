@@ -97,7 +97,10 @@ export async function createFinanceEntry(formData: FormData) {
   if (!parsed.success) redirect("/fi?error=entry-fields#record");
   const values = parsed.data;
   const founderEntry = values.entryType === "founder_draw" || values.entryType === "founder_contribution";
+  const clientEntry = values.entryType === "income" || values.entryType === "refund";
   if (founderEntry !== Boolean(values.founder)) redirect("/fi?error=entry-founder#record");
+  if (clientEntry && !values.dealId) redirect("/fi?error=entry-deal#record");
+  if (values.entryType === "expense" && !values.counterparty) redirect("/fi?error=entry-counterparty#record");
 
   const { session, admin } = await financeContext();
   const { error } = await admin.from("urso_finance_entries").insert({

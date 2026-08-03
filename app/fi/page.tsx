@@ -13,9 +13,10 @@ import {
 } from "lucide-react";
 import { Card, Micro, Tag } from "@/components/dashboard/ui";
 import { CashFlowChart, DealAllocationChart } from "@/components/finance/finance-charts";
+import { FinanceEntryForm } from "@/components/finance/finance-entry-form";
 import { FinanceSubmitButton } from "@/components/finance/submit-button";
 import { VoidEntryButton } from "@/components/finance/void-entry-button";
-import { createFinanceDeal, createFinanceEntry, voidFinanceEntry } from "./actions";
+import { createFinanceDeal, voidFinanceEntry } from "./actions";
 import {
   getFinanceSnapshot,
   type FinanceEntry,
@@ -44,8 +45,10 @@ const errors: Record<string, string> = {
   store: "The Urso finance store is not configured yet.",
   "deal-fields": "Complete the required deal fields with valid dollar amounts.",
   "deal-allocation": "Founder allocations cannot exceed the deal value.",
-  "entry-fields": "Complete the required cash-entry fields with a valid amount and date.",
-  "entry-founder": "Choose Han or Guga for a founder draw or contribution.",
+  "entry-fields": "Complete the required transaction fields with a valid amount and date.",
+  "entry-founder": "Choose Han or Guga for this founder transaction.",
+  "entry-deal": "Choose the deal associated with this client payment or refund.",
+  "entry-counterparty": "Enter the merchant or vendor for this company expense.",
   "entry-id": "That ledger entry could not be identified.",
   save: "The finance record could not be saved. Try again.",
 };
@@ -88,9 +91,9 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
 
 const entryMeta: Record<FinanceEntryType, { label: string; icon: typeof ArrowUpRight; tone: string }> = {
   income: { label: "Client payment", icon: ArrowDownLeft, tone: "text-[var(--color-good)]" },
-  expense: { label: "Business expense", icon: ArrowUpRight, tone: "text-orange" },
-  founder_draw: { label: "Founder draw", icon: HandCoins, tone: "text-orange" },
-  founder_contribution: { label: "Founder contribution", icon: ArrowDownLeft, tone: "text-[var(--color-good)]" },
+  expense: { label: "Company expense", icon: ArrowUpRight, tone: "text-orange" },
+  founder_draw: { label: "Founder payout", icon: HandCoins, tone: "text-orange" },
+  founder_contribution: { label: "Capital added", icon: ArrowDownLeft, tone: "text-[var(--color-good)]" },
   refund: { label: "Client refund", icon: ArrowUpRight, tone: "text-orange" },
 };
 
@@ -128,7 +131,9 @@ export default async function FinancePage({
   const { totals, deals, entries, months } = snapshot;
   const plannedHan = deals.filter((deal) => deal.status !== "canceled").reduce((sum, deal) => sum + deal.plannedHanDrawCents, 0);
   const plannedGuga = deals.filter((deal) => deal.status !== "canceled").reduce((sum, deal) => sum + deal.plannedGugaDrawCents, 0);
-  const reserveProgress = totals.retainedTargetCents > 0 ? Math.max(0, Math.min(1, totals.availableCashCents / totals.retainedTargetCents)) : 0;
+  const revenueProgress = totals.contractedCents > 0 ? totals.collectedCents / totals.contractedCents : 0;
+  const revenueProgressWidth = Math.max(0, Math.min(1, revenueProgress));
+  const allocatedBusinessSpend = Math.min(totals.expensesCents, totals.retainedTargetCents);
   const notice = params.notice ? notices[params.notice] : null;
   const error = params.error ? errors[params.error] ?? errors.save : null;
 
@@ -179,34 +184,40 @@ export default async function FinancePage({
               {money(totals.availableCashCents)}
             </p>
             <p className="mt-5 max-w-[48ch] text-[12px] leading-5 text-ink-dim">
-              This is what Urso can deploy toward a designer, security contractor, software, or any other company need right now.
+              Cleared payments and contributions, less founder payouts, refunds, and company expenses.
             </p>
           </div>
 
           <div>
             <div className="flex items-end justify-between gap-4">
               <div>
-                <Micro>Reserve progress</Micro>
-                <p className="mt-1 text-[13px] text-ink-dim">toward {money(totals.retainedTargetCents)} planned to stay in Urso</p>
+                <Micro>Revenue collected</Micro>
+                <p className="mt-1 text-[13px] text-ink-dim">{money(totals.collectedCents)} of {money(totals.contractedCents)} received</p>
               </div>
-              <span className="font-mono text-[12px] tabular-nums text-ink">{(reserveProgress * 100).toFixed(0)}%</span>
+              <span className="font-mono text-[12px] tabular-nums text-ink">{(revenueProgress * 100).toFixed(0)}%</span>
             </div>
             <div className="mt-3 h-3 overflow-hidden bg-track">
-              <div className="meter-fill h-full bg-[var(--color-good)]" style={{ width: `${reserveProgress * 100}%` }} />
+              <div className="meter-fill h-full bg-[var(--color-good)]" style={{ width: `${revenueProgressWidth * 100}%` }} />
             </div>
             <div className="mt-6">
+              <div className="mb-2 flex items-center justify-between gap-4">
+                <Micro>Contract allocation</Micro>
+                <span className="font-mono text-[10px] tabular-nums text-ink-dimmer">{money(totals.contractedCents)}</span>
+              </div>
               <div className="flex h-7 overflow-hidden bg-track" aria-label="Contract allocation">
                 {totals.contractedCents > 0 && (
                   <>
-                    <div className="h-full bg-orange" style={{ width: `${(totals.retainedTargetCents / totals.contractedCents) * 100}%` }} title={`Stays in Urso: ${money(totals.retainedTargetCents)}`} />
-                    <div className="h-full bg-[var(--color-period-1)]" style={{ width: `${(plannedHan / totals.contractedCents) * 100}%` }} title={`Han: ${money(plannedHan)}`} />
+                    <div className="h-full bg-orange" style={{ width: `${(totals.companyAllocationCents / totals.contractedCents) * 100}%` }} title={`Company cash: ${money(totals.companyAllocationCents)}`} />
+                    <div className="h-full bg-[var(--color-period-1)]" style={{ width: `${(allocatedBusinessSpend / totals.contractedCents) * 100}%` }} title={`Business spent: ${money(allocatedBusinessSpend)}`} />
+                    <div className="h-full bg-[var(--color-period-2)]" style={{ width: `${(plannedHan / totals.contractedCents) * 100}%` }} title={`Han: ${money(plannedHan)}`} />
                     <div className="h-full bg-[var(--color-period-3)]" style={{ width: `${(plannedGuga / totals.contractedCents) * 100}%` }} title={`Guga: ${money(plannedGuga)}`} />
                   </>
                 )}
               </div>
-              <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 font-mono text-[9.5px] uppercase tracking-[0.1em] text-ink-dim">
-                <span className="flex items-center gap-1.5"><span className="size-2 bg-orange" />Urso {money(totals.retainedTargetCents)}</span>
-                <span className="flex items-center gap-1.5"><span className="size-2 bg-[var(--color-period-1)]" />Han {money(plannedHan)}</span>
+              <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 font-mono text-[9.5px] uppercase tracking-[0.08em] text-ink-dim sm:grid-cols-4 lg:grid-cols-2 2xl:grid-cols-4">
+                <span className="flex items-center gap-1.5"><span className="size-2 bg-orange" />Company {money(totals.companyAllocationCents)}</span>
+                <span className="flex items-center gap-1.5"><span className="size-2 bg-[var(--color-period-1)]" />Spent {money(allocatedBusinessSpend)}</span>
+                <span className="flex items-center gap-1.5"><span className="size-2 bg-[var(--color-period-2)]" />Han {money(plannedHan)}</span>
                 <span className="flex items-center gap-1.5"><span className="size-2 bg-[var(--color-period-3)]" />Guga {money(plannedGuga)}</span>
               </div>
             </div>
@@ -218,7 +229,7 @@ export default async function FinancePage({
         <Stat label="Contracted" value={money(totals.contractedCents)} note="signed deal value" icon={BriefcaseBusiness} />
         <Stat label="Collected" value={money(totals.collectedCents)} note="client cash received, net of refunds" icon={CircleDollarSign} tone="good" />
         <Stat label="Still to collect" value={money(totals.outstandingCents)} note="contracted, not cash" icon={WalletCards} tone="orange" />
-        <Stat label="Stays in Urso" value={money(totals.retainedTargetCents)} note="planned before company expenses" icon={Landmark} />
+        <Stat label="Company cash" value={money(totals.companyAllocationCents)} note={`${money(totals.retainedTargetCents)} before expenses`} icon={Landmark} />
         <Stat label="Founder draws" value={money(totals.founderDrawsCents)} note={`${money(totals.plannedFounderDrawsCents)} planned`} icon={HandCoins} />
         <Stat label="Business spent" value={money(totals.expensesCents)} note="contractors, tools, and operating costs" icon={ReceiptText} />
       </section>
@@ -226,11 +237,11 @@ export default async function FinancePage({
       <section id="cash-flow" className="dash-rise grid scroll-mt-20 gap-3 xl:grid-cols-[1.25fr_0.75fr]" style={rise(4)}>
         <Card>
           <div className="flex flex-wrap items-start justify-between gap-4">
-            <div><Micro>Cash movement</Micro><h2 className="mt-1 text-[17px] font-medium tracking-[-0.015em]">Money in, money out, money left</h2></div>
+            <div><Micro>Cash flow</Micro><h2 className="mt-1 text-[17px] font-medium tracking-[-0.015em]">Cash movement</h2></div>
             <div className="flex gap-3 font-mono text-[9px] uppercase tracking-[0.1em] text-ink-dim">
-              <span className="flex items-center gap-1.5"><span className="size-2 bg-orange" />In</span>
-              <span className="flex items-center gap-1.5"><span className="size-2 bg-series" />Out</span>
-              <span className="flex items-center gap-1.5"><span className="size-2 bg-[var(--color-good)]" />Cash</span>
+              <span className="flex items-center gap-1.5"><span className="size-2 bg-orange" />Received</span>
+              <span className="flex items-center gap-1.5"><span className="size-2 bg-series" />Paid</span>
+              <span className="flex items-center gap-1.5"><span className="size-2 bg-[var(--color-good)]" />Balance</span>
             </div>
           </div>
           <div className="mt-4"><CashFlowChart months={months} /></div>
@@ -238,20 +249,20 @@ export default async function FinancePage({
         <Card>
           <Micro>Allocation</Micro>
           <h2 className="mt-1 text-[17px] font-medium tracking-[-0.015em]">Contract allocation</h2>
-          <p className="mt-2 text-[11.5px] leading-[1.5] text-ink-dimmer">Planned company reserve and founder distributions by deal.</p>
+          <p className="mt-2 text-[11.5px] leading-[1.5] text-ink-dimmer">Company expenses reduce the company portion of each linked deal.</p>
           <DealAllocationChart deals={deals} />
         </Card>
       </section>
 
       <section id="deals" className="dash-rise scroll-mt-20 border border-edge bg-panel" style={rise(5)}>
         <div className="flex flex-col gap-2 border-b border-edge px-5 py-4 sm:flex-row sm:items-end sm:justify-between">
-          <div><Micro>Deal book</Micro><h2 className="mt-1 text-[17px] font-medium">Every promise and its allocation</h2></div>
+          <div><Micro>Deals</Micro><h2 className="mt-1 text-[17px] font-medium">Revenue and allocation by deal</h2></div>
           <p className="text-[11px] text-ink-dimmer">{deals.length} deal{deals.length === 1 ? "" : "s"} · {money(totals.contractedCents)} contracted</p>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[860px] text-left">
             <thead className="font-mono text-[9px] uppercase tracking-[0.12em] text-ink-dimmer">
-              <tr className="border-b border-edge"><th className="px-5 py-3 font-normal">Client / deal</th><th className="px-4 py-3 font-normal">Contract</th><th className="px-4 py-3 font-normal">Collected</th><th className="px-4 py-3 font-normal">Outstanding</th><th className="px-4 py-3 font-normal">Founder plan</th><th className="px-4 py-3 font-normal">Stays in Urso</th><th className="px-5 py-3 font-normal">Status</th></tr>
+              <tr className="border-b border-edge"><th className="px-5 py-3 font-normal">Client / deal</th><th className="px-4 py-3 font-normal">Contract</th><th className="px-4 py-3 font-normal">Collected</th><th className="px-4 py-3 font-normal">Outstanding</th><th className="px-4 py-3 font-normal">Founder plan</th><th className="px-4 py-3 font-normal">Company</th><th className="px-5 py-3 font-normal">Status</th></tr>
             </thead>
             <tbody className="divide-y divide-edge">
               {deals.map((deal) => (
@@ -261,7 +272,7 @@ export default async function FinancePage({
                   <td className="px-4 py-4 font-mono text-[12px] tabular-nums text-[var(--color-good)]">{money(deal.collectedCents)}</td>
                   <td className="px-4 py-4 font-mono text-[12px] tabular-nums text-orange">{money(deal.outstandingCents)}</td>
                   <td className="px-4 py-4 font-mono text-[10.5px] text-ink-dim">Han {money(deal.plannedHanDrawCents)}<br />Guga {money(deal.plannedGugaDrawCents)}</td>
-                  <td className="px-4 py-4 font-mono text-[12px] font-medium tabular-nums">{money(deal.retainedTargetCents)}</td>
+                  <td className="px-4 py-4"><p className="font-mono text-[12px] font-medium tabular-nums">{money(deal.companyAllocationCents)}</p><p className="mt-1 text-[10px] text-ink-dimmer">{money(deal.businessSpentCents)} spent</p></td>
                   <td className="px-5 py-4"><Tag tone={deal.status === "complete" ? "good" : deal.status === "canceled" ? "warn" : "muted"}>{deal.status}</Tag></td>
                 </tr>
               ))}
@@ -272,7 +283,7 @@ export default async function FinancePage({
 
       <section id="ledger" className="dash-rise scroll-mt-20 border border-edge bg-panel" style={rise(6)}>
         <div className="flex items-end justify-between gap-4 border-b border-edge px-5 py-4">
-          <div><Micro>Cash ledger</Micro><h2 className="mt-1 text-[17px] font-medium">What actually moved</h2></div>
+          <div><Micro>Ledger</Micro><h2 className="mt-1 text-[17px] font-medium">Transaction history</h2></div>
           <span className="font-mono text-[9.5px] uppercase tracking-[0.1em] text-ink-dimmer">{entries.length} active entries</span>
         </div>
         {entries.length > 0 ? entries.map((entry) => <EntryRow key={entry.id} entry={entry} />) : (
@@ -286,33 +297,14 @@ export default async function FinancePage({
 
       <section id="record" className="dash-rise grid scroll-mt-20 gap-3 xl:grid-cols-2" style={rise(7)}>
         <Card>
-          <Micro>Record money</Micro>
-          <h2 className="mt-1 text-[19px] font-medium">Add a cash entry</h2>
-          <p className="mt-2 text-[11.5px] leading-5 text-ink-dimmer">Only use this when money actually enters or leaves Urso.</p>
-          <form action={createFinanceEntry} className="mt-5 grid gap-4 sm:grid-cols-2">
-            <Field label="Movement">
-              <select name="entryType" className={inputClass} defaultValue="income">
-                <option value="income">Client payment</option><option value="expense">Business expense</option><option value="founder_draw">Founder draw</option><option value="founder_contribution">Founder contribution</option><option value="refund">Client refund</option>
-              </select>
-            </Field>
-            <Field label="Amount"><input name="amount" inputMode="decimal" placeholder="0.00" required className={inputClass} /></Field>
-            <Field label="Date"><input type="date" name="occurredOn" defaultValue={todayEt()} required className={inputClass} /></Field>
-            <Field label="Deal" hint="Optional for general company spending.">
-              <select name="dealId" className={inputClass} defaultValue=""><option value="">No linked deal</option>{deals.map((deal) => <option key={deal.id} value={deal.id}>{deal.clientName}</option>)}</select>
-            </Field>
-            <Field label="Category"><input name="category" list="finance-categories" defaultValue="deal payment" required className={inputClass} /></Field>
-            <Field label="Founder" hint="Required only for draws and contributions.">
-              <select name="founder" className={inputClass} defaultValue=""><option value="">Not a founder entry</option><option value="han">Han</option><option value="guga">Guga</option></select>
-            </Field>
-            <Field label="Counterparty"><input name="counterparty" placeholder="Client, vendor, or supplier" className={inputClass} /></Field>
-            <Field label="Note"><input name="notes" placeholder="What was this for?" className={inputClass} /></Field>
-            <datalist id="finance-categories"><option value="deal payment" /><option value="contractor" /><option value="design" /><option value="cybersecurity" /><option value="software" /><option value="marketing" /><option value="legal" /><option value="accounting" /><option value="tax" /><option value="travel" /><option value="founder draw" /><option value="other" /></datalist>
-            <div className="sm:col-span-2"><FinanceSubmitButton>Record cash movement</FinanceSubmitButton></div>
-          </form>
+          <Micro>New transaction</Micro>
+          <h2 className="mt-1 text-[19px] font-medium">Record a transaction</h2>
+          <p className="mt-2 text-[11.5px] leading-5 text-ink-dimmer">Choose what happened. The form will only ask for the information that matters.</p>
+          <FinanceEntryForm deals={deals.map(({ id, clientName }) => ({ id, clientName }))} today={todayEt()} />
         </Card>
 
         <Card>
-          <Micro>Deal book</Micro>
+          <Micro>New deal</Micro>
           <h2 className="mt-1 text-[19px] font-medium">Add a signed deal</h2>
           <p className="mt-2 text-[11.5px] leading-5 text-ink-dimmer">This updates contracted revenue and the allocation plan—not available cash.</p>
           <form action={createFinanceDeal} className="mt-5 grid gap-4 sm:grid-cols-2">

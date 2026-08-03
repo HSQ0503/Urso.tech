@@ -49,6 +49,8 @@ export type FinanceDeal = {
   plannedHanDrawCents: number;
   plannedGugaDrawCents: number;
   retainedTargetCents: number;
+  businessSpentCents: number;
+  companyAllocationCents: number;
   signedOn: string | null;
   status: FinanceDealStatus;
   notes: string;
@@ -93,6 +95,7 @@ export type FinanceSnapshot = {
     founderContributionsCents: number;
     founderDrawsCents: number;
     expensesCents: number;
+    companyAllocationCents: number;
     refundsCents: number;
     availableCashCents: number;
   };
@@ -165,6 +168,7 @@ const emptySnapshot: FinanceSnapshot = {
     founderContributionsCents: 0,
     founderDrawsCents: 0,
     expensesCents: 0,
+    companyAllocationCents: 0,
     refundsCents: 0,
     availableCashCents: 0,
   },
@@ -200,6 +204,7 @@ export async function getFinanceSnapshot(): Promise<FinanceSnapshot> {
   const dealRows = (dealResult.data ?? []) as FinanceDealRow[];
   const entryRows = (entryResult.data ?? []) as FinanceEntryRow[];
   const collectedByDeal = new Map<string, number>();
+  const expensesByDeal = new Map<string, number>();
   for (const entry of entryRows) {
     if (!entry.deal_id) continue;
     const revenueEffect = entry.entry_type === "income"
@@ -208,11 +213,15 @@ export async function getFinanceSnapshot(): Promise<FinanceSnapshot> {
         ? -entry.amount_cents
         : 0;
     collectedByDeal.set(entry.deal_id, (collectedByDeal.get(entry.deal_id) ?? 0) + revenueEffect);
+    if (entry.entry_type === "expense") {
+      expensesByDeal.set(entry.deal_id, (expensesByDeal.get(entry.deal_id) ?? 0) + entry.amount_cents);
+    }
   }
 
   const deals = dealRows.map<FinanceDeal>((deal) => {
     const collectedCents = collectedByDeal.get(deal.id) ?? 0;
     const retainedTargetCents = deal.contracted_cents - deal.planned_han_draw_cents - deal.planned_guga_draw_cents;
+    const businessSpentCents = expensesByDeal.get(deal.id) ?? 0;
     return {
       id: deal.id,
       clientName: deal.client_name,
@@ -223,6 +232,8 @@ export async function getFinanceSnapshot(): Promise<FinanceSnapshot> {
       plannedHanDrawCents: deal.planned_han_draw_cents,
       plannedGugaDrawCents: deal.planned_guga_draw_cents,
       retainedTargetCents,
+      businessSpentCents,
+      companyAllocationCents: Math.max(0, retainedTargetCents - businessSpentCents),
       signedOn: deal.signed_on,
       status: deal.status,
       notes: deal.notes,
@@ -262,6 +273,7 @@ export async function getFinanceSnapshot(): Promise<FinanceSnapshot> {
   const refundsCents = sum("refund");
   const collectedCents = revenueReceivedCents - refundsCents;
   const availableCashCents = revenueReceivedCents + founderContributionsCents - founderDrawsCents - expensesCents - refundsCents;
+  const companyAllocationCents = Math.max(0, retainedTargetCents - expensesCents);
 
   return {
     configured: true,
@@ -278,6 +290,7 @@ export async function getFinanceSnapshot(): Promise<FinanceSnapshot> {
       founderContributionsCents,
       founderDrawsCents,
       expensesCents,
+      companyAllocationCents,
       refundsCents,
       availableCashCents,
     },

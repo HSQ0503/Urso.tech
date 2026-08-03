@@ -29,9 +29,9 @@ const motion = () => typeof window === "undefined" || !window.matchMedia("(prefe
 export function CashFlowChart({ months }: { months: FinanceMonth[] }) {
   const gradientId = `fi-cash-${useId().replace(/:/g, "")}`;
   const config = {
-    incomeCents: { label: "Cash in", color: "#fe5100" },
-    outflowCents: { label: "Cash out", color: "var(--color-series)" },
-    endingCashCents: { label: "Available cash", color: "var(--color-good)" },
+    incomeCents: { label: "Received", color: "#fe5100" },
+    outflowCents: { label: "Paid", color: "var(--color-series)" },
+    endingCashCents: { label: "Balance", color: "var(--color-good)" },
   } satisfies ChartConfig;
 
   return (
@@ -80,37 +80,43 @@ export function CashFlowChart({ months }: { months: FinanceMonth[] }) {
 export function DealAllocationChart({ deals }: { deals: FinanceDeal[] }) {
   const data = deals.filter((deal) => deal.status !== "canceled").map((deal) => ({
     fullName: deal.clientName,
-    retainedCents: deal.retainedTargetCents,
+    contractedCents: deal.contractedCents,
+    companyCents: deal.companyAllocationCents,
+    spentCents: Math.min(deal.businessSpentCents, deal.retainedTargetCents),
     hanCents: deal.plannedHanDrawCents,
     gugaCents: deal.plannedGugaDrawCents,
   }));
 
   return (
-    <div className="mt-5 divide-y divide-edge border-y border-edge" aria-label="Planned company and founder allocation for every deal">
+    <div className="mt-5 divide-y divide-edge border-y border-edge" aria-label="Company cash, spending, and founder allocation for every deal">
       {data.map((deal) => {
-        const totalCents = deal.retainedCents + deal.hanCents + deal.gugaCents;
-        const share = (amountCents: number) => totalCents > 0 ? `${(amountCents / totalCents) * 100}%` : "0%";
+        const share = (amountCents: number) => deal.contractedCents > 0 ? `${(amountCents / deal.contractedCents) * 100}%` : "0%";
 
         return (
           <section key={deal.fullName} className="py-4 first:pt-3 last:pb-3">
             <div className="flex items-baseline justify-between gap-4">
               <h3 className="min-w-0 truncate text-[13px] font-medium text-ink" title={deal.fullName}>{deal.fullName}</h3>
-              <span className="shrink-0 font-mono text-[11.5px] tabular-nums text-ink">{money(totalCents)}</span>
+              <span className="shrink-0 font-mono text-[11.5px] tabular-nums text-ink">{money(deal.contractedCents)}</span>
             </div>
 
             <div className="mt-3 flex h-2.5 overflow-hidden bg-track" aria-hidden>
-              <span className="bg-orange" style={{ width: share(deal.retainedCents) }} />
-              <span className="bg-[var(--color-period-1)]" style={{ width: share(deal.hanCents) }} />
+              <span className="bg-orange" style={{ width: share(deal.companyCents) }} />
+              <span className="bg-[var(--color-period-1)]" style={{ width: share(deal.spentCents) }} />
+              <span className="bg-[var(--color-period-2)]" style={{ width: share(deal.hanCents) }} />
               <span className="bg-[var(--color-period-3)]" style={{ width: share(deal.gugaCents) }} />
             </div>
 
-            <dl className="mt-3 grid grid-cols-3 gap-2">
+            <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-3 2xl:grid-cols-4">
               <div className="min-w-0">
-                <dt className="flex items-center gap-1.5 text-[10.5px] text-ink-dimmer"><span className="size-1.5 shrink-0 bg-orange" />Urso</dt>
-                <dd className="mt-1 truncate font-mono text-[10.5px] tabular-nums text-ink">{money(deal.retainedCents)}</dd>
+                <dt className="flex items-center gap-1.5 text-[10.5px] text-ink-dimmer"><span className="size-1.5 shrink-0 bg-orange" />Company</dt>
+                <dd className="mt-1 truncate font-mono text-[10.5px] tabular-nums text-ink">{money(deal.companyCents)}</dd>
               </div>
               <div className="min-w-0">
-                <dt className="flex items-center gap-1.5 text-[10.5px] text-ink-dimmer"><span className="size-1.5 shrink-0 bg-[var(--color-period-1)]" />Han</dt>
+                <dt className="flex items-center gap-1.5 text-[10.5px] text-ink-dimmer"><span className="size-1.5 shrink-0 bg-[var(--color-period-1)]" />Spent</dt>
+                <dd className="mt-1 truncate font-mono text-[10.5px] tabular-nums text-ink">{money(deal.spentCents)}</dd>
+              </div>
+              <div className="min-w-0">
+                <dt className="flex items-center gap-1.5 text-[10.5px] text-ink-dimmer"><span className="size-1.5 shrink-0 bg-[var(--color-period-2)]" />Han</dt>
                 <dd className="mt-1 truncate font-mono text-[10.5px] tabular-nums text-ink">{money(deal.hanCents)}</dd>
               </div>
               <div className="min-w-0">
