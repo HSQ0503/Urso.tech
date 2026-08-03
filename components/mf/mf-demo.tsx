@@ -59,6 +59,7 @@ import {
 import { ArtifactWorkspace } from "./artifact-workspace";
 import { MfLogo } from "./mf-logo";
 import { MfLanguageProvider, useMfLanguage } from "./mf-language";
+import { ExecutiveValueBar, StoryRail } from "./mf-story-panels";
 
 const navigation = [
   { id: "control", label: "Projeto hoje", icon: CircleGauge },
@@ -180,6 +181,7 @@ function ViewContent({
   artifactReviewStates,
   sessionId,
   sessionToken,
+  snapshot,
 }: {
   view: DemoView;
   step: number;
@@ -190,8 +192,9 @@ function ViewContent({
   artifactReviewStates: Record<string, ArtifactReviewState>;
   sessionId?: string;
   sessionToken?: string;
+  snapshot?: MfDemoSessionView["snapshot"];
 }) {
-  const props = { step, roleId, onNavigate, onAdvance, onOpenArtifact, artifactReviewStates, sessionId, sessionToken };
+  const props = { step, roleId, onNavigate, onAdvance, onOpenArtifact, artifactReviewStates, sessionId, sessionToken, snapshot };
   if (view === "control") return <ControlTowerView {...props} />;
   if (view === "changes") return <ChangesView {...props} />;
   if (view === "disciplines") return <DisciplinesView {...props} roleId={roleId} />;
@@ -714,6 +717,7 @@ function MfDemoShell() {
         ) : null}
 
         <main ref={mainRef} id="mf-main" className="mf-main" tabIndex={-1}>
+          {demoSession ? <div className="mf-main-story"><ExecutiveValueBar snapshot={demoSession.snapshot} /><StoryRail step={step} /></div> : null}
           <ViewContent
             view={activeView}
             step={step}
@@ -724,6 +728,7 @@ function MfDemoShell() {
             artifactReviewStates={artifactReviewStates}
             sessionId={sessionCredentials?.sessionId}
             sessionToken={sessionCredentials?.token}
+            snapshot={demoSession?.snapshot}
           />
         </main>
 

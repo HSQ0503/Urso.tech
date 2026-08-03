@@ -181,4 +181,29 @@ assert.match(demoClientSource, /sessionStorage/);
 assert.match(demoClientSource, /expectedStep/);
 assert.match(demoClientSource, /transitionError/);
 
+const storyPanelSource = readFileSync(new URL("../components/mf/mf-story-panels.tsx", import.meta.url), "utf8");
+for (const componentName of [
+  "ExecutiveValueBar",
+  "StoryRail",
+  "ConnectedSourcesPanel",
+  "ControlledChangePanel",
+  "ObjectiveWorkflowPanel",
+  "EmployeeObjectivePanel",
+  "OutcomeComparisonPanel",
+  "PilotProposalPanel",
+]) {
+  assert.match(storyPanelSource, new RegExp(`export function ${componentName}`));
+}
+for (const semanticLabel of [
+  "Connection mode",
+  "Authority",
+  "Freshness",
+  "Evidence",
+  "Human gate",
+  "Definition of done",
+  "Select the project and nominate the pilot team",
+]) {
+  assert(storyPanelSource.includes(semanticLabel), `missing story semantics: ${semanticLabel}`);
+}
+
 console.log("✓ MF manifest values, references, and impact contract are consistent.");

@@ -49,9 +49,18 @@ import type {
   DemoView,
   DisciplineGroup,
   ImpactLevel,
+  MfHarnessSnapshot,
 } from "@/lib/mf-demo/types";
 import { useMfLanguage } from "./mf-language";
 import { ProjectBrainWorkspace } from "./project-brain-workspace";
+import {
+  ConnectedSourcesPanel,
+  ControlledChangePanel,
+  EmployeeObjectivePanel,
+  ObjectiveWorkflowPanel,
+  OutcomeComparisonPanel,
+  PilotProposalPanel,
+} from "./mf-story-panels";
 
 export type ViewProps = {
   step: number;
@@ -62,6 +71,7 @@ export type ViewProps = {
   artifactReviewStates: Record<string, ArtifactReviewState>;
   sessionId?: string;
   sessionToken?: string;
+  snapshot?: MfHarnessSnapshot;
 };
 
 const roleArtifactIds: Record<string, string> = {
@@ -376,7 +386,7 @@ function SlackSignalCapture({ approved, language }: { approved: boolean; languag
   );
 }
 
-export function ControlTowerView({ step, roleId, onNavigate, onAdvance }: ViewProps) {
+export function ControlTowerView({ step, roleId, onNavigate, onAdvance, snapshot }: ViewProps) {
   const { language, t } = useMfLanguage();
   const l = (pt: string, en: string) => (language === "pt" ? pt : en);
   const selectedRole = roles.find((role) => role.id === roleId) ?? roles[0];
@@ -469,11 +479,12 @@ export function ControlTowerView({ step, roleId, onNavigate, onAdvance }: ViewPr
         <div><Workflow size={18} /><span><strong>Harness</strong><small>{l("Transforma decisões em trabalho executável", "Turns decisions into executable work")}</small></span></div>
         <div><UserCheck size={18} /><span><strong>{l("Controle humano", "Human control")}</strong><small>{l("MF aprova toda mudança material", "MF approves every material change")}</small></span></div>
       </section>
+      {step >= 8 && snapshot ? <><OutcomeComparisonPanel snapshot={snapshot} /><PilotProposalPanel /></> : null}
     </div>
   );
 }
 
-export function ChangesView({ step, onNavigate, onAdvance }: ViewProps) {
+export function ChangesView({ step, roleId, onNavigate, onAdvance, snapshot }: ViewProps) {
   const { language } = useMfLanguage();
   const l = (pt: string, en: string) => (language === "pt" ? pt : en);
 
@@ -485,6 +496,7 @@ export function ChangesView({ step, onNavigate, onAdvance }: ViewProps) {
           <button type="button" className="mf-primary-action" onClick={onAdvance}><Play size={16} /> {l("Simular chegada da Revisão C", "Simulate Revision C arrival")}</button>
         </header>
         <section className="mf-empty-change-simple"><MessageSquareText size={24} /><span><strong>Slack · #fornecedor-linha</strong><small>{l("Monitoramento ativo · nenhuma ação necessária", "Active monitoring · no action needed")}</small></span></section>
+        {snapshot ? <ConnectedSourcesPanel snapshot={snapshot} roleId={roleId} /> : null}
       </div>
     );
   }
@@ -496,6 +508,8 @@ export function ChangesView({ step, onNavigate, onAdvance }: ViewProps) {
         <div><span className="mf-eyebrow">CHG-024 · {l("Mudança detectada", "Change detected")}</span><h1>{l("A linha de envase mudou", "The bottling line changed")}</h1><p>{l("Urso comparou a nova revisão com a verdade vigente e preparou uma decisão explicável.", "Urso compared the new revision with current truth and prepared an explainable decision.")}</p></div>
         {step < 4 ? <button type="button" className="mf-primary-action" onClick={onAdvance}>{step < 2 ? <GitCompareArrows size={16} /> : step === 2 ? <UserCheck size={16} /> : <Network size={16} />}{step < 2 ? l("Comparar B e C", "Compare B and C") : step === 2 ? l("Aprovar Revisão C", "Approve Revision C") : l("Criar plano coordenado", "Create coordinated plan")}</button> : <button type="button" className="mf-secondary-action" onClick={() => onNavigate("workflows")}>{l("Ver trabalho criado", "View created work")} <ArrowRight size={14} /></button>}
       </header>
+
+      {snapshot ? <><ConnectedSourcesPanel snapshot={snapshot} roleId={roleId} /><ControlledChangePanel snapshot={snapshot} /></> : null}
 
       <section className="mf-change-explainer">
         <article><span>1</span><div><small>{l("O que aconteceu", "What happened")}</small><h2>{l("Uma nova revisão chegou pelo Slack", "A new revision arrived through Slack")}</h2><p>{l("Mensagem e PDF foram preservados como evidência; ainda não alteraram o projeto.", "The message and PDF were preserved as evidence; they have not changed the project yet.")}</p></div></article>
@@ -526,7 +540,7 @@ export function ChangesView({ step, onNavigate, onAdvance }: ViewProps) {
   );
 }
 
-export function DisciplinesView({ step, roleId, onNavigate, onAdvance, onOpenArtifact, artifactReviewStates }: ViewProps) {
+export function DisciplinesView({ step, roleId, onNavigate, onAdvance, onOpenArtifact, artifactReviewStates, snapshot }: ViewProps) {
   const { language, t } = useMfLanguage();
   const l = (pt: string, en: string) => (language === "pt" ? pt : en);
   const selectedRole = roles.find((role) => role.id === roleId) ?? roles[0];
@@ -536,6 +550,8 @@ export function DisciplinesView({ step, roleId, onNavigate, onAdvance, onOpenArt
   return (
     <div className="mf-clarity-view">
       <header className="mf-today-header"><div><span className="mf-eyebrow">{l("Minha equipe e o projeto", "My team & the project")}</span><h1>{t(selectedRole.name)}</h1><p>{l("O Brain traduz a mesma decisão para cada equipe, mostrando apenas o contexto e o trabalho relevantes.", "The Brain translates the same decision for every team, showing only the relevant context and work.")}</p></div>{step < 5 ? <button type="button" className="mf-primary-action" onClick={onAdvance} disabled={step < 4}><Workflow size={16} /> {l("Distribuir trabalho", "Distribute work")}</button> : <button type="button" className="mf-secondary-action" onClick={() => onNavigate("workflows")}>{l("Abrir meu workflow", "Open my workflow")} <ArrowRight size={14} /></button>}</header>
+
+      {snapshot ? <EmployeeObjectivePanel snapshot={snapshot} roleId={roleId} /> : null}
 
       <section className="mf-role-brief" data-guide-key="role-work">
         <header><span className="mf-role-avatar">{t(selectedRole.name).slice(0, 2).toUpperCase()}</span><div><small>{l("Seu foco nesta mudança", "Your focus in this change")}</small><h2>{t(selectedRole.focus)}</h2></div><span className={`mf-simple-status ${step >= 5 ? "is-ready" : ""}`}>{step >= 5 ? l("Trabalho atribuído", "Work assigned") : l("Aguardando decisão", "Awaiting decision")}</span></header>
@@ -560,7 +576,7 @@ export function DisciplinesView({ step, roleId, onNavigate, onAdvance, onOpenArt
   );
 }
 
-export function WorkflowsView({ step, roleId, onNavigate, onAdvance }: ViewProps) {
+export function WorkflowsView({ step, roleId, onNavigate, onAdvance, snapshot }: ViewProps) {
   const { language, t } = useMfLanguage();
   const l = (pt: string, en: string) => (language === "pt" ? pt : en);
   const selectedRole = roles.find((role) => role.id === roleId) ?? roles[0];
@@ -600,6 +616,7 @@ export function WorkflowsView({ step, roleId, onNavigate, onAdvance }: ViewProps
   return (
     <div className="mf-clarity-view">
       <header className="mf-today-header"><div><span className="mf-eyebrow">{l("Harness · workflows agentivos", "Harness · agentic workflows")}</span><h1>{l("Escolha o trabalho. Veja exatamente o que os agentes farão.", "Choose the work. See exactly what the agents will do.")}</h1><p>{l("Cada workflow mostra suas fontes, agentes, ferramentas, controle humano e resultado antes de ser implantado.", "Every workflow shows its sources, agents, tools, human control, and outcome before it is deployed.")}</p></div></header>
+      {snapshot ? <ObjectiveWorkflowPanel snapshot={snapshot} /> : null}
 
       <section className="mf-workflow-deployment">
         <header>
