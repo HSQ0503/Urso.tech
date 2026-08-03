@@ -221,7 +221,7 @@ The final outcome contrasts the operating models:
 
 ### 5.8 Pilot Proposal screen
 
-The demo finishes with an explicit next action: **Select the project and nominate the pilot team.**
+The demo finishes with an explicit decision: **Approve the pilot, select the project, and nominate the team.**
 
 The proposal defines:
 

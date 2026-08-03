@@ -91,11 +91,12 @@ const english: Record<string, string> = {
   "Idiomas": "Languages",
   "Dependências externas": "External dependencies",
   "Nenhuma": "None",
+  "39 docs conectados": "39 connected docs",
   "cenas": "scenes",
   "minutos": "minutes",
   "Setas para navegar": "Arrow keys to navigate",
-  "Dados operacionais sintéticos. Contexto público verificado.":
-    "Synthetic operational data. Verified public context.",
+  "Dados operacionais sintéticos. Contexto controlado conectado.":
+    "Synthetic operational data. Connected controlled context.",
 
   "Baseline aprovado": "Approved baseline",
   "Evento detectado": "Event detected",

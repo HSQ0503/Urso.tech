@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Turn `/mf` into a reliable 12-minute pilot-decision story backed by one canonical project truth, server-authoritative scenario state, connected-source evidence, privilege-specific employee objectives, derived management value, and a concrete pilot close.
+**Goal:** Turn `/mf` into a reliable 15-minute pilot-decision meeting—12 minutes of guided story plus 3 minutes for proof and questions—backed by one canonical project truth, server-authoritative scenario state, connected-source evidence, privilege-specific employee objectives, derived management value, and a concrete pilot close.
 
 **Architecture:** Keep the current MF presentation shell and visual language. Introduce a pure scenario contract and Harness state engine, persist isolated presenter sessions through a repository, coordinate Brain claim transitions with Harness transitions on the server, and render all new views from one authorized snapshot. The Brain remains responsible for governed evidence and temporal truth; the MF Harness model remains responsible for objectives, work, dependencies, gates, handoffs, and workflow receipts.
 
@@ -470,7 +470,7 @@ Repeat the critical path in English and inspect desktop plus mobile widths. Comp
 
 - [ ] **Step 6: Time the guided path**
 
-Run the presentation without proof drawers. Expected duration: at most 12 minutes, ending on the explicit action “Select the project and nominate the pilot team.”
+Run the presentation without proof drawers. Expected duration: at most 12 minutes inside a 15-minute meeting slot, ending on the explicit action “Approve the pilot, select the project, and nominate the team.”
 
 - [ ] **Step 7: Final verification commit**
 

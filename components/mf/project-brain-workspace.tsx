@@ -415,7 +415,7 @@ export function ProjectBrainWorkspace({
               {project.name} · {loadingWorkspace
                 ? l("conectando…", "connecting…")
                 : workspace
-                  ? `${workspace.scope.permittedDocuments} ${l("fontes autorizadas", "authorized sources")}`
+                  ? `${workspace.scope.permittedDocuments} ${l("documentos autorizados", "authorized documents")}`
                   : l("configuração necessária", "setup required")}
             </small>
           </span>
@@ -533,7 +533,7 @@ export function ProjectBrainWorkspace({
         <div className={`mf-gemini-chat ${messages.length ? "has-conversation" : "is-empty"}`}>
           <header className="mf-gemini-chat-header">
             <button type="button" onClick={newConversation}><Plus size={16} /> {l("Nova conversa", "New conversation")}</button>
-            <span><ShieldCheck size={14} /> {t(selectedRole.name)} · {workspace.scope.permittedDocuments} {l("fontes autorizadas", "authorized sources")}</span>
+            <span><ShieldCheck size={14} /> {t(selectedRole.name)} · {workspace.scope.permittedDocuments} {l("documentos autorizados", "authorized documents")}</span>
           </header>
 
           {messages.length === 0 ? (

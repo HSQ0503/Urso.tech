@@ -201,7 +201,7 @@ for (const semanticLabel of [
   "Evidence",
   "Human gate",
   "Definition of done",
-  "Select the project and nominate the pilot team",
+  "Approve the pilot, select the project, and nominate the team",
 ]) {
   assert(storyPanelSource.includes(semanticLabel), `missing story semantics: ${semanticLabel}`);
 }

@@ -80,6 +80,15 @@ export function ConnectedSourcesPanel({
     demo: l("Adaptador da demo", "Demo adapter"),
     pilot: l("Integração do piloto", "Pilot integration"),
   } as const;
+  const authorityLabel: Record<string, string> = {
+    evidence: l("evidência", "evidence"),
+    controlled: l("controlada", "controlled"),
+    working: l("trabalho", "working"),
+    policy: l("norma", "policy"),
+    decision: l("decisão", "decision"),
+    coordination: l("coordenação", "coordination"),
+    security: l("segurança", "security"),
+  };
   return (
     <section className="mf-story-panel" data-guide-key="connected-sources">
       <header className="mf-story-panel-header">
@@ -92,10 +101,10 @@ export function ConnectedSourcesPanel({
           <article key={source.id}>
             <header><Database size={16} /><span><small>{source.system}</small><strong>{localize(source.name)}</strong></span><em className={`is-${source.mode}`}>{modeLabel[source.mode]}</em></header>
             <dl>
-              <div><dt>{l("Connection mode", "Connection mode")}</dt><dd>{modeLabel[source.mode]}</dd></div>
-              <div><dt>{l("Authority", "Authority")}</dt><dd>{source.authority}</dd></div>
-              <div><dt>{l("Freshness", "Freshness")}</dt><dd>{localize(source.freshness)}</dd></div>
-              <div><dt>{l("Evidence", "Evidence")}</dt><dd>{source.evidencePaths.length} {l("registros", "records")}</dd></div>
+              <div><dt>{l("Modo de conexão", "Connection mode")}</dt><dd>{modeLabel[source.mode]}</dd></div>
+              <div><dt>{l("Autoridade", "Authority")}</dt><dd>{authorityLabel[source.authority] ?? source.authority}</dd></div>
+              <div><dt>{l("Atualização", "Freshness")}</dt><dd>{localize(source.freshness)}</dd></div>
+              <div><dt>{l("Evidência", "Evidence")}</dt><dd>{source.evidencePaths.length} {source.evidencePaths.length === 1 ? l("registro", "record") : l("registros", "records")}</dd></div>
             </dl>
             <footer><UserCheck size={13} /> {localize(source.owner)}</footer>
           </article>
@@ -118,7 +127,7 @@ export function ControlledChangePanel({ snapshot }: { snapshot: MfHarnessSnapsho
         <strong className={approved ? "is-positive" : "is-warning"}>{approved ? l("Aprovada", "Approved") : l("Decisão pendente", "Decision pending")}</strong>
       </header>
       <div className="mf-truth-transition">
-        <article><small>REV. B</small><strong>{snapshot.truth.revisionB === "current" ? l("Atual e aceita", "Current and accepted") : l("Histórica e superseded", "Historical and superseded")}</strong><span>{before.footprintM.join(" × ")} m · {before.electricalKw} kW · {before.chilledWaterKw} kW · {before.operatingLoadKn} kN</span></article>
+        <article><small>REV. B</small><strong>{snapshot.truth.revisionB === "current" ? l("Atual e aceita", "Current and accepted") : l("Histórica e superada", "Historical and superseded")}</strong><span>{before.footprintM.join(" × ")} m · {before.electricalKw} kW · {before.chilledWaterKw} kW · {before.operatingLoadKn} kN</span></article>
         <ArrowRight size={20} />
         <article><small>REV. C</small><strong>{snapshot.truth.revisionC === "current" ? l("Atual e aceita", "Current and accepted") : l("Material e não resolvida", "Material and unresolved")}</strong><span>{after.footprintM.join(" × ")} m · {after.electricalKw} kW · {after.chilledWaterKw} kW · {after.operatingLoadKn} kN</span></article>
       </div>
@@ -153,7 +162,7 @@ export function ObjectiveWorkflowPanel({ snapshot }: { snapshot: MfHarnessSnapsh
             <article key={task.id} className={`is-${task.state}`}>
               <header><CircleDot size={14} /><span><small>{owner ? localize(owner.name) : task.ownerRoleId}</small><strong>{localize(task.title)}</strong></span><em>{taskStateLabel(task, l)}</em></header>
               <p>{localize(task.detail)}</p>
-              <footer><span><GitBranch size={12} /> {task.dependsOn.length ? task.dependsOn.join(" · ") : l("Sem dependência", "No dependency")}</span>{task.humanGate ? <span><LockKeyhole size={12} /> {l("Human gate", "Human gate")}</span> : null}</footer>
+              <footer><span><GitBranch size={12} /> {task.dependsOn.length ? task.dependsOn.join(" · ") : l("Sem dependência", "No dependency")}</span>{task.humanGate ? <span><LockKeyhole size={12} /> {l("Gate humano", "Human gate")}</span> : null}</footer>
             </article>
           );
         })}
@@ -181,11 +190,11 @@ export function EmployeeObjectivePanel({
       </header>
       <div className="mf-employee-objective-grid">
         <article><small>{l("Sua próxima ação", "Your next action")}</small><strong>{next ? localize(next.title) : l("Objetivo concluído", "Objective complete")}</strong><p>{next ? localize(next.detail) : localize(workspace.role.deliverable)}</p></article>
-        <article><small>{l("Por que você está envolvido", "Why you are involved")}</small><strong>{localize(workspace.role.assignment)}</strong><p>{workspace.downstreamTasks.length} {l("handoffs dependem do seu trabalho", "handoffs depend on your work")}</p></article>
+        <article><small>{l("Por que você está envolvido", "Why you are involved")}</small><strong>{localize(workspace.role.assignment)}</strong><p>{workspace.downstreamTasks.length} {workspace.downstreamTasks.length === 1 ? l("handoff depende do seu trabalho", "handoff depends on your work") : l("handoffs dependem do seu trabalho", "handoffs depend on your work")}</p></article>
         <article><small>{l("Contexto autorizado", "Authorized context")}</small><strong>{workspace.sources.length} {l("fontes entregues", "sources delivered")}</strong><p>{workspace.sources.map((source) => localize(source.name)).join(" · ")}</p></article>
-        <article><small>{l("Entregável", "Deliverable")}</small><strong>{localize(workspace.role.deliverable)}</strong><p>{l("Definition of done", "Definition of done")}: {next ? taskStateLabel(next, l) : l("Aprovado e entregue", "Approved and handed off")}</p></article>
+        <article><small>{l("Entregável", "Deliverable")}</small><strong>{localize(workspace.role.deliverable)}</strong><p>{l("Critério de conclusão", "Definition of done")}: {next ? taskStateLabel(next, l) : l("Aprovado e entregue", "Approved and handed off")}</p></article>
       </div>
-      <footer className="mf-employee-gate"><ShieldCheck size={15} /><span><strong>{l("Human gate", "Human gate")}</strong><small>{next?.humanGate ? l("Validação humana obrigatória antes do handoff", "Human validation required before handoff") : l("Handoff automático após critérios completos", "Automatic handoff after criteria are complete")}</small></span></footer>
+      <footer className="mf-employee-gate"><ShieldCheck size={15} /><span><strong>{l("Gate humano", "Human gate")}</strong><small>{next?.humanGate ? l("Validação humana obrigatória antes do handoff", "Human validation required before handoff") : l("Handoff automático após critérios completos", "Automatic handoff after criteria are complete")}</small></span></footer>
     </section>
   );
 }
@@ -214,11 +223,11 @@ export function PilotProposalPanel() {
     <section className="mf-story-panel mf-pilot-proposal" data-guide-key="pilot-proposal">
       <header className="mf-story-panel-header"><span><Workflow size={18} /></span><div><small>{l("Próximo passo", "Next step")}</small><h2>{l("Provar o resultado em um projeto real", "Prove the outcome on one real project")}</h2></div><strong>{l("Piloto de um projeto", "One-project pilot")}</strong></header>
       <div className="mf-pilot-grid">
-        <article><small>{l("Escopo", "Scope")}</small><ul><li>{l("Um projeto ativo", "One active project")}</li><li>{l("Um workflow de mudança material", "One material-change workflow")}</li><li>{l("Fontes e papéis selecionados", "Selected sources and roles")}</li><li>{l("Aprovações sob controle humano", "Human-controlled approvals")}</li></ul></article>
+        <article><small>{l("Escopo", "Scope")}</small><ul><li>{l("Um projeto ativo", "One active project")}</li><li>{l("Um workflow integrado de mudança material", "One integrated material-change workflow")}</li><li>{l("Múltiplas disciplinas, fontes e papéis", "Multiple disciplines, sources, and roles")}</li><li>{l("Aprovações sob controle humano", "Human-controlled approvals")}</li></ul></article>
         <article><small>{l("Medição", "Measurement")}</small><ul><li>{l("Tempo até mapear o impacto", "Time to map impact")}</li><li>{l("Envelhecimento de ações e dependências", "Action and dependency aging")}</li><li>{l("Esforço de coordenação do PM", "PM coordination effort")}</li><li>{l("Risco e recuperação do marco", "Milestone risk and recovery")}</li></ul></article>
         <article><small>{l("MF participa com", "MF participates with")}</small><ul><li>{l("Sponsor e gerente do projeto", "Sponsor and project manager")}</li><li>{l("Representantes das disciplinas", "Discipline representatives")}</li><li>{l("Acesso às fontes do piloto", "Access to pilot sources")}</li><li>{l("Revisão semanal de resultados", "Weekly outcome review")}</li></ul></article>
       </div>
-      <button type="button"><Target size={16} /> {l("Selecionar o projeto e nomear a equipe do piloto", "Select the project and nominate the pilot team")} <ArrowRight size={15} /></button>
+      <button type="button"><Target size={16} /> {l("Aprovar o piloto, selecionar o projeto e nomear a equipe", "Approve the pilot, select the project, and nominate the team")} <ArrowRight size={15} /></button>
       <footer><Clock3 size={13} /> {l("Integração focada em um workflow, não em uma transformação geral da empresa.", "Integration focused on one workflow, not a company-wide transformation.")} <Link2 size={13} /></footer>
     </section>
   );

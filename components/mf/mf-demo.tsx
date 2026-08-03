@@ -91,7 +91,7 @@ const guideKeyForStep = [
   "role-work",
   "work-produced",
   "human-review",
-  "project-release",
+  "pilot-proposal",
 ] as const;
 
 const sessionStorageKey = "mf-demo-session-v2";
@@ -106,7 +106,7 @@ const presenterCues = {
     { say: "O harness converte impacto em trabalho com dono e critério.", proof: "Pacotes disciplinares e dependências registradas" },
     { say: "Ferramentas produzem rascunhos verificáveis, não respostas soltas.", proof: "Cálculo, BIM, prazo, checklist e comunicação" },
     { say: "Engenheiros validam e aprovam antes de qualquer liberação.", proof: "Receipts de aprovação e trilha auditável" },
-    { say: "O marco volta a ficar seguro com evidência completa.", proof: "Gate EXE-02 pronto · risco controlado" },
+    { say: "Agora a decisão é simples: provar esse resultado em um projeto real.", proof: "Piloto · 1 projeto · múltiplas disciplinas · 1 workflow integrado" },
   ],
   en: [
     { say: "We begin with a stable project and one approved source of truth.", proof: "Coordinated baseline · gate in 14 days" },
@@ -117,7 +117,7 @@ const presenterCues = {
     { say: "The harness converts impact into work with an owner and completion criterion.", proof: "Discipline packages and dependencies recorded" },
     { say: "Tools produce verifiable drafts, not disconnected answers.", proof: "Calculation, BIM, schedule, checklist, and communication" },
     { say: "Engineers validate and approve before anything is released.", proof: "Approval receipts and auditable history" },
-    { say: "The milestone becomes safe again with complete evidence.", proof: "Gate EXE-02 ready · risk controlled" },
+    { say: "Now the decision is simple: prove this outcome on one real project.", proof: "Pilot · 1 project · multiple disciplines · 1 integrated workflow" },
   ],
 } as const;
 
@@ -962,11 +962,11 @@ function MfDemoShell() {
                   <li><ShieldCheck size={17} /><span><small>{t("Fixture do projeto")}</small><strong>{t("Carregado")}</strong></span><i /></li>
                   <li><RotateCcw size={17} /><span><small>{t("Motor do cenário")}</small><strong>{t("Determinístico")}</strong></span><i /></li>
                   <li><Languages size={17} /><span><small>{t("Idiomas")}</small><strong>PT + EN</strong></span><i /></li>
-                  <li><WifiOff size={17} /><span><small>{t("Dependências externas")}</small><strong>{t("Nenhuma")}</strong></span><i /></li>
+                  <li><BrainCircuit size={17} /><span><small>{t("Contexto autorizado")}</small><strong>{t("39 docs conectados")}</strong></span><i /></li>
                 </ul>
                 <div className="mf-presentation-meta">
-                  <span><Presentation size={15} /><strong>8 {t("cenas")}</strong></span>
-                  <span><Timer size={15} /><strong>12 {t("minutos")}</strong></span>
+                  <span><Presentation size={15} /><strong>9 {t("cenas")}</strong></span>
+                  <span><Timer size={15} /><strong>15 {t("minutos")}</strong></span>
                   <span><Keyboard size={15} /><strong>{t("Setas para navegar")}</strong></span>
                 </div>
               </aside>
@@ -974,7 +974,7 @@ function MfDemoShell() {
 
             <footer>
               <ShieldCheck size={14} />
-              {t("Dados operacionais sintéticos. Contexto público verificado.")}
+              {t("Dados operacionais sintéticos. Contexto controlado conectado.")}
             </footer>
           </section>
         </div>
