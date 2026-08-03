@@ -7,6 +7,13 @@ import {
   getMfRoleWorkspace,
   transitionMfHarness,
 } from "../lib/mf-demo/harness-runtime.mjs";
+import {
+  consumeMfSessionUsage,
+  createMfSessionRecord,
+  hashMfSessionToken,
+  transitionMfSessionRecord,
+  verifyMfSessionToken,
+} from "../lib/mf-demo/session-runtime.mjs";
 
 assert.deepEqual(mfScenarioManifest.revisions.B, {
   footprintM: [18.4, 4.8],
@@ -84,5 +91,65 @@ assert.equal(tower.impactedDisciplines, 10);
 assert.equal(tower.openBlockers, 0);
 assert.equal(tower.daysRecovered, 8);
 assert.equal(tower.releaseReadiness, 100);
+
+const token = "presenter-secret-token";
+const session = createMfSessionRecord({
+  id: "session-1",
+  tokenHash: hashMfSessionToken(token),
+  now: "2026-08-03T12:00:00.000Z",
+});
+assert(verifyMfSessionToken(session, token));
+assert(!verifyMfSessionToken(session, "wrong-token"));
+assert.equal(session.snapshot.step, 0);
+
+const advancedSession = transitionMfSessionRecord(session, {
+  expectedStep: 0,
+  targetStep: 1,
+  idempotencyKey: "session-1-step-1",
+  roleId: "project-manager",
+  now: "2026-08-03T12:01:00.000Z",
+});
+assert.equal(advancedSession.snapshot.step, 1);
+assert.equal(advancedSession.version, 2);
+assert.deepEqual(
+  transitionMfSessionRecord(advancedSession, {
+    expectedStep: 1,
+    targetStep: 1,
+    idempotencyKey: "session-1-step-1",
+    roleId: "project-manager",
+    now: "2026-08-03T12:02:00.000Z",
+  }),
+  advancedSession,
+);
+assert.throws(
+  () => transitionMfSessionRecord(advancedSession, {
+    expectedStep: 0,
+    targetStep: 2,
+    idempotencyKey: "stale-step",
+    roleId: "project-manager",
+    now: "2026-08-03T12:02:00.000Z",
+  }),
+  (error) => error.code === "stale_session",
+);
+assert.throws(
+  () => transitionMfSessionRecord(advancedSession, {
+    expectedStep: 1,
+    targetStep: 2,
+    idempotencyKey: "unknown-role",
+    roleId: "director",
+    now: "2026-08-03T12:02:00.000Z",
+  }),
+  (error) => error.code === "invalid_role",
+);
+
+let usageSession = session;
+for (let index = 0; index < 10; index += 1) usageSession = consumeMfSessionUsage(usageSession, "chat", 10);
+assert.throws(() => consumeMfSessionUsage(usageSession, "chat", 10), (error) => error.code === "usage_limit");
+
+const scenarioRouteSource = readFileSync(new URL("../app/api/mf/brain/scenario/route.ts", import.meta.url), "utf8");
+assert.match(scenarioRouteSource, /action\s*===\s*["']create["']/);
+assert.match(scenarioRouteSource, /expectedStep/);
+assert.match(scenarioRouteSource, /idempotencyKey/);
+assert.match(scenarioRouteSource, /MfSessionContractError/);
 
 console.log("✓ MF manifest values, references, and impact contract are consistent.");
