@@ -135,9 +135,9 @@ export default async function FinancePage({
   if (!snapshot.configured) {
     return (
       <div className="mx-auto max-w-[760px] py-20">
-        <Micro>Finance · Setup required</Micro>
-        <h1 className="mt-3 font-serif text-[clamp(36px,7vw,68px)] leading-[0.98] tracking-[-0.035em]">
-          The ledger is ready.<br /><em className="text-orange">The database isn&rsquo;t.</em>
+        <Micro>Finance setup</Micro>
+        <h1 className="mt-3 max-w-[680px] text-[clamp(32px,5vw,52px)] font-semibold leading-[1.05] tracking-[-0.035em]">
+          Database connection required
         </h1>
         <p className="mt-6 max-w-[58ch] text-[14px] leading-6 text-ink-dim">
           Apply <span className="font-mono text-ink">supabase/urso/0013_finance_tracker.sql</span> to Urso HQ. The page will then load the Sebastian and Scott deal allocations automatically.
@@ -150,15 +150,14 @@ export default async function FinancePage({
     <div className="space-y-3">
       <header className="dash-rise mb-7 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between" style={rise(0)}>
         <div>
-          <Micro>Urso finance · Internal</Micro>
-          <h1 className="mt-2 font-serif text-[clamp(34px,5vw,58px)] font-normal leading-[0.98] tracking-[-0.035em]">
-            Know what we can <em>spend</em><span className="text-orange">.</span>
+          <h1 className="text-[clamp(32px,4vw,48px)] font-semibold leading-[1.05] tracking-[-0.035em]">
+            Financial overview
           </h1>
-          <p className="mt-3 max-w-[58ch] text-[13px] leading-5 text-ink-dim">
-            Signed work, cash collected, founder draws, and company spending—kept separate so contract value never masquerades as money in the bank.
+          <p className="mt-3 max-w-[64ch] text-[13px] leading-5 text-ink-dim">
+            Monitor cash on hand, outstanding receivables, founder distributions, and operating expenses.
           </p>
         </div>
-        <Tag tone="orange">Live company ledger</Tag>
+        <Tag tone="orange">Live ledger</Tag>
       </header>
 
       {(notice || error) && (
