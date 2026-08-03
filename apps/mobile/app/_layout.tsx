@@ -3,16 +3,16 @@ import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import {
-  Fraunces_600SemiBold,
-  Fraunces_600SemiBold_Italic,
-} from "@expo-google-fonts/fraunces";
+  Geist_400Regular,
+  Geist_500Medium,
+  Geist_600SemiBold,
+} from "@expo-google-fonts/geist";
 import {
-  IBMPlexSans_400Regular,
-  IBMPlexSans_500Medium,
-  IBMPlexSans_600SemiBold,
-} from "@expo-google-fonts/ibm-plex-sans";
-import { IBMPlexMono_400Regular } from "@expo-google-fonts/ibm-plex-mono";
+  GeistMono_400Regular,
+  GeistMono_500Medium,
+} from "@expo-google-fonts/geist-mono";
 import { QueryProvider } from "@/query";
+import { ToastProvider } from "@/components/toast";
 import { color } from "@/theme";
 
 // Root layout. Every screen draws its own true-black chrome header, so the
@@ -23,12 +23,11 @@ export default function RootLayout(): React.ReactElement | null {
   // The shorthand keys are the family names theme.ts refers to, so registering
   // and consuming a font can never drift apart.
   const [loaded, error] = useFonts({
-    Fraunces_600SemiBold,
-    Fraunces_600SemiBold_Italic,
-    IBMPlexSans_400Regular,
-    IBMPlexSans_500Medium,
-    IBMPlexSans_600SemiBold,
-    IBMPlexMono_400Regular,
+    Geist_400Regular,
+    Geist_500Medium,
+    Geist_600SemiBold,
+    GeistMono_400Regular,
+    GeistMono_500Medium,
   });
 
   // Hold the app back rather than flash system type and reflow under the crew's
@@ -39,14 +38,16 @@ export default function RootLayout(): React.ReactElement | null {
   return (
     <SafeAreaProvider>
       <QueryProvider>
-        <StatusBar style="light" />
-        <Stack
-          screenOptions={{
-            headerShown: false,
-            // Bone, not white, so a push never flashes a bright card-shaped gap.
-            contentStyle: { backgroundColor: color.bg },
-          }}
-        />
+        <ToastProvider>
+          <StatusBar style="light" />
+          <Stack
+            screenOptions={{
+              headerShown: false,
+              // Bone, not white, so a push never flashes a bright card-shaped gap.
+              contentStyle: { backgroundColor: color.bg },
+            }}
+          />
+        </ToastProvider>
       </QueryProvider>
     </SafeAreaProvider>
   );

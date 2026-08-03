@@ -108,7 +108,7 @@ export async function confirmPasscode(formData: FormData) {
   await setAdminSession(pending.email, admin.scope);
   await setPasscodeConfirmed(pending.email);
   await clearPending();
-  redirect(adminHome());
+  redirect(adminHome(admin.scope));
 }
 
 // Sign an admin out of the magic-link session (separate from the Supabase

@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
 
   if (await hasPasscodeConfirmed(email)) {
     await setAdminSession(email, admin.scope);
-    return NextResponse.redirect(new URL(adminHome(), base));
+    return NextResponse.redirect(new URL(adminHome(admin.scope), base));
   }
 
   await setPending(email);

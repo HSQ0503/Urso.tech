@@ -21,11 +21,19 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Feather } from "@expo/vector-icons";
 import { fmtEt, fmtMoney, fmtPhone, type CustomerSummary } from "@urso/types";
 import { useCustomers } from "@/queries";
 import { noticeFrom, usePullToRefresh, useRefetchOnFocus } from "@/query";
-import { color, font, HIT, radius, space, type } from "@/theme";
+import { color, font, space, type } from "@/theme";
+import {
+  Avatar,
+  Chevron,
+  ChromeBar,
+  EmptyState,
+  SearchStrip,
+  listRowStyle,
+  searchInputStyle,
+} from "@/components/ledger";
 
 // Name matches on plain text; phone matches on digits, so "407" finds a number
 // stored as +14075550123 and typing it with dashes still works.
@@ -38,19 +46,31 @@ function matches(customer: CustomerSummary, query: string): boolean {
 }
 
 // Tapping a row opens the customer's profile at /(owner)/customer/[id].
-function CustomerRow({ customer, onPress }: { customer: CustomerSummary; onPress: () => void }) {
+function CustomerRow({
+  customer,
+  first,
+  last,
+  onPress,
+}: {
+  customer: CustomerSummary;
+  first: boolean;
+  last: boolean;
+  onPress: () => void;
+}) {
   const owes = customer.open_balance_cents > 0;
+  const name = customer.name ?? "Unnamed customer";
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={customer.name ?? "Unnamed customer"}
+      accessibilityLabel={name}
       onPress={onPress}
-      style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+      style={({ pressed }) => [...listRowStyle(first, last), styles.row, pressed && styles.pressed]}
     >
+      <Avatar name={name} />
       <View style={styles.rowBody}>
         <View style={styles.rowTop}>
           <Text style={styles.name} numberOfLines={1}>
-            {customer.name ?? "Unnamed customer"}
+            {name}
           </Text>
           {/* A customer who has never been billed shows nothing here. "$0.00"
               reads as a figure that was calculated, and it put a column of zeroes
@@ -84,7 +104,7 @@ function CustomerRow({ customer, onPress }: { customer: CustomerSummary; onPress
           ) : null}
         </View>
       </View>
-      <Feather name="chevron-right" size={18} color={color.faint} />
+      <Chevron />
     </Pressable>
   );
 }
@@ -122,27 +142,17 @@ export default function CustomersScreen(): React.ReactElement {
 
   return (
     <View style={styles.screen}>
-      <View style={[styles.chrome, { paddingTop: insets.top + space.md }]}>
-        <Text style={styles.chromeTitle}>Customers</Text>
-        <View style={styles.chromeRight}>
-          <View style={styles.chromeStat}>
-            <Text style={styles.chromeStatValue}>{visible.length}</Text>
-            <Text style={styles.chromeStatLabel}>{searching ? "Matches" : "Total"}</Text>
-          </View>
-          {/* A referral he already knows is a customer from the first word.
-              Making him invent a lead to reach the record is paperwork. */}
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="New customer"
-            onPress={() => router.push("/(owner)/customer/new")}
-            style={({ pressed }) => [styles.newButton, pressed && styles.pressed]}
-          >
-            <Text style={styles.newButtonText}>+ New</Text>
-          </Pressable>
-        </View>
-      </View>
+      <ChromeBar
+        title="Customers"
+        stat={String(visible.length)}
+        statLabel={searching ? "Matches" : "Total"}
+        action="New"
+        /* A referral he already knows is a customer from the first word.
+           Making him invent a lead to reach the record is paperwork. */
+        onAction={() => router.push("/(owner)/customer/new")}
+      />
 
-      <View style={styles.searchBar}>
+      <SearchStrip>
         <TextInput
           value={query}
           onChangeText={setQuery}
@@ -153,9 +163,9 @@ export default function CustomersScreen(): React.ReactElement {
           clearButtonMode="while-editing"
           returnKeyType="search"
           accessibilityLabel="Search customers"
-          style={styles.search}
+          style={searchInputStyle}
         />
-      </View>
+      </SearchStrip>
 
       {showSpinner ? (
         <View style={styles.centre}>
@@ -189,17 +199,22 @@ export default function CustomersScreen(): React.ReactElement {
           }
           ListEmptyComponent={
             customers !== null ? (
-              <View style={styles.empty}>
-                <Text style={styles.emptyText}>
-                  {searching
-                    ? "Nobody here matches that."
-                    : "No customers yet. They appear once a lead turns into work — or tap New to add someone yourself."}
-                </Text>
-              </View>
+              <EmptyState
+                text={
+                  searching
+                    ? `Nothing matches “${query.trim()}”.`
+                    : "No customers yet. They appear once a lead turns into work — or tap New to add someone yourself."
+                }
+              />
             ) : null
           }
-          renderItem={({ item }) => (
-            <CustomerRow customer={item} onPress={() => openCustomer(item.id)} />
+          renderItem={({ item, index }) => (
+            <CustomerRow
+              customer={item}
+              first={index === 0}
+              last={index === visible.length - 1}
+              onPress={() => openCustomer(item.id)}
+            />
           )}
         />
       )}
@@ -211,102 +226,34 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: color.bg },
   centre: { flex: 1, alignItems: "center", justifyContent: "center" },
 
-  chrome: {
-    backgroundColor: color.chrome,
-    flexDirection: "row",
-    alignItems: "flex-end",
-    justifyContent: "space-between",
-    gap: space.md,
-    paddingHorizontal: space.lg,
-    paddingBottom: space.md,
-  },
-  chromeTitle: { ...type.display, color: color.chromeInk },
-  chromeRight: { flexDirection: "row", alignItems: "center", gap: space.md },
-  newButton: {
-    minHeight: HIT - 12,
-    justifyContent: "center",
-    paddingHorizontal: space.md,
-    borderRadius: radius.md,
-    backgroundColor: color.brandFill,
-  },
-  newButtonText: { ...type.small, color: "#ffffff", fontFamily: font.bodyMedium },
-  pressedButton: { opacity: 0.72 },
-  chromeStat: { alignItems: "flex-end" },
-  chromeStatValue: {
-    fontFamily: font.bodySemi,
-    fontSize: 18,
-    color: color.chromeInk,
-    fontVariant: ["tabular-nums"],
-  },
-  chromeStatLabel: { ...type.micro, color: color.chromeMuted, marginTop: 2 },
-
-  searchBar: {
-    backgroundColor: color.surface,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: color.line,
-    paddingHorizontal: space.lg,
-    paddingVertical: space.sm,
-  },
-  search: {
-    // Deliberately NOT ...type.body: that spread carries lineHeight, and iOS
-    // renders a TextInput placeholder with visibly wrong tracking when a
-    // lineHeight is combined with a custom font. Height comes from minHeight.
-    fontFamily: font.body,
-    fontSize: 15,
-    color: color.ink,
-    minHeight: HIT,
-    paddingHorizontal: space.md,
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: color.line,
-    backgroundColor: color.bg,
-  },
-
-  list: { padding: space.lg, gap: space.sm },
+  list: { paddingHorizontal: 14, paddingTop: 14 },
   listEmpty: { flexGrow: 1 },
 
-  notice: {
-    backgroundColor: color.dangerBg,
-    borderRadius: radius.md,
-    padding: space.md,
-    marginBottom: space.sm,
-  },
-  noticeText: { ...type.small, color: color.danger },
-
-  row: {
-    minHeight: HIT,
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: color.surface,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: color.line,
-    borderRadius: radius.lg,
-    padding: space.md,
-    gap: space.sm,
-  },
+  row: { flexDirection: "row", alignItems: "center", gap: 11 },
   pressed: { backgroundColor: color.hover },
-  rowBody: { flex: 1, gap: space.xs },
+  rowBody: { flex: 1, minWidth: 0 },
+
   rowTop: {
     flexDirection: "row",
     alignItems: "baseline",
     justifyContent: "space-between",
-    gap: space.sm,
+    gap: 10,
   },
   name: { ...type.title, color: color.ink, flexShrink: 1 },
-  lifetime: { ...type.small, color: color.ink, fontVariant: ["tabular-nums"] },
-  phone: { ...type.small, color: color.muted, fontVariant: ["tabular-nums"] },
-  address: { ...type.small, color: color.faint },
+  lifetime: { ...type.figureSm, color: color.ink, fontVariant: ["tabular-nums"] },
 
-  rowFoot: {
-    flexDirection: "row",
-    alignItems: "center",
-    flexWrap: "wrap",
-    gap: space.sm,
-    marginTop: space.xs,
+  phone: { ...type.smaller, color: color.muted, marginTop: 4 },
+  address: { ...type.smaller, color: color.muted, marginTop: 2 },
+
+  rowFoot: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 9, marginTop: 6 },
+  meta: { ...type.ruleSm, color: color.faint },
+  owing: { ...type.ruleSm, fontFamily: font.monoMedium, color: color.danger },
+
+  notice: {
+    backgroundColor: color.dangerBg,
+    borderRadius: 5,
+    padding: space.md,
+    marginBottom: space.md,
   },
-  meta: { ...type.micro, color: color.faint },
-  owing: { ...type.micro, color: color.brand, fontVariant: ["tabular-nums"] },
-
-  empty: { flex: 1, alignItems: "center", justifyContent: "center", padding: space.xl },
-  emptyText: { ...type.body, color: color.muted, textAlign: "center" },
+  noticeText: { ...type.small, color: color.danger },
 });

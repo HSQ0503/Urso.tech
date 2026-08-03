@@ -17,7 +17,8 @@ import {
 } from "@/platform/auth";
 import { workspaceHref } from "@/platform/types";
 import { queryClient } from "@/query";
-import { color, font, HIT, radius, space, type } from "@/theme";
+import { ChromeLockup } from "@/components/ledger";
+import { color, font, HIT, radius, shadow, space, type } from "@/theme";
 
 // One neutral entry point across clients. The method is selected by the person,
 // never guessed from their email, so this screen cannot become a membership
@@ -32,6 +33,11 @@ const FALLBACK_NOTICE = "That didn’t go through. Try again in a moment.";
 // then reports an invalid token, which sends you looking in the wrong place.
 const MIN_CODE_LENGTH = 6;
 const MAX_CODE_LENGTH = 10;
+
+// This project issues 8, so 8 cells is what the field draws at rest. It grows
+// rather than clips if a project is ever configured longer — the cells are a
+// reading aid, not the thing that decides what is valid.
+const CODE_CELLS = 8;
 
 export default function Login(): React.ReactElement {
   const router = useRouter();
@@ -135,302 +141,328 @@ export default function Login(): React.ReactElement {
     setNotice(null);
   }
 
+  const address = email.trim();
+  const chromeSub =
+    step === "choice"
+      ? "Client operations"
+      : step === "code"
+        ? `Code sent · ${address}`
+        : address;
+
   return (
     <View style={styles.screen}>
-      <View style={[styles.header, { paddingTop: insets.top + space.lg }]}>
-        <Text style={styles.wordmark}>
-          Urso<Text style={styles.wordmarkDot}>.</Text>
-        </Text>
-        <Text style={styles.wordmarkLabel}>Client operations</Text>
-      </View>
+      <ChromeLockup sub={chromeSub} />
 
       <KeyboardAvoidingView
-        style={styles.body}
+        style={[styles.body, { paddingBottom: insets.bottom + space.lg }]}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         <View style={styles.card}>
-          {step === "choice" ? (
-            <>
-              <Text style={styles.title}>Sign in</Text>
-              <Text style={styles.lede}>
-                Use the sign-in method your office gave you. Your email works across Urso
-                workspaces.
-              </Text>
+          <View style={styles.cardHead}>
+            <Text style={styles.title}>
+              {step === "choice"
+                ? "Sign in"
+                : step === "code"
+                  ? "Check your email"
+                  : "Enter your password"}
+              <Text style={styles.stop}>.</Text>
+            </Text>
+            <Text style={styles.lede}>
+              {step === "choice"
+                ? "Use the sign-in method your office gave you. Your email works across Urso workspaces."
+                : step === "code"
+                  ? `We sent a code to ${address}. Type it in below. If it isn’t there in a minute, look in your junk mail.`
+                  : "Use the password your office set up. You can return and get an email code instead."}
+            </Text>
+          </View>
 
-              <Text style={styles.label}>Work email</Text>
-              <TextInput
-                style={styles.input}
-                value={email}
-                onChangeText={setEmail}
-                placeholder="you@company.com"
-                placeholderTextColor={color.faint}
-                autoCapitalize="none"
-                autoCorrect={false}
-                autoComplete="email"
-                keyboardType="email-address"
-                returnKeyType="send"
-                editable={!busy}
-                onSubmitEditing={() => {
-                  handleChoose("password");
-                }}
-              />
-            </>
-          ) : step === "code" ? (
-            <>
-              <Text style={styles.title}>Check your email</Text>
-              <Text style={styles.lede}>
-                We sent a code to {email.trim()}. Type it in below. If it isn’t there in a
-                minute, look in your junk mail.
-              </Text>
+          <View style={styles.cardBody}>
+            {step === "choice" ? (
+              <>
+                <Text style={styles.label}>Work email</Text>
+                <TextInput
+                  style={styles.input}
+                  value={email}
+                  onChangeText={setEmail}
+                  placeholder="you@company.com"
+                  placeholderTextColor={color.faint}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  autoComplete="email"
+                  keyboardType="email-address"
+                  returnKeyType="send"
+                  editable={!busy}
+                  onSubmitEditing={() => {
+                    handleChoose("password");
+                  }}
+                />
+              </>
+            ) : step === "code" ? (
+              <>
+                <View style={styles.labelRow}>
+                  <Text style={styles.label}>Code</Text>
+                  <Text style={styles.labelMeta}>
+                    {MIN_CODE_LENGTH}–{MAX_CODE_LENGTH} digits
+                  </Text>
+                </View>
+                <CodeField code={code} onChange={setCode} onSubmit={handleVerifyCode} busy={busy} />
+              </>
+            ) : (
+              <>
+                <Text style={styles.label}>Password</Text>
+                <TextInput
+                  style={styles.input}
+                  value={password}
+                  onChangeText={setPassword}
+                  placeholder="Password"
+                  placeholderTextColor={color.faint}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  autoComplete="password"
+                  secureTextEntry
+                  returnKeyType="go"
+                  editable={!busy}
+                  autoFocus
+                  onSubmitEditing={() => {
+                    void handlePasswordSignIn();
+                  }}
+                />
+              </>
+            )}
 
-              <Text style={styles.label}>Code</Text>
-              <TextInput
-                style={[styles.input, styles.codeInput]}
-                value={code}
-                onChangeText={setCode}
-                placeholder="000000"
-                placeholderTextColor={color.faint}
-                keyboardType="number-pad"
-                maxLength={MAX_CODE_LENGTH}
-                autoComplete="one-time-code"
-                textContentType="oneTimeCode"
-                editable={!busy}
-                autoFocus
-                onSubmitEditing={() => {
-                  void handleVerifyCode();
-                }}
-              />
-            </>
-          ) : (
-            <>
-              <Text style={styles.title}>Enter your password</Text>
-              <Text style={styles.lede}>
-                Use the password your office set up. You can return and get an email code instead.
-              </Text>
+            {notice !== null && (
+              <View style={styles.notice}>
+                <Text style={styles.noticeText}>{notice}</Text>
+              </View>
+            )}
 
-              <Text style={styles.label}>Password</Text>
-              <TextInput
-                style={styles.input}
-                value={password}
-                onChangeText={setPassword}
-                placeholder="Password"
-                placeholderTextColor={color.faint}
-                autoCapitalize="none"
-                autoCorrect={false}
-                autoComplete="password"
-                secureTextEntry
-                returnKeyType="go"
-                editable={!busy}
-                autoFocus
-                onSubmitEditing={() => {
-                  void handlePasswordSignIn();
-                }}
-              />
-            </>
-          )}
+            {step === "choice" ? (
+              <>
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={busy}
+                  onPress={() => handleChoose("password")}
+                  style={({ pressed }) => [
+                    styles.primary,
+                    pressed && styles.primaryDown,
+                    busy && styles.off,
+                  ]}
+                >
+                  <Text style={styles.primaryLabel}>Continue with password</Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={busy}
+                  onPress={() => handleChoose("code")}
+                  style={({ pressed }) => [
+                    styles.secondary,
+                    pressed && styles.secondaryDown,
+                    busy && styles.off,
+                  ]}
+                >
+                  <Text style={styles.secondaryLabel}>Email me a code</Text>
+                </Pressable>
+              </>
+            ) : (
+              <>
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={busy}
+                  onPress={() => {
+                    void (step === "code" ? handleVerifyCode() : handlePasswordSignIn());
+                  }}
+                  style={({ pressed }) => [
+                    styles.primary,
+                    pressed && styles.primaryDown,
+                    busy && styles.off,
+                  ]}
+                >
+                  <Text style={styles.primaryLabel}>{busy ? "Signing in…" : "Sign in"}</Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={busy}
+                  onPress={handleChangeMethod}
+                  style={styles.textButton}
+                >
+                  <Text style={styles.textButtonLabel}>Use a different sign-in method</Text>
+                </Pressable>
+              </>
+            )}
+          </View>
+        </View>
 
-          {notice !== null && (
-            <View style={styles.notice}>
-              <Text style={styles.noticeText}>{notice}</Text>
-            </View>
-          )}
-
-          {step === "choice" ? (
-            <View style={styles.actions}>
-              <Pressable
-                accessibilityRole="button"
-                disabled={busy}
-                onPress={() => handleChoose("password")}
-                style={({ pressed }) => [
-                  styles.primary,
-                  pressed && styles.primaryDown,
-                  busy && styles.primaryOff,
-                ]}
-              >
-                <Text style={styles.primaryLabel}>Continue with password</Text>
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                disabled={busy}
-                onPress={() => handleChoose("code")}
-                style={({ pressed }) => [
-                  styles.secondary,
-                  pressed && styles.secondaryDown,
-                  busy && styles.primaryOff,
-                ]}
-              >
-                <Text style={styles.secondaryLabel}>Email me a code</Text>
-              </Pressable>
-            </View>
-          ) : (
-            <Pressable
-              accessibilityRole="button"
-              disabled={busy}
-              onPress={() => {
-                void (step === "code" ? handleVerifyCode() : handlePasswordSignIn());
-              }}
-              style={({ pressed }) => [
-                styles.primary,
-                pressed && styles.primaryDown,
-                busy && styles.primaryOff,
-              ]}
-            >
-              <Text style={styles.primaryLabel}>{primaryLabel(step, busy)}</Text>
-            </Pressable>
-          )}
-
-          {step !== "choice" && (
-            <Pressable
-              accessibilityRole="button"
-              disabled={busy}
-              onPress={handleChangeMethod}
-              style={styles.textButton}
-            >
-              <Text style={styles.textButtonLabel}>Use a different sign-in method</Text>
-            </Pressable>
-          )}
+        <View style={styles.footer}>
+          <View style={styles.footerLine} />
+          <Text style={styles.footerText}>Urso · verified session</Text>
+          <View style={styles.footerLine} />
         </View>
       </KeyboardAvoidingView>
     </View>
   );
 }
 
-function primaryLabel(step: Exclude<Step, "choice">, busy: boolean): string {
-  if (step === "code") return busy ? "Signing in…" : "Sign in";
-  return busy ? "Signing in…" : "Sign in";
+// The code, drawn as cells. A single transparent input sits over the top so the
+// OS keyboard, paste, and SMS autofill all behave normally — the cells are only
+// a readout of what that one field holds.
+function CodeField({
+  code,
+  onChange,
+  onSubmit,
+  busy,
+}: {
+  code: string;
+  onChange: (next: string) => void;
+  onSubmit: () => Promise<void>;
+  busy: boolean;
+}): React.ReactElement {
+  const cells = Array.from({ length: Math.max(CODE_CELLS, code.length) });
+  return (
+    <View style={styles.codeWrap}>
+      <View style={styles.codeCells} pointerEvents="none">
+        {cells.map((_, index) => (
+          <View
+            key={index}
+            style={[
+              styles.codeCell,
+              code[index] !== undefined && styles.codeCellFilled,
+              index === code.length && styles.codeCellNext,
+            ]}
+          >
+            <Text style={styles.codeChar}>{code[index] ?? ""}</Text>
+          </View>
+        ))}
+      </View>
+      <TextInput
+        style={styles.codeInput}
+        value={code}
+        onChangeText={(next) => onChange(next.replace(/\D/g, "").slice(0, MAX_CODE_LENGTH))}
+        keyboardType="number-pad"
+        maxLength={MAX_CODE_LENGTH}
+        autoComplete="one-time-code"
+        textContentType="oneTimeCode"
+        editable={!busy}
+        autoFocus
+        accessibilityLabel="Sign-in code"
+        onSubmitEditing={() => {
+          void onSubmit();
+        }}
+      />
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: color.bg,
-  },
-  header: {
-    backgroundColor: color.chrome,
-    paddingHorizontal: space.lg,
-    paddingBottom: space.lg,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: color.chromeLine,
-  },
-  wordmark: {
-    ...type.display,
-    color: color.chromeInk,
-  },
-  wordmarkDot: {
-    color: color.brand,
-  },
-  wordmarkLabel: {
-    ...type.micro,
-    color: color.chromeMuted,
-    marginTop: space.xs,
-  },
-  body: {
-    flex: 1,
-    justifyContent: "center",
-    padding: space.lg,
-  },
+  screen: { flex: 1, backgroundColor: color.bg },
+
+  // The card rides up over the chrome's deep bottom padding.
+  body: { flex: 1, paddingHorizontal: 18, marginTop: -64 },
+
   card: {
-    width: "100%",
-    maxWidth: 420,
-    alignSelf: "center",
     backgroundColor: color.surface,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: color.line,
     borderRadius: radius.lg,
-    padding: space.lg,
+    overflow: "hidden",
+    ...shadow.card,
   },
-  title: {
-    ...type.title,
-    color: color.ink,
+  cardHead: { paddingTop: 20, paddingHorizontal: 18, paddingBottom: 18 },
+  cardBody: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: color.line,
+    paddingTop: 14,
+    paddingHorizontal: 18,
+    paddingBottom: 18,
   },
-  lede: {
-    ...type.small,
-    color: color.muted,
-    marginTop: space.xs,
-  },
-  label: {
-    ...type.micro,
-    color: color.muted,
-    marginTop: space.lg,
-    marginBottom: space.sm,
-  },
+
+  title: { ...type.heading, color: color.ink },
+  stop: { color: color.brand },
+  lede: { ...type.small, lineHeight: 20, color: color.muted, marginTop: 7 },
+
+  labelRow: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between" },
+  label: { ...type.rule, color: color.faint },
+  labelMeta: { ...type.rule, letterSpacing: 1, color: color.faint },
+
   input: {
+    // minHeight, never a fixed height: iOS mis-tracks a custom-font placeholder
+    // when the field's height is constrained rather than derived.
     minHeight: HIT,
+    marginTop: 10,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: color.lineStrong,
     borderRadius: radius.md,
-    paddingHorizontal: space.md,
+    paddingHorizontal: 12,
     backgroundColor: color.surface,
     color: color.ink,
     fontFamily: font.body,
+    // 16 keeps iOS from zooming the field on focus.
     fontSize: 16,
+    // Explicit, and never a lineHeight: iOS builds the placeholder from the
+    // field's default text attributes and tracks it far too wide under a custom
+    // font unless the kern attribute is actually set.
+    letterSpacing: 0,
   },
-  codeInput: {
-    fontFamily: font.mono,
-    fontSize: 22,
-    letterSpacing: 8,
-    textAlign: "center",
+
+  codeWrap: { marginTop: 10, position: "relative" },
+  codeCells: { flexDirection: "row", gap: 6 },
+  codeCell: {
+    flex: 1,
+    height: 52,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.lineStrong,
+    borderRadius: radius.md,
+    backgroundColor: color.surface,
+    alignItems: "center",
+    justifyContent: "center",
   },
+  codeCellFilled: { backgroundColor: color.brandWash },
+  codeCellNext: { borderColor: color.brand },
+  codeChar: { fontFamily: font.monoMedium, fontSize: 20, color: color.ink },
+  codeInput: { position: "absolute", top: 0, left: 0, right: 0, height: 52, opacity: 0 },
+
   notice: {
-    marginTop: space.lg,
+    marginTop: 12,
     backgroundColor: color.dangerBg,
     borderRadius: radius.md,
-    paddingHorizontal: space.md,
-    paddingVertical: space.sm,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
   },
-  noticeText: {
-    ...type.small,
-    fontFamily: font.bodyMedium,
-    color: color.danger,
-  },
+  noticeText: { ...type.small, lineHeight: 18, fontFamily: font.bodyMedium, color: color.danger },
+
   primary: {
-    minHeight: HIT,
-    marginTop: space.lg,
+    height: 50,
+    marginTop: 14,
     borderRadius: radius.md,
     backgroundColor: color.brandFill,
     alignItems: "center",
     justifyContent: "center",
   },
-  primaryDown: {
-    backgroundColor: color.brandDown,
-  },
-  primaryOff: {
-    opacity: 0.45,
-  },
-  primaryLabel: {
-    fontFamily: font.bodySemi,
-    fontSize: 15,
-    color: color.surface,
-  },
-  actions: {
-    marginTop: space.lg,
-    gap: space.sm,
-  },
+  primaryDown: { backgroundColor: color.brandDown },
+  primaryLabel: { fontFamily: font.bodySemi, fontSize: 15, color: color.surface },
+  off: { opacity: 0.45 },
+
   secondary: {
-    minHeight: HIT,
+    height: 50,
+    marginTop: 8,
     borderRadius: radius.md,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: color.lineStrong,
     alignItems: "center",
     justifyContent: "center",
   },
-  secondaryDown: {
-    backgroundColor: color.hover,
-  },
-  secondaryLabel: {
-    fontFamily: font.bodySemi,
-    fontSize: 15,
-    color: color.brandDeep,
-  },
-  textButton: {
-    minHeight: HIT,
-    marginTop: space.xs,
+  secondaryDown: { backgroundColor: color.hover },
+  secondaryLabel: { fontFamily: font.bodySemi, fontSize: 15, color: color.brandDeep },
+
+  textButton: { minHeight: 44, marginTop: 6, alignItems: "center", justifyContent: "center" },
+  textButtonLabel: { ...type.small, fontFamily: font.bodyMedium, color: color.brandDeep },
+
+  footer: {
+    marginTop: "auto",
+    paddingTop: 22,
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
+    gap: space.sm,
   },
-  textButtonLabel: {
-    ...type.small,
-    fontFamily: font.bodyMedium,
-    color: color.brandDeep,
-  },
+  footerLine: { flex: 1, height: 1, backgroundColor: color.line },
+  footerText: { ...type.rule, fontSize: 10, letterSpacing: 1.6, color: color.faint },
 });

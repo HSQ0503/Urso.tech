@@ -1,9 +1,8 @@
 // The owner's door to everything that isn't the daily loop.
 //
-// Two destinations today, and that is on purpose: a row that opens nothing is
-// worse than no row at all. NEXT SLICE, in the order the web sidebar has them:
-// Estimates, Invoices, Insights, Payouts, Settings. Each one gets added here the
-// same day its screen lands, never before.
+// The web sidebar has eleven destinations. Reproducing that as a scrolling tab
+// bar would be faithful and useless, so the phone gets the daily loop in the tab
+// bar and everything else behind this one row of doors.
 
 import { useCallback, useEffect, useState, type ComponentProps } from "react";
 import {
@@ -20,7 +19,16 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import { signOut } from "@/auth";
 import { getAdminProfile, type AdminProfile } from "@/session";
-import { color, HIT, radius, space, type } from "@/theme";
+import { color, radius, space, type } from "@/theme";
+import {
+  Chevron,
+  ChromeBar,
+  LedgerBlock,
+  Mark,
+  Row,
+  SectionRule,
+  bodyStyle,
+} from "@/components/ledger";
 
 type IconName = ComponentProps<typeof Feather>["name"];
 
@@ -43,16 +51,13 @@ function DestinationRow({
   onPress: () => void;
 }) {
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      onPress={onPress}
-      style={({ pressed }) => [styles.row, !first && styles.divided, pressed && styles.pressed]}
-    >
-      <Feather name={icon} size={18} color={color.muted} />
-      <Text style={styles.rowLabel}>{label}</Text>
-      <Feather name="chevron-right" size={18} color={color.faint} />
-    </Pressable>
+    <Row first={first} onPress={onPress} accessibilityLabel={label} style={styles.row}>
+      <View style={styles.rowInner}>
+        <Feather name={icon} size={18} color={color.muted} />
+        <Text style={styles.rowLabel}>{label}</Text>
+        <Chevron />
+      </View>
+    </Row>
   );
 }
 
@@ -151,9 +156,7 @@ export default function MoreScreen(): React.ReactElement {
 
   return (
     <View style={styles.screen}>
-      <View style={[styles.chrome, { paddingTop: insets.top + space.md }]}>
-        <Text style={styles.chromeTitle}>More</Text>
-      </View>
+      <ChromeBar title="More" sub="Canes Pressure · owner" />
 
       {loading ? (
         <View style={styles.centre}>
@@ -171,9 +174,9 @@ export default function MoreScreen(): React.ReactElement {
             />
           }
         >
-          <View style={styles.section}>
-            <Text style={styles.sectionLabel}>Everything else</Text>
-            <View style={styles.card}>
+          <View>
+            <SectionRule label="Everything else" />
+            <LedgerBlock>
               {destinations.map((destination, index) => (
                 <DestinationRow
                   key={destination.key}
@@ -183,32 +186,42 @@ export default function MoreScreen(): React.ReactElement {
                   onPress={destination.go}
                 />
               ))}
-            </View>
+            </LedgerBlock>
           </View>
 
-          <View style={styles.section}>
-            <Text style={styles.sectionLabel}>Signed in</Text>
-            <View style={styles.card}>
+          <View>
+            <SectionRule label="Signed in" />
+            <LedgerBlock>
               <View style={styles.identity}>
-                <Text style={styles.name}>{profile?.name ?? "This device"}</Text>
-                <Text style={styles.email}>
-                  {profile?.email ?? "No owner account is stored on this phone."}
-                </Text>
+                {/* The bear on black — the same lockup the chrome carries, at
+                    the size a row can hold. */}
+                <View style={styles.identityMark}>
+                  <Mark size={30} />
+                </View>
+                <View style={styles.identityBody}>
+                  <Text style={styles.name} numberOfLines={1}>
+                    {profile?.name ?? "This device"}
+                  </Text>
+                  <Text style={styles.email} numberOfLines={1}>
+                    {profile?.email ?? "No owner account is stored on this phone."}
+                  </Text>
+                </View>
               </View>
 
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Sign out"
+              <Row
                 onPress={() => {
                   void handleSignOut();
                 }}
-                style={({ pressed }) => [styles.row, styles.divided, pressed && styles.pressed]}
+                accessibilityLabel="Sign out"
+                style={styles.row}
               >
-                <Feather name="log-out" size={18} color={color.danger} />
-                <Text style={[styles.rowLabel, styles.dangerInk]}>Sign out</Text>
-                <Feather name="chevron-right" size={18} color={color.faint} />
-              </Pressable>
-            </View>
+                <View style={styles.rowInner}>
+                  <Feather name="log-out" size={18} color={color.danger} />
+                  <Text style={[styles.rowLabel, styles.dangerInk]}>Sign out</Text>
+                  <Chevron />
+                </View>
+              </Row>
+            </LedgerBlock>
           </View>
         </ScrollView>
       )}
@@ -220,36 +233,23 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: color.bg },
   centre: { flex: 1, alignItems: "center", justifyContent: "center" },
 
-  chrome: { backgroundColor: color.chrome, paddingHorizontal: space.lg, paddingBottom: space.md },
-  chromeTitle: { ...type.display, color: color.chromeInk },
+  body: bodyStyle,
 
-  body: { padding: space.lg, gap: space.xl },
-
-  section: { gap: space.sm },
-  sectionLabel: { ...type.micro, color: color.faint },
-
-  card: {
-    backgroundColor: color.surface,
-    borderRadius: radius.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: color.line,
-    overflow: "hidden",
-  },
-
-  row: {
-    minHeight: HIT,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.md,
-    paddingHorizontal: space.lg,
-    paddingVertical: space.md,
-  },
-  divided: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.line },
-  rowLabel: { ...type.body, color: color.ink, flex: 1 },
-  pressed: { backgroundColor: color.hover },
+  row: { minHeight: 50, paddingVertical: 13, paddingHorizontal: 15, justifyContent: "center" },
+  rowInner: { flexDirection: "row", alignItems: "center", gap: 14 },
+  rowLabel: { ...type.body, lineHeight: 18, color: color.ink, flex: 1 },
   dangerInk: { color: color.danger },
 
-  identity: { paddingHorizontal: space.lg, paddingVertical: space.lg, gap: space.xs },
+  identity: { flexDirection: "row", alignItems: "center", gap: 13, padding: 15 },
+  identityMark: {
+    width: 42,
+    height: 42,
+    borderRadius: radius.sm,
+    backgroundColor: color.chrome,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  identityBody: { flex: 1, minWidth: 0 },
   name: { ...type.title, color: color.ink },
-  email: { ...type.small, color: color.muted },
+  email: { ...type.small, lineHeight: 17, color: color.muted, marginTop: 4 },
 });
