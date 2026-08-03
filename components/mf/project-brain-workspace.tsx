@@ -1,17 +1,22 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useChat } from "@ai-sdk/react";
+import { DefaultChatTransport, type UIMessage } from "ai";
 import {
+  AlertTriangle,
   ArrowRight,
   ArrowUp,
   Bot,
   Check,
   ChevronDown,
   ChevronRight,
-  FileCheck2,
+  Database,
   FileText,
   FolderOpen,
   GitBranch,
+  History,
+  LoaderCircle,
   Mic,
   Network,
   Plus,
@@ -21,228 +26,69 @@ import {
   UsersRound,
   Workflow,
 } from "lucide-react";
-import { askUrsoAnswers, project, roles } from "@/lib/mf-demo/fixtures";
+import { RichText } from "@/components/dashboard/rich-text";
+import type { BrainContextReceipt, BrainUIData } from "@/lib/brain/types";
+import { project, roles } from "@/lib/mf-demo/fixtures";
 import { useMfLanguage } from "./mf-language";
 
 type BrainMode = "map" | "documents" | "ask";
 type DocumentCategory = "truth" | "change" | "team" | "governance";
 type BrainNodeKind = "project" | "document" | "decision" | "department" | "workflow";
+type MfBrainMessage = UIMessage<unknown, BrainUIData>;
 
-type ProjectDocument = {
+type BrainDocument = {
   id: string;
-  code: string;
+  path: string;
   title: string;
-  englishTitle: string;
-  category: DocumentCategory;
-  kind: BrainNodeKind;
-  owner: string;
-  englishOwner: string;
-  status: string;
-  englishStatus: string;
-  summary: string;
-  englishSummary: string;
-  purpose: string;
-  englishPurpose: string;
-  source: string;
-  updated: string;
-  availableAt: number;
+  description: string;
+  department_id: string | null;
+  project_id: string | null;
+  doc_type: "core" | "doc" | "rule";
+  visibility: "organization" | "department" | "project" | "restricted";
+  tags: string[];
   links: string[];
+  content: string;
+  origin: "vault" | "brain";
+  current_version: number;
+  source_updated_at: string;
+  review_due_at: string | null;
 };
 
-const documents: ProjectDocument[] = [
-  {
-    id: "brief",
-    code: "BASE-001",
-    title: "Brief vigente do projeto",
-    englishTitle: "Current project brief",
-    category: "truth",
-    kind: "project",
-    owner: "Coordenação do Projeto",
-    englishOwner: "Project Coordination",
-    status: "Vigente",
-    englishStatus: "Current",
-    summary: "Objetivos, limites e premissas aprovadas da Fase 3.",
-    englishSummary: "Approved objectives, boundaries, and assumptions for Phase 3.",
-    purpose: "É o ponto de partida que todas as equipes devem seguir.",
-    englishPurpose: "It is the starting point every team must follow.",
-    source: "MF Project Vault",
-    updated: "Hoje · 08:20",
-    availableAt: 0,
-    links: ["schedule", "gate", "decision"],
-  },
-  {
-    id: "datasheet-b",
-    code: "SUP-DS-B",
-    title: "Data Sheet da linha · Rev. B",
-    englishTitle: "Bottling line data sheet · Rev. B",
-    category: "truth",
-    kind: "document",
-    owner: "Engenharia de Processo",
-    englishOwner: "Process Engineering",
-    status: "Substituída após aprovação",
-    englishStatus: "Superseded after approval",
-    summary: "Versão anterior da geometria, carga e utilidades da linha.",
-    englishSummary: "Previous version of the line geometry, load, and utility requirements.",
-    purpose: "Permanece no histórico para explicar de onde cada mudança veio.",
-    englishPurpose: "It remains in history to explain where every change came from.",
-    source: "Supplier CDE",
-    updated: "22 jul · 16:05",
-    availableAt: 0,
-    links: ["datasheet-c", "decision"],
-  },
-  {
-    id: "datasheet-c",
-    code: "SUP-DS-C",
-    title: "Data Sheet da linha · Rev. C",
-    englishTitle: "Bottling line data sheet · Rev. C",
-    category: "change",
-    kind: "document",
-    owner: "Engenharia de Processo",
-    englishOwner: "Process Engineering",
-    status: "Proposta",
-    englishStatus: "Proposed",
-    summary: "Nova revisão: +1,2 m, +15% carga, +18% água gelada e entrega D+10.",
-    englishSummary: "New revision: +1.2 m, +15% load, +18% chilled water, and delivery D+10.",
-    purpose: "É a evidência que Urso compara antes de pedir uma decisão humana.",
-    englishPurpose: "It is the evidence Urso compares before asking for a human decision.",
-    source: "Slack · SUP-118",
-    updated: "Hoje · 09:42",
-    availableAt: 1,
-    links: ["datasheet-b", "decision", "impact"],
-  },
-  {
-    id: "decision",
-    code: "DEC-042",
-    title: "Aprovação da Revisão C",
-    englishTitle: "Revision C approval",
-    category: "governance",
-    kind: "decision",
-    owner: "Gerente do Projeto",
-    englishOwner: "Project Manager",
-    status: "Aguardando aprovação",
-    englishStatus: "Awaiting approval",
-    summary: "Decisão que torna a Rev. C verdade vigente do projeto.",
-    englishSummary: "Decision that makes Revision C the current project truth.",
-    purpose: "Impede que uma conversa ou anexo altere o projeto silenciosamente.",
-    englishPurpose: "It prevents a conversation or attachment from silently changing the project.",
-    source: "Urso Decision Log",
-    updated: "Hoje · 09:45",
-    availableAt: 2,
-    links: ["brief", "datasheet-b", "datasheet-c", "impact", "gate"],
-  },
-  {
-    id: "impact",
-    code: "CHG-024",
-    title: "Plano coordenado de impacto",
-    englishTitle: "Coordinated impact plan",
-    category: "change",
-    kind: "workflow",
-    owner: "Urso Harness + Coordenação",
-    englishOwner: "Urso Harness + Coordination",
-    status: "Gerado após decisão",
-    englishStatus: "Generated after decision",
-    summary: "Liga a mudança a dez equipes, seus responsáveis e critérios de fechamento.",
-    englishSummary: "Connects the change to ten teams, their owners, and completion criteria.",
-    purpose: "Transforma uma decisão aprovada em trabalho que pode ser executado.",
-    englishPurpose: "It turns an approved decision into work that can be executed.",
-    source: "change-propagation@1.4",
-    updated: "Hoje · 09:48",
-    availableAt: 4,
-    links: ["decision", "electrical", "bim", "schedule", "gate"],
-  },
-  {
-    id: "electrical",
-    code: "ELE-08",
-    title: "Pacote elétrico · Rev. 8",
-    englishTitle: "Electrical package · Rev. 8",
-    category: "team",
-    kind: "department",
-    owner: "Elétrica",
-    englishOwner: "Electrical",
-    status: "Revisão técnica",
-    englishStatus: "Technical review",
-    summary: "Lista de cargas, alimentador e unifilar atualizados para a Rev. C.",
-    englishSummary: "Load list, feeder, and single-line diagram updated for Revision C.",
-    purpose: "Mostra exatamente o trabalho atribuído à equipe elétrica.",
-    englishPurpose: "It shows the exact work assigned to the electrical team.",
-    source: "Electrical Agent + MF review",
-    updated: "Hoje · 09:54",
-    availableAt: 6,
-    links: ["datasheet-c", "impact", "bim", "gate"],
-  },
-  {
-    id: "bim",
-    code: "BIM-SC-06",
-    title: "Scaffold BIM de coordenação",
-    englishTitle: "BIM coordination scaffold",
-    category: "team",
-    kind: "department",
-    owner: "Metodologia BIM",
-    englishOwner: "BIM Methodology",
-    status: "Duas interferências abertas",
-    englishStatus: "Two clashes open",
-    summary: "Modelo conceitual para revisar envelope, conexões e interferências.",
-    englishSummary: "Concept model for reviewing envelope, connections, and clashes.",
-    purpose: "Dá às equipes uma base visual antes de editar o modelo construtivo.",
-    englishPurpose: "It gives teams a visual starting point before editing the construction model.",
-    source: "BIM scaffold agent",
-    updated: "Hoje · 09:56",
-    availableAt: 6,
-    links: ["impact", "electrical", "gate"],
-  },
-  {
-    id: "schedule",
-    code: "PLN-REC-03",
-    title: "Plano de recuperação do prazo",
-    englishTitle: "Schedule recovery plan",
-    category: "team",
-    kind: "department",
-    owner: "Planejamento e Controle",
-    englishOwner: "Planning & Control",
-    status: "Opção recomendada pronta",
-    englishStatus: "Recommended option ready",
-    summary: "Recupera oito dos dez dias com revisão paralela controlada.",
-    englishSummary: "Recovers eight of ten days through controlled parallel review.",
-    purpose: "Mostra como a decisão altera datas, dependências e o marco EXE-02.",
-    englishPurpose: "It shows how the decision changes dates, dependencies, and milestone EXE-02.",
-    source: "Schedule simulation agent",
-    updated: "Hoje · 10:02",
-    availableAt: 6,
-    links: ["brief", "impact", "gate"],
-  },
-  {
-    id: "gate",
-    code: "EXE-02",
-    title: "Checklist de liberação executiva",
-    englishTitle: "Executive release checklist",
-    category: "governance",
-    kind: "decision",
-    owner: "Qualidade",
-    englishOwner: "Quality",
-    status: "Aguardando evidências",
-    englishStatus: "Awaiting evidence",
-    summary: "Reúne decisões, revisões técnicas e aprovações necessárias para liberar.",
-    englishSummary: "Collects decisions, technical reviews, and approvals needed for release.",
-    purpose: "O projeto só avança quando a evidência exigida está completa.",
-    englishPurpose: "The project only advances when the required evidence is complete.",
-    source: "Quality Gate Register",
-    updated: "Hoje · 10:18",
-    availableAt: 5,
-    links: ["brief", "decision", "impact", "electrical", "bim", "schedule"],
-  },
-];
+type BrainGraphDocument = Pick<
+  BrainDocument,
+  "path" | "title" | "department_id" | "project_id" | "doc_type" | "origin" | "links"
+>;
 
-const positions: Record<string, { x: number; y: number }> = {
-  brief: { x: 450, y: 280 },
-  "datasheet-b": { x: 130, y: 100 },
-  "datasheet-c": { x: 130, y: 280 },
-  decision: { x: 350, y: 110 },
-  impact: { x: 640, y: 120 },
-  electrical: { x: 760, y: 270 },
-  bim: { x: 710, y: 440 },
-  schedule: { x: 390, y: 465 },
-  gate: { x: 180, y: 455 },
+type BrainClaim = {
+  id: string;
+  subject: string;
+  predicate: string;
+  object: string;
+  lifecycle: "active" | "superseded" | "retired";
+  resolution: "accepted" | "unresolved" | "contested";
+  validFrom: string | null;
+  validUntil: string | null;
+  evidenceDocumentIds: string[];
 };
+
+type BrainWorkspacePayload = {
+  connected: true;
+  scope: {
+    name: string;
+    title: string;
+    departmentId: string;
+    role: string;
+    permittedDocuments: number;
+  };
+  departments: { id: string; name: string; blurb: string }[];
+  documents: BrainDocument[];
+  graph: BrainGraphDocument[];
+  claims: BrainClaim[];
+  proposals: { id: string; status: string; rationale: string; created_at: string }[];
+  audit: { id: number; action: string; resource_type: string; resource_id: string; created_at: string }[];
+};
+
+type ThreadSummary = { id: string; title: string; project_id: string; model: string; updated_at: string };
 
 const categoryLabels: Record<DocumentCategory, { pt: string; en: string }> = {
   truth: { pt: "Verdade vigente", en: "Current truth" },
@@ -251,28 +97,97 @@ const categoryLabels: Record<DocumentCategory, { pt: string; en: string }> = {
   governance: { pt: "Decisões e controle", en: "Decisions & control" },
 };
 
-function findAnswer(question: string, step: number) {
-  const normalized = question.toLocaleLowerCase("pt-BR");
-  let index = 0;
-  if (normalized.includes("elétr") || normalized.includes("electr")) index = 1;
-  else if (normalized.includes("document") || normalized.includes("revis") || normalized.includes("current")) index = 2;
-  else if (normalized.includes("liber") || normalized.includes("falta") || normalized.includes("missing") || normalized.includes("release")) index = 3;
+const graphPriority = [
+  "Project Charter",
+  "Approved Project Premises",
+  "Filling Line Data Sheet — Revision B",
+  "Filling Line Data Sheet — Revision C",
+  "Revision B-C Material Comparison",
+  "Revision C Approval",
+  "Coordinated Impact Plan",
+  "Executive Design Gate",
+  "Baseline Schedule",
+  "Recovery Plan",
+  "Electrical Work Package",
+  "BIM Coordination Work Package",
+  "Planning Work Package",
+  "Quality Gate Work Package",
+  "Concept BIM Scaffold",
+  "Release Readiness",
+];
 
-  const answer = askUrsoAnswers[index];
-  if (index === 2 && step < 3) {
-    return {
-      ...answer,
-      answer: "A Revisão B continua vigente. A Revisão C foi preservada e comparada, mas permanece proposta até a aprovação do Gerente do Projeto.",
-      englishAnswer: "Revision B remains current. Revision C has been preserved and compared, but remains proposed until the Project Manager approves it.",
-      sources: "Histórico de versões · CHG-024 · DEC-042",
-    };
-  }
-  return { ...answer, englishAnswer: undefined };
+const suggestions = {
+  pt: [
+    "Qual revisão da linha está vigente e por quê?",
+    "Quais disciplinas são afetadas pela Revisão C?",
+    "O que ainda bloqueia a liberação EXE-02?",
+  ],
+  en: [
+    "Which filling-line revision is current, and why?",
+    "Which disciplines are affected by Revision C?",
+    "What still blocks the EXE-02 release?",
+  ],
+};
+
+function documentCategory(document: BrainDocument): DocumentCategory {
+  const joined = `${document.title} ${document.tags.join(" ")}`.toLowerCase();
+  if (document.doc_type === "rule" || /approval|decision|gate|governance|quality/.test(joined)) return "governance";
+  if (/work-package|package|discipline|scaffold/.test(joined)) return "team";
+  if (/revision-c|change|comparison|recovery|rfi|event/.test(joined)) return "change";
+  return "truth";
 }
+
+function nodeKind(document: BrainGraphDocument): BrainNodeKind {
+  const value = document.title.toLowerCase();
+  if (document.doc_type === "core" || value.includes("project charter")) return "project";
+  if (/approval|decision|gate|readiness/.test(value)) return "decision";
+  if (/work package/.test(value)) return "department";
+  if (/impact plan|recovery plan|scaffold/.test(value)) return "workflow";
+  return "document";
+}
+
+function documentCode(title: string): string {
+  if (title.includes("DEC-042")) return "DEC-042";
+  if (title.includes("CHG-024")) return "CHG-024";
+  if (title.includes("EXE-02")) return "EXE-02";
+  if (title.includes("Revision B")) return "SUP-DS-B";
+  if (title.includes("Revision C")) return "SUP-DS-C";
+  const initials = title
+    .replace(/[^A-Za-z0-9À-ÿ ]/g, " ")
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 3)
+    .map((word) => word[0])
+    .join("")
+    .toUpperCase();
+  return initials || "DOC";
+}
+
+function graphPosition(index: number, count: number) {
+  if (index === 0) return { x: 450, y: 280 };
+  const ring = index <= 7 ? 1 : 2;
+  const ringItems = ring === 1 ? Math.min(7, count - 1) : Math.max(1, count - 8);
+  const ringIndex = ring === 1 ? index - 1 : index - 8;
+  const angle = (ringIndex / ringItems) * Math.PI * 2 - Math.PI / 2;
+  const radiusX = ring === 1 ? 235 : 365;
+  const radiusY = ring === 1 ? 145 : 225;
+  return { x: 450 + Math.cos(angle) * radiusX, y: 280 + Math.sin(angle) * radiusY };
+}
+
+const errorText = (message: string): string => {
+  try {
+    const parsed = JSON.parse(message) as { error?: string };
+    if (parsed.error) return parsed.error;
+  } catch {
+    // Streaming errors are already plain text.
+  }
+  return message;
+};
 
 function BrainComposer({
   value,
   language,
+  busy,
   compact = false,
   onChange,
   onSubmit,
@@ -280,6 +195,7 @@ function BrainComposer({
 }: {
   value: string;
   language: "pt" | "en";
+  busy: boolean;
   compact?: boolean;
   onChange: (value: string) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
@@ -292,7 +208,7 @@ function BrainComposer({
       <button
         type="button"
         className="mf-brain-composer-add"
-        aria-label={l("Adicionar uma fonte do projeto", "Add a project source")}
+        aria-label={l("Abrir fontes do projeto", "Open project sources")}
         title={l("Abrir documentos do projeto", "Open project documents")}
         onClick={onOpenDocuments}
       >
@@ -303,14 +219,15 @@ function BrainComposer({
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={l("Pergunte ao Brain deste projeto", "Ask this project Brain")}
+        disabled={busy}
       />
       <div className="mf-brain-composer-tools">
         <span className="mf-brain-model"><i /> MF Project Brain <ChevronDown size={13} /></span>
-        <button type="button" className="mf-brain-mic" aria-label={l("Entrada de voz (demonstração)", "Voice input (demonstration)")}>
+        <button type="button" className="mf-brain-mic" aria-label={l("Entrada de voz indisponível", "Voice input unavailable")} disabled>
           <Mic size={17} />
         </button>
-        <button type="submit" className="mf-brain-send" disabled={!value.trim()} aria-label={l("Enviar pergunta", "Send question")}>
-          <ArrowUp size={18} />
+        <button type="submit" className="mf-brain-send" disabled={!value.trim() || busy} aria-label={l("Enviar pergunta", "Send question")}>
+          {busy ? <LoaderCircle className="mf-spin" size={18} /> : <ArrowUp size={18} />}
         </button>
       </div>
     </form>
@@ -321,47 +238,154 @@ export function ProjectBrainWorkspace({ step, roleId }: { step: number; roleId: 
   const { language, t } = useMfLanguage();
   const workspaceRef = useRef<HTMLElement>(null);
   const [mode, setMode] = useState<BrainMode>("map");
-  const [selectedDocumentId, setSelectedDocumentId] = useState("brief");
+  const [workspace, setWorkspace] = useState<BrainWorkspacePayload | null>(null);
+  const [workspaceError, setWorkspaceError] = useState<string | null>(null);
+  const [loadingWorkspace, setLoadingWorkspace] = useState(true);
+  const [selectedDocumentPath, setSelectedDocumentPath] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [category, setCategory] = useState<DocumentCategory | "all">("all");
   const [draftQuestion, setDraftQuestion] = useState("");
-  const [askedQuestion, setAskedQuestion] = useState<string | null>(null);
-
+  const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const selectedRole = roles.find((role) => role.id === roleId) ?? roles[0];
   const l = (pt: string, en: string) => (language === "pt" ? pt : en);
-  const availableDocuments = documents.filter((document) => step >= document.availableAt);
-  const selectedDocument = documents.find((document) => document.id === selectedDocumentId) ?? documents[0];
-  const filteredDocuments = useMemo(() => {
-    const normalized = searchQuery.trim().toLocaleLowerCase("pt-BR");
-    return documents.filter((document) => {
-      const matchesCategory = category === "all" || document.category === category;
-      const matchesQuery = !normalized || [document.code, document.title, document.englishTitle, document.owner, document.englishOwner]
-        .some((value) => value.toLocaleLowerCase("pt-BR").includes(normalized));
-      return matchesCategory && matchesQuery;
+
+  const loadWorkspace = useCallback(async () => {
+    setLoadingWorkspace(true);
+    setWorkspaceError(null);
+    try {
+      const response = await fetch(`/api/mf/brain/workspace?roleId=${encodeURIComponent(roleId)}`, { cache: "no-store" });
+      const payload = (await response.json()) as BrainWorkspacePayload | { error?: string };
+      if (!response.ok || !("connected" in payload)) {
+        throw new Error("error" in payload && payload.error ? payload.error : "MF Brain unavailable");
+      }
+      setWorkspace(payload);
+      setSelectedDocumentPath((current) =>
+        current && payload.documents.some((document) => document.path === current)
+          ? current
+          : (payload.documents[0]?.path ?? null),
+      );
+    } catch (error) {
+      setWorkspace(null);
+      setWorkspaceError(error instanceof Error ? error.message : "MF Brain unavailable");
+    } finally {
+      setLoadingWorkspace(false);
+    }
+  }, [roleId]);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      void loadWorkspace();
     });
-  }, [category, searchQuery]);
-  const activeAnswer = askedQuestion ? findAnswer(askedQuestion, step) : null;
+    return () => window.cancelAnimationFrame(frame);
+  }, [loadWorkspace, step]);
+
+  const chat = useChat<MfBrainMessage>({
+    transport: new DefaultChatTransport({ api: "/api/mf/brain/chat" }),
+  });
+  const { messages, status, error, setMessages } = chat;
+  const busy = status === "submitted" || status === "streaming";
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      setActiveThreadId(null);
+      setMessages([]);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [roleId, setMessages]);
 
   useEffect(() => {
     if (mode !== "ask") return;
-
     const frame = window.requestAnimationFrame(() => {
       workspaceRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
-
     return () => window.cancelAnimationFrame(frame);
   }, [mode]);
 
-  function selectDocument(id: string) {
-    setSelectedDocumentId(id);
-  }
+  const documents = useMemo(() => workspace?.documents ?? [], [workspace?.documents]);
+  const selectedDocument = documents.find((document) => document.path === selectedDocumentPath) ?? documents[0] ?? null;
+  const departmentNames = useMemo(
+    () => new Map((workspace?.departments ?? []).map((department) => [department.id, department.name])),
+    [workspace?.departments],
+  );
+  const filteredDocuments = useMemo(() => {
+    const normalized = searchQuery.trim().toLocaleLowerCase("pt-BR");
+    return documents.filter((document) => {
+      const documentCategoryValue = documentCategory(document);
+      const matchesCategory = category === "all" || documentCategoryValue === category;
+      const matchesQuery = !normalized || [documentCode(document.title), document.title, document.description, document.department_id ?? ""]
+        .some((value) => value.toLocaleLowerCase("pt-BR").includes(normalized));
+      return matchesCategory && matchesQuery;
+    });
+  }, [category, documents, searchQuery]);
+
+  const graphDocuments = useMemo(() => {
+    const graph = workspace?.graph ?? [];
+    const ranked = [...graph].sort((left, right) => {
+      const leftIndex = graphPriority.findIndex((item) => left.title.includes(item));
+      const rightIndex = graphPriority.findIndex((item) => right.title.includes(item));
+      return (leftIndex < 0 ? 999 : leftIndex) - (rightIndex < 0 ? 999 : rightIndex) || left.title.localeCompare(right.title);
+    });
+    return ranked.slice(0, 16);
+  }, [workspace?.graph]);
+  const graphPathSet = useMemo(() => new Set(graphDocuments.map((document) => document.path)), [graphDocuments]);
+  const positions = useMemo(
+    () => new Map(graphDocuments.map((document, index) => [document.path, graphPosition(index, graphDocuments.length)])),
+    [graphDocuments],
+  );
+
+  const latestReceipt = useMemo<BrainContextReceipt | null>(() => {
+    for (let messageIndex = messages.length - 1; messageIndex >= 0; messageIndex--) {
+      for (let partIndex = messages[messageIndex].parts.length - 1; partIndex >= 0; partIndex--) {
+        const part = messages[messageIndex].parts[partIndex];
+        if (part.type === "data-context-receipt") return part.data;
+      }
+    }
+    return null;
+  }, [messages]);
+
+  const createThread = useCallback(async (): Promise<string | null> => {
+    try {
+      const response = await fetch("/api/mf/brain/threads", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ roleId }),
+      });
+      if (!response.ok) return null;
+      const payload = (await response.json()) as { thread: ThreadSummary };
+      setActiveThreadId(payload.thread.id);
+      return payload.thread.id;
+    } catch {
+      return null;
+    }
+  }, [roleId]);
+
+  const sendQuestion = useCallback(async (value: string) => {
+    const question = value.trim();
+    if (!question || busy) return;
+    const threadId = activeThreadId ?? await createThread();
+    chat.sendMessage(
+      { text: question },
+      { body: { threadId: threadId ?? undefined, roleId, language } },
+    );
+    setDraftQuestion("");
+  }, [activeThreadId, busy, chat, createThread, language, roleId]);
 
   function submitQuestion(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!draftQuestion.trim()) return;
-    setAskedQuestion(draftQuestion.trim());
+    void sendQuestion(draftQuestion);
+  }
+
+  function newConversation() {
+    if (busy) chat.stop();
+    setActiveThreadId(null);
+    setMessages([]);
     setDraftQuestion("");
   }
+
+  const openEvidence = (path: string) => {
+    setSelectedDocumentPath(path);
+    setMode("documents");
+  };
 
   return (
     <section ref={workspaceRef} className="mf-brain-workspace" aria-label={l("Workspace do cérebro do projeto", "Project Brain workspace")}>
@@ -370,66 +394,74 @@ export function ProjectBrainWorkspace({ step, roleId }: { step: number; roleId: 
           <span className="mf-brain-mark"><Network size={18} /></span>
           <span>
             <strong>{l("Cérebro do projeto", "Project Brain")}</strong>
-            <small>{project.name} · {availableDocuments.length}/{documents.length} {l("registros disponíveis", "records available")}</small>
+            <small>
+              {project.name} · {loadingWorkspace
+                ? l("conectando…", "connecting…")
+                : workspace
+                  ? `${workspace.scope.permittedDocuments} ${l("fontes autorizadas", "authorized sources")}`
+                  : l("configuração necessária", "setup required")}
+            </small>
           </span>
         </div>
-        <nav aria-label={l("Modos do cérebro", "Brain modes")}>
+        <nav aria-label={l("Modos do cérebro", "Brain modes") }>
           <button type="button" className={mode === "map" ? "is-active" : ""} onClick={() => setMode("map")}>
             <GitBranch size={15} /> {l("Mapa", "Map")}
           </button>
           <button type="button" className={mode === "documents" ? "is-active" : ""} onClick={() => setMode("documents")}>
-            <FolderOpen size={15} /> {l("Documentos", "Documents")} <span>{availableDocuments.length}/{documents.length}</span>
+            <FolderOpen size={15} /> {l("Documentos", "Documents")} <span>{documents.length}</span>
           </button>
           <button type="button" className={mode === "ask" ? "is-active" : ""} onClick={() => setMode("ask")}>
             <Bot size={15} /> {l("Perguntar ao Urso", "Ask Urso")}
           </button>
         </nav>
-        <div className="mf-brain-trust"><ShieldCheck size={14} /> {l("Somente fontes autorizadas", "Authorized sources only")}</div>
+        <div className="mf-brain-trust">
+          {workspace ? <><ShieldCheck size={14} /> {l("Brain conectado", "Brain connected")}</> : <><Database size={14} /> {l("Tenant isolado", "Isolated tenant")}</>}
+        </div>
       </header>
 
-      {mode === "map" ? (
+      {loadingWorkspace ? (
+        <div className="mf-brain-loading"><LoaderCircle className="mf-spin" size={24} /><strong>{l("Autorizando e carregando o projeto", "Authorizing and loading the project")}</strong></div>
+      ) : workspaceError ? (
+        <div className="mf-brain-connection-error">
+          <AlertTriangle size={22} />
+          <div><strong>{l("O tenant MF Brain ainda não está disponível", "The MF Brain tenant is not available yet")}</strong><p>{workspaceError}</p></div>
+          <button type="button" onClick={() => void loadWorkspace()}>{l("Tentar novamente", "Retry")}</button>
+        </div>
+      ) : null}
+
+      {!loadingWorkspace && workspace && mode === "map" ? (
         <div className="mf-brain-map-layout">
           <div className="mf-brain-canvas">
             <div className="mf-brain-canvas-copy">
-              <span>{l("Selecione um nó", "Select a node")}</span>
-              <small>{l("Veja por que cada documento, decisão e equipe está conectado.", "See why every document, decision, and team is connected.")}</small>
+              <span>{l("Mapa autorizado do projeto", "Authorized project map")}</span>
+              <small>{l("Relações reais do Brain, derivadas dos wikilinks e versões atuais.", "Live Brain relationships derived from wikilinks and current versions.")}</small>
             </div>
             <svg viewBox="0 0 900 560" aria-hidden="true">
-              {documents.flatMap((document) => document.links.map((targetId) => {
-                const target = documents.find((item) => item.id === targetId);
-                const sourcePosition = positions[document.id];
-                const targetPosition = target ? positions[target.id] : null;
-                if (!targetPosition || document.id > targetId) return [];
-                const highlighted = selectedDocument && (selectedDocument.id === document.id || selectedDocument.id === targetId);
-                return [
-                  <line
-                    key={`${document.id}-${targetId}`}
-                    x1={sourcePosition.x}
-                    y1={sourcePosition.y}
-                    x2={targetPosition.x}
-                    y2={targetPosition.y}
-                    className={highlighted ? "is-active" : ""}
-                  />,
-                ];
+              {graphDocuments.flatMap((document) => document.links.map((targetPath) => {
+                if (!graphPathSet.has(targetPath) || document.path > targetPath) return [];
+                const sourcePosition = positions.get(document.path);
+                const targetPosition = positions.get(targetPath);
+                if (!sourcePosition || !targetPosition) return [];
+                const highlighted = selectedDocumentPath === document.path || selectedDocumentPath === targetPath;
+                return [<line key={`${document.path}-${targetPath}`} x1={sourcePosition.x} y1={sourcePosition.y} x2={targetPosition.x} y2={targetPosition.y} className={highlighted ? "is-active" : ""} />];
               }))}
             </svg>
-            {documents.map((document) => {
-              const position = positions[document.id];
-              const selected = selectedDocument?.id === document.id;
-              const available = step >= document.availableAt;
+            {graphDocuments.map((document) => {
+              const position = positions.get(document.path) ?? { x: 450, y: 280 };
+              const selected = selectedDocumentPath === document.path;
+              const kind = nodeKind(document);
               return (
                 <button
                   type="button"
-                  key={document.id}
-                  className={`mf-brain-node is-${document.kind} ${selected ? "is-selected" : ""} ${available ? "is-available" : "is-planned"}`}
-                  data-planned-label={l("futuro", "planned")}
+                  key={document.path}
+                  className={`mf-brain-node is-${kind} ${selected ? "is-selected" : ""} is-available`}
                   style={{ left: `${(position.x / 900) * 100}%`, top: `${(position.y / 560) * 100}%` }}
-                  onClick={() => selectDocument(document.id)}
+                  onClick={() => setSelectedDocumentPath(document.path)}
                   aria-pressed={selected}
                 >
-                  <i>{document.kind === "project" ? <Network size={16} /> : document.kind === "decision" ? <ShieldCheck size={15} /> : document.kind === "department" ? <UsersRound size={15} /> : document.kind === "workflow" ? <Workflow size={15} /> : <FileText size={15} />}</i>
-                  <span>{document.code}</span>
-                  <strong>{language === "pt" ? document.title : document.englishTitle}</strong>
+                  <i>{kind === "project" ? <Network size={16} /> : kind === "decision" ? <ShieldCheck size={15} /> : kind === "department" ? <UsersRound size={15} /> : kind === "workflow" ? <Workflow size={15} /> : <FileText size={15} />}</i>
+                  <span>{documentCode(document.title)}</span>
+                  <strong>{document.title}</strong>
                 </button>
               );
             })}
@@ -441,12 +473,12 @@ export function ProjectBrainWorkspace({ step, roleId }: { step: number; roleId: 
             </div>
           </div>
           {selectedDocument ? (
-            <DocumentInspector document={selectedDocument} language={language} onOpenDocuments={() => setMode("documents")} />
+            <DocumentInspector document={selectedDocument} claims={workspace.claims} departmentName={selectedDocument.department_id ? departmentNames.get(selectedDocument.department_id) ?? selectedDocument.department_id : l("Toda a organização", "Organization-wide")} language={language} onOpenDocuments={() => setMode("documents")} />
           ) : null}
         </div>
       ) : null}
 
-      {mode === "documents" ? (
+      {!loadingWorkspace && workspace && mode === "documents" ? (
         <div className="mf-document-browser">
           <aside>
             <label>
@@ -463,12 +495,12 @@ export function ProjectBrainWorkspace({ step, roleId }: { step: number; roleId: 
             </div>
             <div className="mf-document-list">
               {filteredDocuments.map((document) => (
-                <button type="button" key={document.id} className={`${selectedDocument?.id === document.id ? "is-active" : ""} ${step >= document.availableAt ? "is-available" : "is-planned"}`} onClick={() => selectDocument(document.id)}>
+                <button type="button" key={document.path} className={selectedDocument?.path === document.path ? "is-active is-available" : "is-available"} onClick={() => setSelectedDocumentPath(document.path)}>
                   <span><FileText size={15} /></span>
                   <span>
-                    <small>{document.code} · {language === "pt" ? document.owner : document.englishOwner}</small>
-                    <strong>{language === "pt" ? document.title : document.englishTitle}</strong>
-                    <em>{document.updated}</em>
+                    <small>{documentCode(document.title)} · {document.department_id ? departmentNames.get(document.department_id) ?? document.department_id : l("Empresa", "Company")}</small>
+                    <strong>{document.title}</strong>
+                    <em>v{document.current_version} · {document.origin === "vault" ? "Obsidian" : "Brain"}</em>
                   </span>
                   <ChevronRight size={15} />
                 </button>
@@ -476,74 +508,67 @@ export function ProjectBrainWorkspace({ step, roleId }: { step: number; roleId: 
               {filteredDocuments.length === 0 ? <p>{l("Nenhum documento encontrado.", "No documents found.")}</p> : null}
             </div>
           </aside>
-          {selectedDocument ? <DocumentInspector document={selectedDocument} language={language} /> : null}
+          {selectedDocument ? <DocumentInspector document={selectedDocument} claims={workspace.claims} departmentName={selectedDocument.department_id ? departmentNames.get(selectedDocument.department_id) ?? selectedDocument.department_id : l("Toda a organização", "Organization-wide")} language={language} /> : null}
         </div>
       ) : null}
 
-      {mode === "ask" ? (
-        <div className={`mf-gemini-chat ${askedQuestion ? "has-conversation" : "is-empty"}`}>
+      {!loadingWorkspace && workspace && mode === "ask" ? (
+        <div className={`mf-gemini-chat ${messages.length ? "has-conversation" : "is-empty"}`}>
           <header className="mf-gemini-chat-header">
-            <button type="button" onClick={() => setAskedQuestion(null)}>
-              <Plus size={16} /> {l("Nova conversa", "New conversation")}
-            </button>
-            <span><ShieldCheck size={14} /> {t(selectedRole.name)} · {availableDocuments.length} {l("fontes autorizadas", "authorized sources")}</span>
+            <button type="button" onClick={newConversation}><Plus size={16} /> {l("Nova conversa", "New conversation")}</button>
+            <span><ShieldCheck size={14} /> {t(selectedRole.name)} · {workspace.scope.permittedDocuments} {l("fontes autorizadas", "authorized sources")}</span>
           </header>
 
-          {!askedQuestion ? (
+          {messages.length === 0 ? (
             <div className="mf-gemini-empty">
               <div className="mf-gemini-glow" aria-hidden="true" />
               <div className="mf-gemini-intro">
                 <span className="mf-gemini-mark"><Sparkles size={19} /></span>
-                <h2>{l("Pronto quando você estiver", "Ready when you are")}</h2>
+                <h2>{l("Pergunte ao projeto", "Ask the project")}</h2>
                 <p>{l(
-                  `Converse com o projeto como ${t(selectedRole.name)}. O Brain responde com a verdade vigente e mostra as fontes usadas.`,
-                  `Talk to the project as ${t(selectedRole.name)}. The Brain answers from current truth and shows the sources it used.`,
+                  `Você está falando como ${t(selectedRole.name)}. Antes de responder, o Brain autoriza, recupera e registra exatamente as evidências usadas.`,
+                  `You are speaking as ${t(selectedRole.name)}. Before answering, the Brain authorizes, retrieves, and records the exact evidence it used.`,
                 )}</p>
               </div>
-              <BrainComposer
-                value={draftQuestion}
-                language={language}
-                onChange={setDraftQuestion}
-                onSubmit={submitQuestion}
-                onOpenDocuments={() => setMode("documents")}
-              />
-              <div className="mf-gemini-suggestions" aria-label={l("Perguntas sugeridas", "Suggested questions")}>
-                {askUrsoAnswers.slice(0, 3).map((item) => (
-                  <button type="button" key={item.question} onClick={() => setAskedQuestion(item.question)}>
-                    {t(item.question)} <ArrowRight size={13} />
-                  </button>
+              <BrainComposer value={draftQuestion} language={language} busy={busy} onChange={setDraftQuestion} onSubmit={submitQuestion} onOpenDocuments={() => setMode("documents")} />
+              <div className="mf-gemini-suggestions" aria-label={l("Perguntas sugeridas", "Suggested questions") }>
+                {suggestions[language].map((question) => (
+                  <button type="button" key={question} onClick={() => void sendQuestion(question)}>{question} <ArrowRight size={13} /></button>
                 ))}
               </div>
-              <small className="mf-chat-demo-note">{l("Demonstração com respostas determinísticas e rastreáveis.", "Demonstration with deterministic, traceable answers.")}</small>
+              <small className="mf-chat-demo-note"><Database size={12} /> {l("Conectado ao Context Compiler, verdade temporal e recibos do Urso Brain.", "Connected to the Urso Brain Context Compiler, temporal truth, and receipts.")}</small>
             </div>
           ) : (
             <div className="mf-gemini-conversation">
               <div className="mf-gemini-thread" aria-live="polite">
-                <div className="mf-gemini-user-message"><span>{t(askedQuestion)}</span></div>
-                <article className="mf-gemini-answer">
-                  <header><span className="mf-gemini-mark"><Sparkles size={17} /></span><strong>Urso</strong></header>
-                  <p>{language === "en" && activeAnswer?.englishAnswer ? activeAnswer.englishAnswer : t(activeAnswer?.answer ?? "")}</p>
-                  <section className="mf-gemini-sources">
-                    <header><FileCheck2 size={15} /><strong>{l("Fontes verificadas", "Verified sources")}</strong><span>{availableDocuments.length} {l("disponíveis", "available")}</span></header>
-                    <p>{t(activeAnswer?.sources ?? "")}</p>
-                    <button type="button" onClick={() => setMode("documents")}>{l("Abrir documentos usados", "Open documents used")} <ArrowRight size={13} /></button>
-                  </section>
-                  <div className="mf-gemini-answer-actions">
-                    <span><Check size={14} /> {l(`Verdade atual: ${step >= 3 ? "Rev. C" : "Rev. B"}`, `Current truth: ${step >= 3 ? "Rev. C" : "Rev. B"}`)}</span>
-                    <button type="button" onClick={() => setAskedQuestion(null)}><Plus size={14} /> {l("Nova pergunta", "New question")}</button>
-                  </div>
-                </article>
+                {messages.map((message) => {
+                  const text = message.parts.filter((part) => part.type === "text").map((part) => part.text).join("");
+                  if (!text) return null;
+                  return message.role === "user" ? (
+                    <div className="mf-gemini-user-message" key={message.id}><span>{text}</span></div>
+                  ) : (
+                    <article className="mf-gemini-answer" key={message.id}>
+                      <header><span className="mf-gemini-mark"><Sparkles size={17} /></span><strong>Urso</strong></header>
+                      <div className="mf-gemini-answer-copy"><RichText text={text} /></div>
+                    </article>
+                  );
+                })}
+                {busy ? <div className="mf-brain-thinking"><LoaderCircle className="mf-spin" size={16} /> {l("Compilando contexto autorizado…", "Compiling authorized context…")}</div> : null}
+                {error ? <div className="mf-brain-chat-error"><AlertTriangle size={15} /> {errorText(error.message)}</div> : null}
+                {latestReceipt ? (
+                  <ContextReceipt
+                    key={latestReceipt.runId}
+                    receipt={latestReceipt}
+                    language={language}
+                    roleId={roleId}
+                    disabled={busy}
+                    onOpenEvidence={openEvidence}
+                  />
+                ) : null}
               </div>
               <div className="mf-gemini-composer-dock">
-                <BrainComposer
-                  compact
-                  value={draftQuestion}
-                  language={language}
-                  onChange={setDraftQuestion}
-                  onSubmit={submitQuestion}
-                  onOpenDocuments={() => setMode("documents")}
-                />
-                <small className="mf-chat-demo-note">{l("Urso pode cometer erros. Verifique as fontes e decisões antes de agir.", "Urso can make mistakes. Verify sources and decisions before acting.")}</small>
+                <BrainComposer compact value={draftQuestion} language={language} busy={busy} onChange={setDraftQuestion} onSubmit={submitQuestion} onOpenDocuments={() => setMode("documents")} />
+                <small className="mf-chat-demo-note">{l("Verifique as fontes e decisões antes de agir.", "Verify sources and decisions before acting.")}</small>
               </div>
             </div>
           )}
@@ -553,43 +578,152 @@ export function ProjectBrainWorkspace({ step, roleId }: { step: number; roleId: 
   );
 }
 
+function ContextReceipt({
+  receipt,
+  language,
+  roleId,
+  disabled,
+  onOpenEvidence,
+}: {
+  receipt: BrainContextReceipt;
+  language: "pt" | "en";
+  roleId: string;
+  disabled: boolean;
+  onOpenEvidence: (path: string) => void;
+}) {
+  const l = (pt: string, en: string) => (language === "pt" ? pt : en);
+  const [learningState, setLearningState] = useState<
+    | { status: "idle" }
+    | { status: "running" }
+    | { status: "complete"; candidateCount: number; mode: string; evidenceRejected: boolean }
+    | { status: "error"; message: string }
+  >({ status: "idle" });
+
+  async function reviewForLearning() {
+    if (disabled || learningState.status === "running") return;
+    setLearningState({ status: "running" });
+    try {
+      const response = await fetch("/api/mf/brain/learning", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ roleId, contextRunId: receipt.runId }),
+      });
+      const payload = (await response.json()) as {
+        candidateCount?: number;
+        mode?: string;
+        status?: "complete" | "failed" | "skipped";
+        error?: string;
+      };
+      if (!response.ok) throw new Error(payload.error ?? "Learning review failed");
+      setLearningState({
+        status: "complete",
+        candidateCount: payload.candidateCount ?? 0,
+        mode: payload.mode ?? "shadow",
+        evidenceRejected: payload.status === "failed",
+      });
+    } catch (error) {
+      setLearningState({
+        status: "error",
+        message: error instanceof Error ? error.message : "Learning review failed",
+      });
+    }
+  }
+
+  return (
+    <section className="mf-live-receipt">
+      <header>
+        <span><ShieldCheck size={15} /><strong>{l("Recibo de contexto", "Context Receipt")}</strong></span>
+        <code>{receipt.runId.slice(0, 8)}</code>
+      </header>
+      <div className="mf-live-receipt-metrics">
+        <span><small>{l("Escopo", "Scope")}</small><strong>{receipt.scope.department}</strong></span>
+        <span><small>{l("Recuperação", "Retrieval")}</small><strong>{receipt.retrieval.mode}</strong></span>
+        <span><small>{l("Evidências", "Evidence")}</small><strong>{receipt.evidence.length}</strong></span>
+        <span><small>{l("Verdade", "Truth")}</small><strong>{receipt.temporal?.queryTime.mode === "as_of" ? l("histórica", "historical") : l("atual", "current")}</strong></span>
+      </div>
+      <div className="mf-live-receipt-sources">
+        {receipt.evidence.map((source) => (
+          <button type="button" key={source.id} onClick={() => onOpenEvidence(source.path)}>
+            <span>{source.id}</span>
+            <strong>{source.title}</strong>
+            <small>{source.heading || source.path} · v{source.version}</small>
+          </button>
+        ))}
+      </div>
+      {receipt.missing.length ? <p><AlertTriangle size={14} /> {receipt.missing.join(" ")}</p> : null}
+      <div className="mf-live-learning">
+        <span>
+          <Sparkles size={14} />
+          <span>
+            <strong>{l("Aprendizado controlado", "Controlled learning")}</strong>
+            <small>{l("Analisa esta conversa sem alterar a verdade automaticamente.", "Reviews this conversation without changing truth automatically.")}</small>
+          </span>
+        </span>
+        {learningState.status === "complete" ? (
+          <em>
+            {learningState.evidenceRejected ? <ShieldCheck size={13} /> : <Check size={13} />}
+            {learningState.evidenceRejected
+              ? l("evidência rejeitada", "evidence rejected")
+              : `${learningState.candidateCount} ${l("candidatos", "candidates")}`}
+            {` · ${learningState.mode}`}
+          </em>
+        ) : (
+          <button type="button" disabled={disabled || learningState.status === "running"} onClick={() => void reviewForLearning()}>
+            {learningState.status === "running" ? <LoaderCircle className="mf-spin" size={13} /> : <Sparkles size={13} />}
+            {learningState.status === "running" ? l("Analisando…", "Reviewing…") : l("Revisar aprendizado", "Review learning")}
+          </button>
+        )}
+      </div>
+      {learningState.status === "error" ? <p><AlertTriangle size={14} /> {learningState.message}</p> : null}
+    </section>
+  );
+}
+
 function DocumentInspector({
   document,
+  claims,
+  departmentName,
   language,
   onOpenDocuments,
 }: {
-  document: ProjectDocument;
+  document: BrainDocument;
+  claims: BrainClaim[];
+  departmentName: string;
   language: "pt" | "en";
   onOpenDocuments?: () => void;
 }) {
   const l = (pt: string, en: string) => (language === "pt" ? pt : en);
+  const linkedClaims = claims.filter((claim) => claim.evidenceDocumentIds.includes(document.id));
+  const category = documentCategory(document);
   return (
     <article className="mf-document-inspector">
-      <header>
-        <span>{document.code}</span>
-        <small>{categoryLabels[document.category][language]}</small>
-      </header>
+      <header><span>{documentCode(document.title)}</span><small>{categoryLabels[category][language]}</small></header>
       <div className="mf-document-icon"><FileText size={22} /></div>
-      <h2>{language === "pt" ? document.title : document.englishTitle}</h2>
-      <p>{language === "pt" ? document.summary : document.englishSummary}</p>
-      <div className="mf-document-state"><Check size={14} /> {language === "pt" ? document.status : document.englishStatus}</div>
+      <h2>{document.title}</h2>
+      <p>{document.description}</p>
+      <div className="mf-document-state"><Check size={14} /> v{document.current_version} · {document.origin === "vault" ? l("Sincronizado do Obsidian", "Synced from Obsidian") : l("Mantido no Brain", "Brain maintained")}</div>
       <dl>
-        <div><dt>{l("Responsável", "Owner")}</dt><dd>{language === "pt" ? document.owner : document.englishOwner}</dd></div>
-        <div><dt>{l("Última atualização", "Last updated")}</dt><dd>{document.updated}</dd></div>
-        <div><dt>{l("Origem", "Source")}</dt><dd>{document.source}</dd></div>
+        <div><dt>{l("Responsável", "Owner")}</dt><dd>{departmentName}</dd></div>
+        <div><dt>{l("Visibilidade", "Visibility")}</dt><dd>{document.visibility}</dd></div>
+        <div><dt>{l("Tipo", "Type")}</dt><dd>{document.doc_type}</dd></div>
       </dl>
-      <section>
-        <span className="mf-eyebrow">{l("Por que o Brain usa isto", "Why the Brain uses this")}</span>
-        <p>{language === "pt" ? document.purpose : document.englishPurpose}</p>
+      {linkedClaims.length ? (
+        <section>
+          <span className="mf-eyebrow">{l("Verdade temporal suportada", "Supported temporal truth")}</span>
+          <div className="mf-document-claims">
+            {linkedClaims.map((claim) => (
+              <span key={claim.id} className={`is-${claim.lifecycle}`}><History size={12} /> {claim.subject} · {claim.predicate}: {claim.object}</span>
+            ))}
+          </div>
+        </section>
+      ) : null}
+      <section className="mf-document-content">
+        <span className="mf-eyebrow">{l("Conteúdo autorizado", "Authorized content")}</span>
+        <pre>{document.content}</pre>
       </section>
       <section>
         <span className="mf-eyebrow">{l("Conectado a", "Connected to")}</span>
-        <div className="mf-document-links">
-          {document.links.slice(0, 4).map((id) => {
-            const linked = documents.find((item) => item.id === id);
-            return linked ? <span key={id}>{linked.code}</span> : null;
-          })}
-        </div>
+        <div className="mf-document-links">{document.links.slice(0, 6).map((path) => <span key={path}>{documentCode(path.split("/").pop()?.replace(/\.md$/i, "") ?? path)}</span>)}</div>
       </section>
       {onOpenDocuments ? <button type="button" className="mf-document-open" onClick={onOpenDocuments}><FolderOpen size={15} /> {l("Abrir no navegador de documentos", "Open in document browser")}</button> : null}
     </article>

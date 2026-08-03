@@ -1,0 +1,10 @@
+{
+  "organizationId": "minerbo-fuchs-demo",
+  "vaultRoot": "/Users/han/Research Vault/Projects/Urso",
+  "roots": [
+    {
+      "dir": "09 - Minerbo Fuchs/MF Demo Brain Corpus",
+      "project": "uberlandia-refrescos-f3"
+    }
+  ]
+}

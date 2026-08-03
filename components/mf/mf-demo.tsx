@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import {
   ArrowLeft,
   ArrowRight,
@@ -215,6 +215,18 @@ function MfDemoShell() {
   const selectedRole = roles.find((role) => role.id === roleId) ?? roles[0];
   const activeNavigationItem = navigation.find((item) => item.id === activeView) ?? navigation[0];
 
+  const synchronizeScenarioStep = useCallback((nextStep: number) => {
+    void fetch("/api/mf/brain/scenario", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ step: nextStep }),
+    }).then((response) => {
+      if (!response.ok) console.error("[mf-demo] Brain scenario synchronization failed");
+    }).catch(() => {
+      console.error("[mf-demo] Brain scenario synchronization failed");
+    });
+  }, []);
+
   function navigate(view: DemoView) {
     setActiveView(view);
     setMobileNavigationOpen(false);
@@ -223,6 +235,7 @@ function MfDemoShell() {
   function advance() {
     if (step >= 8) return;
     const nextStep = step + 1;
+    synchronizeScenarioStep(nextStep);
     setStep(nextStep);
     setActiveView(viewForStep[nextStep]);
   }
@@ -230,11 +243,13 @@ function MfDemoShell() {
   function rewind() {
     if (step === 0) return;
     const previousStep = step - 1;
+    synchronizeScenarioStep(previousStep);
     setStep(previousStep);
     setActiveView(viewForStep[previousStep]);
   }
 
-  function reset() {
+  const reset = useCallback(() => {
+    synchronizeScenarioStep(0);
     setStep(0);
     setActiveView("control");
     setRoleId(roles[0].id);
@@ -244,7 +259,7 @@ function MfDemoShell() {
     setArtifactReviewStates({});
     setSelectedQuestion(0);
     setDraftQuestion("");
-  }
+  }, [synchronizeScenarioStep]);
 
   function startPresentation() {
     reset();
@@ -298,11 +313,13 @@ function MfDemoShell() {
       if (event.key === "ArrowRight" && step < 8) {
         event.preventDefault();
         const nextStep = step + 1;
+        synchronizeScenarioStep(nextStep);
         setStep(nextStep);
         setActiveView(viewForStep[nextStep]);
       } else if (event.key === "ArrowLeft" && step > 0) {
         event.preventDefault();
         const previousStep = step - 1;
+        synchronizeScenarioStep(previousStep);
         setStep(previousStep);
         setActiveView(viewForStep[previousStep]);
       } else if (event.key.toLocaleLowerCase("pt-BR") === "r") {
@@ -319,7 +336,7 @@ function MfDemoShell() {
 
     window.addEventListener("keydown", handlePresenterShortcut);
     return () => window.removeEventListener("keydown", handlePresenterShortcut);
-  }, [assistantOpen, presentationLobbyOpen, presentationSessionActive, selectedArtifactId, step]);
+  }, [assistantOpen, presentationLobbyOpen, presentationSessionActive, reset, selectedArtifactId, step, synchronizeScenarioStep]);
 
   useEffect(() => {
     if (presentationLobbyOpen) presentationStartRef.current?.focus();
@@ -435,6 +452,7 @@ function MfDemoShell() {
             type="button"
             className={`mf-guided-entry ${presenterMode ? "is-active" : ""}`}
             aria-pressed={presenterMode}
+            aria-label={presenterMode ? (language === "pt" ? "Sair do tour" : "Exit tour") : (language === "pt" ? "Tour guiado" : "Guided tour")}
             onClick={presenterMode ? () => setPresenterMode(false) : startGuidedTour}
           >
             <Presentation size={16} />
@@ -444,6 +462,7 @@ function MfDemoShell() {
           <button
             type="button"
             className="mf-ask-button"
+            aria-label={t("Abrir Brain e chat")}
             onClick={() => navigate("brain")}
           >
             <Bot size={17} />
