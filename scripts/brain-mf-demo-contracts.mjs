@@ -159,4 +159,16 @@ assert.match(scenarioServerSource, /demoSessionId/);
 assert.doesNotMatch(scenarioServerSource, /normalizedStep\s*===\s*0/);
 assert.doesNotMatch(scenarioServerSource, /normalizedStep\s*>=\s*3/);
 
+const brainConfigSource = readFileSync(new URL("../lib/mf-demo/brain-config.ts", import.meta.url), "utf8");
+assert.match(brainConfigSource, /isMfDemoRoleId/);
+for (const routePath of [
+  "../app/api/mf/brain/workspace/route.ts",
+  "../app/api/mf/brain/chat/route.ts",
+  "../app/api/mf/brain/threads/route.ts",
+  "../app/api/mf/brain/learning/route.ts",
+]) {
+  const routeSource = readFileSync(new URL(routePath, import.meta.url), "utf8");
+  assert.match(routeSource, /mfSessionCredentialsFromRequest/, `${routePath} does not require a demo session`);
+}
+
 console.log("✓ MF manifest values, references, and impact contract are consistent.");

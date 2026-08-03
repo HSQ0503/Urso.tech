@@ -18,6 +18,7 @@ export async function resolveMfDemoPrincipal(
   roleId: string | null | undefined,
 ): Promise<BrainPrincipal | null> {
   const persona = getMfDemoPersona(roleId);
+  if (!persona) return null;
   return resolveBrainPrincipal(
     admin,
     { id: persona.userId, email: persona.email, name: persona.name },

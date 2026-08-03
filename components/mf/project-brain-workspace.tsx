@@ -234,7 +234,17 @@ function BrainComposer({
   );
 }
 
-export function ProjectBrainWorkspace({ step, roleId }: { step: number; roleId: string }) {
+export function ProjectBrainWorkspace({
+  step,
+  roleId,
+  sessionId,
+  sessionToken,
+}: {
+  step: number;
+  roleId: string;
+  sessionId?: string;
+  sessionToken?: string;
+}) {
   const { language, t } = useMfLanguage();
   const workspaceRef = useRef<HTMLElement>(null);
   const [mode, setMode] = useState<BrainMode>("map");
@@ -248,12 +258,19 @@ export function ProjectBrainWorkspace({ step, roleId }: { step: number; roleId: 
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const selectedRole = roles.find((role) => role.id === roleId) ?? roles[0];
   const l = (pt: string, en: string) => (language === "pt" ? pt : en);
+  const sessionHeaders = useMemo(() => ({
+    "x-mf-demo-session-id": sessionId ?? "",
+    "x-mf-demo-session-token": sessionToken ?? "",
+  }), [sessionId, sessionToken]);
 
   const loadWorkspace = useCallback(async () => {
     setLoadingWorkspace(true);
     setWorkspaceError(null);
     try {
-      const response = await fetch(`/api/mf/brain/workspace?roleId=${encodeURIComponent(roleId)}`, { cache: "no-store" });
+      const response = await fetch(`/api/mf/brain/workspace?roleId=${encodeURIComponent(roleId)}`, {
+        cache: "no-store",
+        headers: sessionHeaders,
+      });
       const payload = (await response.json()) as BrainWorkspacePayload | { error?: string };
       if (!response.ok || !("connected" in payload)) {
         throw new Error("error" in payload && payload.error ? payload.error : "MF Brain unavailable");
@@ -270,7 +287,7 @@ export function ProjectBrainWorkspace({ step, roleId }: { step: number; roleId: 
     } finally {
       setLoadingWorkspace(false);
     }
-  }, [roleId]);
+  }, [roleId, sessionHeaders]);
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -280,7 +297,7 @@ export function ProjectBrainWorkspace({ step, roleId }: { step: number; roleId: 
   }, [loadWorkspace, step]);
 
   const chat = useChat<MfBrainMessage>({
-    transport: new DefaultChatTransport({ api: "/api/mf/brain/chat" }),
+    transport: new DefaultChatTransport({ api: "/api/mf/brain/chat", headers: sessionHeaders }),
   });
   const { messages, status, error, setMessages } = chat;
   const busy = status === "submitted" || status === "streaming";
@@ -347,7 +364,7 @@ export function ProjectBrainWorkspace({ step, roleId }: { step: number; roleId: 
     try {
       const response = await fetch("/api/mf/brain/threads", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", ...sessionHeaders },
         body: JSON.stringify({ roleId }),
       });
       if (!response.ok) return null;
@@ -357,7 +374,7 @@ export function ProjectBrainWorkspace({ step, roleId }: { step: number; roleId: 
     } catch {
       return null;
     }
-  }, [roleId]);
+  }, [roleId, sessionHeaders]);
 
   const sendQuestion = useCallback(async (value: string) => {
     const question = value.trim();
@@ -561,6 +578,7 @@ export function ProjectBrainWorkspace({ step, roleId }: { step: number; roleId: 
                     receipt={latestReceipt}
                     language={language}
                     roleId={roleId}
+                    sessionHeaders={sessionHeaders}
                     disabled={busy}
                     onOpenEvidence={openEvidence}
                   />
@@ -582,12 +600,14 @@ function ContextReceipt({
   receipt,
   language,
   roleId,
+  sessionHeaders,
   disabled,
   onOpenEvidence,
 }: {
   receipt: BrainContextReceipt;
   language: "pt" | "en";
   roleId: string;
+  sessionHeaders: Record<string, string>;
   disabled: boolean;
   onOpenEvidence: (path: string) => void;
 }) {
@@ -605,7 +625,7 @@ function ContextReceipt({
     try {
       const response = await fetch("/api/mf/brain/learning", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", ...sessionHeaders },
         body: JSON.stringify({ roleId, contextRunId: receipt.runId }),
       });
       const payload = (await response.json()) as {

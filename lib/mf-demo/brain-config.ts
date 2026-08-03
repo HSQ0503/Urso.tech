@@ -87,6 +87,10 @@ export const MF_DEMO_PERSONAS: MfDemoPersona[] = [
   },
 ];
 
-export function getMfDemoPersona(roleId: string | null | undefined): MfDemoPersona {
-  return MF_DEMO_PERSONAS.find((persona) => persona.roleId === roleId) ?? MF_DEMO_PERSONAS[0];
+export function isMfDemoRoleId(roleId: string | null | undefined): roleId is string {
+  return typeof roleId === "string" && MF_DEMO_PERSONAS.some((persona) => persona.roleId === roleId);
+}
+
+export function getMfDemoPersona(roleId: string | null | undefined): MfDemoPersona | null {
+  return MF_DEMO_PERSONAS.find((persona) => persona.roleId === roleId) ?? null;
 }

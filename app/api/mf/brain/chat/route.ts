@@ -4,8 +4,14 @@ import { BRAIN_PROVIDERS } from "@/lib/brain/models";
 import { getOrgKeyStatus } from "@/lib/brain/db";
 import { ursoDbSafe, URSO_DB_MISSING } from "@/lib/brain/supabase";
 import type { BrainProvider, BrainUIData } from "@/lib/brain/types";
-import { MF_BRAIN_PROJECT_ID } from "@/lib/mf-demo/brain-config";
+import { isMfDemoRoleId, MF_BRAIN_PROJECT_ID } from "@/lib/mf-demo/brain-config";
 import { resolveMfDemoPrincipal } from "@/lib/mf-demo/brain-server";
+import { MfSessionContractError } from "@/lib/mf-demo/session-runtime.mjs";
+import {
+  consumeMfDemoSessionUsage,
+  mfSessionCredentialsFromRequest,
+  mfSessionErrorResponse,
+} from "@/lib/mf-demo/session-server";
 
 export const maxDuration = 120;
 
@@ -26,6 +32,14 @@ export async function POST(request: Request) {
 
   const admin = ursoDbSafe();
   if (!admin) return Response.json({ error: URSO_DB_MISSING }, { status: 503 });
+  if (!isMfDemoRoleId(body.roleId)) {
+    return mfSessionErrorResponse(new MfSessionContractError("invalid_role", 400, "Unknown MF demo role."));
+  }
+  try {
+    await consumeMfDemoSessionUsage(admin, mfSessionCredentialsFromRequest(request), "chat", 10);
+  } catch (error) {
+    return mfSessionErrorResponse(error);
+  }
   const principal = await resolveMfDemoPrincipal(admin, body.roleId);
   if (!principal) {
     return Response.json(

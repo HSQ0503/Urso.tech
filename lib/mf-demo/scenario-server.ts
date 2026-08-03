@@ -136,6 +136,7 @@ async function recordAuditOnce(admin: SupabaseClient, step: number, input: Apply
   if (existing) return;
 
   const actor = getMfDemoPersona(input.actorRoleId);
+  if (!actor) throw new Error("MF scenario actor is not a configured demo persona.");
   const { error: auditError } = await admin.from("brain_audit_events").insert({
     organization_id: MF_BRAIN_ORGANIZATION_ID,
     actor_user_id: actor.userId,
