@@ -39,24 +39,21 @@ import {
 import {
   activityEvents,
   artifacts,
-  disciplines,
   roles,
 } from "@/lib/mf-demo/fixtures";
 import { mfScenarioManifest } from "@/lib/mf-demo/manifest.mjs";
 import type {
   ArtifactReviewState,
   DemoView,
-  DisciplineGroup,
-  ImpactLevel,
   MfHarnessSnapshot,
 } from "@/lib/mf-demo/types";
 import { useMfLanguage } from "./mf-language";
 import { MfManagerWorkspace } from "./mf-manager-workspace";
+import { MfTeamCommand } from "./mf-team-command";
 import { ProjectBrainWorkspace } from "./project-brain-workspace";
 import {
   ConnectedSourcesPanel,
   ControlledChangePanel,
-  EmployeeObjectivePanel,
   ObjectiveWorkflowPanel,
   OutcomeComparisonPanel,
   PilotProposalPanel,
@@ -72,27 +69,6 @@ export type ViewProps = {
   sessionId?: string;
   sessionToken?: string;
   snapshot?: MfHarnessSnapshot;
-};
-
-const roleArtifactIds: Record<string, string> = {
-  "project-manager": "impact-plan",
-  electrical: "electrical-package",
-  bim: "bim-scaffold",
-  planning: "recovery-plan",
-  quality: "gate-checklist",
-};
-
-const groupLabels: Record<DisciplineGroup, { pt: string; en: string; detailPt: string; detailEn: string }> = {
-  brain: { pt: "Decisão e controle", en: "Decision & control", detailPt: "5 equipes que orientam o projeto", detailEn: "5 teams that direct the project" },
-  skeleton: { pt: "Infraestrutura física", en: "Physical infrastructure", detailPt: "4 equipes que formam a base", detailEn: "4 teams that form the base" },
-  organs: { pt: "Sistemas da instalação", en: "Facility systems", detailPt: "6 equipes que fazem a fábrica operar", detailEn: "6 teams that make the facility operate" },
-};
-
-const impactLabels: Record<ImpactLevel, { pt: string; en: string }> = {
-  critical: { pt: "Precisa agir", en: "Action required" },
-  watch: { pt: "Precisa revisar", en: "Review required" },
-  support: { pt: "Precisa verificar", en: "Check required" },
-  none: { pt: "Sem alteração", en: "No change" },
 };
 
 const workflowCatalog = [
@@ -425,38 +401,15 @@ export function ChangesView({ step, roleId, onNavigate, onAdvance, snapshot }: V
   );
 }
 
-export function DisciplinesView({ step, roleId, onNavigate, onAdvance, onOpenArtifact, artifactReviewStates, snapshot }: ViewProps) {
+export function DisciplinesView({ step, roleId, onNavigate, onAdvance, snapshot }: ViewProps) {
   const { language, t } = useMfLanguage();
   const l = (pt: string, en: string) => (language === "pt" ? pt : en);
   const selectedRole = roles.find((role) => role.id === roleId) ?? roles[0];
-  const selectedArtifactId = roleArtifactIds[selectedRole.id];
-  const reviewState = artifactReviewStates[selectedArtifactId] ?? (step >= 8 ? "approved" : step >= 7 ? "validated" : "draft");
 
   return (
     <div className="mf-clarity-view">
       <header className="mf-today-header"><div><span className="mf-eyebrow">{l("Minha equipe e o projeto", "My team & the project")}</span><h1>{t(selectedRole.name)}</h1><p>{l("O Brain traduz a mesma decisão para cada equipe, mostrando apenas o contexto e o trabalho relevantes.", "The Brain translates the same decision for every team, showing only the relevant context and work.")}</p></div>{step < 5 ? <button type="button" className="mf-primary-action" onClick={onAdvance} disabled={step < 4}><Workflow size={16} /> {l("Distribuir trabalho", "Distribute work")}</button> : <button type="button" className="mf-secondary-action" onClick={() => onNavigate("workflows")}>{l("Abrir meu workflow", "Open my workflow")} <ArrowRight size={14} /></button>}</header>
-
-      {snapshot ? <EmployeeObjectivePanel snapshot={snapshot} roleId={roleId} /> : null}
-
-      <section className="mf-role-brief" data-guide-key="role-work">
-        <header><span className="mf-role-avatar">{t(selectedRole.name).slice(0, 2).toUpperCase()}</span><div><small>{l("Seu foco nesta mudança", "Your focus in this change")}</small><h2>{t(selectedRole.focus)}</h2></div><span className={`mf-simple-status ${step >= 5 ? "is-ready" : ""}`}>{step >= 5 ? l("Trabalho atribuído", "Work assigned") : l("Aguardando decisão", "Awaiting decision")}</span></header>
-        <div className="mf-role-brief-flow">
-          <div><small>1 · {l("Por que", "Why")}</small><strong>{step >= 4 ? l("Rev. C altera uma premissa da sua equipe", "Revision C changes one of your team assumptions") : l("Nenhum impacto aprovado ainda", "No approved impact yet")}</strong></div><ArrowRight size={16} /><div><small>2 · {l("Sua ação", "Your action")}</small><strong>{step >= 5 ? t(selectedRole.assignment) : l("Aguardando pacote coordenado", "Awaiting coordinated package")}</strong></div><ArrowRight size={16} /><div><small>3 · {l("Resultado esperado", "Expected result")}</small><strong>{t(selectedRole.deliverable)}</strong></div>
-        </div>
-        <footer><div>{selectedRole.evidence.map((item) => <span key={item}><FileCheck2 size={13} /> {t(item)}</span>)}</div><button type="button" onClick={() => onOpenArtifact(selectedArtifactId)} disabled={step < 6}><Maximize2 size={14} /> {step < 6 ? l("Disponível após execução", "Available after execution") : reviewState === "approved" ? l("Abrir resultado aprovado", "Open approved result") : l("Revisar resultado", "Review result")}</button></footer>
-      </section>
-
-      <section className="mf-team-map">
-        <header><div><span className="mf-eyebrow">{l("Como as 15 equipes trabalham juntas", "How the 15 teams work together")}</span><h2>{l("Uma verdade, responsabilidades diferentes", "One truth, different responsibilities")}</h2></div><span>{step >= 4 ? l("10 equipes receberam impacto", "10 teams received an impact") : l("Projeto coordenado", "Coordinated project")}</span></header>
-        <div>
-          {(Object.keys(groupLabels) as DisciplineGroup[]).map((group) => (
-            <article key={group}>
-              <header><strong>{language === "pt" ? groupLabels[group].pt : groupLabels[group].en}</strong><small>{language === "pt" ? groupLabels[group].detailPt : groupLabels[group].detailEn}</small></header>
-              <ul>{disciplines.filter((discipline) => discipline.group === group).map((discipline) => { const impacted = step >= 4 ? discipline.impact : "none"; return <li key={discipline.id} className={`is-${impacted}`}><span>{discipline.shortName}</span><div><strong>{language === "pt" ? discipline.name : discipline.englishName}</strong><small>{language === "pt" ? impactLabels[impacted].pt : impactLabels[impacted].en}</small></div>{impacted !== "none" ? <i /> : null}</li>; })}</ul>
-            </article>
-          ))}
-        </div>
-      </section>
+      {snapshot ? <MfTeamCommand snapshot={snapshot} selectedRoleId={roleId} onNavigate={onNavigate} /> : <div className="mf-manager-loading" aria-busy="true" />}
     </div>
   );
 }

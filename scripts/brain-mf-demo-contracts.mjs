@@ -620,8 +620,30 @@ assert.match(managerWorkspaceSource, /deriveMfManagerCockpitPresentation/);
 assert.match(managerWorkspaceSource, /data-manager-action-cta/);
 assert.match(managerWorkspaceSource, /data-scenario-control/);
 
+const teamCommandSource = readFileSync(
+  new URL("../components/mf/mf-team-command.tsx", import.meta.url),
+  "utf8",
+);
+assert.match(teamCommandSource, /export type MfTeamCommandProps/);
+assert.match(teamCommandSource, /export function MfTeamCommand\(props: MfTeamCommandProps\): React\.JSX\.Element/);
+assert.match(teamCommandSource, /deriveMfTeamCommand/);
+assert.match(teamCommandSource, /deriveMfManager(?:Queue|Workspace)/);
+assert.match(teamCommandSource, /getMfRoleWorkspace/);
+assert.doesNotMatch(teamCommandSource, /\buseState\b/);
+for (const semanticLabel of [
+  "Work by discipline",
+  "Manager attention",
+  "Critical handoff chain",
+  "Full 15-discipline map",
+]) {
+  assert(teamCommandSource.includes(semanticLabel), `missing team command semantics: ${semanticLabel}`);
+}
+assert.match(teamCommandSource, /data-guide-key=["']role-work["']/);
+assert.match(teamCommandSource, /<details/);
+
 const demoViewsSource = readFileSync(new URL("../components/mf/demo-views.tsx", import.meta.url), "utf8");
 assert.match(demoViewsSource, /import \{ MfManagerWorkspace \} from ["']\.\/mf-manager-workspace["']/);
+assert.match(demoViewsSource, /import \{ MfTeamCommand \} from ["']\.\/mf-team-command["']/);
 const controlTowerViewSource = demoViewsSource.match(
   /export function ControlTowerView[\s\S]*?(?=\nexport function ChangesView)/,
 )?.[0] ?? "";
@@ -633,6 +655,18 @@ for (const duplicateClassName of [
   "mf-what-urso-does",
 ]) {
   assert(!controlTowerViewSource.includes(duplicateClassName), `legacy ControlTower class remains: ${duplicateClassName}`);
+}
+
+const disciplinesViewSource = demoViewsSource.match(
+  /export function DisciplinesView[\s\S]*?(?=\nexport function WorkflowsView)/,
+)?.[0] ?? "";
+assert.match(disciplinesViewSource, /<MfTeamCommand/);
+for (const legacyTeamSurface of [
+  "EmployeeObjectivePanel",
+  "mf-role-brief",
+  "mf-team-map",
+]) {
+  assert(!disciplinesViewSource.includes(legacyTeamSurface), `legacy DisciplinesView surface remains: ${legacyTeamSurface}`);
 }
 
 console.log("✓ MF manifest values, references, and impact contract are consistent.");
