@@ -653,8 +653,42 @@ assert.match(teamCommandSource, /role\.id !== ["']project-manager["']/);
 assert.match(teamCommandSource, /discipline\.impacted/);
 assert.doesNotMatch(teamCommandSource, /\{pilotTeams\.map/);
 
+const agentWorkflowSource = readFileSync(
+  new URL("../components/mf/mf-agent-workflow.tsx", import.meta.url),
+  "utf8",
+);
+assert.match(agentWorkflowSource, /export type MfAgentWorkflowProps/);
+for (const propName of [
+  "snapshot",
+  "selectedWorkflowId",
+  "onSelectWorkflow",
+  "onAdvance",
+  "onOpenOutputs",
+]) {
+  assert.match(agentWorkflowSource, new RegExp(`\\b${propName}:`), `missing agent workflow prop: ${propName}`);
+}
+assert.match(
+  agentWorkflowSource,
+  /export function MfAgentWorkflow\(props: MfAgentWorkflowProps\): React\.JSX\.Element/,
+);
+assert.match(agentWorkflowSource, /import \{ deriveMfWorkflowPresentation \} from/);
+for (const semanticLabel of [
+  "Connected context",
+  "Brain boundary",
+  "Agents + tools",
+  "Human gate",
+  "Controlled outputs",
+  "Everything returns to the Brain",
+  "What each employee receives",
+]) {
+  assert(agentWorkflowSource.includes(semanticLabel), `missing agent workflow semantics: ${semanticLabel}`);
+}
+
 const mfCssSource = readFileSync(new URL("../app/mf/mf.css", import.meta.url), "utf8");
 assert.doesNotMatch(mfCssSource, /\.mf-team-row-owner\s*\{\s*display:\s*none;\s*\}/);
+assert.doesNotMatch(mfCssSource, /Agentic workflow deployment studio/);
+assert.doesNotMatch(mfCssSource, /\.mf-agentic-map\s*>\s*:nth-child/);
+assert.match(mfCssSource, /\/\* Agent workflow canvas \*\//);
 
 const demoViewsSource = readFileSync(new URL("../components/mf/demo-views.tsx", import.meta.url), "utf8");
 assert.match(demoViewsSource, /import \{ MfManagerWorkspace \} from ["']\.\/mf-manager-workspace["']/);
@@ -683,5 +717,13 @@ for (const legacyTeamSurface of [
 ]) {
   assert(!disciplinesViewSource.includes(legacyTeamSurface), `legacy DisciplinesView surface remains: ${legacyTeamSurface}`);
 }
+
+const workflowsViewSource = demoViewsSource.match(
+  /export function WorkflowsView[\s\S]*?(?=\nfunction BimScaffold)/,
+)?.[0] ?? "";
+assert.match(demoViewsSource, /import \{ MfAgentWorkflow \} from ["']\.\/mf-agent-workflow["']/);
+assert.match(workflowsViewSource, /<MfAgentWorkflow/);
+assert.doesNotMatch(workflowsViewSource, /ObjectiveWorkflowPanel/);
+assert.doesNotMatch(workflowsViewSource, /workflowCatalog|selectedAgents|selectedTools|stageClass|mf-agentic-map/);
 
 console.log("✓ MF manifest values, references, and impact contract are consistent.");
