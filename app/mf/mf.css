@@ -3926,6 +3926,7 @@
 .mf-manager-decision-rail,
 .mf-handoff-chain,
 .mf-discipline-evidence,
+.mf-role-command-brief,
 .mf-harness-connection,
 .mf-workflow-spotlight,
 .mf-run-simple,
@@ -4373,6 +4374,55 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.mf-role-command-brief {
+  overflow: hidden;
+}
+
+.mf-role-command-brief > .mf-team-command-situation {
+  border-block: 0;
+  border-bottom: 1px solid #deded9;
+}
+
+.mf-role-command-brief-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  background: #fff;
+}
+
+.mf-role-command-brief-grid article {
+  display: flex;
+  min-width: 0;
+  min-height: 142px;
+  flex-direction: column;
+  align-items: flex-start;
+  border-right: 1px solid #e0e0dc;
+  padding: 20px 22px;
+}
+
+.mf-role-command-brief-grid article:last-child { border-right: 0; }
+
+.mf-role-command-brief-grid small {
+  color: #73736d;
+  font: 700 10px/1.2 var(--mf-display);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.mf-role-command-brief-grid strong {
+  margin-top: 9px;
+  color: #252522;
+  font: 680 14px/1.35 var(--mf-display);
+}
+
+.mf-role-command-brief-grid p {
+  margin: 8px 0 0;
+  color: #666661;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.mf-role-command-brief-grid .mf-team-state { margin-top: auto; }
 
 .mf-team-summary {
   display: grid;
@@ -6102,8 +6152,14 @@
     grid-template-columns: minmax(0, 1fr) 300px;
   }
   .mf-team-command-layout { grid-template-columns: 1fr; }
-  .mf-team-row { grid-template-columns: minmax(180px, 0.9fr) minmax(210px, 1.15fr) auto; }
-  .mf-team-row-owner { display: none; }
+  .mf-team-row {
+    grid-template-columns: minmax(180px, 0.9fr) minmax(210px, 1.15fr) auto;
+    grid-template-areas: "role task state" "role owner state";
+  }
+  .mf-team-row-role { grid-area: role; }
+  .mf-team-row-task { grid-area: task; }
+  .mf-team-row-owner { grid-area: owner; }
+  .mf-team-row > .mf-team-state { grid-area: state; }
 }
 
 @media (max-width: 980px) {
@@ -6202,12 +6258,19 @@
   .mf-team-summary { grid-template-columns: 1fr; }
   .mf-team-summary article { min-height: 92px; border-right: 0; border-bottom: 1px solid #e0e0dc; }
   .mf-team-summary article:last-child { border-bottom: 0; }
-  .mf-team-row { grid-template-columns: 1fr; align-items: start; gap: 13px; }
-  .mf-team-row-owner { display: block; }
+  .mf-team-row {
+    grid-template-columns: 1fr;
+    grid-template-areas: "role" "task" "owner" "state";
+    align-items: start;
+    gap: 13px;
+  }
   .mf-team-row > .mf-team-state { justify-self: start; }
   .mf-handoff-chain ol { grid-template-columns: 1fr; }
   .mf-handoff-chain li { min-height: 82px; border-right: 0; border-bottom: 1px solid #e2e2de; }
   .mf-handoff-chain li:last-child { border-bottom: 0; }
+  .mf-role-command-brief-grid { grid-template-columns: 1fr; }
+  .mf-role-command-brief-grid article { min-height: 118px; border-right: 0; border-bottom: 1px solid #e0e0dc; }
+  .mf-role-command-brief-grid article:last-child { border-bottom: 0; }
   .mf-bim-output > footer {
     align-items: flex-start;
     flex-direction: column;
@@ -8467,6 +8530,7 @@
   .mf-manager-decision-rail,
   .mf-handoff-chain,
   .mf-discipline-evidence,
+  .mf-role-command-brief,
   .mf-harness-connection,
   .mf-workflow-spotlight,
   .mf-run-simple,

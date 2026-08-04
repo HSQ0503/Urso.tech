@@ -89,11 +89,15 @@ export function MfTeamCommand(props: MfTeamCommandProps): React.JSX.Element {
     complete: l("Concluído", "Complete"),
   };
   const isManager = selectedRoleId === "project-manager";
+  const impactsAreControlled = snapshot.step >= 4;
   const nextRoleTask = roleWorkspace.nextTask;
   const authorizedSystems = [...new Set(roleWorkspace.sources.map((source) => source.system))].join(" · ");
   const pilotTeams = teamCommand.teams.filter((team) =>
     mfScenarioManifest.roles.some((role) => role.id === team.roleId),
   );
+  const selectedTeam = teamCommand.teams.find((team) => team.roleId === selectedRoleId);
+  const roleTask = nextRoleTask ?? selectedTeam?.currentTask ?? null;
+  const roleState = selectedTeam ? displayState(selectedTeam) : "complete";
   const waitingTeamCount = pilotTeams.filter((team) => {
     const state = displayState(team);
     return state === "waiting" || state === "at_risk";
@@ -106,6 +110,7 @@ export function MfTeamCommand(props: MfTeamCommandProps): React.JSX.Element {
   ];
   const managerActionDestination = (action: MfManagerActionItem): { view: DemoView; label: string } => {
     if (action.actionId === "DEC-042") return { view: "changes", label: l("Revisar mudança", "Review change") };
+    if (action.actionId === "ACT-IMPACT") return { view: "changes", label: l("Revisar impacto", "Review impact") };
     if (action.actionId === "SCN-003") return { view: "workflows", label: l("Abrir workflow", "Open workflow") };
     if (action.actionId === "EXE-02" && action.state === "complete") {
       return { view: "audit", label: l("Abrir auditoria", "Open audit") };
@@ -114,31 +119,26 @@ export function MfTeamCommand(props: MfTeamCommandProps): React.JSX.Element {
     return { view: "workflows", label: l("Ver execução", "View execution") };
   };
 
-  return (
-    <section className="mf-team-command" data-guide-key="role-work" aria-labelledby="mf-team-command-title">
+  const managerCommand = (
+    <>
       <header className="mf-team-command-situation">
         <div>
           <span className="mf-eyebrow">{l("Grupo piloto de execução", "Pilot execution group")}</span>
-          <h2 id="mf-team-command-title">
-            {isManager ? localize(managerWorkspace.objective.title) : localize(roleWorkspace.role.objective)}
-          </h2>
+          <h2 id="mf-team-command-title">{localize(managerWorkspace.objective.title)}</h2>
           <p>
-            {isManager
+            {impactsAreControlled
               ? l(
                 "Este centro coordena os cinco papéis do piloto que possuem pacotes detalhados. As dez disciplinas afetadas continuam visíveis no mapa, mas não receberam todas o mesmo nível de atribuição.",
                 "This center coordinates the five pilot roles with detailed work packages. The ten affected disciplines remain visible in the map, but they have not all received the same level of assignment.",
               )
-              : nextRoleTask
-                ? localize(nextRoleTask.detail)
-                : l("Nenhuma próxima ação permanece aberta para este papel.", "No next action remains open for this role.")}
+              : l(
+                "O grupo piloto permanece preparado, mas a cobertura disciplinar aguarda o mapeamento canônico de impacto.",
+                "The pilot group remains prepared, but discipline coverage is awaiting canonical impact mapping.",
+              )}
           </p>
         </div>
         <aside>
-          {isManager ? (
-            <><ShieldCheck size={18} aria-hidden="true" /><span><small>{l("Situação integrada", "Integrated situation")}</small><strong>{localize(managerWorkspace.objective.detail)}</strong></span></>
-          ) : (
-            <><FileSearch size={18} aria-hidden="true" /><span><small>{l("Contexto autorizado", "Authorized context")}</small><strong>{l(`${roleWorkspace.sources.length} fontes autorizadas`, `${roleWorkspace.sources.length} authorized sources`)}</strong><em>{authorizedSystems || l("Sem fonte necessária nesta etapa", "No source required at this stage")}</em></span></>
-          )}
+          <ShieldCheck size={18} aria-hidden="true" /><span><small>{l("Situação integrada", "Integrated situation")}</small><strong>{localize(managerWorkspace.objective.detail)}</strong></span>
         </aside>
       </header>
 
@@ -150,7 +150,7 @@ export function MfTeamCommand(props: MfTeamCommandProps): React.JSX.Element {
 
       <div className="mf-team-command-layout">
         <section className="mf-team-list" aria-labelledby="mf-team-list-title">
-          <header><div><span className="mf-eyebrow">{l("Execução do piloto", "Pilot execution")}</span><h3 id="mf-team-list-title">{l("Trabalho por disciplina", "Work by discipline")}</h3></div><span><UsersRound size={14} aria-hidden="true" />{l("Papéis ativos e impactados", "Impacted and active roles")}</span></header>
+          <header><div><span className="mf-eyebrow">{l("Execução do piloto", "Pilot execution")}</span><h3 id="mf-team-list-title">{l("Trabalho por disciplina", "Work by discipline")}</h3></div><span><UsersRound size={14} aria-hidden="true" />{impactsAreControlled ? l("Papéis ativos e impactados", "Impacted and active roles") : l("Papéis do piloto", "Pilot roles")}</span></header>
           <div>
             {pilotTeams.map((team) => {
               const role = mfScenarioManifest.roles.find((candidate) => candidate.id === team.roleId);
@@ -192,6 +192,44 @@ export function MfTeamCommand(props: MfTeamCommandProps): React.JSX.Element {
           </div>
         </aside>
       </div>
+    </>
+  );
+
+  const roleBrief = (
+    <section className="mf-role-command-brief" aria-label={l("Brief do papel selecionado", "Selected role brief")}>
+      <header className="mf-team-command-situation">
+        <div>
+          <span className="mf-eyebrow">{localize(roleWorkspace.role.name)}</span>
+          <h2 id="mf-team-command-title">{localize(roleWorkspace.role.objective)}</h2>
+          <p>{roleTask ? localize(roleTask.detail) : l("Nenhuma próxima ação permanece aberta para este papel.", "No next action remains open for this role.")}</p>
+        </div>
+        <aside>
+          <FileSearch size={18} aria-hidden="true" /><span><small>{l("Contexto autorizado", "Authorized context")}</small><strong>{l(`${roleWorkspace.sources.length} fontes autorizadas`, `${roleWorkspace.sources.length} authorized sources`)}</strong><em>{authorizedSystems || l("Sem fonte necessária nesta etapa", "No source required at this stage")}</em></span>
+        </aside>
+      </header>
+      <div className="mf-role-command-brief-grid">
+        <article>
+          <small>{l("Próxima ação canônica", "Next canonical action")}</small>
+          <strong>{roleTask ? localize(roleTask.title) : l("Trabalho concluído", "Work complete")}</strong>
+          <span className={`mf-team-state is-${roleState}`}>{stateIcon(roleState)}{stateLabels[roleState]}</span>
+        </article>
+        <article>
+          <small>{l("Responsável", "Accountable")}</small>
+          <strong>{localize(roleWorkspace.role.name)}</strong>
+          <p>{localize(roleWorkspace.role.assignment)}</p>
+        </article>
+        <article>
+          <small>{l("Entregável esperado", "Expected deliverable")}</small>
+          <strong>{localize(roleWorkspace.role.deliverable)}</strong>
+          <p>{l("Visível somente com o contexto autorizado deste papel.", "Shown only with this role's authorized context.")}</p>
+        </article>
+      </div>
+    </section>
+  );
+
+  return (
+    <section className="mf-team-command" data-guide-key="role-work" aria-labelledby="mf-team-command-title">
+      {isManager ? managerCommand : roleBrief}
 
       <section className="mf-handoff-chain" aria-labelledby="mf-handoff-chain-title">
         <header><div><span className="mf-eyebrow">{l("Sequência operacional", "Operational sequence")}</span><h3 id="mf-handoff-chain-title">{l("Cadeia crítica de handoff", "Critical handoff chain")}</h3></div><Network size={18} aria-hidden="true" /></header>
@@ -217,9 +255,10 @@ export function MfTeamCommand(props: MfTeamCommandProps): React.JSX.Element {
               <ul>
                 {disciplines.filter((discipline) => discipline.group === group).map((discipline) => {
                   const related = discipline.id === selectedManifestRole.departmentId || discipline.id === selectedRoleId;
+                  const controlledImpact = impactsAreControlled ? discipline.impact : "none";
                   return (
-                    <li className={`${discipline.impact !== "none" ? `is-${discipline.impact}` : ""}${related ? " is-related" : ""}`} key={discipline.id}>
-                      <span>{discipline.shortName}</span><div><strong>{language === "pt" ? discipline.name : discipline.englishName}</strong><small>{discipline.impact === "none" ? l("Sem pacote detalhado", "No detailed package") : l("Impacto mapeado", "Impact mapped")}</small></div>{related ? <em>{l("Papel selecionado", "Selected role")}</em> : null}
+                    <li className={`${controlledImpact !== "none" ? `is-${controlledImpact}` : ""}${related ? " is-related" : ""}`} key={discipline.id}>
+                      <span>{discipline.shortName}</span><div><strong>{language === "pt" ? discipline.name : discipline.englishName}</strong><small>{!impactsAreControlled ? l("Impacto aguardando mapeamento", "Impact awaiting mapping") : controlledImpact === "none" ? l("Sem pacote detalhado", "No detailed package") : l("Impacto mapeado", "Impact mapped")}</small></div>{related ? <em>{l("Papel selecionado", "Selected role")}</em> : null}
                     </li>
                   );
                 })}

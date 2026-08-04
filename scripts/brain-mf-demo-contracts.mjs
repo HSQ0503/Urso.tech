@@ -640,6 +640,15 @@ for (const semanticLabel of [
 }
 assert.match(teamCommandSource, /data-guide-key=["']role-work["']/);
 assert.match(teamCommandSource, /<details/);
+assert.match(teamCommandSource, /const managerCommand = \(/);
+assert.match(teamCommandSource, /const roleBrief = \(/);
+assert.match(teamCommandSource, /\{isManager \? managerCommand : roleBrief\}/);
+assert.match(teamCommandSource, /roleWorkspace\.role\.deliverable/);
+assert.match(teamCommandSource, /action\.actionId === ["']ACT-IMPACT["'][\s\S]*?view: ["']changes["']/);
+assert.match(teamCommandSource, /const impactsAreControlled = snapshot\.step >= 4/);
+
+const mfCssSource = readFileSync(new URL("../app/mf/mf.css", import.meta.url), "utf8");
+assert.doesNotMatch(mfCssSource, /\.mf-team-row-owner\s*\{\s*display:\s*none;\s*\}/);
 
 const demoViewsSource = readFileSync(new URL("../components/mf/demo-views.tsx", import.meta.url), "utf8");
 assert.match(demoViewsSource, /import \{ MfManagerWorkspace \} from ["']\.\/mf-manager-workspace["']/);
