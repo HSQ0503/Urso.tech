@@ -1,5 +1,52 @@
 export type MfLocalizedText = Readonly<{ pt: string; en: string }>;
 export type MfSourceMode = "live" | "demo" | "pilot";
+export type MfTechnologyId = "slack" | "cde" | "revit" | "primavera-p6" | "teams" | "urso-brain";
+export type MfToolPermission = "read" | "query" | "draft" | "write";
+
+export type MfManifestManagerAction = Readonly<{
+  id: string;
+  kind: "decision" | "action" | "release";
+  label: MfLocalizedText;
+  due: MfLocalizedText;
+  actionAt: number;
+  blockedLane: "next" | "waiting_on_team";
+}>;
+
+export type MfManifestHandoffStage = Readonly<{
+  id: string;
+  label: MfLocalizedText;
+  taskIds: readonly string[];
+}>;
+
+export type MfManifestWorkflowDefinition = Readonly<{
+  id: string;
+  runCode: string;
+  ownerRoleId: string;
+  title: MfLocalizedText;
+  trigger: MfLocalizedText;
+  purpose: MfLocalizedText;
+  sourceIds: readonly string[];
+  agents: readonly Readonly<{
+    id: string;
+    name: MfLocalizedText;
+    objective: MfLocalizedText;
+    tool: Readonly<{ id: string; name: MfLocalizedText; permission: MfToolPermission }>;
+  }>[];
+  gate: Readonly<{
+    taskId: string;
+    roleId: string;
+    decision: MfLocalizedText;
+    evidenceSourceIds: readonly string[];
+    affectedRoleIds: readonly string[];
+  }>;
+  outputs: readonly Readonly<{
+    id: string;
+    label: MfLocalizedText;
+    kind: "receipt" | "plan" | "brief" | "draft" | "checklist";
+    recipientRoleIds: readonly string[];
+  }>[];
+  deliveryRoleIds: readonly string[];
+}>;
 
 export type MfManifestRole = Readonly<{
   id: string;
@@ -14,6 +61,7 @@ export type MfManifestSource = Readonly<{
   id: string;
   name: MfLocalizedText;
   system: string;
+  technology: Readonly<{ id: MfTechnologyId; name: string }>;
   type: MfLocalizedText;
   mode: MfSourceMode;
   authority: string;
@@ -32,6 +80,7 @@ export type MfManifestTask = Readonly<{
   sourceIds: readonly string[];
   artifactId: string;
   humanGate: boolean;
+  managerAction?: MfManifestManagerAction;
 }>;
 
 export const mfScenarioManifest: Readonly<{
@@ -57,7 +106,12 @@ export const mfScenarioManifest: Readonly<{
   sources: readonly MfManifestSource[];
   roles: readonly MfManifestRole[];
   disciplines: readonly Readonly<{ id: string; name: MfLocalizedText; impacted: boolean; impact: string }>[];
-  workflow: Readonly<{ id: string; tasks: readonly MfManifestTask[] }>;
+  workflow: Readonly<{
+    id: string;
+    tasks: readonly MfManifestTask[];
+    handoffStages: readonly MfManifestHandoffStage[];
+    catalog: readonly MfManifestWorkflowDefinition[];
+  }>;
   story: readonly Readonly<{ step: number; state: string; stage: MfLocalizedText }>[];
 }>;
 

@@ -51,6 +51,54 @@ for (const task of mfScenarioManifest.workflow.tasks) {
   }
 }
 
+const managerActions = mfScenarioManifest.workflow.tasks
+  .filter((task) => task.managerAction)
+  .map((task) => task.managerAction);
+assert.equal(new Set(managerActions.map((action) => action.id)).size, managerActions.length);
+assert.deepEqual(managerActions.map((action) => action.id), ["DEC-042", "ACT-IMPACT", "SCN-003", "EXE-02"]);
+
+const workflowTaskIds = new Set(mfScenarioManifest.workflow.tasks.map((task) => task.id));
+assert.deepEqual(
+  mfScenarioManifest.workflow.handoffStages.map((stage) => stage.id),
+  ["truth", "bim", "technical", "gate", "release"],
+);
+for (const stage of mfScenarioManifest.workflow.handoffStages) {
+  assert(stage.taskIds.every((taskId) => workflowTaskIds.has(taskId)), `unknown handoff task: ${stage.id}`);
+}
+assert(
+  mfScenarioManifest.workflow.tasks
+    .find((task) => task.id === "verify-gate")
+    .dependsOn.includes("select-recovery-scenario"),
+);
+
+const validTechnologyIds = new Set(["slack", "cde", "revit", "primavera-p6", "teams", "urso-brain"]);
+for (const source of mfScenarioManifest.sources) {
+  assert(validTechnologyIds.has(source.technology.id), `invalid source technology: ${source.id}`);
+}
+
+const workflowIds = mfScenarioManifest.workflow.catalog.map((workflow) => workflow.id);
+const runCodes = mfScenarioManifest.workflow.catalog.map((workflow) => workflow.runCode);
+assert.equal(new Set(workflowIds).size, workflowIds.length);
+assert.equal(new Set(runCodes).size, runCodes.length);
+for (const workflow of mfScenarioManifest.workflow.catalog) {
+  assert(mfScenarioManifest.roles.some((role) => role.id === workflow.ownerRoleId), `unknown workflow owner: ${workflow.id}`);
+  assert(workflow.sourceIds.every((sourceId) => mfScenarioManifest.sources.some((source) => source.id === sourceId)));
+  assert(workflow.gate && workflowTaskIds.has(workflow.gate.taskId), `unknown workflow gate task: ${workflow.id}`);
+  assert(mfScenarioManifest.roles.some((role) => role.id === workflow.gate.roleId), `unknown workflow gate role: ${workflow.id}`);
+  assert(workflow.gate.evidenceSourceIds.every((sourceId) => mfScenarioManifest.sources.some((source) => source.id === sourceId)));
+  assert(workflow.gate.affectedRoleIds.every((roleId) => mfScenarioManifest.roles.some((role) => role.id === roleId)));
+  assert(workflow.outputs.every((output) => output.recipientRoleIds.every((roleId) => mfScenarioManifest.roles.some((role) => role.id === roleId))));
+  assert(workflow.deliveryRoleIds.every((roleId) => mfScenarioManifest.roles.some((role) => role.id === roleId)));
+  assert(workflow.agents.every((agent) => ["read", "query", "draft", "write"].includes(agent.tool.permission)));
+  assert(workflow.agents.every((agent) => agent.tool.permission !== "write"), "pre-gate agents must not write");
+}
+assert.deepEqual(
+  mfScenarioManifest.workflow.catalog
+    .find((workflow) => workflow.id === "coordinate-project-change")
+    .sourceIds.map((sourceId) => mfScenarioManifest.sources.find((source) => source.id === sourceId).technology.id),
+  ["slack", "cde", "revit", "primavera-p6", "teams"],
+);
+
 const truthConsumers = [
   "../lib/mf-demo/fixtures.ts",
   "../components/mf/demo-views.tsx",
@@ -66,6 +114,11 @@ assert.equal(baseline.truth.currentRevision, "B");
 assert.equal(baseline.truth.revisionB, "current");
 assert.equal(baseline.truth.revisionC, "unresolved");
 assert.equal(baseline.decision.status, "pending");
+assert.equal(
+  baseline.workItems.find((task) => task.id === "approve-controlled-truth").state,
+  "blocked",
+  "DEC-042 must not be actionable during baseline",
+);
 
 const approved = transitionMfHarness(baseline, 3, "approve-3", "project-manager");
 assert.equal(approved.truth.currentRevision, "C");
