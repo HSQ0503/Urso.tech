@@ -42,7 +42,7 @@ export default async function LoginPage({
           <span className="size-1.5 rounded-full bg-orange" />
         </div>
 
-        <h1 className="text-[26px] font-medium tracking-[-0.02em]">Sign in</h1>
+        <h1 className="font-mono text-[27px] font-semibold tracking-[-0.045em]">Sign in</h1>
         <p className="mt-2 text-[13.5px] leading-[1.55] text-ink-dim">
           Use the account Urso provisioned for you. One login per person — owners see every store, managers see theirs.
         </p>
@@ -84,7 +84,7 @@ export default async function LoginPage({
                 className="w-full rounded-xl border border-edge bg-panel px-4 py-3 text-[13.5px] text-ink placeholder:text-ink-dimmer transition-colors focus:border-edge-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-orange/60"
               />
               <span className="mt-1.5 block text-[11.5px] leading-[1.5] text-ink-dimmer">
-                Admins provisioned for a magic link can leave this blank.
+                Admins sign in with a secure link sent to their email and can leave this blank.
               </span>
             </label>
 
