@@ -646,6 +646,8 @@ assert.match(teamCommandSource, /\{isManager \? managerCommand : roleBrief\}/);
 assert.match(teamCommandSource, /roleWorkspace\.role\.deliverable/);
 assert.match(teamCommandSource, /action\.actionId === ["']ACT-IMPACT["'][\s\S]*?view: ["']changes["']/);
 assert.match(teamCommandSource, /const impactsAreControlled = snapshot\.step >= 4/);
+assert.match(teamCommandSource, /const roleTask = nextRoleTask;/);
+assert.doesNotMatch(teamCommandSource, /nextRoleTask \?\? selectedTeam\?\.currentTask/);
 
 const mfCssSource = readFileSync(new URL("../app/mf/mf.css", import.meta.url), "utf8");
 assert.doesNotMatch(mfCssSource, /\.mf-team-row-owner\s*\{\s*display:\s*none;\s*\}/);

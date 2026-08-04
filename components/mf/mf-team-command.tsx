@@ -96,7 +96,7 @@ export function MfTeamCommand(props: MfTeamCommandProps): React.JSX.Element {
     mfScenarioManifest.roles.some((role) => role.id === team.roleId),
   );
   const selectedTeam = teamCommand.teams.find((team) => team.roleId === selectedRoleId);
-  const roleTask = nextRoleTask ?? selectedTeam?.currentTask ?? null;
+  const roleTask = nextRoleTask;
   const roleState = selectedTeam ? displayState(selectedTeam) : "complete";
   const waitingTeamCount = pilotTeams.filter((team) => {
     const state = displayState(team);
