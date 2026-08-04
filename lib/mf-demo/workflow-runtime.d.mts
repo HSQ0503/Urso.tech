@@ -1,5 +1,10 @@
 import type { MfHarnessSnapshot, MfWorkItem, MfWorkState } from "./harness-runtime.mjs";
-import type { MfLocalizedText, MfManifestRole, MfManifestSource, MfToolPermission } from "./manifest.mjs";
+import type {
+  MfLocalizedText,
+  MfManifestRole,
+  MfManifestWorkflowDefinition,
+  MfToolPermission,
+} from "./manifest.mjs";
 
 export type MfWorkflowStageId =
   | "connected_context"
@@ -29,10 +34,9 @@ export type MfWorkflowGatePresentation = Readonly<{
   receiptId: string | null;
 }>;
 
-export type MfWorkflowReceiptPresentation = Readonly<{
-  state: "pending" | "available" | "missing";
-  id: string | null;
-}>;
+export type MfWorkflowReceiptPresentation =
+  | Readonly<{ state: "available"; id: string }>
+  | Readonly<{ state: "pending" | "missing"; id: null }>;
 
 export type MfWorkflowOutputPresentation = Readonly<{
   id: string;
@@ -69,6 +73,7 @@ export type MfWorkflowPresentationStage =
   }>;
 
 export type MfWorkflowPresentation = Readonly<{
+  definition: MfManifestWorkflowDefinition;
   workflowId: string;
   runCode: string;
   ownerRole: MfManifestRole;

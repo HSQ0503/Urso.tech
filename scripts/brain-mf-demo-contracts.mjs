@@ -102,6 +102,12 @@ for (const workflow of mfScenarioManifest.workflow.catalog) {
   assert(workflow.gate && workflowTaskIds.has(workflow.gate.taskId), `unknown workflow gate task: ${workflow.id}`);
   assert(mfScenarioManifest.roles.some((role) => role.id === workflow.gate.roleId), `unknown workflow gate role: ${workflow.id}`);
   assert(workflow.gate.evidenceSourceIds.every((sourceId) => mfScenarioManifest.sources.some((source) => source.id === sourceId)));
+  assert(
+    workflow.gate.evidenceSourceIds.every((sourceId) => mfScenarioManifest.sources
+      .find((source) => source.id === sourceId)
+      .authorizedRoleIds.includes(workflow.gate.roleId)),
+    `gate evidence is not authorized for gate role: ${workflow.id}`,
+  );
   assert(workflow.gate.affectedRoleIds.every((roleId) => mfScenarioManifest.roles.some((role) => role.id === roleId)));
   assert(workflow.outputs.every((output) => output.recipientRoleIds.every((roleId) => mfScenarioManifest.roles.some((role) => role.id === roleId))));
   assert(workflow.deliveryRoleIds.every((roleId) => mfScenarioManifest.roles.some((role) => role.id === roleId)));
@@ -241,6 +247,7 @@ const coordinateWorkflow = mfScenarioManifest.workflow.catalog.find(
   (workflow) => workflow.id === "coordinate-project-change",
 );
 const coordinateAtStep2 = deriveMfWorkflowPresentation(createMfHarnessSnapshot(2), coordinateWorkflow.id);
+assert.equal(coordinateAtStep2.definition, coordinateWorkflow);
 assert.deepEqual(coordinateAtStep2.stages.map((stage) => stage.id), [
   "connected_context",
   "brain_boundary",
@@ -266,6 +273,27 @@ assert.deepEqual(
 );
 assert(coordinateAtStep2.sources.every((source) => source.authorizedRoleIds.includes(coordinateWorkflow.ownerRoleId)));
 
+const divergentSourceSnapshot = {
+  ...createMfHarnessSnapshot(2),
+  sources: createMfHarnessSnapshot(2).sources.map((source) => source.id === "supplier-communication"
+    ? {
+      ...source,
+      name: { pt: "Divergent source", en: "Divergent source" },
+      authorizedRoleIds: [],
+      status: "available_in_pilot",
+    }
+    : source),
+};
+const canonicalSourcePresentation = deriveMfWorkflowPresentation(divergentSourceSnapshot, coordinateWorkflow.id);
+const canonicalSupplierSource = mfScenarioManifest.sources.find((source) => source.id === "supplier-communication");
+assert.deepEqual(
+  canonicalSourcePresentation.sources.find((source) => source.id === canonicalSupplierSource.id),
+  { ...canonicalSupplierSource, status: "available_in_pilot" },
+);
+assert(canonicalSourcePresentation.roleDeliveries
+  .find((delivery) => delivery.role.id === "project-manager")
+  .sources.some((source) => source.id === canonicalSupplierSource.id));
+
 const coordinateAtStep3 = deriveMfWorkflowPresentation(createMfHarnessSnapshot(3), coordinateWorkflow.id);
 assert.equal(coordinateAtStep3.gate.state, "complete");
 assert.equal(coordinateAtStep3.truth.currentRevision, "C");
@@ -287,6 +315,47 @@ assert.equal(coordinateAtStep8.outputsReady, true);
 assert.equal(coordinateAtStep8.gate.state, "complete");
 assert.deepEqual(coordinateAtStep8.outputs.map((output) => output.id), coordinateWorkflow.outputs.map((output) => output.id));
 assert(coordinateAtStep8.outputs.every((output) => output.ready && output.receipt.state === "available" && output.receipt.id));
+
+const completedWithoutTaskReceipt = {
+  ...createMfHarnessSnapshot(3),
+  workItems: createMfHarnessSnapshot(3).workItems.map((task) => task.id === "approve-controlled-truth"
+    ? { ...task, receiptId: null }
+    : task),
+  receipts: [{
+    id: "RCPT-UNRELATED-TRANSITION",
+    idempotencyKey: "unrelated-transition",
+    actorRoleId: "project-manager",
+    action: "scenario_advance",
+    fromStep: 2,
+    toStep: 3,
+    evidenceIds: [],
+  }],
+};
+const missingGateReceipt = deriveMfWorkflowPresentation(completedWithoutTaskReceipt, coordinateWorkflow.id);
+assert.equal(missingGateReceipt.gate.receiptId, null);
+assert(missingGateReceipt.outputs.every((output) => output.receipt.state === "missing" && output.receipt.id === null));
+
+const workflowPresentationSteps = {
+  "coordinate-project-change": 2,
+  "update-electrical-package": 7,
+  "prepare-bim-coordination": 6,
+  "recover-project-schedule": 7,
+  "verify-gate-readiness": 7,
+};
+for (const workflow of mfScenarioManifest.workflow.catalog) {
+  const presentation = deriveMfWorkflowPresentation(createMfHarnessSnapshot(workflowPresentationSteps[workflow.id]), workflow.id);
+  assert.equal(presentation.definition, workflow);
+  assert(presentation.gate.evidenceSources.every((source) => source.authorizedRoleIds.includes(presentation.gate.role.id)));
+  assert(presentation.roleDeliveries.every((delivery) =>
+    delivery.sources.every((source) => source.authorizedRoleIds.includes(delivery.role.id)),
+  ));
+  assert.equal(presentation.outputsReady, presentation.gate.state === "complete");
+  assert.deepEqual(presentation.outputs.map((output) => output.id), workflow.outputs.map((output) => output.id));
+  assert(presentation.outputs.every((output) => output.ready === presentation.outputsReady));
+  assert(presentation.outputs.every((output) => presentation.gate.state === "complete"
+    ? output.receipt.state === "available" && output.receipt.id === presentation.gate.task.receiptId
+    : output.receipt.state === "pending" && output.receipt.id === null));
+}
 
 assert.throws(
   () => deriveMfWorkflowPresentation(createMfHarnessSnapshot(0), "unknown-workflow"),
