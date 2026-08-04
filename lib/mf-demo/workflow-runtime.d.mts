@@ -25,6 +25,7 @@ export type MfWorkflowAgentPresentation = Readonly<{
 export type MfWorkflowGatePresentation = Readonly<{
   task: MfWorkItem;
   state: MfWorkState;
+  canonicalActionAt: number | null;
   role: MfManifestRole;
   decision: MfLocalizedText;
   evidenceSources: readonly MfWorkflowSourcePresentation[];
@@ -76,6 +77,7 @@ export type MfWorkflowPresentationStage =
 
 export type MfWorkflowPresentation = Readonly<{
   definition: MfManifestWorkflowDefinition;
+  scenarioStep: number;
   workflowId: string;
   runCode: string;
   ownerRole: MfManifestRole;
@@ -110,6 +112,7 @@ export type MfArtifactAccess = Readonly<{
 export type MfWorkflowInteractionActionId =
   | "advance"
   | "external_action"
+  | "scenario_unavailable"
   | "waiting"
   | "unauthorized"
   | "outputs_pending"

@@ -570,6 +570,43 @@ const actionableQualityInteraction = interactionFor(
 assert.equal(actionableQualityInteraction.canAdvance, false);
 assert.equal(actionableQualityInteraction.action.id, "external_action");
 
+const driftedApproveSnapshot = {
+  ...createMfHarnessSnapshot(6),
+  workItems: createMfHarnessSnapshot(6).workItems.map((task) => task.id === "approve-controlled-truth"
+    ? { ...task, state: "in_progress", receiptId: null }
+    : task),
+};
+const driftedApprovePresentation = deriveMfWorkflowPresentation(
+  driftedApproveSnapshot,
+  "coordinate-project-change",
+);
+const driftedApproveInteraction = deriveMfWorkflowInteraction(
+  driftedApprovePresentation,
+  "project-manager",
+);
+assert.equal(driftedApproveInteraction.canAdvance, false);
+assert.equal(driftedApproveInteraction.action.id, "scenario_unavailable");
+assert.equal(driftedApprovePresentation.scenarioStep, 6);
+
+const driftedApproveMetadataSnapshot = {
+  ...createMfHarnessSnapshot(1),
+  workItems: createMfHarnessSnapshot(1).workItems.map((task) => task.id === "approve-controlled-truth"
+    ? {
+      ...task,
+      state: "in_progress",
+      managerAction: { ...task.managerAction, actionAt: 1 },
+    }
+    : task),
+};
+const driftedApproveMetadataInteraction = interactionFor(
+  1,
+  "coordinate-project-change",
+  "project-manager",
+  driftedApproveMetadataSnapshot,
+);
+assert.equal(driftedApproveMetadataInteraction.canAdvance, false);
+assert.equal(driftedApproveMetadataInteraction.action.id, "scenario_unavailable");
+
 const step5WithoutGateReceipt = {
   ...createMfHarnessSnapshot(5),
   workItems: createMfHarnessSnapshot(5).workItems.map((task) => task.id === "approve-controlled-truth"
@@ -874,6 +911,51 @@ assert.match(mfCssSource, /\.mf-source-connection-status/);
 assert.match(mfCssSource, /\.mf-receipt-status/);
 
 const demoViewsSource = readFileSync(new URL("../components/mf/demo-views.tsx", import.meta.url), "utf8");
+const mfDemoSource = readFileSync(new URL("../components/mf/mf-demo.tsx", import.meta.url), "utf8");
+const artifactWorkspaceSource = readFileSync(
+  new URL("../components/mf/artifact-workspace.tsx", import.meta.url),
+  "utf8",
+);
+const artifactWorkspaceInvocation = mfDemoSource.match(
+  /\{selectedArtifact \? \([\s\S]*?<ArtifactWorkspace[\s\S]*?\) : null\}/,
+)?.[0] ?? "";
+assert.doesNotMatch(artifactWorkspaceInvocation, /synchronizeScenarioStep/);
+assert.match(artifactWorkspaceInvocation, /receiptId=/);
+assert.doesNotMatch(artifactWorkspaceSource, /onReviewStateChange|RCPT-ART-|52 \+ index/);
+assert.match(artifactWorkspaceSource, /Continue in connected system/);
+assert.match(artifactWorkspaceSource, /Receipt (?:pending|unavailable)/);
+assert.match(mfDemoSource, /const artifactAccess = deriveMfArtifactAccess\(roleId\)/);
+const selectedArtifactSource = mfDemoSource.match(
+  /const selectedArtifact = artifacts\.find[\s\S]*?\?\? null;/,
+)?.[0] ?? "";
+assert.match(selectedArtifactSource, /step >= artifact\.availableAt/);
+assert.match(selectedArtifactSource, /artifactAccess\.canViewAll/);
+assert.match(selectedArtifactSource, /artifactAccess\.artifactIds\.includes\(artifact\.id\)/);
+const selectRoleSource = mfDemoSource.match(
+  /const selectRole = useCallback[\s\S]*?(?=\n\s*function navigate)/,
+)?.[0] ?? "";
+assert.match(selectRoleSource, /setSelectedArtifactId\(null\)/);
+const openArtifactSource = mfDemoSource.match(
+  /function openArtifact[\s\S]*?(?=\n\s*useEffect\()/,
+)?.[0] ?? "";
+assert.match(openArtifactSource, /step >= artifact\.availableAt/);
+assert.match(openArtifactSource, /artifactAccess\.canViewAll/);
+assert.match(openArtifactSource, /if \(!allowed\)/);
+assert.match(openArtifactSource, /setSelectedArtifactId\(null\);[\s\S]*?return;/);
+const artifactReviewStateSource = mfDemoSource.match(
+  /const artifactReviewStates = useMemo[\s\S]*?(?=\n\s*const risk)/,
+)?.[0] ?? "";
+assert.doesNotMatch(artifactReviewStateSource, /step >= 8/);
+assert.match(artifactReviewStateSource, /workItems\.length > 0 && workItems\.every/);
+const selectedArtifactReceiptSource = mfDemoSource.match(
+  /const selectedArtifactWorkItems[\s\S]*?(?=\n\s*const approvedArtifacts)/,
+)?.[0] ?? "";
+assert.match(selectedArtifactReceiptSource, /right\.completeAt - left\.completeAt/);
+assert.match(selectedArtifactReceiptSource, /selectedArtifactWorkItems\.every/);
+assert.match(mfDemoSource, /useEffect\(\(\) => \{[\s\S]*?selectedArtifactId[\s\S]*?!selectedArtifact[\s\S]*?setSelectedArtifactId\(null\)[\s\S]*?\}, \[selectedArtifact, selectedArtifactId\]\)/);
+assert.doesNotMatch(mfDemoSource, /receipt registrado/);
+assert.match(mfDemoSource, /const approvedArtifacts[\s\S]*?receiptId[\s\S]*?Receipt unavailable/);
+assert.doesNotMatch(artifactWorkspaceSource, /\bRCPT-/);
 const fixturesSource = readFileSync(new URL("../lib/mf-demo/fixtures.ts", import.meta.url), "utf8");
 const impactPlanArtifactSource = fixturesSource.match(
   /\{\s*id:\s*["']impact-plan["'],[\s\S]*?\n\s*\},/,
@@ -929,5 +1011,11 @@ const auditViewSource = demoViewsSource.match(
 assert.match(auditViewSource, /deriveMfArtifactAccess\(roleId\)/);
 assert.match(auditViewSource, /visibleArtifacts/);
 assert.match(auditViewSource, /approvedArtifacts\.length} \/ \{visibleArtifacts\.length/);
+assert.match(auditViewSource, /mfScenarioManifest\.workflow\.id/);
+assert.doesNotMatch(auditViewSource, /change-propagation@1\.4|RCPT-\{/);
+assert.doesNotMatch(auditViewSource, /step >= 8/);
+assert.match(auditViewSource, /snapshot\?\.receipts/);
+assert.match(auditViewSource, /workItem\.receiptId/);
+assert.match(auditViewSource, /Receipt (?:pending|unavailable)/);
 
 console.log("✓ MF manifest values, references, and impact contract are consistent.");

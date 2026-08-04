@@ -41,6 +41,7 @@ import {
   projectRisk,
   scenarioLabels,
 } from "@/lib/mf-demo/scenario";
+import { deriveMfArtifactAccess } from "@/lib/mf-demo/workflow-runtime.mjs";
 import type {
   ArtifactReviewState,
   DemoView,
@@ -226,23 +227,49 @@ function MfDemoShell() {
   const step = demoSession?.snapshot.step ?? 0;
   const artifactReviewStates = useMemo<Record<string, ArtifactReviewState>>(() => Object.fromEntries(
     artifacts.map((artifact) => {
-      const workItem = demoSession?.snapshot.workItems.find((task) => task.artifactId === artifact.id);
-      const reviewState: ArtifactReviewState = workItem?.state === "complete" || step >= 8
+      const workItems = demoSession?.snapshot.workItems.filter((task) => task.artifactId === artifact.id) ?? [];
+      const reviewState: ArtifactReviewState = workItems.length > 0 && workItems.every((task) => task.state === "complete")
         ? "approved"
-        : step >= 7
+        : workItems.some((task) => task.state === "in_progress" || task.state === "complete")
           ? "validated"
           : "draft";
       return [artifact.id, reviewState];
     }),
-  ), [demoSession?.snapshot, step]);
+  ), [demoSession?.snapshot]);
   const risk = projectRisk(step);
   const visibleActivity = activityEvents.filter((event) => step >= event.availableAt).reverse();
-  const selectedArtifact = artifacts.find((artifact) => artifact.id === selectedArtifactId) ?? null;
-  const approvedArtifacts = artifacts.filter((artifact) => artifactReviewStates[artifact.id] === "approved");
+  const artifactAccess = deriveMfArtifactAccess(roleId);
+  const selectedArtifact = artifacts.find((artifact) =>
+    artifact.id === selectedArtifactId
+    && step >= artifact.availableAt
+    && (artifactAccess.canViewAll || artifactAccess.artifactIds.includes(artifact.id))) ?? null;
+  const selectedArtifactWorkItems = selectedArtifact
+    ? demoSession?.snapshot.workItems.filter((task) => task.artifactId === selectedArtifact.id) ?? []
+    : [];
+  const terminalArtifactWorkItem = [...selectedArtifactWorkItems]
+    .sort((left, right) => right.completeAt - left.completeAt)[0] ?? null;
+  const selectedArtifactReceiptId = selectedArtifactWorkItems.length > 0
+    && selectedArtifactWorkItems.every((task) => task.state === "complete")
+    ? terminalArtifactWorkItem?.receiptId ?? null
+    : null;
+  const approvedArtifacts = artifacts.flatMap((artifact) => {
+    if (artifactReviewStates[artifact.id] !== "approved") return [];
+    const workItems = demoSession?.snapshot.workItems.filter((task) => task.artifactId === artifact.id) ?? [];
+    if (workItems.length === 0 || workItems.some((task) => task.state !== "complete")) return [];
+    const terminalWorkItem = [...workItems].sort((left, right) => right.completeAt - left.completeAt)[0];
+    return [{ artifact, receiptId: terminalWorkItem.receiptId }];
+  });
   const activeAnswer = answerForScenario(step, selectedQuestion);
   const presenterCue = presenterCues[language][step];
   const selectedRole = roles.find((role) => role.id === roleId) ?? roles[0];
   const activeNavigationItem = navigation.find((item) => item.id === activeView) ?? navigation[0];
+
+  useEffect(() => {
+    if (selectedArtifactId && !selectedArtifact) {
+      const frameId = window.requestAnimationFrame(() => setSelectedArtifactId(null));
+      return () => window.cancelAnimationFrame(frameId);
+    }
+  }, [selectedArtifact, selectedArtifactId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -348,6 +375,7 @@ function MfDemoShell() {
 
   const selectRole = useCallback(async (nextRoleId: string) => {
     if (!sessionCredentials || transitioning) return;
+    setSelectedArtifactId(null);
     setTransitioning(true);
     setTransitionError(null);
     try {
@@ -427,6 +455,14 @@ function MfDemoShell() {
   }
 
   function openArtifact(artifactId: string) {
+    const artifact = artifacts.find((candidate) => candidate.id === artifactId);
+    const allowed = artifact
+      && step >= artifact.availableAt
+      && (artifactAccess.canViewAll || artifactAccess.artifactIds.includes(artifact.id));
+    if (!allowed) {
+      setSelectedArtifactId(null);
+      return;
+    }
     setAssistantOpen(false);
     setSelectedArtifactId(artifactId);
   }
@@ -755,13 +791,13 @@ function MfDemoShell() {
             <FileClock size={15} />
           </div>
           <div className="mf-activity-list" aria-live="polite">
-            {approvedArtifacts.slice().reverse().map((artifact) => (
+            {approvedArtifacts.slice().reverse().map(({ artifact, receiptId }) => (
               <div className="mf-activity-item" key={`approval-${artifact.id}`}>
                 <span className="mf-activity-marker is-positive" />
                 <div>
                   <time>{t("AGORA")}</time>
                   <strong>{t("Artefato aprovado")}</strong>
-                  <small>{t(artifact.title)} · {t("receipt registrado")}</small>
+                  <small>{t(artifact.title)} · {receiptId ?? (language === "pt" ? "Recibo indisponível" : "Receipt unavailable")}</small>
                 </div>
               </div>
             ))}
@@ -859,11 +895,9 @@ function MfDemoShell() {
           artifact={selectedArtifact}
           reviewState={
             artifactReviewStates[selectedArtifact.id] ??
-            (step >= 8 ? "approved" : step >= 7 ? "validated" : "draft")
+            "draft"
           }
-          onReviewStateChange={(reviewState) =>
-            reviewState !== "draft" && step < 8 ? void synchronizeScenarioStep(step + 1) : undefined
-          }
+          receiptId={selectedArtifactReceiptId}
           onClose={() => setSelectedArtifactId(null)}
         />
       ) : null}

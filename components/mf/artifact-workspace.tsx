@@ -10,9 +10,7 @@ import {
   FileCheck2,
   FileText,
   GitCompareArrows,
-  RotateCcw,
   ShieldCheck,
-  UserCheck,
   X,
 } from "lucide-react";
 import type { Artifact, ArtifactReviewState } from "@/lib/mf-demo/types";
@@ -22,7 +20,7 @@ import { useMfLanguage } from "./mf-language";
 type ArtifactWorkspaceProps = {
   artifact: Artifact;
   reviewState: ArtifactReviewState;
-  onReviewStateChange: (state: ArtifactReviewState) => void;
+  receiptId: string | null;
   onClose: () => void;
 };
 
@@ -129,13 +127,14 @@ function RecoveryPreview() {
 }
 
 function ChecklistPreview({ artifact }: { artifact: Artifact }) {
-  const { t } = useMfLanguage();
+  const { language, t } = useMfLanguage();
+  const l = (pt: string, en: string) => (language === "pt" ? pt : en);
   return (
     <div className="mf-checklist-preview">
-      {artifact.findings.map((finding, index) => (
+      {artifact.findings.map((finding) => (
         <div key={finding}>
           <span><Check size={14} /></span>
-          <p><strong>{t(finding)}</strong><small>{t("Recebido")} · RCPT-{52 + index}</small></p>
+          <p><strong>{t(finding)}</strong><small>{l("Evidência verificada · recibo do artefato pendente", "Evidence verified · artifact receipt pending")}</small></p>
           <em>{t("Conforme")}</em>
         </div>
       ))}
@@ -193,8 +192,9 @@ function ArtifactPreview({ artifact }: { artifact: Artifact }) {
   return <ImpactPreview artifact={artifact} />;
 }
 
-export function ArtifactWorkspace({ artifact, reviewState, onReviewStateChange, onClose }: ArtifactWorkspaceProps) {
-  const { t } = useMfLanguage();
+export function ArtifactWorkspace({ artifact, reviewState, receiptId, onClose }: ArtifactWorkspaceProps) {
+  const { language, t } = useMfLanguage();
+  const l = (pt: string, en: string) => (language === "pt" ? pt : en);
   const headingRef = useRef<HTMLHeadingElement>(null);
 
   useEffect(() => {
@@ -244,7 +244,7 @@ export function ArtifactWorkspace({ artifact, reviewState, onReviewStateChange, 
             </ul>
             <div className="mf-workbench-method">
               <span>{t("Procedimento")}</span>
-              <strong>artifact-review@1.4</strong>
+              <strong>{mfScenarioManifest.workflow.id}</strong>
               <small>{t("Execução isolada · demo")}</small>
             </div>
           </aside>
@@ -268,23 +268,20 @@ export function ArtifactWorkspace({ artifact, reviewState, onReviewStateChange, 
             </ol>
 
             <div className="mf-review-actions">
-              {reviewState === "draft" ? (
-                <button type="button" className="mf-primary-action" onClick={() => onReviewStateChange("validated")}>
-                  <Bot size={15} /> {t("Executar validadores")}
-                </button>
-              ) : reviewState === "validated" ? (
-                <>
-                  <button type="button" className="mf-primary-action" onClick={() => onReviewStateChange("approved")}>
-                    <UserCheck size={15} /> {t("Aprovar rascunho")}
-                  </button>
-                  <button type="button" className="mf-secondary-action" onClick={() => onReviewStateChange("draft")}>
-                    <RotateCcw size={14} /> {t("Solicitar correção")}
-                  </button>
-                </>
-              ) : (
+              {reviewState === "approved" && receiptId ? (
                 <div className="mf-approval-receipt">
                   <ShieldCheck size={19} />
-                  <span><strong>{t("Aprovação registrada")}</strong><small>RCPT-ART-{artifact.id.slice(0, 3).toUpperCase()}-01</small></span>
+                  <span><strong>{l("Aprovação registrada", "Approval recorded")}</strong><small>{receiptId}</small></span>
+                </div>
+              ) : reviewState === "approved" ? (
+                <div className="mf-approval-receipt is-pending">
+                  <CircleDashed size={19} />
+                  <span><strong>{l("Recibo de aprovação indisponível", "Approval receipt unavailable")}</strong><small>{l("Recibo indisponível", "Receipt unavailable")}</small></span>
+                </div>
+              ) : (
+                <div className="mf-approval-receipt is-pending">
+                  <ArrowRight size={19} />
+                  <span><strong>{l("Continuar no sistema conectado", "Continue in connected system")}</strong><small>{l("Recibo pendente · use os controles do apresentador para avançar a demonstração.", "Receipt pending · use presenter controls to advance the demonstration.")}</small></span>
                 </div>
               )}
             </div>
