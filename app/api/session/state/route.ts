@@ -13,7 +13,7 @@ export async function GET(): Promise<Response> {
     const admin = await getAdminSession();
     if (admin) {
       return NextResponse.json(
-        { dash: { href: adminHome(), label: "Enter dashboard" } },
+        { dash: { href: adminHome(admin.scope), label: "Enter dashboard" } },
         { headers: { "cache-control": "no-store" } },
       );
     }

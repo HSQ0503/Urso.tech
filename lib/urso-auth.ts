@@ -41,10 +41,10 @@ export function isAdminEmail(email: string): boolean {
   return getAdmin(email) !== null;
 }
 
-// Where an admin lands after login. Both current scopes reach the Canes
-// dashboard; branch here when a wider-scope admin needs a different home.
-export function adminHome(): string {
-  return "/CanesPressure";
+// Urso platform admins land in the company console; a client-scoped owner
+// stays inside their own operation.
+export function adminHome(scope: AdminScope): string {
+  return scope === "admin" ? "/fi" : "/CanesPressure";
 }
 
 // ── Signing (HMAC-SHA256 over a base64url JSON payload) ───────────────────────

@@ -2,7 +2,7 @@
 //
 // A hot lead is a person who called and is waiting; a cold one came off the
 // vendor feed and can keep. The whole point of this screen is that the first is
-// never mistaken for the second, so hot rows carry the orange rule and the
+// never mistaken for the second, so hot rows carry the orange rail and the
 // orange age, and the age is the loudest thing after the name.
 //
 // Above the rows sit the same five pipeline tabs the web console has, with the
@@ -19,7 +19,6 @@ import {
   FlatList,
   Pressable,
   RefreshControl,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -37,7 +36,16 @@ import {
 } from "@urso/types";
 import { useLeads } from "@/queries";
 import { noticeFrom, usePullToRefresh, useRefetchOnFocus } from "@/query";
-import { color, font, HIT, radius, space, type } from "@/theme";
+import { color, font, space, type } from "@/theme";
+import {
+  Chip,
+  ChromeBar,
+  EmptyState,
+  FilterChips,
+  SearchStrip,
+  listRowStyle,
+  searchInputStyle,
+} from "@/components/ledger";
 
 // The pipeline tabs, copied from the web list (app/CanesPressure/(app)/leads)
 // key for key. The membership rules are the web's exactly — "open" is anything
@@ -100,16 +108,29 @@ function leadTitle(lead: Lead): string {
   return "Unnamed lead";
 }
 
-function LeadRow({ lead, onPress }: { lead: Lead; onPress: () => void }) {
+function LeadRow({
+  lead,
+  first,
+  last,
+  onPress,
+}: {
+  lead: Lead;
+  first: boolean;
+  last: boolean;
+  onPress: () => void;
+}) {
   const hot = lead.type === "hot";
-  const reviewParse =
-    lead.parse_confidence !== null && lead.parse_confidence < LOW_CONFIDENCE;
+  const reviewParse = lead.parse_confidence !== null && lead.parse_confidence < LOW_CONFIDENCE;
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={leadTitle(lead)}
       onPress={onPress}
-      style={({ pressed }) => [styles.row, hot && styles.rowHot, pressed && styles.pressed]}
+      style={({ pressed }) => [
+        ...listRowStyle(first, last),
+        hot && styles.rowHot,
+        pressed && styles.pressed,
+      ]}
     >
       <View style={styles.rowTop}>
         <Text style={styles.name} numberOfLines={1}>
@@ -123,18 +144,14 @@ function LeadRow({ lead, onPress }: { lead: Lead; onPress: () => void }) {
       </Text>
 
       <View style={styles.rowFoot}>
-        <View style={styles.chip}>
-          <Text style={styles.chipText}>{STATUS_LABEL[lead.status]}</Text>
-        </View>
+        <Chip label={STATUS_LABEL[lead.status]} tone={hot ? "brand" : "neutral"} />
         {/* Ahead of the source, which is the one thing here allowed to shrink:
             a badly parsed row is a row whose name and number may be somebody
             else's, and that has to survive a long service line. */}
-        {reviewParse ? (
-          <View style={styles.reviewChip}>
-            <Text style={styles.reviewChipText}>Review parse</Text>
-          </View>
-        ) : null}
-        <Text style={styles.source}>{SOURCE_LABEL[lead.source]}</Text>
+        {reviewParse ? <Chip label="Review parse" tone="danger" /> : null}
+        <Text style={styles.source} numberOfLines={1}>
+          {SOURCE_LABEL[lead.source]}
+        </Text>
       </View>
     </Pressable>
   );
@@ -198,29 +215,17 @@ export default function LeadsScreen(): React.ReactElement {
 
   return (
     <View style={styles.screen}>
-      <View style={[styles.chrome, { paddingTop: insets.top + space.md }]}>
-        <Text style={styles.chromeTitle}>Leads</Text>
-        <View style={styles.chromeRight}>
-          <View style={styles.chromeStat}>
-            <Text style={styles.chromeStatValue}>
-              {searching ? rows.length : (leads?.length ?? 0)}
-            </Text>
-            <Text style={styles.chromeStatLabel}>{searching ? "Matches" : "Total"}</Text>
-          </View>
-          {/* The leak this closes: a neighbour who walks up while a crew is
-              working had nowhere to go except Sebastian's memory. */}
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="New lead"
-            onPress={() => router.push("/(owner)/lead/new")}
-            style={({ pressed }) => [styles.newButton, pressed && styles.pressed]}
-          >
-            <Text style={styles.newButtonText}>+ New</Text>
-          </Pressable>
-        </View>
-      </View>
+      <ChromeBar
+        title="Leads"
+        stat={String(searching ? rows.length : (leads?.length ?? 0))}
+        statLabel={searching ? "Matches" : "Total"}
+        action="New"
+        /* The leak this closes: a neighbour who walks up while a crew is
+           working had nowhere to go except Sebastian's memory. */
+        onAction={() => router.push("/(owner)/lead/new")}
+      />
 
-      <View style={styles.searchBar}>
+      <SearchStrip>
         <TextInput
           value={query}
           onChangeText={setQuery}
@@ -231,48 +236,20 @@ export default function LeadsScreen(): React.ReactElement {
           clearButtonMode="while-editing"
           returnKeyType="search"
           accessibilityLabel="Search leads"
-          style={styles.search}
+          style={searchInputStyle}
         />
-      </View>
+      </SearchStrip>
 
-      {/* Pinned under the chrome rather than scrolling with the rows: the tab
-          he is on is a thing he needs to see while reading the list, not only
-          at the top of it. Held back until the read lands, because a row of
-          zeroes is a claim about leads nobody has counted yet. */}
       {leads !== null ? (
-        <View style={styles.filterBar}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.filterRow}
-          >
-            {FILTERS.map((key) => {
-              const current = key === filter;
-              const count = subsets[key].length;
-              return (
-                <Pressable
-                  key={key}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${FILTER_LABEL[key]}, ${count}`}
-                  accessibilityState={{ selected: current }}
-                  onPress={() => setFilter(key)}
-                  style={({ pressed }) => [
-                    styles.filterChip,
-                    current && styles.filterChipCurrent,
-                    pressed && styles.pressed,
-                  ]}
-                >
-                  <Text style={[styles.filterText, current && styles.filterTextCurrent]}>
-                    {FILTER_LABEL[key]}
-                  </Text>
-                  <Text style={[styles.filterCount, current && styles.filterTextCurrent]}>
-                    {count}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-        </View>
+        <FilterChips
+          current={filter}
+          onPick={setFilter}
+          filters={FILTERS.map((key) => ({
+            key,
+            label: FILTER_LABEL[key],
+            count: subsets[key].length,
+          }))}
+        />
       ) : null}
 
       {showSpinner ? (
@@ -307,17 +284,22 @@ export default function LeadsScreen(): React.ReactElement {
             // Empty says WHICH empty — an unworked pipeline and a filter with
             // nothing under it are different pieces of news.
             leads !== null ? (
-              <View style={styles.empty}>
-                {/* A search that found nothing is not an empty pipeline, and
-                    saying "No leads yet" to someone holding 40 leads reads as
-                    data loss. */}
-                <Text style={styles.emptyText}>
-                  {searching ? `Nobody matching “${query.trim()}”.` : EMPTY_COPY[filter]}
-                </Text>
-              </View>
+              // A search that found nothing is not an empty pipeline, and
+              // saying "No leads yet" to someone holding 40 leads reads as
+              // data loss.
+              <EmptyState
+                text={searching ? `Nobody matching “${query.trim()}”.` : EMPTY_COPY[filter]}
+              />
             ) : null
           }
-          renderItem={({ item }) => <LeadRow lead={item} onPress={() => openLead(item.id)} />}
+          renderItem={({ item, index }) => (
+            <LeadRow
+              lead={item}
+              first={index === 0}
+              last={index === rows.length - 1}
+              onPress={() => openLead(item.id)}
+            />
+          )}
         />
       )}
     </View>
@@ -328,102 +310,10 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: color.bg },
   centre: { flex: 1, alignItems: "center", justifyContent: "center" },
 
-  chrome: {
-    backgroundColor: color.chrome,
-    flexDirection: "row",
-    alignItems: "flex-end",
-    justifyContent: "space-between",
-    gap: space.md,
-    paddingHorizontal: space.lg,
-    paddingBottom: space.md,
-  },
-  chromeTitle: { ...type.display, color: color.chromeInk },
-  chromeRight: { flexDirection: "row", alignItems: "center", gap: space.md },
-  newButton: {
-    minHeight: HIT - 12,
-    justifyContent: "center",
-    paddingHorizontal: space.md,
-    borderRadius: radius.md,
-    backgroundColor: color.brandFill,
-  },
-  newButtonText: { ...type.small, color: "#ffffff", fontFamily: font.bodyMedium },
-  searchBar: {
-    backgroundColor: color.surface,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: color.line,
-    paddingHorizontal: space.lg,
-    paddingVertical: space.sm,
-  },
-  search: {
-    // Deliberately NOT ...type.body: that spread carries lineHeight, and iOS
-    // renders a TextInput placeholder with visibly wrong tracking when a
-    // lineHeight is combined with a custom font. Height comes from minHeight.
-    fontFamily: font.body,
-    fontSize: 15,
-    color: color.ink,
-    minHeight: HIT,
-    paddingHorizontal: space.md,
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: color.line,
-    backgroundColor: color.bg,
-  },
-  chromeStat: { alignItems: "flex-end" },
-  chromeStatValue: {
-    fontFamily: font.bodySemi,
-    fontSize: 18,
-    color: color.chromeInk,
-    fontVariant: ["tabular-nums"],
-  },
-  chromeStatLabel: { ...type.micro, color: color.chromeMuted, marginTop: 2 },
-
-  filterBar: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: color.line,
-  },
-  filterRow: {
-    flexDirection: "row",
-    gap: space.sm,
-    paddingHorizontal: space.lg,
-    paddingVertical: space.sm,
-  },
-  filterChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.sm,
-    minHeight: HIT,
-    paddingHorizontal: space.md,
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: color.lineStrong,
-    backgroundColor: color.surface,
-  },
-  filterChipCurrent: { borderColor: color.brand, backgroundColor: color.brandSoft },
-  filterText: { ...type.micro, color: color.muted },
-  filterCount: { ...type.micro, color: color.faint, fontVariant: ["tabular-nums"] },
-  filterTextCurrent: { color: color.brandDeep },
-
-  list: { padding: space.lg, gap: space.sm },
+  list: { paddingHorizontal: 14, paddingTop: 14 },
   listEmpty: { flexGrow: 1 },
 
-  notice: {
-    backgroundColor: color.dangerBg,
-    borderRadius: radius.md,
-    padding: space.md,
-    marginBottom: space.sm,
-  },
-  noticeText: { ...type.small, color: color.danger },
-
-  row: {
-    minHeight: HIT,
-    backgroundColor: color.surface,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: color.line,
-    borderRadius: radius.lg,
-    padding: space.md,
-    gap: space.xs,
-  },
-  // The one visual difference that matters on this screen.
+  // The one accent on this screen: a hot lead is a person waiting on a call.
   rowHot: { borderLeftWidth: 3, borderLeftColor: color.brand },
   pressed: { backgroundColor: color.hover },
 
@@ -431,38 +321,22 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "baseline",
     justifyContent: "space-between",
-    gap: space.sm,
+    gap: 10,
   },
-  name: { ...type.title, color: color.ink, flexShrink: 1 },
-  age: { ...type.micro, color: color.faint },
+  name: { fontFamily: font.bodySemi, fontSize: 16.5, lineHeight: 20, color: color.ink, flexShrink: 1 },
+  age: { ...type.rule, letterSpacing: 1.3, color: color.faint },
   ageHot: { color: color.brand },
 
-  service: { ...type.small, color: color.muted },
+  service: { ...type.small, lineHeight: 18, color: color.muted, marginTop: 5 },
 
-  rowFoot: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.sm,
-    marginTop: space.xs,
-  },
-  chip: {
-    backgroundColor: color.hover,
-    borderRadius: radius.sm,
-    paddingHorizontal: space.sm,
-    paddingVertical: space.xs,
-  },
-  chipText: { ...type.micro, color: color.muted },
-  // Danger, not the accent: orange on this screen already means "hot, waiting",
-  // and a bad parse is the opposite claim — do not trust what this row says.
-  reviewChip: {
+  rowFoot: { flexDirection: "row", alignItems: "center", gap: 9, marginTop: 9 },
+  source: { ...type.ruleSm, color: color.faint, flexShrink: 1 },
+
+  notice: {
     backgroundColor: color.dangerBg,
-    borderRadius: radius.sm,
-    paddingHorizontal: space.sm,
-    paddingVertical: space.xs,
+    borderRadius: 5,
+    padding: space.md,
+    marginBottom: space.md,
   },
-  reviewChipText: { ...type.micro, color: color.danger },
-  source: { ...type.micro, color: color.faint, flexShrink: 1 },
-
-  empty: { flex: 1, alignItems: "center", justifyContent: "center", padding: space.xl },
-  emptyText: { ...type.body, color: color.muted, textAlign: "center" },
+  noticeText: { ...type.small, color: color.danger },
 });
