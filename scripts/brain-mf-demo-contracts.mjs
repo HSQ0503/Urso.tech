@@ -989,6 +989,13 @@ assert(managerWorkspaceSource.includes("Pilot work packages are ready for the cu
 assert.match(managerWorkspaceSource, /deriveMfManagerCockpitPresentation/);
 assert.match(managerWorkspaceSource, /data-manager-action-cta/);
 assert.match(managerWorkspaceSource, /data-scenario-control/);
+assert.match(managerWorkspaceSource, /Monitorado · próximo/);
+assert.match(managerWorkspaceSource, /Monitored · upcoming/);
+assert.match(managerWorkspaceSource, /const evidenceReviewAvailable = snapshot\.step > 0;/);
+assert.match(managerWorkspaceSource, /disabled=\{!evidenceReviewAvailable\}/);
+assert.match(managerWorkspaceSource, /data-evidence-status=\{evidenceReviewAvailable \? ["']available["'] : ["']upcoming["']\}/);
+assert.match(managerWorkspaceSource, /Evidência em breve/);
+assert.match(managerWorkspaceSource, /Evidence upcoming/);
 
 const teamCommandSource = readFileSync(
   new URL("../components/mf/mf-team-command.tsx", import.meta.url),
@@ -1074,8 +1081,54 @@ for (const semanticLabel of [
 assert.match(agentWorkflowSource, /className="mf-workflow-schematic"/);
 assert.match(agentWorkflowSource, /className="mf-flowchart-grid"/);
 assert.match(agentWorkflowSource, /className="mf-workflow-stage-register"/);
+const compactFlowchartSource = agentWorkflowSource.match(
+  /<div className="mf-flowchart-grid">([\s\S]*?)<\/div>\s*<div className="mf-flow-return">/,
+)?.[1] ?? "";
+assert(compactFlowchartSource, "missing compact workflow flowchart markup");
+assert.equal(
+  (compactFlowchartSource.match(/aria-current=\{[^}]+\? ["']step["'] : undefined\}/g) ?? []).length,
+  5,
+  "all five compact workflow stages must expose aria-current=step when current",
+);
+assert.equal(
+  (compactFlowchartSource.match(/<CompactStageState\b/g) ?? []).length,
+  5,
+  "all five compact workflow stages must show their localized state",
+);
+for (const compactStateLabel of ["Complete", "Current stage", "Waiting"]) {
+  assert(agentWorkflowSource.includes(compactStateLabel), `missing compact stage state label: ${compactStateLabel}`);
+}
+
+const technologyGlyphRegistrySource = agentWorkflowSource.match(
+  /const TECHNOLOGY_GLYPH_REGISTRY = \{([\s\S]*?)\} as const;/,
+)?.[1] ?? "";
+assert(technologyGlyphRegistrySource, "missing explicit technology glyph registry");
+for (const technologyId of ["urso-brain", "cde", "revit", "primavera-p6", "slack", "teams"]) {
+  assert(
+    technologyGlyphRegistrySource.includes(`"${technologyId}"`),
+    `technology glyph registry is missing ${technologyId}`,
+  );
+}
+assert.match(agentWorkflowSource, /className="mf-technology-lettermark is-unknown"/);
+assert.match(agentWorkflowSource, />\?<\/span>/);
 
 const mfCssSource = readFileSync(new URL("../app/mf/mf.css", import.meta.url), "utf8");
+const compactSchematicCss = mfCssSource.match(
+  /\.mf-workflow-schematic\s*\{([\s\S]*?)(?=\.mf-workflow-stage-register\s*\{)/,
+)?.[0] ?? "";
+assert(compactSchematicCss, "missing compact schematic CSS");
+assert.doesNotMatch(compactSchematicCss, /overflow-x:\s*auto/);
+assert.doesNotMatch(compactSchematicCss, /min-width:\s*1040px/);
+const compactFontSizes = [...compactSchematicCss.matchAll(/font(?:-size)?\s*:[^;]*?(\d+(?:\.\d+)?)px/g)]
+  .map((match) => Number(match[1]));
+assert(
+  compactFontSizes.length > 0 && compactFontSizes.every((size) => size >= 11),
+  `compact schematic text must be at least 11px; found ${compactFontSizes.join(", ")}`,
+);
+assert.match(
+  mfCssSource,
+  /@media \(max-width:\s*1120px\)\s*\{[\s\S]*?\.mf-flowchart-grid\s*\{[^}]*flex-direction:\s*column;/,
+);
 const mfLogoSource = readFileSync(
   new URL("../components/mf/mf-logo.tsx", import.meta.url),
   "utf8",

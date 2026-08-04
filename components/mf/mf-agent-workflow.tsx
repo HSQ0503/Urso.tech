@@ -6,6 +6,7 @@ import {
   Bot,
   CheckCircle2,
   CircleDot,
+  Clock3,
   FileCheck2,
   FileSearch,
   LockKeyhole,
@@ -35,8 +36,25 @@ export type MfAgentWorkflowProps = {
   onOpenOutputs: () => void;
 };
 
+type WorkflowStageState = "complete" | "current" | "pending";
+
+const TECHNOLOGY_GLYPH_REGISTRY = {
+  "urso-brain": { kind: "lettermark", mark: "UB" },
+  "cde": { kind: "lettermark", mark: "CDE" },
+  "revit": { kind: "lettermark", mark: "R" },
+  "primavera-p6": { kind: "lettermark", mark: "P6" },
+  "slack": { kind: "slack" },
+  "teams": { kind: "teams" },
+} as const;
+
 function TechnologyGlyph({ id }: { id: string }): React.JSX.Element {
-  if (id === "slack") {
+  const technology = TECHNOLOGY_GLYPH_REGISTRY[id as keyof typeof TECHNOLOGY_GLYPH_REGISTRY];
+
+  if (!technology) {
+    return <span className="mf-technology-lettermark is-unknown" aria-hidden="true">?</span>;
+  }
+
+  if (technology.kind === "slack") {
     return (
       <svg className="mf-technology-glyph is-slack" viewBox="0 0 24 24" aria-hidden="true">
         <rect x="9" y="1" width="5" height="10" rx="2.5" />
@@ -47,7 +65,7 @@ function TechnologyGlyph({ id }: { id: string }): React.JSX.Element {
     );
   }
 
-  if (id === "teams") {
+  if (technology.kind === "teams") {
     return (
       <svg className="mf-technology-glyph is-teams" viewBox="0 0 24 24" aria-hidden="true">
         <circle cx="17.5" cy="6" r="3" />
@@ -58,8 +76,16 @@ function TechnologyGlyph({ id }: { id: string }): React.JSX.Element {
     );
   }
 
-  const glyph = id === "cde" ? "CDE" : id === "revit" ? "R" : id === "primavera-p6" ? "P6" : "UB";
-  return <span className={`mf-technology-lettermark is-${id}`} aria-hidden="true">{glyph}</span>;
+  return <span className={`mf-technology-lettermark is-${id}`} aria-hidden="true">{technology.mark}</span>;
+}
+
+function CompactStageState({ state, label }: { state: WorkflowStageState; label: string }): React.JSX.Element {
+  return (
+    <small className={`mf-flow-stage-state is-${state}`}>
+      {state === "complete" ? <CheckCircle2 size={12} aria-hidden="true" /> : state === "current" ? <CircleDot size={12} aria-hidden="true" /> : <Clock3 size={12} aria-hidden="true" />}
+      <span>{label}</span>
+    </small>
+  );
 }
 
 export function MfAgentWorkflow(props: MfAgentWorkflowProps): React.JSX.Element {
@@ -110,8 +136,8 @@ export function MfAgentWorkflow(props: MfAgentWorkflowProps): React.JSX.Element 
     pending: l("Pendente", "Pending"),
     missing: l("Ausente", "Missing"),
   } as const;
-  const stageState = (stageId: string) => interaction.stages.find((stage) => stage.id === stageId)?.state ?? "pending";
-  const stageStateLabel = (state: "complete" | "current" | "pending") => {
+  const stageState = (stageId: string): WorkflowStageState => interaction.stages.find((stage) => stage.id === stageId)?.state ?? "pending";
+  const stageStateLabel = (state: WorkflowStageState) => {
     if (state === "complete") return l("Concluído", "Complete");
     if (state === "current") return l("Etapa atual", "Current stage");
     return l("Aguardando", "Waiting");
@@ -129,6 +155,11 @@ export function MfAgentWorkflow(props: MfAgentWorkflowProps): React.JSX.Element 
       : presentation.outputsReady
         ? l("Existem registros em rascunho. A emissão segue bloqueada até o recibo do gate.", "Draft records exist. Issuance remains blocked until the gate receipt is recorded.")
         : l("As saídas permanecem bloqueadas até a etapa de controle definida.", "Outputs remain locked until their defined control stage.");
+  const connectedContextState = stageState("connected_context");
+  const brainBoundaryState = stageState("brain_boundary");
+  const agentsToolsState = stageState("agents_tools");
+  const humanGateState = stageState("human_gate");
+  const controlledOutputsState = stageState("controlled_outputs");
   const runAdvance = () => {
     if (!interaction.canAdvance) return;
     onAdvance();
@@ -184,8 +215,8 @@ export function MfAgentWorkflow(props: MfAgentWorkflowProps): React.JSX.Element 
             <code>{presentation.runCode}</code>
           </header>
           <div className="mf-flowchart-grid">
-            <section className={`mf-flow-group is-sources is-${stageState("connected_context")}`}>
-              <header><span>01</span><div><small>{l("Recebimento", "Source intake")}</small><strong>{l("Fontes autorizadas", "Authorized sources")}</strong></div></header>
+            <section className={`mf-flow-group is-sources is-${connectedContextState}`} aria-current={connectedContextState === "current" ? "step" : undefined}>
+              <header><span>01</span><div><CompactStageState state={connectedContextState} label={stageStateLabel(connectedContextState)} /><strong>{l("Fontes autorizadas", "Authorized sources")}</strong></div></header>
               <ul>
                 {presentation.sources.map((source) => (
                   <li key={source.id}><TechnologyGlyph id={source.technology.id} /><span><strong>{source.technology.name}</strong><small>{localize(source.name)}</small></span><em>{modeLabels[source.mode]}</em></li>
@@ -193,16 +224,16 @@ export function MfAgentWorkflow(props: MfAgentWorkflowProps): React.JSX.Element 
               </ul>
             </section>
             <div className="mf-flow-bus"><span>{l("normalizar", "normalize")}</span><i aria-hidden="true" /><ArrowRight size={16} aria-hidden="true" /></div>
-            <article className={`mf-flow-core is-${stageState("brain_boundary")}`}>
-              <header><span>02</span><small>{l("Base aprovada", "Approved baseline")}</small></header>
+            <article className={`mf-flow-core is-${brainBoundaryState}`} aria-current={brainBoundaryState === "current" ? "step" : undefined}>
+              <header><span>02</span><CompactStageState state={brainBoundaryState} label={stageStateLabel(brainBoundaryState)} /></header>
               <ShieldCheck size={21} aria-hidden="true" />
               <strong>{l("Base aprovada do projeto", "Approved project baseline")}</strong>
               <dl><div><dt>{l("Atual", "Current")}</dt><dd>REV. {presentation.truth.currentRevision}</dd></div><div><dt>{l("Escopo", "Scope")}</dt><dd>{presentation.gate.affectedRoleCount} {l("equipes", "teams")}</dd></div></dl>
               <p>{l("Identidade, versão e autoridade verificadas antes da análise.", "Identity, revision, and authority verified before analysis.")}</p>
             </article>
             <div className="mf-flow-bus"><span>{l("distribuir", "scope")}</span><i aria-hidden="true" /><ArrowRight size={16} aria-hidden="true" /></div>
-            <section className={`mf-flow-group is-analysis is-${stageState("agents_tools")}`}>
-              <header><span>03</span><div><small>{l("Análise de impacto", "Impact analysis")}</small><strong>{l("Trabalho em paralelo", "Parallel work")}</strong></div></header>
+            <section className={`mf-flow-group is-analysis is-${agentsToolsState}`} aria-current={agentsToolsState === "current" ? "step" : undefined}>
+              <header><span>03</span><div><CompactStageState state={agentsToolsState} label={stageStateLabel(agentsToolsState)} /><strong>{l("Trabalho em paralelo", "Parallel work")}</strong></div></header>
               <ul>
                 {presentation.agents.map((agent) => (
                   <li key={agent.id}><Bot size={15} aria-hidden="true" /><span><strong>{localize(agent.name)}</strong><small>{localize(agent.tool.name)}</small></span><em>{permissionLabels[agent.tool.permission]}</em></li>
@@ -210,16 +241,16 @@ export function MfAgentWorkflow(props: MfAgentWorkflowProps): React.JSX.Element 
               </ul>
             </section>
             <div className="mf-flow-bus"><span>{l("consolidar", "converge")}</span><i aria-hidden="true" /><ArrowRight size={16} aria-hidden="true" /></div>
-            <article className={`mf-flow-gate is-${stageState("human_gate")}`}>
-              <header><span>04</span><small>{l("Decisão MF", "MF decision")}</small></header>
+            <article className={`mf-flow-gate is-${humanGateState}`} aria-current={humanGateState === "current" ? "step" : undefined}>
+              <header><span>04</span><CompactStageState state={humanGateState} label={stageStateLabel(humanGateState)} /></header>
               <UserCheck size={22} aria-hidden="true" />
               <strong>{l("Aprovação do PM", "PM approval")}</strong>
               <p>{localize(presentation.gate.decision)}</p>
               <em>{localize(presentation.gate.role.name)}</em>
             </article>
             <div className="mf-flow-bus"><span>{l("emitir", "issue")}</span><i aria-hidden="true" /><ArrowRight size={16} aria-hidden="true" /></div>
-            <section className={`mf-flow-group is-outputs is-${stageState("controlled_outputs")}`}>
-              <header><span>05</span><div><small>{l("Pacotes de trabalho", "Work packages")}</small><strong>{l("Saídas controladas", "Controlled outputs")}</strong></div></header>
+            <section className={`mf-flow-group is-outputs is-${controlledOutputsState}`} aria-current={controlledOutputsState === "current" ? "step" : undefined}>
+              <header><span>05</span><div><CompactStageState state={controlledOutputsState} label={stageStateLabel(controlledOutputsState)} /><strong>{l("Saídas controladas", "Controlled outputs")}</strong></div></header>
               <ul>
                 {presentation.outputs.map((output) => (
                   <li key={output.id}>{output.ready ? <CheckCircle2 size={15} aria-hidden="true" /> : <FileCheck2 size={15} aria-hidden="true" />}<span><strong>{localize(output.label)}</strong><small>{output.recipients.map((role) => localize(role.name)).join(" · ")}</small></span><em>{receiptStatusLabels[output.receipt.state]}</em></li>

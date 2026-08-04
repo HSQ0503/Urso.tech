@@ -138,7 +138,7 @@ export function MfManagerWorkspace(props: MfManagerWorkspaceProps): React.JSX.El
     complete: l("Concluído", "Complete"),
   } as const;
   const primaryStateLabel = snapshot.step === 0
-    ? l("Monitorado", "Monitored")
+    ? l("Monitorado · próximo", "Monitored · upcoming")
     : snapshot.step === 1
       ? l("Sinal recebido", "Incoming")
       : stateLabels[primaryAction.state];
@@ -147,6 +147,7 @@ export function MfManagerWorkspace(props: MfManagerWorkspaceProps): React.JSX.El
     : snapshot.step === 1
       ? "incoming"
       : primaryAction.state;
+  const evidenceReviewAvailable = snapshot.step > 0;
   const affectedTeamValue = snapshot.step >= 4
     ? String(workspace.controlTower.impactedDisciplines)
     : l("Escopo em análise", "Scope under review");
@@ -238,9 +239,9 @@ export function MfManagerWorkspace(props: MfManagerWorkspaceProps): React.JSX.El
             <span className={`mf-decision-state is-${primaryStateClass}`}>{snapshot.step === 0 ? <ShieldCheck size={15} aria-hidden="true" /> : snapshot.step === 1 ? <CircleDot size={15} aria-hidden="true" /> : stateIcon(primaryAction.state)}{primaryStateLabel}</span>
           </header>
           <div className="mf-primary-decision-copy">
-            <span className="mf-eyebrow">{localize(primaryAction.label)}</span>
-            <h2>{primaryTask ? localize(primaryTask.title) : localize(primaryAction.label)}</h2>
-            <p>{primaryTask ? localize(primaryTask.detail) : consequence}</p>
+            <span className="mf-eyebrow">{snapshot.step === 0 ? l("Próxima decisão monitorada", "Monitored upcoming decision") : localize(primaryAction.label)}</span>
+            <h2>{snapshot.step === 0 ? l("DEC-042 · aguardando um sinal verificável", "DEC-042 · awaiting a verified signal") : primaryTask ? localize(primaryTask.title) : localize(primaryAction.label)}</h2>
+            <p>{snapshot.step === 0 ? consequence : primaryTask ? localize(primaryTask.detail) : consequence}</p>
           </div>
           <dl>
             <div><dt>{l("Prazo", "Due")}</dt><dd><Clock3 size={14} aria-hidden="true" />{localize(primaryAction.due)}</dd></div>
@@ -251,7 +252,7 @@ export function MfManagerWorkspace(props: MfManagerWorkspaceProps): React.JSX.El
           <aside><strong>{l("Consequência", "Consequence")}</strong><p>{consequence}</p></aside>
           {primaryAction.actionId === "DEC-042" || presentation.primaryManagerAction ? (
             <footer>
-              {primaryAction.actionId === "DEC-042" ? <button type="button" className="mf-decision-link" onClick={() => onNavigate("changes")} aria-label={l("Revisar evidências da mudança", "Review change evidence")}><FileSearch size={15} />{l("Revisar evidências", "Review evidence")}</button> : null}
+              {primaryAction.actionId === "DEC-042" ? <button type="button" className="mf-decision-link" onClick={() => onNavigate("changes")} disabled={!evidenceReviewAvailable} data-evidence-status={evidenceReviewAvailable ? "available" : "upcoming"} aria-label={evidenceReviewAvailable ? l("Revisar evidências da mudança", "Review change evidence") : l("Evidência disponível após o sinal", "Evidence available after the signal")}><FileSearch size={15} />{evidenceReviewAvailable ? l("Revisar evidências", "Review evidence") : l("Evidência em breve", "Evidence upcoming")}</button> : null}
               {presentation.primaryManagerAction ? <button type="button" className="mf-primary-action" data-manager-action-cta onClick={onAdvance} disabled={!presentation.primaryManagerAction} aria-label={localize(presentation.primaryManagerAction.label)}><ArrowRight size={15} />{localize(presentation.primaryManagerAction.label)}</button> : null}
             </footer>
           ) : null}
