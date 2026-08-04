@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -50,10 +50,29 @@ export default function Login(): React.ReactElement {
   const [busy, setBusy] = useState<boolean>(false);
   const [notice, setNotice] = useState<string | null>(null);
 
+  // Moving between steps clears the last step's sentence. Without this a
+  // refusal from the email step ("Enter a valid email.") could still be on
+  // screen under the code cells, blaming the code for something the address
+  // did — which is exactly what it looked like in the field.
+  function go(next: Step): void {
+    setNotice(null);
+    setStep(next);
+  }
+
   function requireEmail(): string | null {
     const address = email.trim();
     if (!address) {
       setNotice("Enter your work email first.");
+      return null;
+    }
+    // Shape-checked HERE as well as on the server. The server's refusal is the
+    // authority, but it costs a round trip and — because /request-code answers
+    // identically for every validly-shaped address so it cannot be used to
+    // enumerate people — a typo and a stranger come back looking the same.
+    // Catching an obviously malformed address before sending is the difference
+    // between "Enter a valid email." and a silent nothing.
+    if (!/^\S+@\S+\.\S+$/.test(address)) {
+      setNotice("That doesn’t look like an email address.");
       return null;
     }
     return address;
@@ -74,7 +93,7 @@ export default function Login(): React.ReactElement {
       return;
     }
     setCode("");
-    setStep("code");
+    go("code");
   }
 
   async function handleVerifyCode(): Promise<void> {
@@ -135,7 +154,7 @@ export default function Login(): React.ReactElement {
 
   function handleChangeMethod(): void {
     if (busy) return;
-    setStep("choice");
+    go("choice");
     setCode("");
     setPassword("");
     setNotice(null);
@@ -302,9 +321,23 @@ export default function Login(): React.ReactElement {
   );
 }
 
-// The code, drawn as cells. A single transparent input sits over the top so the
-// OS keyboard, paste, and SMS autofill all behave normally — the cells are only
-// a readout of what that one field holds.
+// The code, drawn as cells. A single input sits over the top so the OS keyboard,
+// paste, and SMS autofill all behave normally — the cells are only a readout of
+// what that one field holds.
+//
+// THE INPUT IS INVISIBLE, NOT TRANSPARENT, AND THE DIFFERENCE IS THE WHOLE BUG.
+// It used to carry `opacity: 0`. React Native maps opacity onto UIView.alpha,
+// and UIKit's default hitTest ignores any view with alpha <= 0.01 — so the field
+// could not be tapped AND could not become first responder, which meant autoFocus
+// fired and no keyboard ever appeared. On a real device that is a dead end: the
+// code arrives by email and there is no way to type it. Invisible now means
+// transparent TEXT on a transparent BACKGROUND at full alpha, which hit-tests
+// normally.
+//
+// Belt and braces on top of that, because this screen must never be a dead end
+// again: the whole block is pressable and focuses the field, and focus is
+// re-asserted on mount after a frame — autoFocus alone is unreliable when a
+// screen is still transitioning.
 function CodeField({
   code,
   onChange,
@@ -316,9 +349,21 @@ function CodeField({
   onSubmit: () => Promise<void>;
   busy: boolean;
 }): React.ReactElement {
+  const ref = useRef<TextInput>(null);
   const cells = Array.from({ length: Math.max(CODE_CELLS, code.length) });
+
+  useEffect(() => {
+    const timer = setTimeout(() => ref.current?.focus(), 150);
+    return () => clearTimeout(timer);
+  }, []);
+
   return (
-    <View style={styles.codeWrap}>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Enter the sign-in code"
+      onPress={() => ref.current?.focus()}
+      style={styles.codeWrap}
+    >
       <View style={styles.codeCells} pointerEvents="none">
         {cells.map((_, index) => (
           <View
@@ -334,6 +379,7 @@ function CodeField({
         ))}
       </View>
       <TextInput
+        ref={ref}
         style={styles.codeInput}
         value={code}
         onChangeText={(next) => onChange(next.replace(/\D/g, "").slice(0, MAX_CODE_LENGTH))}
@@ -343,12 +389,13 @@ function CodeField({
         textContentType="oneTimeCode"
         editable={!busy}
         autoFocus
+        caretHidden
         accessibilityLabel="Sign-in code"
         onSubmitEditing={() => {
           void onSubmit();
         }}
       />
-    </View>
+    </Pressable>
   );
 }
 
@@ -418,7 +465,17 @@ const styles = StyleSheet.create({
   codeCellFilled: { backgroundColor: color.brandWash },
   codeCellNext: { borderColor: color.brand },
   codeChar: { fontFamily: font.monoMedium, fontSize: 20, color: color.ink },
-  codeInput: { position: "absolute", top: 0, left: 0, right: 0, height: 52, opacity: 0 },
+  // NOT opacity: 0 — see CodeField. Transparent ink on a transparent ground at
+  // full alpha, so UIKit still hit-tests it and it can take the keyboard.
+  codeInput: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 52,
+    color: "transparent",
+    backgroundColor: "transparent",
+  },
 
   notice: {
     marginTop: 12,
