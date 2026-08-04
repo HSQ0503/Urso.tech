@@ -92,13 +92,20 @@ export function MfTeamCommand(props: MfTeamCommandProps): React.JSX.Element {
   const impactsAreControlled = snapshot.step >= 4;
   const nextRoleTask = roleWorkspace.nextTask;
   const authorizedSystems = [...new Set(roleWorkspace.sources.map((source) => source.system))].join(" · ");
-  const pilotTeams = teamCommand.teams.filter((team) =>
-    mfScenarioManifest.roles.some((role) => role.id === team.roleId),
-  );
+  const visibleTeams = impactsAreControlled
+    ? teamCommand.teams.filter((team) => {
+      const role = mfScenarioManifest.roles.find((candidate) => candidate.id === team.roleId);
+      if (!role) return false;
+      const discipline = mfScenarioManifest.disciplines.find((candidate) => candidate.id === role.departmentId);
+      if (!discipline) return false;
+      return role.id !== "project-manager" && discipline.impacted;
+    })
+    : [];
   const selectedTeam = teamCommand.teams.find((team) => team.roleId === selectedRoleId);
   const roleTask = nextRoleTask;
   const roleState = selectedTeam ? displayState(selectedTeam) : "complete";
-  const waitingTeamCount = pilotTeams.filter((team) => {
+  const activeTeamCount = visibleTeams.filter((team) => team.state === "in_progress").length;
+  const waitingTeamCount = visibleTeams.filter((team) => {
     const state = displayState(team);
     return state === "waiting" || state === "at_risk";
   }).length;
@@ -143,16 +150,16 @@ export function MfTeamCommand(props: MfTeamCommandProps): React.JSX.Element {
       </header>
 
       <section className="mf-team-summary" aria-label={l("Resumo do comando", "Command summary")}>
-        <article><small>{l("Trabalho ativo", "Active work")}</small><strong>{teamCommand.activeWorkCount}</strong><span>{l("Papéis com tarefa em andamento", "Roles with work in progress")}</span></article>
+        <article><small>{l("Trabalho ativo", "Active work")}</small><strong>{activeTeamCount}</strong><span>{l("Disciplinas impactadas em andamento", "Impacted disciplines with work in progress")}</span></article>
         <article><small>{l("Decisões para o gerente", "Manager attention decisions")}</small><strong>{managerQueue.decisionsRequiringAction.length}</strong><span>{l("Decisões humanas exigindo atenção", "Human decisions requiring attention")}</span></article>
-        <article><small>{l("Equipes em risco / aguardando", "At-risk / waiting teams")}</small><strong>{waitingTeamCount}</strong><span>{l("Prontidão segue a cadeia canônica", "Readiness follows the canonical chain")}</span></article>
+        <article><small>{l("Disciplinas em risco / aguardando", "At-risk / waiting disciplines")}</small><strong>{waitingTeamCount}</strong><span>{l("Prontidão segue a cadeia canônica", "Readiness follows the canonical chain")}</span></article>
       </section>
 
       <div className="mf-team-command-layout">
         <section className="mf-team-list" aria-labelledby="mf-team-list-title">
-          <header><div><span className="mf-eyebrow">{l("Execução do piloto", "Pilot execution")}</span><h3 id="mf-team-list-title">{l("Trabalho por disciplina", "Work by discipline")}</h3></div><span><UsersRound size={14} aria-hidden="true" />{impactsAreControlled ? l("Papéis ativos e impactados", "Impacted and active roles") : l("Papéis do piloto", "Pilot roles")}</span></header>
+          <header><div><span className="mf-eyebrow">{l("Execução do piloto", "Pilot execution")}</span><h3 id="mf-team-list-title">{l("Trabalho por disciplina", "Work by discipline")}</h3></div><span><UsersRound size={14} aria-hidden="true" />{impactsAreControlled ? l("Papéis ativos e impactados", "Impacted and active roles") : l("Impacto aguardando mapeamento", "Impact mapping pending")}</span></header>
           <div>
-            {pilotTeams.map((team) => {
+            {visibleTeams.length > 0 ? visibleTeams.map((team) => {
               const role = mfScenarioManifest.roles.find((candidate) => candidate.id === team.roleId);
               const state = displayState(team);
               const selected = team.roleId === selectedRoleId;
@@ -164,7 +171,7 @@ export function MfTeamCommand(props: MfTeamCommandProps): React.JSX.Element {
                   <span className={`mf-team-state is-${state}`}>{stateIcon(state)}{stateLabels[state]}</span>
                 </article>
               );
-            })}
+            }) : <p className="mf-team-list-empty"><Network size={18} aria-hidden="true" /><span><strong>{l("Nenhuma disciplina liberada para execução", "No discipline released for execution")}</strong><small>{l("O mapeamento canônico de impacto precisa ser concluído antes de exibir trabalho disciplinar.", "Canonical impact mapping must complete before discipline work is shown.")}</small></span></p>}
           </div>
         </section>
 

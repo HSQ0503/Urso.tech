@@ -4521,6 +4521,23 @@
 .mf-team-row.is-at_risk { background: #fff7f5; }
 .mf-team-row.is-waiting:not(.is-selected) { background: #fbfaf4; }
 
+.mf-team-list-empty {
+  display: flex;
+  min-height: 176px;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin: 0;
+  padding: 24px;
+  color: #6e6e68;
+  text-align: left;
+}
+
+.mf-team-list-empty > svg { flex: 0 0 auto; color: #176a63; }
+.mf-team-list-empty > span { display: flex; max-width: 480px; flex-direction: column; }
+.mf-team-list-empty strong { color: #343431; font: 680 13px/1.3 var(--mf-display); }
+.mf-team-list-empty small { margin-top: 5px; font-size: 11px; line-height: 1.45; }
+
 .mf-team-row-role {
   display: grid;
   min-width: 0;

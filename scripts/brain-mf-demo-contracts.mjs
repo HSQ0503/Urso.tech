@@ -648,6 +648,10 @@ assert.match(teamCommandSource, /action\.actionId === ["']ACT-IMPACT["'][\s\S]*?
 assert.match(teamCommandSource, /const impactsAreControlled = snapshot\.step >= 4/);
 assert.match(teamCommandSource, /const roleTask = nextRoleTask;/);
 assert.doesNotMatch(teamCommandSource, /nextRoleTask \?\? selectedTeam\?\.currentTask/);
+assert.match(teamCommandSource, /const visibleTeams = impactsAreControlled/);
+assert.match(teamCommandSource, /role\.id !== ["']project-manager["']/);
+assert.match(teamCommandSource, /discipline\.impacted/);
+assert.doesNotMatch(teamCommandSource, /\{pilotTeams\.map/);
 
 const mfCssSource = readFileSync(new URL("../app/mf/mf.css", import.meta.url), "utf8");
 assert.doesNotMatch(mfCssSource, /\.mf-team-row-owner\s*\{\s*display:\s*none;\s*\}/);
