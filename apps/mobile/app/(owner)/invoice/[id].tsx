@@ -24,7 +24,8 @@ import {
   type InvoiceStatus,
 } from "@urso/types";
 import { API_BASE, invoiceActions } from "@/api";
-import { Mark } from "@/components/ledger";
+import { DeliverySheet, type DeliveryChannels } from "@/components/delivery-sheet";
+import { Mark, NextStep } from "@/components/ledger";
 import { Notice } from "@/components/notice";
 import { keys, useInvoice } from "@/queries";
 import { noticeFrom, useAction, usePullToRefresh } from "@/query";
@@ -48,6 +49,12 @@ function dollarsToCents(value: string): number {
 function GoodNotice({ text }: { text: string | null }) {
   if (!text) return null;
   return <View style={styles.goodNotice}><Text style={styles.goodNoticeText}>{text}</Text></View>;
+}
+
+function successNotice(data: unknown): string | null {
+  if (typeof data !== "object" || data === null) return null;
+  const notice = (data as { notice?: unknown }).notice;
+  return typeof notice === "string" && notice.length > 0 ? notice : null;
 }
 
 function PreviewTabButton({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
@@ -107,6 +114,7 @@ export default function InvoicePreviewScreen(): React.ReactElement {
 
   const [tab, setTab] = useState<PreviewTab>("job");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [deliveryOpen, setDeliveryOpen] = useState(false);
   const [paymentsOpen, setPaymentsOpen] = useState(false);
   const [paymentMethodsOpen, setPaymentMethodsOpen] = useState(false);
   const [messageOpen, setMessageOpen] = useState(false);
@@ -117,7 +125,10 @@ export default function InvoicePreviewScreen(): React.ReactElement {
   const [good, setGood] = useState<string | null>(null);
 
   const invoiceKeys: QueryKey[] = [keys.invoiceOne(id), keys.invoices(), keys.overview()];
-  const send = useAction<void, Record<string, never>>(() => invoiceActions.send(id), { invalidates: invoiceKeys });
+  const send = useAction<DeliveryChannels, Record<string, unknown>>(
+    (channels) => invoiceActions.send(id, { channels }),
+    { invalidates: invoiceKeys },
+  );
   const recordCash = useAction((amountCents: number) => invoiceActions.recordCashPayment(id, amountCents), { invalidates: invoiceKeys });
   const voidInvoice = useAction<void, Record<string, never>>(() => invoiceActions.void(id), { invalidates: invoiceKeys });
   const deleteInvoice = useAction<void, Record<string, never>>(() => invoiceActions.delete(id), { invalidates: [keys.invoices(), keys.overview()] });
@@ -141,13 +152,13 @@ export default function InvoicePreviewScreen(): React.ReactElement {
   const statusBad = invoice.status === "void";
   const customerUrl = `${API_BASE}/CanesPressure/i/${invoice.public_token}`;
 
-  const sendNow = async () => {
+  const sendNow = async (channels: DeliveryChannels) => {
     setNotice(null);
     setGood(null);
-    const result = await send.mutateAsync();
+    const result = await send.mutateAsync(channels);
     if (!result.ok) setNotice(result.notice);
-    else setGood(invoice.status === "draft" ? "Invoice sent." : "Invoice re-sent.");
-    setMenuOpen(false);
+    else setGood(successNotice(result.data) ?? (invoice.status === "draft" ? "Invoice sent." : "Invoice re-sent."));
+    setDeliveryOpen(false);
   };
 
   const shareNow = async () => {
@@ -218,6 +229,30 @@ export default function InvoicePreviewScreen(): React.ReactElement {
       >
         {notice ? <Notice text={notice} /> : null}
         <GoodNotice text={good} />
+
+        {/* The one action that moves this bill forward, on the surface rather
+            than three taps into the menu. An unsent invoice needs sending; a
+            sent one with money outstanding needs chasing or recording. A paid
+            or voided invoice is finished and shows nothing — a "next step" on a
+            settled record is noise that teaches him to ignore the strip. */}
+        {invoice.status === "draft" ? (
+          <NextStep
+            label="Send the invoice"
+            hint="Texts and emails the customer their pay link."
+            icon="send"
+            onPress={() => setDeliveryOpen(true)}
+          />
+        ) : invoice.status !== "paid" && invoice.status !== "void" && balance > 0 ? (
+          <NextStep
+            label="Record a payment"
+            hint={`${fmtMoney(balance)} still outstanding. Took cash or a check? Record it here.`}
+            icon="dollar-sign"
+            onPress={() => {
+              setCashText((balance / 100).toFixed(2));
+              setRecordOpen(true);
+            }}
+          />
+        ) : null}
 
         <View style={styles.identity}>
           <View style={styles.identityMark}>
@@ -312,7 +347,7 @@ export default function InvoicePreviewScreen(): React.ReactElement {
             {busy ? <ActivityIndicator color={color.brand} style={styles.busy} /> : null}
             <View style={styles.actionGrid}>
               <ActionTile label="Edit" icon="edit-3" disabled={invoice.status !== "draft" || busy} onPress={() => { setMenuOpen(false); router.push({ pathname: "/(owner)/invoice/new", params: { id } }); }} />
-              <ActionTile label={invoice.sent_at ? "Re-Send" : "Send"} icon="send" disabled={invoice.status === "paid" || invoice.status === "void" || busy} onPress={() => void sendNow()} />
+              <ActionTile label={invoice.sent_at ? "Re-Send" : "Send"} icon="send" disabled={invoice.status === "paid" || invoice.status === "void" || busy} onPress={() => { setMenuOpen(false); setDeliveryOpen(true); }} />
               <ActionTile label="Record Payment" icon="dollar-sign" disabled={invoice.status === "paid" || invoice.status === "void" || busy} onPress={() => { setMenuOpen(false); setCashText((balance / 100).toFixed(2)); setRecordOpen(true); }} />
               <ActionTile label="Share Invoice Link" icon="link" disabled={invoice.status === "void" || busy} onPress={() => void shareNow()} />
               <ActionTile label="View Customer" icon="user" disabled={!invoice.contact_id} onPress={() => { setMenuOpen(false); if (invoice.contact_id) router.push({ pathname: "/(owner)/customer/[id]", params: { id: invoice.contact_id } }); }} />
@@ -322,6 +357,16 @@ export default function InvoicePreviewScreen(): React.ReactElement {
           </View>
         </View>
       </Modal>
+
+      <DeliverySheet
+        visible={deliveryOpen}
+        documentLabel="invoice"
+        phone={invoice.customer_phone}
+        email={invoice.customer_email}
+        sending={send.isPending}
+        onClose={() => { if (!send.isPending) setDeliveryOpen(false); }}
+        onSend={(channels) => void sendNow(channels)}
+      />
 
       <Modal visible={paymentsOpen} transparent animationType="slide" onRequestClose={() => setPaymentsOpen(false)}>
         <View style={styles.sheetScrim}>

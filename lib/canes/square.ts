@@ -25,7 +25,7 @@ const SQUARE_API_BASE =
     ? "https://connect.squareupsandbox.com"
     : "https://connect.squareup.com";
 // Pin the API version Square evaluates the request against.
-const SQUARE_VERSION = "2025-01-23";
+const SQUARE_VERSION = "2026-07-15";
 const APP_URL = (process.env.NEXT_PUBLIC_APP_URL ?? "https://urso.ws").replace(/\/$/, "");
 
 export function squareEnvLabel(): string {
@@ -505,7 +505,7 @@ function squareErr(json: Record<string, unknown>, status: number): string {
 // TOCTOU-safe. Never throws into the route.
 
 export type ReconcileOutcome = {
-  handled: "duplicate" | "unmatched" | "amount_mismatch" | "recorded" | "refunded" | "ignored" | "unconfigured";
+  handled: "duplicate" | "unmatched" | "amount_mismatch" | "recorded" | "refunded" | "ignored" | "unconfigured" | "retryable_error";
   invoiceId?: string;
   // Set when the event settled a booking DEPOSIT (0013) instead of an invoice.
   depositJobId?: string;
@@ -523,14 +523,33 @@ export async function handleSquarePaymentEvent(
   // Dedupe the whole event first (Square delivers at-least-once). Store the
   // REAL payload — an empty {} here made the 2026-07-18 field-name bug
   // undebuggable from the database.
-  const { data: seen } = await db
+  const { data: seen, error: eventInsertError } = await db
     .from("square_webhook_events")
     .upsert(
       { event_id: event.eventId, event_type: event.eventType, processed: false, payload: rawPayload ?? {} },
       { onConflict: "event_id", ignoreDuplicates: true },
     )
     .select("event_id");
-  if (!seen || seen.length === 0) return { handled: "duplicate" };
+  if (eventInsertError) {
+    console.error(`[canes] square event log failed for ${event.eventId}: ${eventInsertError.message}`);
+    return { handled: "retryable_error" };
+  }
+  if (!seen || seen.length === 0) {
+    // A previous delivery can have inserted the event and then failed before
+    // setting processed=true. Square retries those notifications; only a row
+    // that is actually processed is a duplicate. An unfinished one must run
+    // again or a transient database failure permanently loses real money.
+    const { data: prior, error: priorError } = await db
+      .from("square_webhook_events")
+      .select("processed")
+      .eq("event_id", event.eventId)
+      .maybeSingle();
+    if (priorError) {
+      console.error(`[canes] square event lookup failed for ${event.eventId}: ${priorError.message}`);
+      return { handled: "retryable_error" };
+    }
+    if (!prior || (prior as { processed: boolean }).processed) return { handled: "duplicate" };
+  }
 
   // Refund path. Runs before everything below because a refund event carries no
   // invoice id and no payment object, so every gate further down would read it
@@ -617,9 +636,10 @@ export async function handleSquarePaymentEvent(
     recorded_by: "square",
   });
   if (insErr) {
-    // Left unprocessed on purpose — the event stays retryable.
+    // Left unprocessed on purpose. The route returns a non-2xx response for
+    // this outcome so Square retries the notification.
     console.error(`[canes] square payment insert failed for invoice ${invoice.id}: ${insErr.message}`);
-    return { handled: "unmatched", invoiceId: invoice.id };
+    return { handled: "retryable_error", invoiceId: invoice.id };
   }
 
   // recomputeInvoicePaid re-reads the ledger and settles ONLY when the summed
@@ -914,9 +934,9 @@ async function recordDepositPayment(event: NormalizedPaymentEvent): Promise<Reco
     recorded_by: "square",
   });
   if (insErr) {
-    // Left unprocessed on purpose — the event stays retryable.
+    // Left unprocessed on purpose; the webhook route asks Square to retry.
     console.error(`[canes] deposit payment insert failed for job ${job.id}: ${insErr.message}`);
-    return { handled: "unmatched", depositJobId: job.id };
+    return { handled: "retryable_error", depositJobId: job.id };
   }
 
   const secondPayment = Boolean(job.deposit_paid_at);
@@ -998,7 +1018,11 @@ export async function cancelSquareInvoice(squareInvoiceId: string): Promise<bool
 }
 
 async function markEventProcessed(eventId: string): Promise<void> {
-  await canesDb().from("square_webhook_events").update({ processed: true }).eq("event_id", eventId);
+  const { error } = await canesDb()
+    .from("square_webhook_events")
+    .update({ processed: true })
+    .eq("event_id", eventId);
+  if (error) throw new Error(`square event completion failed for ${eventId}: ${error.message}`);
 }
 
 // Recompute an invoice's paid cache from the ledger, and settle it (invoice +

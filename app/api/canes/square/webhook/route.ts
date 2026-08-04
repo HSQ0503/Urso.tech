@@ -10,7 +10,8 @@ import { getEstimate, getJob } from "@/lib/canes/estimates";
 import { notifyDepositPaid, notifyInvoicePaid, notifyInvoiceReceipt } from "@/lib/canes/notify";
 
 // Square webhook — the authoritative "an invoice got paid" signal. Verify-first,
-// always-200 (so Square stops retrying a handled event), idempotent. Card data
+// idempotent, and non-2xx on transient processing failures so Square retries.
+// Card data
 // never arrives here; Square hosts the pay page (PCI SAQ-A). Mirrors the Twilio
 // webhook's verify-then-answer shape.
 //
@@ -41,6 +42,9 @@ export async function POST(req: Request): Promise<Response> {
     if (!event) return NextResponse.json({ ok: true, skipped: "unparseable" });
 
     const outcome = await handleSquarePaymentEvent(event, payload);
+    if (outcome.handled === "retryable_error") {
+      return NextResponse.json({ ok: false, retry: true }, { status: 503 });
+    }
 
     // On a first confirmed, amount-matched card payment, fire the notifications
     // (best-effort). Duplicates/mismatches/ignored events don't notify.
@@ -61,8 +65,11 @@ export async function POST(req: Request): Promise<Response> {
     }
     console.log(`[canes] square webhook ${event.eventType}: ${outcome.handled}`);
   } catch (err) {
-    // Never make Square retry on our own processing error — log + ack.
+    // A verified event that failed internally must be retried. The event log
+    // distinguishes processed duplicates from unfinished deliveries and the
+    // payments ledger has its own uniqueness backstop.
     console.error("[canes] square webhook processing failed:", err);
+    return NextResponse.json({ ok: false, retry: true }, { status: 503 });
   }
 
   return NextResponse.json({ ok: true });

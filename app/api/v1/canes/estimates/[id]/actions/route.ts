@@ -189,10 +189,18 @@ export const POST = apiRoute<{ id: string }>(async ({ req, params }) => {
     case "send": {
       // All three opts are optional: no opts at all means "send to whatever is on
       // file", which is the action's documented back-compat path.
-      if (body.channels !== undefined
-          && (typeof body.channels !== "object" || body.channels === null
-              || Array.isArray(body.channels))) {
-        return apiFail("`channels` must be an object.", 422);
+      if (body.channels !== undefined) {
+        if (typeof body.channels !== "object" || body.channels === null
+            || Array.isArray(body.channels)) {
+          return apiFail("`channels` must be an object.", 422);
+        }
+        const { email, text } = body.channels as { email?: unknown; text?: unknown };
+        if (email !== undefined && typeof email !== "boolean") {
+          return apiFail("`channels.email` must be a boolean.", 422);
+        }
+        if (text !== undefined && typeof text !== "boolean") {
+          return apiFail("`channels.text` must be a boolean.", 422);
+        }
       }
       // The action calls .trim() on these, so a non-string is a TypeError, not a
       // refusal — that makes them shape, and shape is this layer's job.

@@ -1160,8 +1160,10 @@ export async function sendEstimate(
     ...(totals ?? {}),
   };
 
-  // Email inline (best-effort). notifyEstimateSent no-ops without an address.
-  if (canEmail) await notifyEstimateSent(sent);
+  // Email inline with a per-attempt idempotency key. The provider outcome is
+  // part of the action result — never claim "emailed" after a missing key,
+  // render failure, or provider rejection.
+  const emailResult = canEmail ? await notifyEstimateSent(sent, now) : null;
 
   // Text inline NOW so it lands in the thread immediately (sendCanesSms logs to
   // messages). If quiet hours or Twilio isn't configured, fall back to the tasks
@@ -1199,24 +1201,36 @@ export async function sendEstimate(
     await touch(estimate.lead_id);
   }
   refresh();
-  return { ok: true, notice: sendEstimateNotice({ canEmail, optedOut, textSent, textQueued }) };
+  const emailSent = emailResult?.ok === true;
+  const emailFailure = emailResult && !emailResult.ok
+    ? emailResult.skipped ?? emailResult.error ?? "Email delivery failed."
+    : null;
+  const delivered = emailSent || textSent || textQueued;
+  return {
+    ok: delivered,
+    notice: sendEstimateNotice({ emailSent, emailFailure, optedOut, textSent, textQueued }),
+  };
 }
 
 // Human-readable summary of what actually happened when the estimate went out.
 function sendEstimateNotice(s: {
-  canEmail: boolean;
+  emailSent: boolean;
+  emailFailure: string | null;
   optedOut: boolean;
   textSent: boolean;
   textQueued: boolean;
 }): string {
-  if (s.textSent && s.canEmail) return "Texted and emailed the estimate.";
+  if (s.emailFailure && s.textSent) return `Texted the estimate. Email failed: ${s.emailFailure}`;
+  if (s.emailFailure && s.textQueued) return `Text queued. Email failed: ${s.emailFailure}`;
+  if (s.emailFailure) return `The estimate was prepared, but email failed: ${s.emailFailure}`;
+  if (s.textSent && s.emailSent) return "Texted and emailed the estimate.";
   if (s.textSent) return "Texted the estimate.";
-  if (s.textQueued && s.canEmail) return "Text queued for after quiet hours; emailed now.";
+  if (s.textQueued && s.emailSent) return "Text queued for after quiet hours; emailed now.";
   if (s.textQueued) return "Text queued for after quiet hours.";
   // Opted-out surfaces regardless of the picker choice so the owner knows why no text went.
-  if (s.optedOut && s.canEmail) return "Sent by email — customer opted out of texts.";
-  if (s.canEmail) return "Emailed the estimate.";
-  return "Estimate sent.";
+  if (s.optedOut && s.emailSent) return "Sent by email — customer opted out of texts.";
+  if (s.emailSent) return "Emailed the estimate.";
+  return "The estimate could not be delivered. Try again.";
 }
 
 export async function voidEstimate(estimateId: string): Promise<ActionResult> {
@@ -1509,10 +1523,13 @@ export async function approveEstimate(
 // approving those here would silently drop every unselected line. (No
 // separate expiry check: the cron already flips overdue estimates to
 // 'expired', which the sent/viewed guard rejects.)
+// jobId comes back so the phone can land on the job this approval just created.
+// The public approveEstimate above deliberately does NOT widen — a customer on
+// the token page has no business receiving an internal job id.
 export async function approveEstimateInPerson(
   estimateId: string,
   opts?: { depositCollected?: boolean; depositMethod?: PaymentMethod },
-): Promise<ActionResult & { depositUrl?: string | null }> {
+): Promise<ActionResult & { depositUrl?: string | null; jobId?: string | null }> {
   if (!canesConfigured()) return DEMO;
   const denied = await denyUnlessPermitted("estimates");
   if (denied) return denied;
@@ -1549,7 +1566,7 @@ async function finalizeEstimateApproval(
     depositCollected?: boolean;
     depositMethod?: PaymentMethod;
   } = {},
-): Promise<ActionResult & { depositUrl?: string | null }> {
+): Promise<ActionResult & { depositUrl?: string | null; jobId?: string | null }> {
   const { selectedItemIds } = opts;
   const db = canesDb();
   // Options estimates: persist the customer's selection before recomputing so
@@ -1650,10 +1667,19 @@ async function finalizeEstimateApproval(
       ? await insertJobDepositRow(job, approved.deposit_cents, opts.depositMethod ?? "cash")
       : { ok: false as const, notice: "job not found" };
     refresh();
+    // jobId rides back on every success path so a caller can land on the job
+    // the approval just created instead of announcing it and leaving the person
+    // to go find it. The web ignores it; the phone navigates with it.
     return dep.ok
-      ? { ok: true, depositUrl: null, notice: "Approved — deposit recorded, job in the schedule tray." }
+      ? {
+          ok: true,
+          jobId,
+          depositUrl: null,
+          notice: "Approved — deposit recorded, job in the schedule tray.",
+        }
       : {
           ok: true,
+          jobId,
           depositUrl: null,
           notice: "Approved — but the deposit could NOT be recorded. Open the job and record it there.",
         };
@@ -1663,6 +1689,7 @@ async function finalizeEstimateApproval(
   refresh();
   return {
     ok: true,
+    jobId,
     depositUrl: deposit.url,
     ...(opts.inPerson
       ? {
@@ -2846,7 +2873,7 @@ export async function sendInvoice(
   }
   const sent: Invoice = { ...fresh, status: "sent", sent_at: fresh.sent_at ?? now, hosted_payment_url: hostedUrl ?? null };
 
-  if (canEmail) await notifyInvoiceSent(sent);
+  const emailResult = canEmail ? await notifyInvoiceSent(sent, now) : null;
 
   const link = invoicePublicUrl(sent);
   let textSent = false;
@@ -2870,17 +2897,28 @@ export async function sendInvoice(
   await logInvoiceEvent(invoice.lead_id, `Invoice ${invoice.number} sent (${fmtMoney(sent.total_cents)})`);
   if (invoice.lead_id) await touch(invoice.lead_id);
   refresh();
-  return { ok: true, notice: sendInvoiceNotice({ canEmail, optedOut, textSent, textQueued }) };
+  const emailSent = emailResult?.ok === true;
+  const emailFailure = emailResult && !emailResult.ok
+    ? emailResult.skipped ?? emailResult.error ?? "Email delivery failed."
+    : null;
+  const delivered = emailSent || textSent || textQueued;
+  return {
+    ok: delivered,
+    notice: sendInvoiceNotice({ emailSent, emailFailure, optedOut, textSent, textQueued }),
+  };
 }
 
-function sendInvoiceNotice(s: { canEmail: boolean; optedOut: boolean; textSent: boolean; textQueued: boolean }): string {
-  if (s.textSent && s.canEmail) return "Texted and emailed the invoice.";
+function sendInvoiceNotice(s: { emailSent: boolean; emailFailure: string | null; optedOut: boolean; textSent: boolean; textQueued: boolean }): string {
+  if (s.emailFailure && s.textSent) return `Texted the invoice. Email failed: ${s.emailFailure}`;
+  if (s.emailFailure && s.textQueued) return `Text queued. Email failed: ${s.emailFailure}`;
+  if (s.emailFailure) return `The invoice was prepared, but email failed: ${s.emailFailure}`;
+  if (s.textSent && s.emailSent) return "Texted and emailed the invoice.";
   if (s.textSent) return "Texted the invoice.";
-  if (s.textQueued && s.canEmail) return "Text queued for after quiet hours; emailed now.";
+  if (s.textQueued && s.emailSent) return "Text queued for after quiet hours; emailed now.";
   if (s.textQueued) return "Text queued for after quiet hours.";
-  if (s.optedOut && s.canEmail) return "Sent by email — customer opted out of texts.";
-  if (s.canEmail) return "Emailed the invoice.";
-  return "Invoice sent.";
+  if (s.optedOut && s.emailSent) return "Sent by email — customer opted out of texts.";
+  if (s.emailSent) return "Emailed the invoice.";
+  return "The invoice could not be delivered. Try again.";
 }
 
 // Record a cash payment against an invoice — the Verify step. TOCTOU-safe: the

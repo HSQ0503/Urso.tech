@@ -198,7 +198,7 @@ export const POST = apiRoute<{ id: string }>(async ({ req, params }) => {
       // action's, written for the reader.
       const opts: NonNullable<Parameters<typeof sendInvoice>[1]> = {};
       if (body.channels !== undefined) {
-        if (typeof body.channels !== "object" || body.channels === null) {
+        if (typeof body.channels !== "object" || body.channels === null || Array.isArray(body.channels)) {
           return apiFail("`channels` must be an object.", 422);
         }
         const { email, text } = body.channels as { email?: unknown; text?: unknown };

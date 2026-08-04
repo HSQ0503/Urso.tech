@@ -1377,7 +1377,10 @@ export default function ScheduleScreen(): React.ReactElement {
                 sub: entry.crewName ?? entry.job.customer_name,
                 onPress: () => openJob(entry.job.id),
               });
-            } else {
+            } else if (entry.kind === "visit") {
+              // Checked explicitly rather than as an `else`: entriesFor returns
+              // the full Row union, so the negative branch is "not a job",
+              // which is wider than "is a visit" and narrows to neither.
               const start = etMinutes(entry.visit.appointment_at);
               if (start === null) continue;
               blocks.push({

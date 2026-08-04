@@ -42,7 +42,9 @@ import {
 } from "@urso/types";
 import { callActions, jobActions, type JobDetailsPatch } from "@/api";
 import { NavigateButton } from "@/components/navigate";
+import { NextStep } from "@/components/ledger";
 import { Notice } from "@/components/notice";
+import { useToast } from "@/components/toast";
 import { isCompleteWhen, SlotPicker } from "@/components/slot-picker";
 import { keys, useCrews, useInvoices, useJob } from "@/queries";
 import { noticeFrom, useAction, usePullToRefresh } from "@/query";
@@ -185,6 +187,7 @@ export default function JobScreen(): React.ReactElement {
   const [customerGood, setCustomerGood] = useState<string | null>(null);
   const [scheduleNotice, setScheduleNotice] = useState<string | null>(null);
   const [goodNotice, setGoodNotice] = useState<string | null>(null);
+  const toast = useToast();
   const [moneyNotice, setMoneyNotice] = useState<string | null>(null);
   const [siteNotice, setSiteNotice] = useState<string | null>(null);
   const [recurrenceNotice, setRecurrenceNotice] = useState<string | null>(null);
@@ -320,8 +323,21 @@ export default function JobScreen(): React.ReactElement {
     setScheduleNotice(null);
     setGoodNotice(null);
     const r = await complete.mutateAsync();
-    if (!r.ok) setScheduleNotice(r.notice);
-    else if (r.data.invoiceId !== undefined) setGoodNotice("Invoice created.");
+    if (!r.ok) {
+      setScheduleNotice(r.notice);
+      return;
+    }
+    // Completing a job MINTS its invoice, and the next thing to do is send it.
+    // Landing on the bill is the whole point of finishing the job, so go there
+    // rather than reporting it and stopping. completeJob refuses rather than
+    // returning ok with no id, so an absent invoiceId means the bill genuinely
+    // was not created — say so instead of navigating nowhere.
+    if (typeof r.data.invoiceId === "string") {
+      toast.show("Job completed — invoice created.");
+      router.push({ pathname: "/(owner)/invoice/[id]", params: { id: r.data.invoiceId } });
+    } else {
+      setGoodNotice("Job completed.");
+    }
   };
 
   const onReopen = () => {
@@ -491,6 +507,19 @@ export default function JobScreen(): React.ReactElement {
           />
         }
       >
+        {/* A job that nobody is going to is the one state this screen exists to
+            get out of, and "Schedule job" was a button partway down the page.
+            An estimate approval now lands here directly, so the first thing on
+            the screen is the reason it was created. Nothing is shown once it is
+            booked — the schedule section below already owns moving it. */}
+        {job.scheduled_at === null && job.status !== "canceled" ? (
+          <NextStep
+            label="Put it on the calendar"
+            hint="This job is sold but nobody is going yet."
+            icon="calendar"
+            onPress={openSlot}
+          />
+        ) : null}
         <Notice text={notice} />
 
         <View style={[styles.card, styles.summaryCard]}>

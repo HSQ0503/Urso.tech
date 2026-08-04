@@ -22,8 +22,10 @@ import {
   type EstimateStatus,
 } from "@urso/types";
 import { API_BASE, estimateActions } from "@/api";
+import { DeliverySheet, type DeliveryChannels } from "@/components/delivery-sheet";
 import { Mark } from "@/components/ledger";
 import { Notice } from "@/components/notice";
+import { useToast } from "@/components/toast";
 import { keys, useEstimate } from "@/queries";
 import { noticeFrom, useAction, usePullToRefresh } from "@/query";
 import { color, font, HIT, radius, space, type } from "@/theme";
@@ -116,16 +118,21 @@ export default function EstimatePreviewScreen(): React.ReactElement {
   const estimate = estimateQuery.data ?? null;
 
   const [menuOpen, setMenuOpen] = useState(false);
+  const [deliveryOpen, setDeliveryOpen] = useState(false);
   const [tab, setTab] = useState<PreviewTab>("job");
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [messageOpen, setMessageOpen] = useState(false);
   const [termsOpen, setTermsOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [good, setGood] = useState<string | null>(null);
+  const toast = useToast();
 
   const quoteKeys: QueryKey[] = [keys.estimateOne(id), keys.estimates()];
-  const send = useAction<void, Record<string, never>>(() => estimateActions.send(id), { invalidates: quoteKeys });
-  const approve = useAction<void, Record<string, never>>(
+  const send = useAction<DeliveryChannels, Record<string, unknown>>(
+    (channels) => estimateActions.send(id, { channels }),
+    { invalidates: quoteKeys },
+  );
+  const approve = useAction<void, { jobId?: string | null; notice?: string }>(
     () => estimateActions.approveInPerson(id),
     { invalidates: [...quoteKeys, ["owner", "schedule"], keys.schedule.unscheduled(), keys.overview()] },
   );
@@ -148,12 +155,12 @@ export default function EstimatePreviewScreen(): React.ReactElement {
   }
 
   const customerUrl = `${API_BASE}/CanesPressure/e/${estimate.public_token}`;
-  const sendNow = async () => {
+  const sendNow = async (channels: DeliveryChannels) => {
     setNotice(null); setGood(null);
-    const result = await send.mutateAsync();
+    const result = await send.mutateAsync(channels);
     if (!result.ok) setNotice(result.notice);
     else setGood(successNotice(result.data) ?? "Estimate sent.");
-    setMenuOpen(false);
+    setDeliveryOpen(false);
   };
   const approveNow = () => {
     setMenuOpen(false);
@@ -163,8 +170,21 @@ export default function EstimatePreviewScreen(): React.ReactElement {
         text: "Mark accepted",
         onPress: () => void (async () => {
           const result = await approve.mutateAsync();
-          if (!result.ok) setNotice(result.notice);
-          else setGood(successNotice(result.data) ?? "Accepted — job created.");
+          if (!result.ok) {
+            setNotice(result.notice);
+            return;
+          }
+          // Approving CREATES a job, and the next thing to do with a job is
+          // put it on the calendar — so land on it rather than announcing it
+          // and leaving him to find it in the tray. The sentence rides the
+          // toast, which is mounted at the root precisely so it survives this
+          // navigation; several of these are QUALIFIED successes ("the deposit
+          // could NOT be recorded"), so it is shown verbatim, not replaced.
+          toast.show(successNotice(result.data) ?? "Accepted — job created.");
+          const jobId = result.data.jobId;
+          if (typeof jobId === "string") {
+            router.push({ pathname: "/(owner)/job/[id]", params: { id: jobId } });
+          }
         })(),
       },
     ]);
@@ -333,7 +353,7 @@ export default function EstimatePreviewScreen(): React.ReactElement {
             <View style={styles.actionGrid}>
               <ActionTile label="Edit" icon="edit-3" disabled={!canEdit || busy} onPress={() => { setMenuOpen(false); router.push({ pathname: "/(owner)/estimate/new", params: { id } }); }} />
               <ActionTile label="Cancel" icon="slash" danger disabled={!canSend || busy} onPress={voidNow} />
-              <ActionTile label="Re-Send" icon="send" disabled={!canSend || busy} onPress={() => void sendNow()} />
+              <ActionTile label={estimate.sent_at ? "Re-Send" : "Send"} icon="send" disabled={!canSend || busy} onPress={() => { setMenuOpen(false); setDeliveryOpen(true); }} />
               <ActionTile label="Mark As Lost" icon="thumbs-down" danger disabled={!canSend || busy} onPress={voidNow} />
               <ActionTile label="Clone Estimate" icon="copy" disabled={busy} onPress={() => void duplicateNow()} />
               <ActionTile label="Mark As Accepted" icon="check" disabled={!canApprove || busy} onPress={approveNow} />
@@ -346,6 +366,16 @@ export default function EstimatePreviewScreen(): React.ReactElement {
           </View>
         </View>
       </Modal>
+
+      <DeliverySheet
+        visible={deliveryOpen}
+        documentLabel="estimate"
+        phone={estimate.customer_phone}
+        email={estimate.customer_email}
+        sending={send.isPending}
+        onClose={() => { if (!send.isPending) setDeliveryOpen(false); }}
+        onSend={(channels) => void sendNow(channels)}
+      />
     </View>
   );
 }

@@ -45,6 +45,66 @@ const TO = [
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://urso.ws";
 
+export type CustomerEmailResult =
+  | { ok: true; id: string }
+  | { ok: false; skipped?: string; error?: string };
+
+function resendErrorMessage(error: unknown): string {
+  if (typeof error !== "object" || error === null) return "Email provider rejected the message.";
+  const message = (error as { message?: unknown }).message;
+  return typeof message === "string" && message.length > 0 ? message : "Email provider rejected the message.";
+}
+
+function shouldRetryResend(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  const candidate = error as { statusCode?: unknown; name?: unknown };
+  const status = typeof candidate.statusCode === "number" ? candidate.statusCode : null;
+  const name = typeof candidate.name === "string" ? candidate.name : "";
+  return status === 429 || (status !== null && status >= 500) || name === "rate_limit_exceeded" || name === "internal_server_error";
+}
+
+async function sendCustomerEmail(input: {
+  to: string;
+  subject: string;
+  html: string;
+  idempotencyKey: string;
+  documentType: "estimate" | "invoice";
+  documentId: string;
+}): Promise<CustomerEmailResult> {
+  const key = process.env.RESEND_API;
+  if (!key) return { ok: false, skipped: "Email delivery is not configured." };
+
+  const resend = new Resend(key);
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const { data, error } = await resend.emails.send(
+        {
+          from: FROM,
+          to: [input.to],
+          subject: input.subject,
+          html: input.html,
+          tags: [
+            { name: "document_type", value: input.documentType },
+            { name: "document_id", value: input.documentId },
+          ],
+        },
+        { idempotencyKey: input.idempotencyKey },
+      );
+      if (!error && data?.id) return { ok: true, id: data.id };
+      lastError = error;
+      if (!shouldRetryResend(error) || attempt === 2) break;
+    } catch (error) {
+      lastError = error;
+      if (attempt === 2) break;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250 * (2 ** attempt)));
+  }
+  const message = resendErrorMessage(lastError);
+  console.error(`[canes/notify] ${input.documentType} email failed:`, message);
+  return { ok: false, error: message };
+}
+
 // Owner-facing send: subject + pre-rendered HTML to the notify list. Best-effort
 // — skips without a key, swallows every error, never throws into the caller.
 async function send(subject: string, html: string): Promise<void> {
@@ -154,37 +214,34 @@ export async function sendDigestEmail(subject: string, html: string): Promise<vo
 // ── Estimate emails (Phase 2) ────────────────────────────────────────────────
 
 // Customer-facing: the estimate is ready to review + approve at its token link.
-export async function notifyEstimateSent(estimate: Estimate): Promise<void> {
-  if (!estimate.customer_email) return;
-  const html = await render(
-    <EstimateEmail
-      number={estimate.number}
-      customerName={estimate.customer_name}
-      customerPhone={estimate.customer_phone ? fmtPhone(estimate.customer_phone) : null}
-      jobAddress={estimate.job_address}
-      jobName={estimate.job_name}
-      total={fmtMoney(estimate.total_cents)}
-      deposit={estimate.deposit_cents > 0 ? fmtMoney(estimate.deposit_cents) : null}
-      message={estimate.message_to_customer}
-      reviewUrl={`${APP_URL}/CanesPressure/e/${estimate.public_token}`}
-    />,
-  );
-  const key = process.env.RESEND_API;
-  if (!key) {
-    console.warn("[canes/notify] RESEND_API not set — skipping estimate email:", estimate.number);
-    return;
-  }
+export async function notifyEstimateSent(estimate: Estimate, deliveryId = estimate.id): Promise<CustomerEmailResult> {
+  if (!estimate.customer_email) return { ok: false, skipped: "No email address is on file." };
   try {
-    const resend = new Resend(key);
-    const { error } = await resend.emails.send({
-      from: FROM,
-      to: [estimate.customer_email],
+    const html = await render(
+      <EstimateEmail
+        number={estimate.number}
+        customerName={estimate.customer_name}
+        customerPhone={estimate.customer_phone ? fmtPhone(estimate.customer_phone) : null}
+        jobAddress={estimate.job_address}
+        jobName={estimate.job_name}
+        total={fmtMoney(estimate.total_cents)}
+        deposit={estimate.deposit_cents > 0 ? fmtMoney(estimate.deposit_cents) : null}
+        message={estimate.message_to_customer}
+        reviewUrl={`${APP_URL}/CanesPressure/e/${estimate.public_token}`}
+      />,
+    );
+    return sendCustomerEmail({
+      to: estimate.customer_email,
       subject: `Your estimate from Canes Pressure Washing — ${estimate.number}`,
       html,
+      idempotencyKey: `estimate-send/${estimate.id}/${deliveryId}`,
+      documentType: "estimate",
+      documentId: estimate.id,
     });
-    if (error) console.error("[canes/notify] resend error:", error);
-  } catch (err) {
-    console.error("[canes/notify] estimate send failed:", err);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("[canes/notify] estimate render failed:", message);
+    return { ok: false, error: message };
   }
 }
 
@@ -246,49 +303,44 @@ export async function notifyEstimateDeclined(estimate: Estimate): Promise<void> 
 // ── Invoice emails (Phase 2.5) ────────────────────────────────────────────────
 
 // Customer-facing: the invoice is ready to view + pay at its token link.
-export async function notifyInvoiceSent(invoice: Invoice): Promise<void> {
-  if (!invoice.customer_email) return;
-  const balance = invoiceBalanceCents(invoice);
-  // Reward offers still open on this bill (0012) — surfaced in the email so
-  // the customer opens the page. Best-effort: never block the send.
-  let rewardLines: string[] = [];
+export async function notifyInvoiceSent(invoice: Invoice, deliveryId = invoice.id): Promise<CustomerEmailResult> {
+  if (!invoice.customer_email) return { ok: false, skipped: "No email address is on file." };
   try {
-    rewardLines = (await listInvoiceRewards(invoice.id))
-      .filter((r) => r.status === "offered" || r.status === "claimed")
-      .map((r) => `${fmtMoney(r.amount_cents)} off — ${r.label}`);
-  } catch (err) {
-    console.error("[canes/notify] reward lines failed:", err);
-  }
-  const html = await render(
-    <InvoiceEmail
-      number={invoice.number}
-      customerName={invoice.customer_name}
-      customerPhone={invoice.customer_phone ? fmtPhone(invoice.customer_phone) : null}
-      jobAddress={invoice.job_address}
-      jobName={invoice.job_name}
-      total={fmtMoney(invoice.total_cents)}
-      balance={balance > 0 ? fmtMoney(balance) : null}
-      message={invoice.message_to_customer}
-      payUrl={invoicePayUrl(invoice)}
-      rewardLines={rewardLines}
-    />,
-  );
-  const key = process.env.RESEND_API;
-  if (!key) {
-    console.warn("[canes/notify] RESEND_API not set — skipping invoice email:", invoice.number);
-    return;
-  }
-  try {
-    const resend = new Resend(key);
-    const { error } = await resend.emails.send({
-      from: FROM,
-      to: [invoice.customer_email],
+    const balance = invoiceBalanceCents(invoice);
+    let rewardLines: string[] = [];
+    try {
+      rewardLines = (await listInvoiceRewards(invoice.id))
+        .filter((reward) => reward.status === "offered" || reward.status === "claimed")
+        .map((reward) => `${fmtMoney(reward.amount_cents)} off — ${reward.label}`);
+    } catch (error) {
+      console.error("[canes/notify] reward lines failed:", error);
+    }
+    const html = await render(
+      <InvoiceEmail
+        number={invoice.number}
+        customerName={invoice.customer_name}
+        customerPhone={invoice.customer_phone ? fmtPhone(invoice.customer_phone) : null}
+        jobAddress={invoice.job_address}
+        jobName={invoice.job_name}
+        total={fmtMoney(invoice.total_cents)}
+        balance={balance > 0 ? fmtMoney(balance) : null}
+        message={invoice.message_to_customer}
+        payUrl={invoicePayUrl(invoice)}
+        rewardLines={rewardLines}
+      />,
+    );
+    return sendCustomerEmail({
+      to: invoice.customer_email,
       subject: `Your invoice from Canes Pressure Washing — ${invoice.number}`,
       html,
+      idempotencyKey: `invoice-send/${invoice.id}/${deliveryId}`,
+      documentType: "invoice",
+      documentId: invoice.id,
     });
-    if (error) console.error("[canes/notify] resend error:", error);
-  } catch (err) {
-    console.error("[canes/notify] invoice send failed:", err);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("[canes/notify] invoice render failed:", message);
+    return { ok: false, error: message };
   }
 }
 

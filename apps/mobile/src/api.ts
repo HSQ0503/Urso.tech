@@ -572,6 +572,13 @@ export const estimateActions = {
   // The GUARDED owner twin of the public approveEstimate — same finalize path
   // (job, deposit, lead → won), signature recorded as an in-person agreement.
   // depositMethod defaults to cash inside the action when absent.
+  // Returns the JOB the approval just created, so the caller can land on it
+  // instead of announcing it and leaving the owner to go find it in the tray.
+  // depositUrl rides along too — it is the link the customer's estimate page
+  // now shows, and is null when the deposit was taken in person.
   approveInPerson: (id: string, opts?: { depositCollected?: boolean; depositMethod?: string }) =>
-    act(`/canes/estimates/${id}/actions`, { action: "approveInPerson", ...opts }),
+    act<{ jobId?: string | null; depositUrl?: string | null; notice?: string }>(
+      `/canes/estimates/${id}/actions`,
+      { action: "approveInPerson", ...opts },
+    ),
 };

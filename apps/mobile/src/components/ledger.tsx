@@ -446,6 +446,51 @@ export function PrimaryButton({ label, onPress }: { label: string; onPress: () =
   );
 }
 
+// ── Next step ────────────────────────────────────────────────────────────────
+//
+// The one thing that moves this record forward, stated and tappable.
+//
+// The pipeline was CONNECTED before this existed — approving built the job,
+// completing minted the invoice — but each screen then announced what it had
+// done and stopped. The next action was real and reachable, just not on the
+// surface: sending an invoice sits three taps down a menu, which is a strange
+// place for the only reason the invoice exists.
+//
+// One per screen, never a list. A record with two "next" steps has none.
+export function NextStep({
+  label,
+  hint,
+  icon,
+  onPress,
+}: {
+  label: string;
+  hint: string;
+  icon: IconName;
+  onPress: () => void;
+}): React.ReactElement {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${label}. ${hint}`}
+      onPress={onPress}
+      style={({ pressed }) => [styles.nextStep, pressed && styles.nextStepPressed]}
+    >
+      <View style={styles.nextIcon}>
+        <Feather name={icon} size={18} color={color.surface} />
+      </View>
+      <View style={styles.nextBody}>
+        <Text style={styles.nextLabel} numberOfLines={1}>
+          {label}
+        </Text>
+        <Text style={styles.nextHint} numberOfLines={2}>
+          {hint}
+        </Text>
+      </View>
+      <Feather name="chevron-right" size={20} color={color.brandDeep} />
+    </Pressable>
+  );
+}
+
 // ── Empty state ──────────────────────────────────────────────────────────────
 
 export function EmptyState({
@@ -815,6 +860,31 @@ const styles = StyleSheet.create({
     gap: 13,
   },
   emptyText: { fontFamily: font.body, fontSize: 14, lineHeight: 20, color: color.muted },
+
+  nextStep: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    minHeight: 66,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    backgroundColor: color.brandWash,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.brandEdge,
+    borderRadius: radius.lg,
+  },
+  nextStepPressed: { backgroundColor: color.brandSoft },
+  nextIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: color.brandDown,
+  },
+  nextBody: { flex: 1, minWidth: 0, gap: 3 },
+  nextLabel: { ...type.title, color: color.brandDeep },
+  nextHint: { ...type.small, color: color.muted },
 
   chip: { paddingVertical: 4, paddingHorizontal: 8, borderRadius: radius.chip },
   chipText: { ...type.ruleSm, lineHeight: 12 },
