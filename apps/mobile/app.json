@@ -10,6 +10,9 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "ws.urso.app",
+      "config": {
+        "usesNonExemptEncryption": false
+      },
       "infoPlist": {
         "NSFaceIDUsageDescription": "Unlock Urso with Face ID instead of re-entering your PIN.",
         "NSCameraUsageDescription": "Take before and after photos of a job.",
