@@ -12,10 +12,7 @@ import {
 } from "@/lib/brain/models";
 import { ursoDbSafe, URSO_DB_MISSING } from "@/lib/brain/supabase";
 import type { BrainProvider } from "@/lib/brain/types";
-import {
-  isMfDemoRoleId,
-  MF_BRAIN_PROVIDER_ORGANIZATION_ID,
-} from "@/lib/mf-demo/brain-config";
+import { isMfDemoRoleId } from "@/lib/mf-demo/brain-config";
 import { resolveMfDemoPrincipal } from "@/lib/mf-demo/brain-server";
 import { MfSessionContractError } from "@/lib/mf-demo/session-runtime.mjs";
 import {
@@ -70,7 +67,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "Controlled learning is disabled for this Brain." }, { status: 409 });
   }
 
-  const configured = await getOrgKeyStatus(admin, MF_BRAIN_PROVIDER_ORGANIZATION_ID);
+  const configured = await getOrgKeyStatus(admin, principal.organizationId);
   const configuredProviders = configured.map((item) => item.provider);
   const settings = policyRow.settings ?? {};
   const requestedProvider = typeof settings.provider === "string" ? settings.provider : "";
@@ -88,7 +85,7 @@ export async function POST(request: Request) {
   const modelId = isCatalogModel(provider, requestedModel)
     ? requestedModel
     : BRAIN_PROVIDERS[provider].defaultModel;
-  const apiKey = await getOrgKey(admin, provider, MF_BRAIN_PROVIDER_ORGANIZATION_ID);
+  const apiKey = await getOrgKey(admin, provider, principal.organizationId);
   if (!apiKey) {
     return Response.json({ error: `No ${BRAIN_PROVIDERS[provider].name} key is configured.` }, { status: 503 });
   }

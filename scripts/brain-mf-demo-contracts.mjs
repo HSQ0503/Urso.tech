@@ -86,12 +86,21 @@ const providerRefreshSource = readFileSync(
   new URL("../scripts/brain-mf-refresh-provider-keys.mjs", import.meta.url),
   "utf8",
 );
-assert.match(providerRefreshSource, /const sourceOrganizationId = ["']urso["']/);
-assert.match(providerRefreshSource, /const targetOrganizationId = ["']minerbo-fuchs-demo["']/);
-assert.match(providerRefreshSource, /key_ciphertext/);
-assert.doesNotMatch(providerRefreshSource, /BRAIN_KEYS_SECRET/);
-assert.doesNotMatch(providerRefreshSource, /createCipheriv|encrypt\(/);
-assert.doesNotMatch(providerRefreshSource, /OPENAI_API_KEY|GOOGLE_GENERATIVE_AI_API_KEY|ANTHROPIC_API_KEY|MOONSHOT_API_KEY/);
+assert.match(providerRefreshSource, /const organizationId = ["']minerbo-fuchs-demo["']/);
+assert.match(providerRefreshSource, /BRAIN_KEYS_SECRET/);
+assert.match(providerRefreshSource, /createCipheriv|encrypt\(/);
+for (const providerEnvironmentVariable of [
+  "OPENAI_API_KEY",
+  "GOOGLE_GENERATIVE_AI_API_KEY",
+  "ANTHROPIC_API_KEY",
+  "MOONSHOT_API_KEY",
+]) {
+  assert(
+    providerRefreshSource.includes(providerEnvironmentVariable),
+    `MF provider refresh is missing ${providerEnvironmentVariable}`,
+  );
+}
+assert.doesNotMatch(providerRefreshSource, /sourceOrganizationId|brain-mf-provider-sync:urso/);
 
 assert.deepEqual(mfScenarioManifest.revisions.B, {
   footprintM: [18.4, 4.8],
@@ -853,22 +862,25 @@ for (const routePath of [
 }
 
 const mfChatRouteSource = readFileSync(new URL("../app/api/mf/brain/chat/route.ts", import.meta.url), "utf8");
-assert.match(mfChatRouteSource, /MF_BRAIN_PROVIDER_ORGANIZATION_ID/);
+assert.doesNotMatch(mfChatRouteSource, /MF_BRAIN_PROVIDER_ORGANIZATION_ID/);
 assert.match(
   mfChatRouteSource,
-  /getOrgKeyStatus\(admin, MF_BRAIN_PROVIDER_ORGANIZATION_ID\)/,
-  "MF chat must use the canonical Urso provider registry",
+  /getOrgKeyStatus\(admin, principal\.organizationId\)/,
+  "MF chat must inspect its isolated tenant provider registry",
 );
 assert.match(
   mfChatRouteSource,
-  /getOrgKey\(admin, provider, MF_BRAIN_PROVIDER_ORGANIZATION_ID\)/,
-  "MF chat must read provider credentials from the canonical Urso organization",
+  /getOrgKey\(admin, provider, principal\.organizationId\)/,
+  "MF chat must read credentials from its isolated tenant",
 );
-assert.doesNotMatch(
-  mfChatRouteSource,
-  /getOrgKey(?:Status)?\(admin, (?:provider, )?principal\.organizationId\)/,
-  "MF project isolation must not require duplicated provider ciphertext",
-);
+for (const providerRoutePath of [
+  "../app/api/mf/brain/learning/route.ts",
+  "../app/api/mf/brain/threads/route.ts",
+]) {
+  const providerRouteSource = readFileSync(new URL(providerRoutePath, import.meta.url), "utf8");
+  assert.doesNotMatch(providerRouteSource, /MF_BRAIN_PROVIDER_ORGANIZATION_ID/);
+  assert.match(providerRouteSource, /getOrgKeyStatus\(admin, principal\.organizationId\)/);
+}
 
 const demoClientSource = readFileSync(new URL("../components/mf/mf-demo.tsx", import.meta.url), "utf8");
 assert.doesNotMatch(demoClientSource, /void fetch\(["']\/api\/mf\/brain\/scenario/);

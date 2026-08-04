@@ -2,10 +2,6 @@ import type { BrainRole } from "@/lib/brain/types";
 
 export const MF_BRAIN_ORGANIZATION_ID = "minerbo-fuchs-demo";
 export const MF_BRAIN_PROJECT_ID = "uberlandia-refrescos-f3";
-// MF keeps its own authorization and project-data boundary, but model calls use
-// Urso's canonical provider registry. Duplicating encrypted provider rows here
-// lets a local BRAIN_KEYS_SECRET overwrite break the production demo.
-export const MF_BRAIN_PROVIDER_ORGANIZATION_ID = "urso";
 
 export const MF_DEMO_CLAIM_IDS = {
   revisionB: "d2000000-0000-4000-8000-000000000001",
