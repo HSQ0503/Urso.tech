@@ -27,6 +27,39 @@ import {
   transitionMfSessionRecord,
   verifyMfSessionToken,
 } from "../lib/mf-demo/session-runtime.mjs";
+import { resolveReadableBrainProvider } from "../lib/mf-demo/provider-runtime.mjs";
+
+const providerAttempts = [];
+const providerFallback = await resolveReadableBrainProvider({
+  preferences: ["openai", "google", "anthropic"],
+  configuredProviders: ["openai", "google"],
+  readKey: async (provider) => {
+    providerAttempts.push(provider);
+    if (provider === "openai") throw new Error("Unsupported state or unable to authenticate data");
+    return provider === "google" ? "google-demo-key" : null;
+  },
+});
+assert.deepEqual(providerAttempts, ["openai", "google"]);
+assert.deepEqual(providerFallback, {
+  provider: "google",
+  apiKey: "google-demo-key",
+  configuredCount: 2,
+  unreadableProviders: ["openai"],
+});
+
+const noProvider = await resolveReadableBrainProvider({
+  preferences: ["openai", "google"],
+  configuredProviders: [],
+  readKey: async () => {
+    throw new Error("unconfigured providers must not be read");
+  },
+});
+assert.deepEqual(noProvider, {
+  provider: null,
+  apiKey: null,
+  configuredCount: 0,
+  unreadableProviders: [],
+});
 
 assert.deepEqual(mfScenarioManifest.revisions.B, {
   footprintM: [18.4, 4.8],
@@ -993,6 +1026,7 @@ const agentWorkflowSource = readFileSync(
   new URL("../components/mf/mf-agent-workflow.tsx", import.meta.url),
   "utf8",
 );
+assert.match(agentWorkflowSource, /className="mf-workflow-vitals"/);
 assert.match(agentWorkflowSource, /export type MfAgentWorkflowProps/);
 for (const propName of [
   "snapshot",
@@ -1042,6 +1076,9 @@ assert.doesNotMatch(mfCssSource, /\.mf-team-row-owner\s*\{\s*display:\s*none;\s*
 assert.doesNotMatch(mfCssSource, /Agentic workflow deployment studio/);
 assert.doesNotMatch(mfCssSource, /\.mf-agentic-map\s*>\s*:nth-child/);
 assert.match(mfCssSource, /\/\* Agent workflow canvas \*\//);
+assert.match(mfCssSource, /\.mf-brain-composer:focus-within\s*\{/);
+assert.match(mfCssSource, /\.mf-brain-composer input:focus-visible\s*\{[\s\S]*?outline:\s*none/);
+assert.match(mfCssSource, /\.mf-workflow-vitals\s*\{/);
 assert.match(mfCssSource, /\.mf-source-connection-status/);
 assert.match(mfCssSource, /\.mf-receipt-status/);
 for (const obsoleteClassName of [
@@ -1109,6 +1146,15 @@ assert.doesNotMatch(retainedStoryCss, /background:\s*#101010/);
 
 const demoViewsSource = readFileSync(new URL("../components/mf/demo-views.tsx", import.meta.url), "utf8");
 const mfDemoSource = readFileSync(new URL("../components/mf/mf-demo.tsx", import.meta.url), "utf8");
+const projectBrainSource = readFileSync(
+  new URL("../components/mf/project-brain-workspace.tsx", import.meta.url),
+  "utf8",
+);
+assert.match(projectBrainSource, /const graphEdges = useMemo/);
+assert.match(projectBrainSource, /<path key=\{edge\.key\}/);
+assert.match(projectBrainSource, /<RichText text=\{document\.content\} \/>/);
+assert.match(projectBrainSource, /error, clearError, setMessages/);
+assert.match(projectBrainSource, /function newConversation\(\)[\s\S]*?clearError\(\)/);
 for (const accessibilityContract of [
   "trapTabFocus",
   "presentationDialogRef",

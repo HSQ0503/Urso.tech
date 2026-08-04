@@ -1,11 +1,12 @@
 import type { UIMessage } from "ai";
 import { createBrainChatResponse } from "@/lib/brain/chat-runtime";
 import { BRAIN_PROVIDERS } from "@/lib/brain/models";
-import { getOrgKeyStatus } from "@/lib/brain/db";
+import { getOrgKey, getOrgKeyStatus } from "@/lib/brain/db";
 import { ursoDbSafe, URSO_DB_MISSING } from "@/lib/brain/supabase";
 import type { BrainProvider, BrainUIData } from "@/lib/brain/types";
 import { isMfDemoRoleId, MF_BRAIN_PROJECT_ID } from "@/lib/mf-demo/brain-config";
 import { resolveMfDemoPrincipal } from "@/lib/mf-demo/brain-server";
+import { resolveReadableBrainProvider } from "@/lib/mf-demo/provider-runtime.mjs";
 import { MfSessionContractError } from "@/lib/mf-demo/session-runtime.mjs";
 import {
   consumeMfDemoSessionUsage,
@@ -49,18 +50,27 @@ export async function POST(request: Request) {
   }
 
   const keyStatus = await getOrgKeyStatus(admin, principal.organizationId).catch(() => []);
-  const available = new Set(keyStatus.map((key) => key.provider));
-  const provider = providerPreference.find((candidate) => available.has(candidate)) ?? null;
-  if (!provider) {
+  const providerResolution = await resolveReadableBrainProvider({
+    preferences: providerPreference,
+    configuredProviders: keyStatus.map((key) => key.provider),
+    readKey: (provider) => getOrgKey(admin, provider, principal.organizationId),
+  });
+  if (!providerResolution.provider || !providerResolution.apiKey) {
+    const error = providerResolution.configuredCount > 0
+      ? "The MF Brain provider credentials cannot be read by this server. Refresh the MF provider keys and restart the app."
+      : "The MF Brain has no model provider configured yet.";
     return Response.json(
-      { error: "The MF Brain has no model provider configured yet." },
+      { error },
       { status: 503 },
     );
   }
 
+  const provider = providerResolution.provider;
+
   return createBrainChatResponse({
     admin,
     principal,
+    apiKey: providerResolution.apiKey,
     forcedProjectId: MF_BRAIN_PROJECT_ID,
     responseLanguage: body.language === "en" ? "en" : "pt",
     body: {

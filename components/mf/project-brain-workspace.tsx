@@ -163,15 +163,22 @@ function documentCode(title: string): string {
   return initials || "DOC";
 }
 
-function graphPosition(index: number, count: number) {
-  if (index === 0) return { x: 450, y: 280 };
-  const ring = index <= 7 ? 1 : 2;
-  const ringItems = ring === 1 ? Math.min(7, count - 1) : Math.max(1, count - 8);
-  const ringIndex = ring === 1 ? index - 1 : index - 8;
-  const angle = (ringIndex / ringItems) * Math.PI * 2 - Math.PI / 2;
-  const radiusX = ring === 1 ? 235 : 365;
-  const radiusY = ring === 1 ? 145 : 225;
-  return { x: 450 + Math.cos(angle) * radiusX, y: 280 + Math.sin(angle) * radiusY };
+const graphFlowPositions = [
+  { x: 95, y: 280 },
+  { x: 275, y: 135 }, { x: 275, y: 280 }, { x: 275, y: 425 },
+  { x: 455, y: 115 }, { x: 455, y: 235 }, { x: 455, y: 355 }, { x: 455, y: 475 },
+  { x: 635, y: 95 }, { x: 635, y: 205 }, { x: 635, y: 315 }, { x: 635, y: 425 },
+  { x: 815, y: 75 }, { x: 815, y: 180 }, { x: 815, y: 285 }, { x: 815, y: 390 },
+] as const;
+
+function graphPosition(index: number) {
+  return graphFlowPositions[index] ?? { x: 815, y: 495 };
+}
+
+function graphCurve(source: { x: number; y: number }, target: { x: number; y: number }) {
+  const direction = target.x >= source.x ? 1 : -1;
+  const control = Math.max(42, Math.abs(target.x - source.x) * 0.45);
+  return `M ${source.x} ${source.y} C ${source.x + control * direction} ${source.y}, ${target.x - control * direction} ${target.y}, ${target.x} ${target.y}`;
 }
 
 const errorText = (message: string): string => {
@@ -299,7 +306,7 @@ export function ProjectBrainWorkspace({
   const chat = useChat<MfBrainMessage>({
     transport: new DefaultChatTransport({ api: "/api/mf/brain/chat", headers: sessionHeaders }),
   });
-  const { messages, status, error, setMessages } = chat;
+  const { messages, status, error, clearError, setMessages } = chat;
   const busy = status === "submitted" || status === "streaming";
 
   useEffect(() => {
@@ -346,9 +353,19 @@ export function ProjectBrainWorkspace({
   }, [workspace?.graph]);
   const graphPathSet = useMemo(() => new Set(graphDocuments.map((document) => document.path)), [graphDocuments]);
   const positions = useMemo(
-    () => new Map(graphDocuments.map((document, index) => [document.path, graphPosition(index, graphDocuments.length)])),
+    () => new Map(graphDocuments.map((document, index) => [document.path, graphPosition(index)])),
     [graphDocuments],
   );
+  const graphEdges = useMemo(() => {
+    const seen = new Set<string>();
+    return graphDocuments.flatMap((document) => document.links.flatMap((targetPath) => {
+      if (!graphPathSet.has(targetPath)) return [];
+      const key = [document.path, targetPath].sort().join("::");
+      if (seen.has(key)) return [];
+      seen.add(key);
+      return [{ key, sourcePath: document.path, targetPath }];
+    }));
+  }, [graphDocuments, graphPathSet]);
 
   const latestReceipt = useMemo<BrainContextReceipt | null>(() => {
     for (let messageIndex = messages.length - 1; messageIndex >= 0; messageIndex--) {
@@ -380,12 +397,13 @@ export function ProjectBrainWorkspace({
     const question = value.trim();
     if (!question || busy) return;
     const threadId = activeThreadId ?? await createThread();
+    clearError();
     chat.sendMessage(
       { text: question },
       { body: { threadId: threadId ?? undefined, roleId, language } },
     );
     setDraftQuestion("");
-  }, [activeThreadId, busy, chat, createThread, language, roleId]);
+  }, [activeThreadId, busy, chat, clearError, createThread, language, roleId]);
 
   function submitQuestion(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -394,6 +412,7 @@ export function ProjectBrainWorkspace({
 
   function newConversation() {
     if (busy) chat.stop();
+    clearError();
     setActiveThreadId(null);
     setMessages([]);
     setDraftQuestion("");
@@ -453,15 +472,19 @@ export function ProjectBrainWorkspace({
               <span>{l("Mapa autorizado do projeto", "Authorized project map")}</span>
               <small>{l("Relações reais do Brain, derivadas dos wikilinks e versões atuais.", "Live Brain relationships derived from wikilinks and current versions.")}</small>
             </div>
+            <div className="mf-brain-canvas-metrics" aria-label={l("Resumo do mapa", "Map summary")}>
+              <span><strong>{graphDocuments.length}</strong>{l("registros", "records")}</span>
+              <span><strong>{graphEdges.length}</strong>{l("relações", "relationships")}</span>
+              <span><i />{l("verdade atual", "current truth")}</span>
+            </div>
             <svg viewBox="0 0 900 560" aria-hidden="true">
-              {graphDocuments.flatMap((document) => document.links.map((targetPath) => {
-                if (!graphPathSet.has(targetPath) || document.path > targetPath) return [];
-                const sourcePosition = positions.get(document.path);
-                const targetPosition = positions.get(targetPath);
-                if (!sourcePosition || !targetPosition) return [];
-                const highlighted = selectedDocumentPath === document.path || selectedDocumentPath === targetPath;
-                return [<line key={`${document.path}-${targetPath}`} x1={sourcePosition.x} y1={sourcePosition.y} x2={targetPosition.x} y2={targetPosition.y} className={highlighted ? "is-active" : ""} />];
-              }))}
+              {graphEdges.map((edge) => {
+                const sourcePosition = positions.get(edge.sourcePath);
+                const targetPosition = positions.get(edge.targetPath);
+                if (!sourcePosition || !targetPosition) return null;
+                const highlighted = selectedDocumentPath === edge.sourcePath || selectedDocumentPath === edge.targetPath;
+                return <path key={edge.key} d={graphCurve(sourcePosition, targetPosition)} className={highlighted ? "is-active" : ""} />;
+              })}
             </svg>
             {graphDocuments.map((document) => {
               const position = positions.get(document.path) ?? { x: 450, y: 280 };
@@ -739,7 +762,7 @@ function DocumentInspector({
       ) : null}
       <section className="mf-document-content">
         <span className="mf-eyebrow">{l("Conteúdo autorizado", "Authorized content")}</span>
-        <pre>{document.content}</pre>
+        <div className="mf-document-richtext"><RichText text={document.content} /></div>
       </section>
       <section>
         <span className="mf-eyebrow">{l("Conectado a", "Connected to")}</span>

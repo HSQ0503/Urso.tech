@@ -59,12 +59,13 @@ export async function createBrainChatResponse(input: {
   admin: SupabaseClient;
   principal: BrainPrincipal;
   body: BrainChatRequestBody;
+  apiKey?: string;
   forcedProjectId?: string;
   responseLanguage?: "en" | "pt";
 }) {
   const { admin, principal, body } = input;
-  let apiKey: string | null = null;
-  try {
+  let apiKey: string | null = input.apiKey?.trim() || null;
+  if (!apiKey) try {
     apiKey = await getOrgKey(admin, body.provider, principal.organizationId);
   } catch (error) {
     const raw = error instanceof Error ? error.message : String(error);

@@ -168,6 +168,13 @@ export function MfAgentWorkflow(props: MfAgentWorkflowProps): React.JSX.Element 
           </button>
         </header>
 
+        <div className="mf-workflow-vitals" aria-label={l("Resumo operacional do workflow", "Workflow operating summary")}>
+          <span><small>{l("Fontes autorizadas", "Authorized sources")}</small><strong>{presentation.sources.length}</strong></span>
+          <span><small>{l("Agentes especializados", "Specialist agents")}</small><strong>{presentation.agents.length}</strong></span>
+          <span><small>{l("Gate humano", "Human gate")}</small><strong>{localize(presentation.gate.role.name)}</strong></span>
+          <span><small>{l("Saídas controladas", "Controlled outputs")}</small><strong>{presentation.outputs.length}</strong></span>
+        </div>
+
         <div className="mf-workflow-pipeline" aria-label={l("Pipeline do workflow agentivo", "Agent workflow pipeline")}>
           <article className={`mf-workflow-stage is-context is-${stageState("connected_context")}`} aria-current={stageState("connected_context") === "current" ? "step" : undefined}>
             <header><span>01</span><div><small>{stageStateLabel(stageState("connected_context"))}</small><h3>{l("Contexto conectado", "Connected context")}</h3></div></header>
