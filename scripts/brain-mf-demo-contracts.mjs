@@ -180,6 +180,21 @@ assert.deepEqual(queueAtStep2.decisionsRequiringAction.map((item) => item.action
 const releaseAtStep2 = queueAtStep2.waitingOnTeam[0];
 assert.deepEqual(releaseAtStep2.blockingRoleIds, ["quality", "electrical", "bim", "planning"]);
 assert.equal(releaseAtStep2.blockingTeamCount, 4);
+const shuffledStep2Snapshot = {
+  ...createMfHarnessSnapshot(2),
+  workItems: [...createMfHarnessSnapshot(2).workItems].reverse(),
+};
+assert.deepEqual(
+  deriveMfManagerQueue(shuffledStep2Snapshot).next.map((item) => item.taskId),
+  ["map-impact", "select-recovery-scenario"],
+);
+const cyclicStep2Snapshot = {
+  ...createMfHarnessSnapshot(2),
+  workItems: createMfHarnessSnapshot(2).workItems.map((task) => task.id === "verify-gate"
+    ? { ...task, dependsOn: [...task.dependsOn, "release-exe-02"] }
+    : task),
+};
+assert(!deriveMfManagerQueue(cyclicStep2Snapshot).waitingOnTeam[0].transitiveBlockerIds.includes("release-exe-02"));
 
 const teamAtStep5 = deriveMfTeamCommand(createMfHarnessSnapshot(5));
 assert.equal(teamAtStep5.teams.find((team) => team.roleId === "bim").state, "in_progress");
