@@ -1109,6 +1109,31 @@ assert.doesNotMatch(retainedStoryCss, /background:\s*#101010/);
 
 const demoViewsSource = readFileSync(new URL("../components/mf/demo-views.tsx", import.meta.url), "utf8");
 const mfDemoSource = readFileSync(new URL("../components/mf/mf-demo.tsx", import.meta.url), "utf8");
+for (const accessibilityContract of [
+  "trapTabFocus",
+  "presentationDialogRef",
+  "mobileMenuRef",
+  "mobileNavigationRef",
+  'aria-controls="mf-project-navigation"',
+  'id="mf-project-navigation"',
+  "isMobileViewport && !mobileNavigationOpen",
+]) {
+  assert(mfDemoSource.includes(accessibilityContract), `missing MF shell accessibility contract: ${accessibilityContract}`);
+}
+assert.match(mfDemoSource, /presentationLobbyOpen[\s\S]*?event\.key === ["']Escape["'][\s\S]*?setPresentationLobbyOpen\(false\)/);
+assert.match(mfDemoSource, /button, a, summary, \[contenteditable/);
+assert.match(mfDemoSource, /presenterMode && !presentationLobbyOpen && !selectedArtifactId/);
+assert.match(mfDemoSource, /!\(isMobileViewport && mobileNavigationOpen\)/);
+assert.doesNotMatch(mfDemoSource, /aria-hidden=\{presentationLobbyOpen/);
+assert.match(mfCssSource, /\.mf-presentation-lobby > section\s*\{[\s\S]*?overflow-y:\s*auto;/);
+assert.match(mfCssSource, /\.mf-clarity \.mf-topbar :focus-visible,[\s\S]*?outline-color:\s*#fff;/);
+assert.match(mfCssSource, /\.mf-clarity \.mf-lobby-language :focus-visible,/);
+assert.match(mfCssSource, /\.mf-clarity \.mf-workbench :focus-visible/);
+assert.match(mfCssSource, /\.mf-live-receipt-sources button:focus-visible\s*\{[\s\S]*?outline:\s*2px solid/);
+assert.match(mfCssSource, /@media \(max-width:\s*980px\)[\s\S]*?\.mf-sidebar\s*\{[\s\S]*?visibility:\s*hidden;[\s\S]*?pointer-events:\s*none;/);
+assert.match(mfCssSource, /@media \(max-width:\s*1180px\)[\s\S]*?\.mf-workflow-pipeline\s*\{[\s\S]*?flex-direction:\s*column;/);
+assert.match(mfCssSource, /@media \(max-width:\s*980px\)\s*\{\s*\.mf-workflow-tabs button small[\s\S]*?\.mf-workflow-stage\s*\{\s*min-height:\s*0;\s*\}\s*\}/);
+assert.doesNotMatch(mfCssSource, /\.mf-workflow-stage\s*\{\s*min-height:\s*455px;/);
 const artifactWorkspaceSource = readFileSync(
   new URL("../components/mf/artifact-workspace.tsx", import.meta.url),
   "utf8",

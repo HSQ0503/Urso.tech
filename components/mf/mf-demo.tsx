@@ -85,6 +85,35 @@ const guideKeyForStep = [
 ] as const;
 
 const sessionStorageKey = "mf-demo-session-v2";
+const focusableElementSelector = [
+  "a[href]",
+  "button:not([disabled])",
+  "input:not([disabled])",
+  "select:not([disabled])",
+  "textarea:not([disabled])",
+  '[tabindex]:not([tabindex="-1"])',
+].join(", ");
+
+function trapTabFocus(event: KeyboardEvent, container: HTMLElement | null) {
+  if (event.key !== "Tab" || !container) return false;
+
+  const focusableElements = Array.from(container.querySelectorAll<HTMLElement>(focusableElementSelector))
+    .filter((element) => element.getAttribute("aria-hidden") !== "true" && element.getClientRects().length > 0);
+  if (focusableElements.length === 0) {
+    event.preventDefault();
+    container.focus();
+    return true;
+  }
+
+  const activeIndex = focusableElements.indexOf(document.activeElement as HTMLElement);
+  const movingBeforeStart = event.shiftKey && activeIndex <= 0;
+  const movingPastEnd = !event.shiftKey && (activeIndex === -1 || activeIndex === focusableElements.length - 1);
+  if (movingBeforeStart || movingPastEnd) {
+    event.preventDefault();
+    focusableElements[movingBeforeStart ? focusableElements.length - 1 : 0]?.focus();
+  }
+  return true;
+}
 
 const presenterCues = {
   pt: [
@@ -154,11 +183,19 @@ function MfDemoShell() {
   const [activeView, setActiveView] = useState<DemoView>("control");
   const [roleId, setRoleId] = useState(roles[0].id);
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
   const [selectedArtifactId, setSelectedArtifactId] = useState<string | null>(null);
   const [presenterMode, setPresenterMode] = useState(false);
   const [presentationLobbyOpen, setPresentationLobbyOpen] = useState(true);
   const [presentationSessionActive, setPresentationSessionActive] = useState(false);
   const presentationStartRef = useRef<HTMLButtonElement>(null);
+  const presentationDialogRef = useRef<HTMLDivElement>(null);
+  const presentationOpenerRef = useRef<HTMLElement | null>(null);
+  const presentationWasOpenRef = useRef(true);
+  const mobileMenuRef = useRef<HTMLButtonElement>(null);
+  const mobileNavigationRef = useRef<HTMLElement>(null);
+  const mobileNavigationCloseRef = useRef<HTMLButtonElement>(null);
+  const mobileNavigationWasOpenRef = useRef(false);
   const mainRef = useRef<HTMLElement>(null);
   const step = demoSession?.snapshot.step ?? 0;
   const artifactReviewStates = useMemo<Record<string, ArtifactReviewState>>(() => Object.fromEntries(
@@ -198,6 +235,54 @@ function MfDemoShell() {
   const presenterCue = presenterCues[language][step];
   const selectedRole = roles.find((role) => role.id === roleId) ?? roles[0];
   const activeNavigationItem = navigation.find((item) => item.id === activeView) ?? navigation[0];
+
+  useEffect(() => {
+    const mobileViewport = window.matchMedia("(max-width: 980px)");
+    const synchronizeViewport = () => {
+      setIsMobileViewport(mobileViewport.matches);
+      if (!mobileViewport.matches) setMobileNavigationOpen(false);
+    };
+    synchronizeViewport();
+    mobileViewport.addEventListener("change", synchronizeViewport);
+    return () => mobileViewport.removeEventListener("change", synchronizeViewport);
+  }, []);
+
+  useEffect(() => {
+    if (!isMobileViewport) {
+      mobileNavigationWasOpenRef.current = false;
+      return;
+    }
+
+    if (mobileNavigationOpen) {
+      mobileNavigationWasOpenRef.current = true;
+      const frame = window.requestAnimationFrame(() => mobileNavigationCloseRef.current?.focus());
+      return () => window.cancelAnimationFrame(frame);
+    }
+
+    if (!mobileNavigationWasOpenRef.current) return;
+    mobileNavigationWasOpenRef.current = false;
+    const frame = window.requestAnimationFrame(() => mobileMenuRef.current?.focus());
+    return () => window.cancelAnimationFrame(frame);
+  }, [isMobileViewport, mobileNavigationOpen]);
+
+  useEffect(() => {
+    if (presentationLobbyOpen) {
+      presentationWasOpenRef.current = true;
+      const frame = window.requestAnimationFrame(() => presentationDialogRef.current?.focus());
+      return () => window.cancelAnimationFrame(frame);
+    }
+
+    if (!presentationWasOpenRef.current) return;
+    presentationWasOpenRef.current = false;
+    const frame = window.requestAnimationFrame(() => {
+      const opener = presentationOpenerRef.current;
+      const openerIsDisabled = opener instanceof HTMLButtonElement && opener.disabled;
+      if (opener?.isConnected && !openerIsDisabled) opener.focus();
+      else mainRef.current?.focus();
+      presentationOpenerRef.current = null;
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [presentationLobbyOpen]);
 
   useEffect(() => {
     if (selectedArtifactId && !selectedArtifact) {
@@ -335,6 +420,11 @@ function MfDemoShell() {
     setMobileNavigationOpen(false);
   }
 
+  function openPresentationLobby() {
+    presentationOpenerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setPresentationLobbyOpen(true);
+  }
+
   function advance() {
     if (step >= 8 || transitioning) return;
     void synchronizeScenarioStep(step + 1);
@@ -400,16 +490,44 @@ function MfDemoShell() {
 
   useEffect(() => {
     function handlePresenterShortcut(event: KeyboardEvent) {
+      if (presentationLobbyOpen) {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          setPresentationLobbyOpen(false);
+          return;
+        }
+        trapTabFocus(event, presentationDialogRef.current);
+        return;
+      }
+
+      if (selectedArtifactId) {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          setSelectedArtifactId(null);
+        }
+        return;
+      }
+
+      if (mobileNavigationOpen) {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          setMobileNavigationOpen(false);
+          return;
+        }
+        trapTabFocus(event, mobileNavigationRef.current);
+        return;
+      }
+
       if (event.key === "Escape") {
         setMobileNavigationOpen(false);
         if (!presentationSessionActive) setPresenterMode(false);
         return;
       }
 
-      if (presentationLobbyOpen || selectedArtifactId || event.metaKey || event.ctrlKey || event.altKey) return;
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
 
       const target = event.target;
-      if (target instanceof HTMLElement && ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) return;
+      if (target instanceof HTMLElement && target.closest('input, textarea, select, button, a, summary, [contenteditable="true"], [role]')) return;
 
       if (event.key === "ArrowRight" && step < 8) {
         event.preventDefault();
@@ -431,11 +549,7 @@ function MfDemoShell() {
 
     window.addEventListener("keydown", handlePresenterShortcut);
     return () => window.removeEventListener("keydown", handlePresenterShortcut);
-  }, [presentationLobbyOpen, presentationSessionActive, reset, selectedArtifactId, step, synchronizeScenarioStep]);
-
-  useEffect(() => {
-    if (presentationLobbyOpen) presentationStartRef.current?.focus();
-  }, [presentationLobbyOpen]);
+  }, [mobileNavigationOpen, presentationLobbyOpen, presentationSessionActive, reset, selectedArtifactId, step, synchronizeScenarioStep]);
 
   useEffect(() => {
     mainRef.current?.scrollTo({ top: 0, behavior: "auto" });
@@ -485,10 +599,15 @@ function MfDemoShell() {
         </div>
       ) : null}
 
-      <header className="mf-topbar">
+      <header
+        className="mf-topbar"
+        inert={presentationLobbyOpen || (isMobileViewport && mobileNavigationOpen) ? true : undefined}
+      >
         <button
+          ref={mobileMenuRef}
           type="button"
           className="mf-mobile-menu"
+          aria-controls="mf-project-navigation"
           aria-label={t("Abrir navegação")}
           aria-expanded={mobileNavigationOpen}
           onClick={() => setMobileNavigationOpen(true)}
@@ -548,10 +667,15 @@ function MfDemoShell() {
       </header>
 
       <div className="mf-shell">
-        <aside className={`mf-sidebar ${mobileNavigationOpen ? "is-open" : ""}`}>
+        <aside
+          ref={mobileNavigationRef}
+          id="mf-project-navigation"
+          className={`mf-sidebar ${mobileNavigationOpen ? "is-open" : ""}`}
+          inert={presentationLobbyOpen || (isMobileViewport && !mobileNavigationOpen) ? true : undefined}
+        >
           <div className="mf-mobile-sidebar-header">
             <MfLogo compact />
-            <button type="button" aria-label={t("Fechar navegação")} onClick={() => setMobileNavigationOpen(false)}>
+            <button ref={mobileNavigationCloseRef} type="button" aria-label={t("Fechar navegação")} onClick={() => setMobileNavigationOpen(false)}>
               <X size={20} />
             </button>
           </div>
@@ -617,7 +741,7 @@ function MfDemoShell() {
             <button
               type="button"
               className={`mf-presentation-entry ${presentationSessionActive ? "is-active" : ""}`}
-              onClick={() => setPresentationLobbyOpen(true)}
+              onClick={openPresentationLobby}
               disabled={presentationSessionActive}
             >
               {presentationSessionActive ? <Presentation size={14} /> : <Play size={14} />}
@@ -640,11 +764,19 @@ function MfDemoShell() {
             type="button"
             className="mf-sidebar-scrim"
             aria-label={t("Fechar navegação")}
+            aria-hidden="true"
+            tabIndex={-1}
             onClick={() => setMobileNavigationOpen(false)}
           />
         ) : null}
 
-        <main ref={mainRef} id="mf-main" className="mf-main" tabIndex={-1}>
+        <main
+          ref={mainRef}
+          id="mf-main"
+          className="mf-main"
+          tabIndex={-1}
+          inert={presentationLobbyOpen || (isMobileViewport && mobileNavigationOpen) ? true : undefined}
+        >
           <ViewContent
             view={activeView}
             step={step}
@@ -674,7 +806,7 @@ function MfDemoShell() {
         />
       ) : null}
 
-      {presenterMode ? (
+      {presenterMode && !presentationLobbyOpen && !selectedArtifactId && !(isMobileViewport && mobileNavigationOpen) ? (
         <aside className="mf-presenter-guide" aria-label={language === "pt" ? "Tour guiado do sistema" : "Guided system tour"}>
           <div className="mf-presenter-guide-progress">
             <span className="mf-presenter-guide-step">
@@ -720,7 +852,14 @@ function MfDemoShell() {
       ) : null}
 
       {presentationLobbyOpen ? (
-        <div className="mf-presentation-lobby" role="dialog" aria-modal="true" aria-labelledby="mf-presentation-title">
+        <div
+          ref={presentationDialogRef}
+          className="mf-presentation-lobby"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="mf-presentation-title"
+          tabIndex={-1}
+        >
           <div className="mf-presentation-lobby-scrim" />
           <section>
             <header>
