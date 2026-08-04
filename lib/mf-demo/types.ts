@@ -88,6 +88,7 @@ export type {
   MfTeamStatus,
 } from "./manager-runtime.mjs";
 export type {
+  MfArtifactAccess,
   MfWorkflowAccess,
   MfWorkflowAgentPresentation,
   MfWorkflowGatePresentation,

@@ -41,6 +41,7 @@ import {
   roles,
 } from "@/lib/mf-demo/fixtures";
 import { mfScenarioManifest } from "@/lib/mf-demo/manifest.mjs";
+import { deriveMfArtifactAccess } from "@/lib/mf-demo/workflow-runtime.mjs";
 import type {
   ArtifactReviewState,
   DemoView,
@@ -322,24 +323,29 @@ function BimScaffold({ active }: { active: boolean }) {
   );
 }
 
-export function ArtifactsView({ step, onNavigate, onAdvance, onOpenArtifact, artifactReviewStates }: ViewProps) {
+export function ArtifactsView({ step, roleId, onNavigate, onOpenArtifact, artifactReviewStates }: ViewProps) {
   const { language, t } = useMfLanguage();
   const l = (pt: string, en: string) => (language === "pt" ? pt : en);
+  const artifactAccess = deriveMfArtifactAccess(roleId);
+  const visibleArtifacts = artifacts.filter((artifact) =>
+    artifactAccess.canViewAll || artifactAccess.artifactIds.includes(artifact.id));
+  const canViewBimScaffold = artifactAccess.canViewAll
+    || artifactAccess.artifactIds.includes("bim-scaffold");
   return (
     <div className="mf-clarity-view">
-      <header className="mf-today-header"><div><span className="mf-eyebrow">{l("Trabalho produzido", "Work produced")}</span><h1>{l("O que os workflows entregam às equipes", "What workflows deliver to teams")}</h1><p>{l("Cada item abaixo é um rascunho, análise ou checklist criado para uma pessoa da MF revisar. Nada é emitido automaticamente.", "Each item below is a draft, analysis, or checklist created for an MF employee to review. Nothing is issued automatically.")}</p></div>{step >= 5 && step < 7 ? <button type="button" className="mf-primary-action" onClick={onAdvance}><Bot size={16} />{step < 6 ? l("Gerar resultados", "Generate results") : l("Enviar para revisão", "Send for review")}</button> : null}</header>
+      <header className="mf-today-header"><div><span className="mf-eyebrow">{l("Trabalho produzido", "Work produced")}</span><h1>{l("O que os workflows entregam às equipes", "What workflows deliver to teams")}</h1><p>{l("Cada item abaixo é um rascunho, análise ou checklist criado para uma pessoa da MF revisar. Nada é emitido automaticamente.", "Each item below is a draft, analysis, or checklist created for an MF employee to review. Nothing is issued automatically.")}</p></div></header>
 
       <section className="mf-output-definition" data-guide-key="work-produced"><FileCheck2 size={20} /><div><strong>{l("“Trabalho produzido” significa uma saída verificável", "“Work produced” means a verifiable output")}</strong><p>{l("Ela mostra as fontes usadas, o que Urso fez, quem precisa revisar e qual decisão depende dela.", "It shows the sources used, what Urso did, who must review it, and which decision depends on it.")}</p></div></section>
 
       <section className="mf-output-list">
-        {artifacts.map((artifact) => {
+        {visibleArtifacts.map((artifact) => {
           const unlocked = step >= artifact.availableAt;
           const reviewState = artifactReviewStates[artifact.id] ?? (step >= 8 ? "approved" : step >= 7 ? "validated" : "draft");
           return <article key={artifact.id} className={unlocked ? "is-ready" : "is-locked"}><div className="mf-output-type">{unlocked ? <FileCheck2 size={18} /> : <LockKeyhole size={17} />}<span><small>{t(artifact.type)}</small><strong>{t(artifact.title)}</strong></span></div><div><small>{l("O que é", "What it is")}</small><p>{unlocked ? t(artifact.description) : l(`Disponível quando o workflow chegar à etapa ${artifact.availableAt}.`, `Available when the workflow reaches step ${artifact.availableAt}.`)}</p></div><div><small>{l("Por que importa", "Why it matters")}</small><p>{unlocked ? t(artifact.validation) : l("Ainda não foi gerado.", "It has not been generated yet.")}</p></div><div><small>{l("Quem revisa", "Who reviews")}</small><p>{t(artifact.discipline)}</p></div><div className="mf-output-action"><span className={`mf-simple-status is-${reviewState}`}>{!unlocked ? l("Bloqueado", "Locked") : reviewState === "approved" ? l("Aprovado", "Approved") : reviewState === "validated" ? l("Pronto para aprovar", "Ready to approve") : l("Rascunho", "Draft")}</span><button type="button" onClick={() => onOpenArtifact(artifact.id)} disabled={!unlocked}><Maximize2 size={14} /> {l("Abrir e revisar", "Open and review")}</button></div></article>;
         })}
       </section>
 
-      <section className="mf-bim-output"><header><div><span className="mf-eyebrow">{l("Exemplo visual · workflow BIM", "Visual example · BIM workflow")}</span><h2>{l("Scaffold básico para iniciar coordenação", "Basic scaffold to start coordination")}</h2></div><span>{l("Rascunho · exige revisão BIM", "Draft · requires BIM review")}</span></header><BimScaffold active={step >= 6} /><footer><Box size={17} /><p>{l("Urso organiza geometria, conexões e áreas de interferência para a equipe começar. O Coordenador BIM decide o que entra no modelo oficial.", "Urso organizes geometry, connections, and clash areas so the team can begin. The BIM Coordinator decides what enters the official model.")}</p><button type="button" onClick={() => onNavigate("workflows")}>{l("Ver como o workflow funciona", "See how the workflow works")} <ArrowRight size={14} /></button></footer></section>
+      {canViewBimScaffold ? <section className="mf-bim-output"><header><div><span className="mf-eyebrow">{l("Exemplo visual · workflow BIM", "Visual example · BIM workflow")}</span><h2>{l("Scaffold básico para iniciar coordenação", "Basic scaffold to start coordination")}</h2></div><span>{l("Rascunho · exige revisão BIM", "Draft · requires BIM review")}</span></header><BimScaffold active={step >= 6} /><footer><Box size={17} /><p>{l("Urso organiza geometria, conexões e áreas de interferência para a equipe começar. O Coordenador BIM decide o que entra no modelo oficial.", "Urso organizes geometry, connections, and clash areas so the team can begin. The BIM Coordinator decides what enters the official model.")}</p><button type="button" onClick={() => onNavigate("workflows")}>{l("Ver como o workflow funciona", "See how the workflow works")} <ArrowRight size={14} /></button></footer></section> : null}
     </div>
   );
 }
@@ -355,15 +361,18 @@ export function BrainView({ step, roleId, onNavigate, sessionId, sessionToken }:
   );
 }
 
-export function AuditView({ step, onNavigate, artifactReviewStates }: ViewProps) {
+export function AuditView({ step, roleId, onNavigate, artifactReviewStates }: ViewProps) {
   const { language, t } = useMfLanguage();
   const l = (pt: string, en: string) => (language === "pt" ? pt : en);
   const events = activityEvents.filter((event) => step >= event.availableAt).reverse();
-  const approvedArtifacts = artifacts.filter((artifact) => artifactReviewStates[artifact.id] === "approved" || step >= 8);
+  const artifactAccess = deriveMfArtifactAccess(roleId);
+  const visibleArtifacts = artifacts.filter((artifact) =>
+    artifactAccess.canViewAll || artifactAccess.artifactIds.includes(artifact.id));
+  const approvedArtifacts = visibleArtifacts.filter((artifact) => artifactReviewStates[artifact.id] === "approved" || step >= 8);
   return (
     <div className="mf-clarity-view">
       <header className="mf-today-header"><div><span className="mf-eyebrow">{l("Decisões e histórico", "Decisions & history")}</span><h1>{l("Nada muda sem deixar uma explicação", "Nothing changes without leaving an explanation")}</h1><p>{l("Veja o que mudou, quem aprovou, quais fontes foram usadas e o que o sistema atualizou.", "See what changed, who approved it, which sources were used, and what the system updated.")}</p></div><button type="button" className="mf-secondary-action" onClick={() => onNavigate("brain")}>{l("Abrir relações no Brain", "Open relationships in the Brain")} <Network size={14} /></button></header>
-      <section className="mf-audit-summary"><div><Clock3 size={18} /><span><small>{l("Workflow", "Workflow")}</small><strong>change-propagation@1.4</strong></span></div><div><UserCheck size={18} /><span><small>{l("Decisão humana", "Human decision")}</small><strong>{step >= 3 ? "DEC-042 · " + l("Aprovada", "Approved") : l("Aguardando", "Waiting")}</strong></span></div><div><ShieldCheck size={18} /><span><small>{l("Trabalho aprovado", "Approved work")}</small><strong>{approvedArtifacts.length} / {artifacts.length}</strong></span></div></section>
+      <section className="mf-audit-summary"><div><Clock3 size={18} /><span><small>{l("Workflow", "Workflow")}</small><strong>change-propagation@1.4</strong></span></div><div><UserCheck size={18} /><span><small>{l("Decisão humana", "Human decision")}</small><strong>{step >= 3 ? "DEC-042 · " + l("Aprovada", "Approved") : l("Aguardando", "Waiting")}</strong></span></div><div><ShieldCheck size={18} /><span><small>{l("Trabalho aprovado", "Approved work")}</small><strong>{approvedArtifacts.length} / {visibleArtifacts.length}</strong></span></div></section>
       <section className="mf-history-list"><header><span>{l("Horário", "Time")}</span><span>{l("O que aconteceu", "What happened")}</span><span>{l("Quem / sistema", "Who / system")}</span><span>{l("Evidência", "Evidence")}</span></header>{approvedArtifacts.map((artifact) => <div key={artifact.id}><time>{l("Agora", "Now")}</time><span><strong>{t(artifact.title)}</strong><small>{l("Resultado aprovado e conectado ao Brain", "Result approved and connected to the Brain")}</small></span><span>{t(artifact.discipline)}</span><code>RCPT-{artifact.id.slice(0, 4).toUpperCase()}</code></div>)}{events.map((event) => <div key={event.id}><time>{event.time}</time><span><strong>{t(event.title)}</strong><small>{t(event.detail)}</small></span><span>{event.id === "approved" ? l("Gerente do Projeto", "Project Manager") : "Urso Harness"}</span><code>RCPT-{String(event.availableAt + 41).padStart(3, "0")}</code></div>)}</section>
     </div>
   );

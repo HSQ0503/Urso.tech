@@ -311,7 +311,7 @@ export const artifacts: Artifact[] = [
     type: "Coordenação",
     description: "Ações, dependências, responsáveis e critérios de fechamento para 15 disciplinas.",
     owner: "Gerente do Projeto",
-    availableAt: 5,
+    availableAt: 4,
     validation: "15 disciplinas avaliadas",
     discipline: "Gerenciamento do Projeto",
     sources: ["DEC-042", "Matriz de dependências", "Plano executivo EXE-02"],

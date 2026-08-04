@@ -101,8 +101,15 @@ export type MfWorkflowAccess = Readonly<{
   defaultWorkflowId: string | null;
 }>;
 
+export type MfArtifactAccess = Readonly<{
+  viewerRoleId: string;
+  canViewAll: boolean;
+  artifactIds: readonly string[];
+}>;
+
 export type MfWorkflowInteractionActionId =
   | "advance"
+  | "external_action"
   | "waiting"
   | "unauthorized"
   | "outputs_pending"
@@ -119,6 +126,8 @@ export type MfWorkflowInteraction = Readonly<{
 }>;
 
 export function deriveMfWorkflowAccess(viewerRoleId: string): MfWorkflowAccess;
+
+export function deriveMfArtifactAccess(viewerRoleId: string): MfArtifactAccess;
 
 export function deriveMfWorkflowInteraction(
   presentation: MfWorkflowPresentation,

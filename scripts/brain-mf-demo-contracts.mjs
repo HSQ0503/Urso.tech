@@ -18,6 +18,7 @@ import {
   deriveMfWorkflowInteraction,
   deriveMfWorkflowPresentation,
 } from "../lib/mf-demo/workflow-runtime.mjs";
+import * as workflowRuntime from "../lib/mf-demo/workflow-runtime.mjs";
 import {
   consumeMfSessionUsage,
   createMfSessionRecord,
@@ -496,6 +497,25 @@ assert.deepEqual(deriveMfWorkflowAccess("unknown-role"), {
   defaultWorkflowId: null,
 });
 
+assert.equal(typeof workflowRuntime.deriveMfArtifactAccess, "function");
+const projectManagerArtifactAccess = workflowRuntime.deriveMfArtifactAccess("project-manager");
+assert.equal(projectManagerArtifactAccess.canViewAll, true);
+const electricalArtifactAccess = workflowRuntime.deriveMfArtifactAccess("electrical");
+assert.equal(electricalArtifactAccess.canViewAll, false);
+assert(electricalArtifactAccess.artifactIds.includes("electrical-package"));
+assert(electricalArtifactAccess.artifactIds.includes("bim-scaffold"));
+assert(!electricalArtifactAccess.artifactIds.includes("recovery-plan"));
+assert(!electricalArtifactAccess.artifactIds.includes("hvac-package"));
+const planningArtifactAccess = workflowRuntime.deriveMfArtifactAccess("planning");
+assert.equal(planningArtifactAccess.canViewAll, false);
+assert(planningArtifactAccess.artifactIds.includes("recovery-plan"));
+assert(!planningArtifactAccess.artifactIds.includes("electrical-package"));
+assert.deepEqual(workflowRuntime.deriveMfArtifactAccess("unknown-role"), {
+  viewerRoleId: "unknown-role",
+  canViewAll: false,
+  artifactIds: [],
+});
+
 const interactionFor = (step, workflowId, viewerRoleId, snapshotOverride) => deriveMfWorkflowInteraction(
   deriveMfWorkflowPresentation(snapshotOverride ?? createMfHarnessSnapshot(step), workflowId),
   viewerRoleId,
@@ -506,11 +526,11 @@ for (const scenario of [
   { step: 2, workflowId: "coordinate-project-change", roleId: "electrical", current: "human_gate", canAdvance: false, action: "unauthorized", terminal: false },
   { step: 3, workflowId: "coordinate-project-change", roleId: "project-manager", current: "controlled_outputs", canAdvance: false, action: "outputs_pending", terminal: false },
   { step: 5, workflowId: "coordinate-project-change", roleId: "project-manager", current: null, canAdvance: false, action: "complete", terminal: true },
-  { step: 4, workflowId: "prepare-bim-coordination", roleId: "bim", current: "agents_tools", canAdvance: true, action: "advance", terminal: false },
-  { step: 5, workflowId: "prepare-bim-coordination", roleId: "bim", current: "agents_tools", canAdvance: true, action: "advance", terminal: false },
-  { step: 6, workflowId: "update-electrical-package", roleId: "electrical", current: "human_gate", canAdvance: true, action: "advance", terminal: false },
+  { step: 4, workflowId: "prepare-bim-coordination", roleId: "bim", current: "agents_tools", canAdvance: false, action: "external_action", terminal: false },
+  { step: 5, workflowId: "prepare-bim-coordination", roleId: "bim", current: "agents_tools", canAdvance: false, action: "external_action", terminal: false },
+  { step: 6, workflowId: "update-electrical-package", roleId: "electrical", current: "human_gate", canAdvance: false, action: "external_action", terminal: false },
   { step: 6, workflowId: "update-electrical-package", roleId: "project-manager", current: "human_gate", canAdvance: false, action: "unauthorized", terminal: false },
-  { step: 6, workflowId: "recover-project-schedule", roleId: "project-manager", current: "human_gate", canAdvance: true, action: "advance", terminal: false },
+  { step: 6, workflowId: "recover-project-schedule", roleId: "project-manager", current: "human_gate", canAdvance: false, action: "external_action", terminal: false },
   { step: 6, workflowId: "recover-project-schedule", roleId: "planning", current: "human_gate", canAdvance: false, action: "unauthorized", terminal: false },
   { step: 6, workflowId: "verify-gate-readiness", roleId: "quality", current: "brain_boundary", canAdvance: false, action: "waiting", terminal: false },
   { step: 7, workflowId: "verify-gate-readiness", roleId: "quality", current: null, canAdvance: false, action: "complete", terminal: true },
@@ -532,8 +552,23 @@ assert.deepEqual(
 const bimStep4Presentation = deriveMfWorkflowPresentation(createMfHarnessSnapshot(4), "prepare-bim-coordination");
 assert.deepEqual(
   deriveMfWorkflowInteraction(bimStep4Presentation, "bim").action.label,
-  bimStep4Presentation.gate.task.title,
+  { pt: "Continuar no sistema conectado", en: "Continue in connected system" },
 );
+
+const actionableQualitySnapshot = {
+  ...createMfHarnessSnapshot(6),
+  workItems: createMfHarnessSnapshot(6).workItems.map((task) => task.id === "verify-gate"
+    ? { ...task, state: "ready" }
+    : task),
+};
+const actionableQualityInteraction = interactionFor(
+  6,
+  "verify-gate-readiness",
+  "quality",
+  actionableQualitySnapshot,
+);
+assert.equal(actionableQualityInteraction.canAdvance, false);
+assert.equal(actionableQualityInteraction.action.id, "external_action");
 
 const step5WithoutGateReceipt = {
   ...createMfHarnessSnapshot(5),
@@ -839,6 +874,11 @@ assert.match(mfCssSource, /\.mf-source-connection-status/);
 assert.match(mfCssSource, /\.mf-receipt-status/);
 
 const demoViewsSource = readFileSync(new URL("../components/mf/demo-views.tsx", import.meta.url), "utf8");
+const fixturesSource = readFileSync(new URL("../lib/mf-demo/fixtures.ts", import.meta.url), "utf8");
+const impactPlanArtifactSource = fixturesSource.match(
+  /\{\s*id:\s*["']impact-plan["'],[\s\S]*?\n\s*\},/,
+)?.[0] ?? "";
+assert.match(impactPlanArtifactSource, /availableAt:\s*4,/);
 assert.match(demoViewsSource, /import \{ MfManagerWorkspace \} from ["']\.\/mf-manager-workspace["']/);
 assert.match(demoViewsSource, /import \{ MfTeamCommand \} from ["']\.\/mf-team-command["']/);
 const controlTowerViewSource = demoViewsSource.match(
@@ -874,5 +914,20 @@ assert.match(workflowsViewSource, /<MfAgentWorkflow/);
 assert.match(workflowsViewSource, /viewerRoleId=\{roleId\}/);
 assert.doesNotMatch(workflowsViewSource, /ObjectiveWorkflowPanel/);
 assert.doesNotMatch(workflowsViewSource, /workflowCatalog|selectedAgents|selectedTools|stageClass|mf-agentic-map/);
+
+const artifactsViewSource = demoViewsSource.match(
+  /export function ArtifactsView[\s\S]*?(?=\nexport function BrainView)/,
+)?.[0] ?? "";
+assert.match(artifactsViewSource, /deriveMfArtifactAccess\(roleId\)/);
+assert.match(artifactsViewSource, /visibleArtifacts\.map/);
+assert.match(artifactsViewSource, /artifactIds\.includes\("bim-scaffold"\)/);
+assert.doesNotMatch(artifactsViewSource, /\bonAdvance\b/);
+
+const auditViewSource = demoViewsSource.match(
+  /export function AuditView[\s\S]*?(?=\nexport function EmptyScenarioView)/,
+)?.[0] ?? "";
+assert.match(auditViewSource, /deriveMfArtifactAccess\(roleId\)/);
+assert.match(auditViewSource, /visibleArtifacts/);
+assert.match(auditViewSource, /approvedArtifacts\.length} \/ \{visibleArtifacts\.length/);
 
 console.log("✓ MF manifest values, references, and impact contract are consistent.");
