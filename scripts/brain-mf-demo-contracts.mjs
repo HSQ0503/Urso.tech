@@ -80,6 +80,16 @@ const workflowIds = mfScenarioManifest.workflow.catalog.map((workflow) => workfl
 const runCodes = mfScenarioManifest.workflow.catalog.map((workflow) => workflow.runCode);
 assert.equal(new Set(workflowIds).size, workflowIds.length);
 assert.equal(new Set(runCodes).size, runCodes.length);
+assert.deepEqual(
+  mfScenarioManifest.workflow.catalog.map(({ id, runCode }) => ({ id, runCode })),
+  [
+    { id: "coordinate-project-change", runCode: "WF-REV-C-001" },
+    { id: "update-electrical-package", runCode: "WF-ELE-008" },
+    { id: "prepare-bim-coordination", runCode: "WF-BIM-014" },
+    { id: "recover-project-schedule", runCode: "WF-PLN-021" },
+    { id: "verify-gate-readiness", runCode: "WF-QLT-002" },
+  ],
+);
 for (const workflow of mfScenarioManifest.workflow.catalog) {
   assert(mfScenarioManifest.roles.some((role) => role.id === workflow.ownerRoleId), `unknown workflow owner: ${workflow.id}`);
   assert(workflow.sourceIds.every((sourceId) => mfScenarioManifest.sources.some((source) => source.id === sourceId)));
@@ -114,11 +124,22 @@ assert.equal(baseline.truth.currentRevision, "B");
 assert.equal(baseline.truth.revisionB, "current");
 assert.equal(baseline.truth.revisionC, "unresolved");
 assert.equal(baseline.decision.status, "pending");
-assert.equal(
-  baseline.workItems.find((task) => task.id === "approve-controlled-truth").state,
-  "blocked",
-  "DEC-042 must not be actionable during baseline",
-);
+const taskStateAt = (step, taskId) => createMfHarnessSnapshot(step).workItems
+  .find((task) => task.id === taskId)
+  .state;
+for (const [actionId, taskId, step, expectedState] of [
+  ["DEC-042", "approve-controlled-truth", 0, "blocked"],
+  ["DEC-042", "approve-controlled-truth", 2, "in_progress"],
+  ["DEC-042", "approve-controlled-truth", 3, "complete"],
+  ["ACT-IMPACT", "map-impact", 3, "in_progress"],
+  ["ACT-IMPACT", "map-impact", 4, "complete"],
+  ["SCN-003", "select-recovery-scenario", 6, "in_progress"],
+  ["SCN-003", "select-recovery-scenario", 7, "complete"],
+  ["EXE-02", "release-exe-02", 7, "in_progress"],
+  ["EXE-02", "release-exe-02", 8, "complete"],
+]) {
+  assert.equal(taskStateAt(step, taskId), expectedState, `${actionId} at step ${step}`);
+}
 
 const approved = transitionMfHarness(baseline, 3, "approve-3", "project-manager");
 assert.equal(approved.truth.currentRevision, "C");
