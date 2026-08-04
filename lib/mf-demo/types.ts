@@ -77,6 +77,32 @@ export type ActivityEvent = {
 };
 
 export type { MfHarnessSnapshot, MfWorkItem, MfWorkflowReceipt, MfWorkState } from "./harness-runtime.mjs";
+export type {
+  MfHandoffStageStatus,
+  MfManagerActionItem,
+  MfManagerCockpitPresentation,
+  MfManagerQueue,
+  MfManagerScenarioControl,
+  MfManagerWorkspace,
+  MfTeamCommand,
+  MfTeamStatus,
+} from "./manager-runtime.mjs";
+export type {
+  MfArtifactAccess,
+  MfWorkflowAccess,
+  MfWorkflowAgentPresentation,
+  MfWorkflowGatePresentation,
+  MfWorkflowInteraction,
+  MfWorkflowInteractionActionId,
+  MfWorkflowOutputPresentation,
+  MfWorkflowPresentation,
+  MfWorkflowPresentationStage,
+  MfWorkflowReceiptPresentation,
+  MfWorkflowRoleDelivery,
+  MfWorkflowSourcePresentation,
+  MfWorkflowStageId,
+  MfWorkflowStageState,
+} from "./workflow-runtime.mjs";
 import type { MfHarnessSnapshot } from "./harness-runtime.mjs";
 
 export type MfDemoSessionCredentials = { sessionId: string; token: string };

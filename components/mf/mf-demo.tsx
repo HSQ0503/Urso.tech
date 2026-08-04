@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   ArrowRight,
@@ -9,19 +9,15 @@ import {
   Check,
   ChevronDown,
   CircleGauge,
-  FileClock,
-  FileStack,
   GitPullRequestArrow,
   History,
   Keyboard,
   Languages,
   LogOut,
   Menu,
-  PanelRightClose,
   Play,
   Presentation,
   RotateCcw,
-  Search,
   ShieldCheck,
   Timer,
   UsersRound,
@@ -30,17 +26,12 @@ import {
   X,
 } from "lucide-react";
 import {
-  activityEvents,
   artifacts,
-  askUrsoAnswers,
   project,
   roles,
 } from "@/lib/mf-demo/fixtures";
-import {
-  nextActionLabels,
-  projectRisk,
-  scenarioLabels,
-} from "@/lib/mf-demo/scenario";
+import { scenarioLabels } from "@/lib/mf-demo/scenario";
+import { deriveMfArtifactAccess } from "@/lib/mf-demo/workflow-runtime.mjs";
 import type {
   ArtifactReviewState,
   DemoView,
@@ -59,7 +50,6 @@ import {
 import { ArtifactWorkspace } from "./artifact-workspace";
 import { MfLogo } from "./mf-logo";
 import { MfLanguageProvider, useMfLanguage } from "./mf-language";
-import { ExecutiveValueBar, StoryRail } from "./mf-story-panels";
 
 const navigation = [
   { id: "control", label: "Projeto hoje", icon: CircleGauge },
@@ -95,6 +85,35 @@ const guideKeyForStep = [
 ] as const;
 
 const sessionStorageKey = "mf-demo-session-v2";
+const focusableElementSelector = [
+  "a[href]",
+  "button:not([disabled])",
+  "input:not([disabled])",
+  "select:not([disabled])",
+  "textarea:not([disabled])",
+  '[tabindex]:not([tabindex="-1"])',
+].join(", ");
+
+function trapTabFocus(event: KeyboardEvent, container: HTMLElement | null) {
+  if (event.key !== "Tab" || !container) return false;
+
+  const focusableElements = Array.from(container.querySelectorAll<HTMLElement>(focusableElementSelector))
+    .filter((element) => element.getAttribute("aria-hidden") !== "true" && element.getClientRects().length > 0);
+  if (focusableElements.length === 0) {
+    event.preventDefault();
+    container.focus();
+    return true;
+  }
+
+  const activeIndex = focusableElements.indexOf(document.activeElement as HTMLElement);
+  const movingBeforeStart = event.shiftKey && activeIndex <= 0;
+  const movingPastEnd = !event.shiftKey && (activeIndex === -1 || activeIndex === focusableElements.length - 1);
+  if (movingBeforeStart || movingPastEnd) {
+    event.preventDefault();
+    focusableElements[movingBeforeStart ? focusableElements.length - 1 : 0]?.focus();
+  }
+  return true;
+}
 
 const presenterCues = {
   pt: [
@@ -120,56 +139,6 @@ const presenterCues = {
     { say: "Now the decision is simple: prove this outcome on one real project.", proof: "Pilot · 1 project · multiple disciplines · 1 integrated workflow" },
   ],
 } as const;
-
-function answerForScenario(step: number, questionIndex: number) {
-  const scriptedAnswer = askUrsoAnswers[questionIndex];
-
-  if (questionIndex === 2 && step < 3) {
-    return {
-      ...scriptedAnswer,
-      answer:
-        "A Revisão B continua vigente. A Revisão C foi preservada como evidência e comparada, mas permanece proposta até o Gerente do Projeto registrar a decisão.",
-      sources: "Histórico de versões · Mudança proposta CHG-024",
-    };
-  }
-
-  if (questionIndex === 1 && step < 5) {
-    return {
-      ...scriptedAnswer,
-      answer:
-        "O aumento de 15% da carga foi identificado, mas o pacote elétrico ainda não existe. Primeiro a mudança precisa ser aprovada e o impacto propagado para Elétrica.",
-      sources: "Data Sheet Rev. C §4.2 · Estado atual do WF-REV-C-001",
-    };
-  }
-
-  if (questionIndex === 3) {
-    if (step >= 8) {
-      return {
-        ...scriptedAnswer,
-        answer: "Nada crítico permanece aberto. O gate EXE-02 possui decisões, artefatos, aprovações e evidências completas e está pronto para liberação.",
-        sources: "Checklist EXE-02 · Histórico de receipts · WF-REV-C-001",
-      };
-    }
-    if (step < 5) {
-      return {
-        ...scriptedAnswer,
-        answer:
-          "Ainda faltam o plano de impacto, os pacotes por disciplina, a execução das ferramentas, as aprovações técnicas e a verificação final do gate.",
-        sources: "Gate EXE-02 · Estado atual do WF-REV-C-001",
-      };
-    }
-    if (step < 7) {
-      return {
-        ...scriptedAnswer,
-        answer:
-          "Os pacotes já foram distribuídos. Faltam executar ou validar os oito artefatos, fechar duas interferências BIM e confirmar o plano de recuperação.",
-        sources: "Pacotes disciplinares · Gate EXE-02 · WF-REV-C-001",
-      };
-    }
-  }
-
-  return scriptedAnswer;
-}
 
 function ViewContent({
   view,
@@ -214,35 +183,113 @@ function MfDemoShell() {
   const [activeView, setActiveView] = useState<DemoView>("control");
   const [roleId, setRoleId] = useState(roles[0].id);
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
-  const [assistantOpen, setAssistantOpen] = useState(false);
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
   const [selectedArtifactId, setSelectedArtifactId] = useState<string | null>(null);
-  const [selectedQuestion, setSelectedQuestion] = useState(0);
-  const [draftQuestion, setDraftQuestion] = useState("");
   const [presenterMode, setPresenterMode] = useState(false);
   const [presentationLobbyOpen, setPresentationLobbyOpen] = useState(true);
   const [presentationSessionActive, setPresentationSessionActive] = useState(false);
   const presentationStartRef = useRef<HTMLButtonElement>(null);
+  const presentationDialogRef = useRef<HTMLDivElement>(null);
+  const presentationOpenerRef = useRef<HTMLElement | null>(null);
+  const presentationWasOpenRef = useRef(true);
+  const mobileMenuRef = useRef<HTMLButtonElement>(null);
+  const mobileNavigationRef = useRef<HTMLElement>(null);
+  const mobileNavigationCloseRef = useRef<HTMLButtonElement>(null);
+  const mobileNavigationWasOpenRef = useRef(false);
   const mainRef = useRef<HTMLElement>(null);
   const step = demoSession?.snapshot.step ?? 0;
   const artifactReviewStates = useMemo<Record<string, ArtifactReviewState>>(() => Object.fromEntries(
     artifacts.map((artifact) => {
-      const workItem = demoSession?.snapshot.workItems.find((task) => task.artifactId === artifact.id);
-      const reviewState: ArtifactReviewState = workItem?.state === "complete" || step >= 8
+      const workItems = demoSession?.snapshot.workItems.filter((task) => task.artifactId === artifact.id) ?? [];
+      const reviewState: ArtifactReviewState = workItems.length > 0 && workItems.every((task) => task.state === "complete")
         ? "approved"
-        : step >= 7
+        : workItems.some((task) => task.state === "in_progress" || task.state === "complete")
           ? "validated"
           : "draft";
       return [artifact.id, reviewState];
     }),
-  ), [demoSession?.snapshot, step]);
-  const risk = projectRisk(step);
-  const visibleActivity = activityEvents.filter((event) => step >= event.availableAt).reverse();
-  const selectedArtifact = artifacts.find((artifact) => artifact.id === selectedArtifactId) ?? null;
-  const approvedArtifacts = artifacts.filter((artifact) => artifactReviewStates[artifact.id] === "approved");
-  const activeAnswer = answerForScenario(step, selectedQuestion);
+  ), [demoSession?.snapshot]);
+  const artifactAccess = deriveMfArtifactAccess(roleId);
+  const selectedArtifact = artifacts.find((artifact) =>
+    artifact.id === selectedArtifactId
+    && step >= artifact.availableAt
+    && (artifactAccess.canViewAll || artifactAccess.artifactIds.includes(artifact.id))) ?? null;
+  const selectedArtifactWorkItems = selectedArtifact
+    ? demoSession?.snapshot.workItems.filter((task) => task.artifactId === selectedArtifact.id) ?? []
+    : [];
+  const terminalArtifactWorkItem = [...selectedArtifactWorkItems]
+    .sort((left, right) => right.completeAt - left.completeAt)[0] ?? null;
+  const selectedArtifactReceiptId = selectedArtifactWorkItems.length > 0
+    && selectedArtifactWorkItems.every((task) => task.state === "complete")
+    ? terminalArtifactWorkItem?.receiptId ?? null
+    : null;
+  const managerConfirmationWorkItem = demoSession?.snapshot.workItems
+    .find((task) => task.id === "release-exe-02") ?? null;
+  const managerConfirmationState = managerConfirmationWorkItem?.state ?? null;
+  const managerConfirmationReceiptId = managerConfirmationState === "complete"
+    ? managerConfirmationWorkItem?.receiptId ?? null
+    : null;
+  const authorizedEvidenceRecordCount = demoSession?.snapshot.sources
+    .filter((source) => source.authorizedRoleIds.includes(roleId))
+    .reduce((count, source) => count + source.evidencePaths.length, 0) ?? 0;
   const presenterCue = presenterCues[language][step];
   const selectedRole = roles.find((role) => role.id === roleId) ?? roles[0];
   const activeNavigationItem = navigation.find((item) => item.id === activeView) ?? navigation[0];
+
+  useEffect(() => {
+    const mobileViewport = window.matchMedia("(max-width: 980px)");
+    const synchronizeViewport = () => {
+      setIsMobileViewport(mobileViewport.matches);
+      if (!mobileViewport.matches) setMobileNavigationOpen(false);
+    };
+    synchronizeViewport();
+    mobileViewport.addEventListener("change", synchronizeViewport);
+    return () => mobileViewport.removeEventListener("change", synchronizeViewport);
+  }, []);
+
+  useEffect(() => {
+    if (!isMobileViewport) {
+      mobileNavigationWasOpenRef.current = false;
+      return;
+    }
+
+    if (mobileNavigationOpen) {
+      mobileNavigationWasOpenRef.current = true;
+      const frame = window.requestAnimationFrame(() => mobileNavigationCloseRef.current?.focus());
+      return () => window.cancelAnimationFrame(frame);
+    }
+
+    if (!mobileNavigationWasOpenRef.current) return;
+    mobileNavigationWasOpenRef.current = false;
+    const frame = window.requestAnimationFrame(() => mobileMenuRef.current?.focus());
+    return () => window.cancelAnimationFrame(frame);
+  }, [isMobileViewport, mobileNavigationOpen]);
+
+  useEffect(() => {
+    if (presentationLobbyOpen) {
+      presentationWasOpenRef.current = true;
+      const frame = window.requestAnimationFrame(() => presentationDialogRef.current?.focus());
+      return () => window.cancelAnimationFrame(frame);
+    }
+
+    if (!presentationWasOpenRef.current) return;
+    presentationWasOpenRef.current = false;
+    const frame = window.requestAnimationFrame(() => {
+      const opener = presentationOpenerRef.current;
+      const openerIsDisabled = opener instanceof HTMLButtonElement && opener.disabled;
+      if (opener?.isConnected && !openerIsDisabled) opener.focus();
+      else mainRef.current?.focus();
+      presentationOpenerRef.current = null;
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [presentationLobbyOpen]);
+
+  useEffect(() => {
+    if (selectedArtifactId && !selectedArtifact) {
+      const frameId = window.requestAnimationFrame(() => setSelectedArtifactId(null));
+      return () => window.cancelAnimationFrame(frameId);
+    }
+  }, [selectedArtifact, selectedArtifactId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -348,6 +395,7 @@ function MfDemoShell() {
 
   const selectRole = useCallback(async (nextRoleId: string) => {
     if (!sessionCredentials || transitioning) return;
+    setSelectedArtifactId(null);
     setTransitioning(true);
     setTransitionError(null);
     try {
@@ -372,6 +420,11 @@ function MfDemoShell() {
     setMobileNavigationOpen(false);
   }
 
+  function openPresentationLobby() {
+    presentationOpenerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setPresentationLobbyOpen(true);
+  }
+
   function advance() {
     if (step >= 8 || transitioning) return;
     void synchronizeScenarioStep(step + 1);
@@ -388,10 +441,7 @@ function MfDemoShell() {
     setActiveView("control");
     setRoleId(roles[0].id);
     setMobileNavigationOpen(false);
-    setAssistantOpen(false);
     setSelectedArtifactId(null);
-    setSelectedQuestion(0);
-    setDraftQuestion("");
     return true;
   }, [synchronizeScenarioStep]);
 
@@ -427,23 +477,57 @@ function MfDemoShell() {
   }
 
   function openArtifact(artifactId: string) {
-    setAssistantOpen(false);
+    const artifact = artifacts.find((candidate) => candidate.id === artifactId);
+    const allowed = artifact
+      && step >= artifact.availableAt
+      && (artifactAccess.canViewAll || artifactAccess.artifactIds.includes(artifact.id));
+    if (!allowed) {
+      setSelectedArtifactId(null);
+      return;
+    }
     setSelectedArtifactId(artifactId);
   }
 
   useEffect(() => {
     function handlePresenterShortcut(event: KeyboardEvent) {
+      if (presentationLobbyOpen) {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          setPresentationLobbyOpen(false);
+          return;
+        }
+        trapTabFocus(event, presentationDialogRef.current);
+        return;
+      }
+
+      if (selectedArtifactId) {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          setSelectedArtifactId(null);
+        }
+        return;
+      }
+
+      if (mobileNavigationOpen) {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          setMobileNavigationOpen(false);
+          return;
+        }
+        trapTabFocus(event, mobileNavigationRef.current);
+        return;
+      }
+
       if (event.key === "Escape") {
-        setAssistantOpen(false);
         setMobileNavigationOpen(false);
         if (!presentationSessionActive) setPresenterMode(false);
         return;
       }
 
-      if (presentationLobbyOpen || assistantOpen || selectedArtifactId || event.metaKey || event.ctrlKey || event.altKey) return;
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
 
       const target = event.target;
-      if (target instanceof HTMLElement && ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) return;
+      if (target instanceof HTMLElement && target.closest('input, textarea, select, button, a, summary, [contenteditable="true"], [role]')) return;
 
       if (event.key === "ArrowRight" && step < 8) {
         event.preventDefault();
@@ -465,11 +549,7 @@ function MfDemoShell() {
 
     window.addEventListener("keydown", handlePresenterShortcut);
     return () => window.removeEventListener("keydown", handlePresenterShortcut);
-  }, [assistantOpen, presentationLobbyOpen, presentationSessionActive, reset, selectedArtifactId, step, synchronizeScenarioStep]);
-
-  useEffect(() => {
-    if (presentationLobbyOpen) presentationStartRef.current?.focus();
-  }, [presentationLobbyOpen]);
+  }, [mobileNavigationOpen, presentationLobbyOpen, presentationSessionActive, reset, selectedArtifactId, step, synchronizeScenarioStep]);
 
   useEffect(() => {
     mainRef.current?.scrollTo({ top: 0, behavior: "auto" });
@@ -498,19 +578,6 @@ function MfDemoShell() {
     return () => window.cancelAnimationFrame(frame);
   }, [activeView, presentationLobbyOpen, presenterMode, step]);
 
-  function submitScriptedQuestion(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const normalizedQuestion = draftQuestion.trim().toLocaleLowerCase("pt-BR");
-    if (!normalizedQuestion) return;
-
-    if (normalizedQuestion.includes("elétr") || normalizedQuestion.includes("electr")) setSelectedQuestion(1);
-    else if (normalizedQuestion.includes("document") || normalizedQuestion.includes("revis")) setSelectedQuestion(2);
-    else if (normalizedQuestion.includes("liber") || normalizedQuestion.includes("falta") || normalizedQuestion.includes("missing")) setSelectedQuestion(3);
-    else setSelectedQuestion(0);
-
-    setDraftQuestion("");
-  }
-
   return (
     <div
       className={`mf-app mf-fieldbook mf-clarity ${presentationSessionActive ? "is-presentation-session" : ""}`}
@@ -532,10 +599,15 @@ function MfDemoShell() {
         </div>
       ) : null}
 
-      <header className="mf-topbar">
+      <header
+        className="mf-topbar"
+        inert={presentationLobbyOpen || (isMobileViewport && mobileNavigationOpen) ? true : undefined}
+      >
         <button
+          ref={mobileMenuRef}
           type="button"
           className="mf-mobile-menu"
+          aria-controls="mf-project-navigation"
           aria-label={t("Abrir navegação")}
           aria-expanded={mobileNavigationOpen}
           onClick={() => setMobileNavigationOpen(true)}
@@ -562,22 +634,6 @@ function MfDemoShell() {
             <strong>{t(activeNavigationItem.label)}</strong>
           </span>
           <small className="mf-demo-tag">DEMO</small>
-        </div>
-
-        <div className="mf-ribbon-stat">
-          <span>{t("Etapa")}</span>
-          <strong>{t(project.stage)}</strong>
-        </div>
-        <div className="mf-ribbon-stat mf-milestone-stat">
-          <span>{t("Próximo marco")}</span>
-          <strong>EXE-02 · {step >= 3 && step < 8 ? t("em risco") : t("14 dias")}</strong>
-        </div>
-        <div className={`mf-risk-badge is-${risk.tone}`}>
-          <span />
-          <div>
-            <small>{t("Risco")}</small>
-            <strong>{t(risk.label)}</strong>
-          </div>
         </div>
 
         <div className="mf-topbar-actions">
@@ -611,10 +667,15 @@ function MfDemoShell() {
       </header>
 
       <div className="mf-shell">
-        <aside className={`mf-sidebar ${mobileNavigationOpen ? "is-open" : ""}`}>
+        <aside
+          ref={mobileNavigationRef}
+          id="mf-project-navigation"
+          className={`mf-sidebar ${mobileNavigationOpen ? "is-open" : ""}`}
+          inert={presentationLobbyOpen || (isMobileViewport && !mobileNavigationOpen) ? true : undefined}
+        >
           <div className="mf-mobile-sidebar-header">
             <MfLogo compact />
-            <button type="button" aria-label={t("Fechar navegação")} onClick={() => setMobileNavigationOpen(false)}>
+            <button ref={mobileNavigationCloseRef} type="button" aria-label={t("Fechar navegação")} onClick={() => setMobileNavigationOpen(false)}>
               <X size={20} />
             </button>
           </div>
@@ -663,15 +724,6 @@ function MfDemoShell() {
               );
             })}
           </nav>
-          <div className="mf-system-health">
-            <span className="mf-eyebrow">{t("Conexões")}</span>
-            <ul>
-              <li><span className="is-online" /> Slack / Teams <small>{t("ativo")}</small></li>
-              <li><span className="is-online" /> {language === "pt" ? "Documentos" : "Documents"} <small>{t("ativo")}</small></li>
-              <li><span className="is-demo" /> BIM / CDE <small>demo</small></li>
-              <li><span className="is-demo" /> {t("Cronograma")} <small>demo</small></li>
-            </ul>
-          </div>
           <div className="mf-presenter-controls">
             <span className="mf-eyebrow">{t("Controles da demo")}</span>
             <div>
@@ -689,7 +741,7 @@ function MfDemoShell() {
             <button
               type="button"
               className={`mf-presentation-entry ${presentationSessionActive ? "is-active" : ""}`}
-              onClick={() => setPresentationLobbyOpen(true)}
+              onClick={openPresentationLobby}
               disabled={presentationSessionActive}
             >
               {presentationSessionActive ? <Presentation size={14} /> : <Play size={14} />}
@@ -712,12 +764,19 @@ function MfDemoShell() {
             type="button"
             className="mf-sidebar-scrim"
             aria-label={t("Fechar navegação")}
+            aria-hidden="true"
+            tabIndex={-1}
             onClick={() => setMobileNavigationOpen(false)}
           />
         ) : null}
 
-        <main ref={mainRef} id="mf-main" className="mf-main" tabIndex={-1}>
-          {demoSession ? <div className="mf-main-story"><ExecutiveValueBar snapshot={demoSession.snapshot} /><StoryRail step={step} /></div> : null}
+        <main
+          ref={mainRef}
+          id="mf-main"
+          className="mf-main"
+          tabIndex={-1}
+          inert={presentationLobbyOpen || (isMobileViewport && mobileNavigationOpen) ? true : undefined}
+        >
           <ViewContent
             view={activeView}
             step={step}
@@ -731,144 +790,23 @@ function MfDemoShell() {
             snapshot={demoSession?.snapshot}
           />
         </main>
-
-        <aside className="mf-activity-rail" aria-label={t("Atividade do projeto")}>
-          <div className="mf-run-card">
-            <div className="mf-run-card-topline">
-              <span className={step > 0 && step < 8 ? "is-running" : ""} />
-              <small>DEMO RUN · WF-REV-C-001</small>
-            </div>
-            <strong aria-live="polite">{t(scenarioLabels[step])}</strong>
-            <div className="mf-run-progress" aria-label={`${t("Etapa")} ${step} / 8`}>
-              {Array.from({ length: 8 }, (_, index) => (
-                <span key={index} className={step > index ? "is-complete" : step === index ? "is-current" : ""} />
-              ))}
-            </div>
-            <button type="button" onClick={advance} disabled={step === 8 || sessionHydrating || transitioning}>
-              {step === 8 ? <Check size={15} /> : <ArrowRight size={15} />}
-              {t(nextActionLabels[step])}
-            </button>
-          </div>
-
-          <div className="mf-rail-heading">
-            <span>{t("Atividade recente")}</span>
-            <FileClock size={15} />
-          </div>
-          <div className="mf-activity-list" aria-live="polite">
-            {approvedArtifacts.slice().reverse().map((artifact) => (
-              <div className="mf-activity-item" key={`approval-${artifact.id}`}>
-                <span className="mf-activity-marker is-positive" />
-                <div>
-                  <time>{t("AGORA")}</time>
-                  <strong>{t("Artefato aprovado")}</strong>
-                  <small>{t(artifact.title)} · {t("receipt registrado")}</small>
-                </div>
-              </div>
-            ))}
-            {visibleActivity.slice(0, 6).map((event) => (
-              <div className="mf-activity-item" key={event.id}>
-                <span className={`mf-activity-marker is-${event.tone}`} />
-                <div>
-                  <time>{event.time}</time>
-                  <strong>{t(event.title)}</strong>
-                  <small>{t(event.detail)}</small>
-                </div>
-              </div>
-            ))}
-          </div>
-          <button type="button" className="mf-rail-link" onClick={() => navigate("audit")}>
-            {t("Ver histórico completo")} <ArrowRight size={14} />
-          </button>
-
-          <div className="mf-context-card">
-            <Search size={16} />
-            <div>
-              <span>{t("Contexto carregado")}</span>
-              <strong>19 {t("fontes")} · 15 {t("disciplinas")}</strong>
-              <small>{t("Escopo")}: {t(roles.find((role) => role.id === roleId)?.name ?? "")}</small>
-            </div>
-          </div>
-        </aside>
       </div>
-
-      {assistantOpen ? (
-        <div className="mf-assistant-layer" role="dialog" aria-modal="true" aria-labelledby="mf-assistant-title">
-          <button
-            type="button"
-            className="mf-assistant-scrim"
-            aria-label={t("Fechar assistente")}
-            onClick={() => setAssistantOpen(false)}
-          />
-          <section className="mf-assistant-drawer">
-            <header>
-              <div>
-                <span className="mf-assistant-icon"><Bot size={18} /></span>
-                <div>
-                  <span className="mf-eyebrow">{t("Escopo atual")} · {project.name}</span>
-                  <h2 id="mf-assistant-title">{t("Perguntar ao Urso")}</h2>
-                </div>
-              </div>
-              <button type="button" aria-label={t("Fechar assistente")} onClick={() => setAssistantOpen(false)}>
-                <PanelRightClose size={19} />
-              </button>
-            </header>
-            <div className="mf-assistant-context">
-              <ShieldCheck size={15} /> {t("Respostas usam apenas fontes autorizadas deste projeto.")}
-            </div>
-            <div className="mf-question-list">
-              {askUrsoAnswers.map((item, index) => (
-                <button
-                  type="button"
-                  key={item.question}
-                  className={selectedQuestion === index ? "is-active" : ""}
-                  onClick={() => setSelectedQuestion(index)}
-                >
-                  {t(item.question)}
-                </button>
-              ))}
-            </div>
-            <div className="mf-answer-card" aria-live="polite">
-              <span className="mf-eyebrow">{t("Resposta contextual")}</span>
-              <p>{t(activeAnswer.answer)}</p>
-              <div>
-                <FileStack size={14} />
-                <span>
-                  <strong>{t("Fontes")}</strong>
-                  <small>{t(activeAnswer.sources)}</small>
-                </span>
-              </div>
-            </div>
-            <form className="mf-assistant-composer" onSubmit={submitScriptedQuestion}>
-              <input
-                aria-label={t("Pergunta para o Urso")}
-                placeholder={t("Pergunte sobre este projeto…")}
-                value={draftQuestion}
-                onChange={(event) => setDraftQuestion(event.target.value)}
-              />
-              <button type="submit" aria-label={t("Enviar pergunta")} disabled={!draftQuestion.trim()}>
-                <ArrowRight size={17} />
-              </button>
-            </form>
-            <p className="mf-assistant-note">{t("Respostas pré-configuradas para esta demonstração.")}</p>
-          </section>
-        </div>
-      ) : null}
 
       {selectedArtifact ? (
         <ArtifactWorkspace
           artifact={selectedArtifact}
           reviewState={
             artifactReviewStates[selectedArtifact.id] ??
-            (step >= 8 ? "approved" : step >= 7 ? "validated" : "draft")
+            "draft"
           }
-          onReviewStateChange={(reviewState) =>
-            reviewState !== "draft" && step < 8 ? void synchronizeScenarioStep(step + 1) : undefined
-          }
+          receiptId={selectedArtifactReceiptId}
+          managerConfirmationState={managerConfirmationState}
+          managerConfirmationReceiptId={managerConfirmationReceiptId}
           onClose={() => setSelectedArtifactId(null)}
         />
       ) : null}
 
-      {presenterMode ? (
+      {presenterMode && !presentationLobbyOpen && !selectedArtifactId && !(isMobileViewport && mobileNavigationOpen) ? (
         <aside className="mf-presenter-guide" aria-label={language === "pt" ? "Tour guiado do sistema" : "Guided system tour"}>
           <div className="mf-presenter-guide-progress">
             <span className="mf-presenter-guide-step">
@@ -914,7 +852,14 @@ function MfDemoShell() {
       ) : null}
 
       {presentationLobbyOpen ? (
-        <div className="mf-presentation-lobby" role="dialog" aria-modal="true" aria-labelledby="mf-presentation-title">
+        <div
+          ref={presentationDialogRef}
+          className="mf-presentation-lobby"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="mf-presentation-title"
+          tabIndex={-1}
+        >
           <div className="mf-presentation-lobby-scrim" />
           <section>
             <header>
@@ -962,7 +907,7 @@ function MfDemoShell() {
                   <li><ShieldCheck size={17} /><span><small>{t("Fixture do projeto")}</small><strong>{t("Carregado")}</strong></span><i /></li>
                   <li><RotateCcw size={17} /><span><small>{t("Motor do cenário")}</small><strong>{t("Determinístico")}</strong></span><i /></li>
                   <li><Languages size={17} /><span><small>{t("Idiomas")}</small><strong>PT + EN</strong></span><i /></li>
-                  <li><BrainCircuit size={17} /><span><small>{t("Contexto autorizado")}</small><strong>{t("39 docs conectados")}</strong></span><i /></li>
+                  <li><BrainCircuit size={17} /><span><small>{t("Contexto autorizado")}</small><strong>{authorizedEvidenceRecordCount} {language === "pt" ? "registros autorizados" : "authorized records"}</strong></span><i /></li>
                 </ul>
                 <div className="mf-presentation-meta">
                   <span><Presentation size={15} /><strong>9 {t("cenas")}</strong></span>

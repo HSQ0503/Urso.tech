@@ -34,30 +34,27 @@ import {
   UserCheck,
   UsersRound,
   Workflow,
-  Wrench,
 } from "lucide-react";
 import {
   activityEvents,
   artifacts,
-  disciplines,
   roles,
 } from "@/lib/mf-demo/fixtures";
 import { mfScenarioManifest } from "@/lib/mf-demo/manifest.mjs";
-import { nextActionLabels } from "@/lib/mf-demo/scenario";
+import { deriveMfArtifactAccess } from "@/lib/mf-demo/workflow-runtime.mjs";
 import type {
   ArtifactReviewState,
   DemoView,
-  DisciplineGroup,
-  ImpactLevel,
   MfHarnessSnapshot,
 } from "@/lib/mf-demo/types";
 import { useMfLanguage } from "./mf-language";
+import { MfAgentWorkflow } from "./mf-agent-workflow";
+import { MfManagerWorkspace } from "./mf-manager-workspace";
+import { MfTeamCommand } from "./mf-team-command";
 import { ProjectBrainWorkspace } from "./project-brain-workspace";
 import {
   ConnectedSourcesPanel,
   ControlledChangePanel,
-  EmployeeObjectivePanel,
-  ObjectiveWorkflowPanel,
   OutcomeComparisonPanel,
   PilotProposalPanel,
 } from "./mf-story-panels";
@@ -73,197 +70,6 @@ export type ViewProps = {
   sessionToken?: string;
   snapshot?: MfHarnessSnapshot;
 };
-
-const roleArtifactIds: Record<string, string> = {
-  "project-manager": "impact-plan",
-  electrical: "electrical-package",
-  bim: "bim-scaffold",
-  planning: "recovery-plan",
-  quality: "gate-checklist",
-};
-
-const groupLabels: Record<DisciplineGroup, { pt: string; en: string; detailPt: string; detailEn: string }> = {
-  brain: { pt: "Decisão e controle", en: "Decision & control", detailPt: "5 equipes que orientam o projeto", detailEn: "5 teams that direct the project" },
-  skeleton: { pt: "Infraestrutura física", en: "Physical infrastructure", detailPt: "4 equipes que formam a base", detailEn: "4 teams that form the base" },
-  organs: { pt: "Sistemas da instalação", en: "Facility systems", detailPt: "6 equipes que fazem a fábrica operar", detailEn: "6 teams that make the facility operate" },
-};
-
-const impactLabels: Record<ImpactLevel, { pt: string; en: string }> = {
-  critical: { pt: "Precisa agir", en: "Action required" },
-  watch: { pt: "Precisa revisar", en: "Review required" },
-  support: { pt: "Precisa verificar", en: "Check required" },
-  none: { pt: "Sem alteração", en: "No change" },
-};
-
-const workflowCatalog = [
-  {
-    roleId: "project-manager",
-    namePt: "Coordenar uma mudança de projeto",
-    nameEn: "Coordinate a project change",
-    triggerPt: "Uma nova revisão chega pelo Slack, Teams ou CDE",
-    triggerEn: "A new revision arrives through Slack, Teams, or the CDE",
-    actionPt: "Compara, localiza dependências e monta um plano integrado",
-    actionEn: "Compares, finds dependencies, and builds an integrated plan",
-    approvalPt: "Gerente aprova a nova verdade e os responsáveis",
-    approvalEn: "Manager approves the new truth and owners",
-    outputPt: "Decisão + plano de impacto",
-    outputEn: "Decision + impact plan",
-    sourcesPt: ["Slack · #fornecedor-linha", "Data Sheet Rev. C", "Baseline Rev. B"],
-    sourcesEn: ["Slack · #supplier-line", "Data Sheet Rev. C", "Baseline Rev. B"],
-    agentsPt: [
-      ["Agente de mudança", "Compara revisões e extrai os deltas"],
-      ["Agente de dependências", "Percorre o grafo das 15 equipes"],
-      ["Agente de planejamento", "Monta responsáveis, datas e critérios"],
-    ],
-    agentsEn: [
-      ["Change agent", "Compares revisions and extracts deltas"],
-      ["Dependency agent", "Traverses the 15-team graph"],
-      ["Planning agent", "Builds owners, dates, and criteria"],
-    ],
-    toolsPt: ["Comparador de documentos", "Grafo do Brain", "Planejador"],
-    toolsEn: ["Document comparison", "Brain graph", "Planner"],
-    runCode: "WF-REV-C-001",
-  },
-  {
-    roleId: "electrical",
-    namePt: "Atualizar o pacote elétrico",
-    nameEn: "Update the electrical package",
-    triggerPt: "Uma premissa de carga é alterada",
-    triggerEn: "A load assumption changes",
-    actionPt: "Puxa fontes, recalcula carga e prepara marcações do unifilar",
-    actionEn: "Pulls sources, recalculates load, and prepares single-line markups",
-    approvalPt: "Líder de Elétrica valida premissas e resultado",
-    approvalEn: "Electrical Lead validates assumptions and result",
-    outputPt: "Pacote elétrico Rev. 8",
-    outputEn: "Electrical package Rev. 8",
-    sourcesPt: ["Data Sheet Rev. C", "Unifilar Rev. 7", "Modelo federado"],
-    sourcesEn: ["Data Sheet Rev. C", "Single-line Rev. 7", "Federated model"],
-    agentsPt: [
-      ["Agente de carga", "Recalcula demanda e reserva"],
-      ["Agente de normas", "Verifica premissas e critérios"],
-      ["Agente de documentação", "Prepara marcações e memorial"],
-    ],
-    agentsEn: [
-      ["Load agent", "Recalculates demand and spare capacity"],
-      ["Standards agent", "Checks assumptions and criteria"],
-      ["Documentation agent", "Prepares markups and calculation note"],
-    ],
-    toolsPt: ["Calculadora de carga", "Revit", "Editor de unifilar"],
-    toolsEn: ["Load calculator", "Revit", "Single-line editor"],
-    runCode: "WF-ELE-008",
-  },
-  {
-    roleId: "bim",
-    namePt: "Preparar coordenação BIM",
-    nameEn: "Prepare BIM coordination",
-    triggerPt: "Geometria ou conexão muda",
-    triggerEn: "Geometry or a connection changes",
-    actionPt: "Puxa modelos, cria scaffold básico e identifica interferências",
-    actionEn: "Pulls models, creates a basic scaffold, and identifies clashes",
-    approvalPt: "Coordenador BIM decide o que entra no modelo federado",
-    approvalEn: "BIM Coordinator decides what enters the federated model",
-    outputPt: "Scaffold + relatório de interferências",
-    outputEn: "Scaffold + clash report",
-    sourcesPt: ["Modelo arquitetônico", "Modelo MEP", "Envelope Rev. C"],
-    sourcesEn: ["Architectural model", "MEP model", "Envelope Rev. C"],
-    agentsPt: [
-      ["Agente de modelos", "Localiza e valida as versões corretas"],
-      ["Agente de geometria", "Cria um scaffold coordenável"],
-      ["Agente de interferências", "Prioriza clashes por impacto"],
-    ],
-    agentsEn: [
-      ["Model agent", "Finds and validates the correct versions"],
-      ["Geometry agent", "Creates a coordination-ready scaffold"],
-      ["Clash agent", "Prioritizes clashes by impact"],
-    ],
-    toolsPt: ["CDE", "Revit", "Navisworks"],
-    toolsEn: ["CDE", "Revit", "Navisworks"],
-    runCode: "WF-BIM-014",
-  },
-  {
-    roleId: "planning",
-    namePt: "Recuperar o cronograma",
-    nameEn: "Recover the schedule",
-    triggerPt: "Uma data afeta o caminho crítico",
-    triggerEn: "A date affects the critical path",
-    actionPt: "Simula sequências e compara prazo, risco e dependências",
-    actionEn: "Simulates sequences and compares time, risk, and dependencies",
-    approvalPt: "Planejamento recomenda; gerente escolhe o cenário",
-    approvalEn: "Planning recommends; the manager selects the scenario",
-    outputPt: "Três cenários de recuperação",
-    outputEn: "Three recovery scenarios",
-    sourcesPt: ["Cronograma baseline", "Restrições abertas", "Datas dos fornecedores"],
-    sourcesEn: ["Baseline schedule", "Open constraints", "Supplier dates"],
-    agentsPt: [
-      ["Agente de caminho crítico", "Rastreia atividades dependentes"],
-      ["Agente de cenários", "Testa sequências e sobreposições"],
-      ["Agente de risco", "Compara prazo, custo e exposição"],
-    ],
-    agentsEn: [
-      ["Critical-path agent", "Traces dependent activities"],
-      ["Scenario agent", "Tests sequences and overlaps"],
-      ["Risk agent", "Compares time, cost, and exposure"],
-    ],
-    toolsPt: ["Primavera P6", "Simulador de cenários", "Registro de risco"],
-    toolsEn: ["Primavera P6", "Scenario simulator", "Risk register"],
-    runCode: "WF-PLN-021",
-  },
-  {
-    roleId: "quality",
-    namePt: "Verificar prontidão do gate",
-    nameEn: "Verify gate readiness",
-    triggerPt: "Uma liberação está próxima",
-    triggerEn: "A release is approaching",
-    actionPt: "Verifica evidências, aprovações e pendências em todas as equipes",
-    actionEn: "Checks evidence, approvals, and open items across all teams",
-    approvalPt: "Qualidade bloqueia ou libera com evidência",
-    approvalEn: "Quality blocks or releases with evidence",
-    outputPt: "Checklist EXE-02 auditável",
-    outputEn: "Auditable EXE-02 checklist",
-    sourcesPt: ["Gate EXE-02", "Registros de aprovação", "Pendências das equipes"],
-    sourcesEn: ["EXE-02 gate", "Approval records", "Team open items"],
-    agentsPt: [
-      ["Agente de evidências", "Confirma arquivos e aprovações"],
-      ["Agente de pendências", "Consolida bloqueios das 15 equipes"],
-      ["Agente de auditoria", "Monta checklist e recibo rastreável"],
-    ],
-    agentsEn: [
-      ["Evidence agent", "Confirms files and approvals"],
-      ["Open-item agent", "Consolidates blockers across 15 teams"],
-      ["Audit agent", "Builds the checklist and traceable receipt"],
-    ],
-    toolsPt: ["Índice de evidências", "Validador de gates", "Gerador de recibos"],
-    toolsEn: ["Evidence index", "Gate validator", "Receipt generator"],
-    runCode: "WF-QLT-002",
-  },
-] as const;
-
-function currentProjectMessage(step: number, language: "pt" | "en") {
-  const messages = language === "pt"
-    ? [
-        "O projeto está dentro do plano. O Brain monitora as fontes autorizadas.",
-        "Uma revisão do fornecedor chegou e precisa ser entendida.",
-        "Urso encontrou quatro mudanças materiais. A Rev. B ainda é a verdade vigente.",
-        "A Rev. C foi aprovada. Agora dez equipes precisam atualizar seu trabalho.",
-        "O impacto está mapeado. O projeto precisa distribuir os pacotes certos.",
-        "Cada equipe recebeu fontes, ação, responsável e critério de conclusão.",
-        "Os agentes produziram rascunhos. Os engenheiros precisam validá-los.",
-        "As revisões técnicas terminaram. Falta confirmar o gate executivo.",
-        "O marco EXE-02 está pronto com evidência completa e rastreável.",
-      ]
-    : [
-        "The project is on plan. The Brain is monitoring authorized sources.",
-        "A supplier revision arrived and needs to be understood.",
-        "Urso found four material changes. Revision B is still the current truth.",
-        "Revision C was approved. Ten teams now need to update their work.",
-        "The impact is mapped. The project needs to distribute the right work packages.",
-        "Every team received sources, an action, an owner, and a completion criterion.",
-        "Agents produced drafts. Engineers now need to validate them.",
-        "Technical reviews are complete. The executive gate needs final confirmation.",
-        "Milestone EXE-02 is ready with complete, traceable evidence.",
-      ];
-  return messages[step];
-}
 
 function SlackSignalCapture({ approved, language }: { approved: boolean; language: "pt" | "en" }) {
   const [captureRun, setCaptureRun] = useState(0);
@@ -386,100 +192,12 @@ function SlackSignalCapture({ approved, language }: { approved: boolean; languag
   );
 }
 
-export function ControlTowerView({ step, roleId, onNavigate, onAdvance, snapshot }: ViewProps) {
-  const { language, t } = useMfLanguage();
-  const l = (pt: string, en: string) => (language === "pt" ? pt : en);
-  const selectedRole = roles.find((role) => role.id === roleId) ?? roles[0];
-  const stage = step === 0 ? "stable" : step < 3 ? "decision" : step < 8 ? "work" : "ready";
-  const statusTitle = stage === "stable"
-    ? l("Tudo sob controle", "Everything is under control")
-    : stage === "decision"
-      ? l("Uma mudança precisa de decisão", "One change needs a decision")
-      : stage === "work"
-        ? l("A mudança está sendo coordenada", "The change is being coordinated")
-        : l("Pronto para liberar", "Ready to release");
-
-  const truthSteps = [
-    { label: l("Sinal", "Signal"), detail: "Slack", at: 1 },
-    { label: l("Entendimento", "Understanding"), detail: l("4 diferenças", "4 differences"), at: 2 },
-    { label: l("Decisão", "Decision"), detail: "DEC-042", at: 3 },
-    { label: l("Trabalho", "Work"), detail: l("10 equipes", "10 teams"), at: 5 },
-    { label: l("Liberação", "Release"), detail: "EXE-02", at: 8 },
-  ];
-
+export function ControlTowerView({ step, onNavigate, onAdvance, snapshot }: ViewProps) {
+  if (!snapshot) return <div className="mf-clarity-view mf-manager-loading" aria-busy="true" />;
   return (
     <div className="mf-clarity-view">
-      <header className="mf-today-header">
-        <div>
-          <span className="mf-eyebrow">{l("Projeto hoje", "Project today")}</span>
-          <h1>{statusTitle}</h1>
-          <p>{currentProjectMessage(step, language)}</p>
-        </div>
-        <button type="button" className="mf-primary-action" onClick={onAdvance} disabled={step === 8}>
-          {step === 8 ? <Check size={16} /> : <ArrowRight size={16} />}
-          {t(nextActionLabels[step])}
-        </button>
-      </header>
-
-      <section className={`mf-truth-path is-${stage}`} data-guide-key="project-status" aria-label={l("Caminho da mudança à liberação", "Path from change to release")}>
-        <div className="mf-truth-path-intro">
-          <span>{l("Como Urso mantém o projeto alinhado", "How Urso keeps the project aligned")}</span>
-          <strong>{step === 0 ? l("Aguardando uma mudança", "Waiting for a change") : l("Revisão C · linha de envase", "Revision C · bottling line")}</strong>
-        </div>
-        <ol>
-          {truthSteps.map((item, index) => {
-            const complete = step >= item.at;
-            const current = step < item.at && (index === 0 || step >= truthSteps[index - 1].at);
-            return (
-              <li key={item.label} className={`${complete ? "is-complete" : ""} ${current ? "is-current" : ""}`}>
-                <i>{complete ? <Check size={14} /> : index + 1}</i>
-                <span><strong>{item.label}</strong><small>{complete ? item.detail : l("Aguardando", "Waiting")}</small></span>
-              </li>
-            );
-          })}
-        </ol>
-      </section>
-
-      <div className="mf-today-grid">
-        <section className="mf-focus-card">
-          <header>
-            <span className="mf-role-avatar">{t(selectedRole.name).slice(0, 2).toUpperCase()}</span>
-            <span><small>{l("Você está trabalhando como", "You are working as")}</small><strong>{t(selectedRole.name)}</strong></span>
-            <button type="button" onClick={() => onNavigate("disciplines")}>{l("Ver minha equipe", "View my team")} <ArrowRight size={13} /></button>
-          </header>
-          <div>
-            <span className="mf-eyebrow">{l("O que importa para você agora", "What matters to you now")}</span>
-            <h2>{step < 4 ? l("Acompanhar a decisão da Revisão C", "Track the Revision C decision") : t(selectedRole.focus)}</h2>
-            <p>{step < 4 ? l("Urso ainda não distribuiu trabalho porque a nova premissa precisa de aprovação.", "Urso has not distributed work yet because the new assumption needs approval.") : t(selectedRole.assignment)}</p>
-          </div>
-          <footer>
-            <span><FileText size={15} /> {step >= 5 ? t(selectedRole.deliverable) : l("Nenhum novo pacote atribuído", "No new package assigned")}</span>
-            <button type="button" onClick={() => onNavigate(step < 4 ? "changes" : "workflows")}>{step < 4 ? l("Revisar mudança", "Review change") : l("Abrir meu workflow", "Open my workflow")} <ArrowRight size={14} /></button>
-          </footer>
-        </section>
-
-        <section className="mf-release-card" data-guide-key="project-release">
-          <header>
-            <span><small>{l("Próximo marco", "Next milestone")}</small><strong>EXE-02 · {l("Liberação executiva", "Executive release")}</strong></span>
-            <span className={`mf-simple-status is-${step >= 8 ? "ready" : step >= 3 ? "risk" : "stable"}`}>{step >= 8 ? l("Pronto", "Ready") : step >= 3 ? l("Em risco", "At risk") : l("No prazo", "On plan")}</span>
-          </header>
-          <div className="mf-schedule-compare">
-            <div><span>{l("Plano original", "Original plan")}</span><strong>{l("16 AGO", "AUG 16")}</strong><small>{l("Baseline Rev. 12", "Baseline Rev. 12")}</small></div>
-            <ArrowRight size={17} />
-            <div><span>{l("Após Rev. C", "After Rev. C")}</span><strong>{l("26 AGO", "AUG 26")}</strong><small>{l("+10 dias", "+10 days")}</small></div>
-            <ArrowRight size={17} />
-            <div className={step >= 6 ? "is-recommended" : ""}><span>{l("Plano recomendado", "Recommended plan")}</span><strong>{step >= 6 ? l("18 AGO", "AUG 18") : "—"}</strong><small>{step >= 6 ? l("Recupera 8 dias", "Recovers 8 days") : l("Aguardando simulação", "Awaiting simulation")}</small></div>
-          </div>
-          <button type="button" onClick={() => onNavigate("changes")}>{l("Entender a mudança e o impacto", "Understand the change and impact")} <ArrowRight size={14} /></button>
-        </section>
-      </div>
-
-      <section className="mf-what-urso-does">
-        <div><Network size={18} /><span><strong>{l("Brain", "Brain")}</strong><small>{l("Mantém verdade, decisões e contexto conectados", "Keeps truth, decisions, and context connected")}</small></span></div>
-        <div><Workflow size={18} /><span><strong>Harness</strong><small>{l("Transforma decisões em trabalho executável", "Turns decisions into executable work")}</small></span></div>
-        <div><UserCheck size={18} /><span><strong>{l("Controle humano", "Human control")}</strong><small>{l("MF aprova toda mudança material", "MF approves every material change")}</small></span></div>
-      </section>
-      {step >= 8 && snapshot ? <><OutcomeComparisonPanel snapshot={snapshot} /><PilotProposalPanel /></> : null}
+      <MfManagerWorkspace snapshot={snapshot} onAdvance={onAdvance} onNavigate={onNavigate} />
+      {step >= 8 ? <><OutcomeComparisonPanel snapshot={snapshot} /><PilotProposalPanel /></> : null}
     </div>
   );
 }
@@ -540,168 +258,46 @@ export function ChangesView({ step, roleId, onNavigate, onAdvance, snapshot }: V
   );
 }
 
-export function DisciplinesView({ step, roleId, onNavigate, onAdvance, onOpenArtifact, artifactReviewStates, snapshot }: ViewProps) {
+export function DisciplinesView({ step, roleId, onNavigate, onAdvance, snapshot }: ViewProps) {
   const { language, t } = useMfLanguage();
   const l = (pt: string, en: string) => (language === "pt" ? pt : en);
   const selectedRole = roles.find((role) => role.id === roleId) ?? roles[0];
-  const selectedArtifactId = roleArtifactIds[selectedRole.id];
-  const reviewState = artifactReviewStates[selectedArtifactId] ?? (step >= 8 ? "approved" : step >= 7 ? "validated" : "draft");
 
   return (
     <div className="mf-clarity-view">
       <header className="mf-today-header"><div><span className="mf-eyebrow">{l("Minha equipe e o projeto", "My team & the project")}</span><h1>{t(selectedRole.name)}</h1><p>{l("O Brain traduz a mesma decisão para cada equipe, mostrando apenas o contexto e o trabalho relevantes.", "The Brain translates the same decision for every team, showing only the relevant context and work.")}</p></div>{step < 5 ? <button type="button" className="mf-primary-action" onClick={onAdvance} disabled={step < 4}><Workflow size={16} /> {l("Distribuir trabalho", "Distribute work")}</button> : <button type="button" className="mf-secondary-action" onClick={() => onNavigate("workflows")}>{l("Abrir meu workflow", "Open my workflow")} <ArrowRight size={14} /></button>}</header>
-
-      {snapshot ? <EmployeeObjectivePanel snapshot={snapshot} roleId={roleId} /> : null}
-
-      <section className="mf-role-brief" data-guide-key="role-work">
-        <header><span className="mf-role-avatar">{t(selectedRole.name).slice(0, 2).toUpperCase()}</span><div><small>{l("Seu foco nesta mudança", "Your focus in this change")}</small><h2>{t(selectedRole.focus)}</h2></div><span className={`mf-simple-status ${step >= 5 ? "is-ready" : ""}`}>{step >= 5 ? l("Trabalho atribuído", "Work assigned") : l("Aguardando decisão", "Awaiting decision")}</span></header>
-        <div className="mf-role-brief-flow">
-          <div><small>1 · {l("Por que", "Why")}</small><strong>{step >= 4 ? l("Rev. C altera uma premissa da sua equipe", "Revision C changes one of your team assumptions") : l("Nenhum impacto aprovado ainda", "No approved impact yet")}</strong></div><ArrowRight size={16} /><div><small>2 · {l("Sua ação", "Your action")}</small><strong>{step >= 5 ? t(selectedRole.assignment) : l("Aguardando pacote coordenado", "Awaiting coordinated package")}</strong></div><ArrowRight size={16} /><div><small>3 · {l("Resultado esperado", "Expected result")}</small><strong>{t(selectedRole.deliverable)}</strong></div>
-        </div>
-        <footer><div>{selectedRole.evidence.map((item) => <span key={item}><FileCheck2 size={13} /> {t(item)}</span>)}</div><button type="button" onClick={() => onOpenArtifact(selectedArtifactId)} disabled={step < 6}><Maximize2 size={14} /> {step < 6 ? l("Disponível após execução", "Available after execution") : reviewState === "approved" ? l("Abrir resultado aprovado", "Open approved result") : l("Revisar resultado", "Review result")}</button></footer>
-      </section>
-
-      <section className="mf-team-map">
-        <header><div><span className="mf-eyebrow">{l("Como as 15 equipes trabalham juntas", "How the 15 teams work together")}</span><h2>{l("Uma verdade, responsabilidades diferentes", "One truth, different responsibilities")}</h2></div><span>{step >= 4 ? l("10 equipes receberam impacto", "10 teams received an impact") : l("Projeto coordenado", "Coordinated project")}</span></header>
-        <div>
-          {(Object.keys(groupLabels) as DisciplineGroup[]).map((group) => (
-            <article key={group}>
-              <header><strong>{language === "pt" ? groupLabels[group].pt : groupLabels[group].en}</strong><small>{language === "pt" ? groupLabels[group].detailPt : groupLabels[group].detailEn}</small></header>
-              <ul>{disciplines.filter((discipline) => discipline.group === group).map((discipline) => { const impacted = step >= 4 ? discipline.impact : "none"; return <li key={discipline.id} className={`is-${impacted}`}><span>{discipline.shortName}</span><div><strong>{language === "pt" ? discipline.name : discipline.englishName}</strong><small>{language === "pt" ? impactLabels[impacted].pt : impactLabels[impacted].en}</small></div>{impacted !== "none" ? <i /> : null}</li>; })}</ul>
-            </article>
-          ))}
-        </div>
-      </section>
+      {snapshot ? <MfTeamCommand snapshot={snapshot} selectedRoleId={roleId} onNavigate={onNavigate} /> : <div className="mf-manager-loading" aria-busy="true" />}
     </div>
   );
 }
 
-export function WorkflowsView({ step, roleId, onNavigate, onAdvance, snapshot }: ViewProps) {
-  const { language, t } = useMfLanguage();
+export function WorkflowsView({ roleId, onNavigate, onAdvance, snapshot }: ViewProps) {
+  const { language } = useMfLanguage();
   const l = (pt: string, en: string) => (language === "pt" ? pt : en);
-  const selectedRole = roles.find((role) => role.id === roleId) ?? roles[0];
-  const [workflowSelection, setWorkflowSelection] = useState({ roleContextId: roleId, workflowRoleId: selectedRole.id });
-  const selectedWorkflowRoleId = workflowSelection.roleContextId === roleId ? workflowSelection.workflowRoleId : selectedRole.id;
-  const selectedWorkflow = workflowCatalog.find((workflow) => workflow.roleId === selectedWorkflowRoleId) ?? workflowCatalog[0];
-  const workflowRole = roles.find((role) => role.id === selectedWorkflow.roleId) ?? roles[0];
-  const selectedSources = language === "pt" ? selectedWorkflow.sourcesPt : selectedWorkflow.sourcesEn;
-  const selectedAgents = language === "pt" ? selectedWorkflow.agentsPt : selectedWorkflow.agentsEn;
-  const selectedTools = language === "pt" ? selectedWorkflow.toolsPt : selectedWorkflow.toolsEn;
-  const progressIndex = step < 5 ? -1 : step === 5 ? 2 : step === 6 ? 4 : step === 7 ? 5 : 6;
-  const deploymentStatus = step < 5
-    ? l("Bloqueado até a aprovação", "Locked until approval")
-    : step === 5
-      ? l("Pronto para implantar", "Ready to deploy")
-      : step === 6
-        ? l("Aguardando revisão humana", "Waiting for human review")
-        : step === 7
-          ? l("Revisão concluída", "Review complete")
-          : l("Concluído e registrado", "Completed and recorded");
-  const deploymentAction = step < 5
-    ? l("Aprovação necessária", "Approval required")
-    : step === 5
-      ? l("Implantar workflow", "Deploy workflow")
-      : step === 6
-        ? l("Confirmar revisão", "Confirm review")
-        : step === 7
-          ? l("Liberar resultado", "Release result")
-          : l("Workflow concluído", "Workflow complete");
-  const stageClass = (index: number) => {
-    if (progressIndex < 0) return "is-locked";
-    if (index < progressIndex) return "is-complete";
-    if (index === progressIndex && progressIndex < 6) return "is-current";
-    return "is-pending";
-  };
+  const defaultWorkflow = mfScenarioManifest.workflow.catalog.find((workflow) => workflow.ownerRoleId === roleId)
+    ?? mfScenarioManifest.workflow.catalog[0];
+  const [workflowSelection, setWorkflowSelection] = useState({
+    roleContextId: roleId,
+    workflowId: defaultWorkflow.id,
+  });
+  const selectedWorkflowId = workflowSelection.roleContextId === roleId
+    && mfScenarioManifest.workflow.catalog.some((workflow) => workflow.id === workflowSelection.workflowId)
+    ? workflowSelection.workflowId
+    : defaultWorkflow.id;
 
   return (
     <div className="mf-clarity-view">
       <header className="mf-today-header"><div><span className="mf-eyebrow">{l("Harness · workflows agentivos", "Harness · agentic workflows")}</span><h1>{l("Escolha o trabalho. Veja exatamente o que os agentes farão.", "Choose the work. See exactly what the agents will do.")}</h1><p>{l("Cada workflow mostra suas fontes, agentes, ferramentas, controle humano e resultado antes de ser implantado.", "Every workflow shows its sources, agents, tools, human control, and outcome before it is deployed.")}</p></div></header>
-      {snapshot ? <ObjectiveWorkflowPanel snapshot={snapshot} /> : null}
-
-      <section className="mf-workflow-deployment">
-        <header>
-          <div><span className="mf-eyebrow">{l("Central de implantação", "Deployment studio")}</span><h2>{l("Workflows disponíveis para as equipes MF", "Workflows available to MF teams")}</h2></div>
-          <span className={`mf-deployment-status ${step < 5 ? "is-locked" : step >= 8 ? "is-complete" : "is-active"}`}><i />{deploymentStatus}</span>
-        </header>
-
-        <div className="mf-deployment-layout">
-          <aside className="mf-workflow-picker" aria-label={l("Escolher workflow", "Choose workflow")}>
-            <header><strong>{l("1. Escolha um workflow", "1. Choose a workflow")}</strong><small>{l("Selecione para inspecionar antes de implantar", "Select one to inspect before deployment")}</small></header>
-            <nav>
-              {workflowCatalog.map((workflow, index) => {
-                const role = roles.find((item) => item.id === workflow.roleId) ?? roles[0];
-                const isSelected = workflow.roleId === selectedWorkflow.roleId;
-                return (
-                  <button key={workflow.roleId} type="button" className={isSelected ? "is-selected" : ""} onClick={() => setWorkflowSelection({ roleContextId: roleId, workflowRoleId: workflow.roleId })} aria-pressed={isSelected}>
-                    <i>{String(index + 1).padStart(2, "0")}</i>
-                    <span><small>{t(role.name)}</small><strong>{language === "pt" ? workflow.namePt : workflow.nameEn}</strong><em>{language === "pt" ? workflow.outputPt : workflow.outputEn}</em></span>
-                    <ArrowRight size={14} />
-                  </button>
-                );
-              })}
-            </nav>
-          </aside>
-
-          <div className="mf-workflow-canvas">
-            <header>
-              <div><span><Workflow size={14} /> {selectedWorkflow.runCode}</span><h3>{language === "pt" ? selectedWorkflow.namePt : selectedWorkflow.nameEn}</h3><p>{t(workflowRole.name)} · {language === "pt" ? selectedWorkflow.actionPt : selectedWorkflow.actionEn}</p></div>
-              <button type="button" className="mf-primary-action" onClick={onAdvance} disabled={step < 5 || step >= 8}><Play size={15} />{deploymentAction}</button>
-            </header>
-
-            <div className="mf-agentic-map" aria-label={l("Mapa visual do workflow agentivo", "Visual agentic workflow map")}>
-              <article className={`mf-agentic-node is-source ${stageClass(0)}`}>
-                <header><i><MessageSquareText size={15} /></i><span><small>{l("Entrada", "Input")}</small><strong>{l("Sinal e fontes", "Signal & sources")}</strong></span><b>{stageClass(0) === "is-complete" ? <Check size={12} /> : "01"}</b></header>
-                <p>{language === "pt" ? selectedWorkflow.triggerPt : selectedWorkflow.triggerEn}</p>
-                <ul>{selectedSources.map((source) => <li key={source}><FileText size={11} />{source}</li>)}</ul>
-              </article>
-
-              <div className="mf-agentic-connector"><ArrowRight size={16} /><small>{l("contextualiza", "contextualizes")}</small></div>
-
-              <article className={`mf-agentic-node is-brain ${stageClass(1)}`}>
-                <header><i><Network size={15} /></i><span><small>Urso Brain</small><strong>{l("Contexto autorizado", "Authorized context")}</strong></span><b>{stageClass(1) === "is-complete" ? <Check size={12} /> : "02"}</b></header>
-                <p>{l("Carrega a verdade vigente, permissões e dependências relevantes para este trabalho.", "Loads current truth, permissions, and dependencies relevant to this work.")}</p>
-                <footer><span><ShieldCheck size={12} />{l("Escopo controlado", "Controlled scope")}</span><span>{l("Somente leitura", "Read-only")}</span></footer>
-              </article>
-
-              <div className="mf-agentic-connector"><ArrowRight size={16} /><small>{l("delega", "delegates")}</small></div>
-
-              <article className={`mf-agentic-node is-agents ${stageClass(2)}`}>
-                <header><i><Bot size={15} /></i><span><small>{l("Execução agentiva", "Agentic execution")}</small><strong>{selectedAgents.length} {l("agentes coordenados", "coordinated agents")}</strong></span><b>{stageClass(2) === "is-complete" ? <Check size={12} /> : "03"}</b></header>
-                <div>{selectedAgents.map(([name, task], index) => <section key={name}><i>{index + 1}</i><span><strong>{name}</strong><small>{task}</small></span></section>)}</div>
-              </article>
-
-              <div className="mf-agentic-connector"><ArrowRight size={16} /><small>{l("usa", "uses")}</small></div>
-
-              <article className={`mf-agentic-node is-tools ${stageClass(3)}`}>
-                <header><i><Wrench size={15} /></i><span><small>{l("Ferramentas", "Tools")}</small><strong>{l("Ações permitidas", "Permitted actions")}</strong></span><b>{stageClass(3) === "is-complete" ? <Check size={12} /> : "04"}</b></header>
-                <div>{selectedTools.map((tool) => <span key={tool}><Check size={11} />{tool}</span>)}</div>
-                <footer>{l("Rascunhos apenas · nenhuma emissão automática", "Drafts only · no automatic issuance")}</footer>
-              </article>
-
-              <div className="mf-agentic-connector"><ArrowRight size={16} /><small>{l("solicita", "requests")}</small></div>
-
-              <article className={`mf-agentic-node is-gate ${stageClass(4)}`} data-guide-key="human-review">
-                <header><i><UserCheck size={15} /></i><span><small>{l("Gate humano", "Human gate")}</small><strong>{l("Revisar e decidir", "Review & decide")}</strong></span><b>{stageClass(4) === "is-complete" ? <Check size={12} /> : "05"}</b></header>
-                <p>{language === "pt" ? selectedWorkflow.approvalPt : selectedWorkflow.approvalEn}</p>
-                <footer><span>{t(workflowRole.name)}</span><span>{l("Obrigatório", "Required")}</span></footer>
-              </article>
-
-              <div className="mf-agentic-connector"><ArrowRight size={16} /><small>{l("libera", "releases")}</small></div>
-
-              <article className={`mf-agentic-node is-output ${stageClass(5)}`}>
-                <header><i><FileCheck2 size={15} /></i><span><small>{l("Resultado", "Outcome")}</small><strong>{l("Trabalho verificável", "Verifiable work")}</strong></span><b>{stageClass(5) === "is-complete" ? <Check size={12} /> : "06"}</b></header>
-                <p>{language === "pt" ? selectedWorkflow.outputPt : selectedWorkflow.outputEn}</p>
-                <button type="button" onClick={() => onNavigate("artifacts")}>{l("Abrir resultados", "Open outputs")}<ArrowRight size={13} /></button>
-              </article>
-            </div>
-
-            <footer className="mf-workflow-receipt">
-              <div><ShieldCheck size={16} /><span><strong>{l("Tudo volta ao Brain", "Everything returns to the Brain")}</strong><small>{l("Entradas, chamadas de ferramentas, decisões e resultados formam um recibo auditável.", "Inputs, tool calls, decisions, and outputs form an auditable receipt.")}</small></span></div>
-              <code>RCPT-{selectedWorkflow.runCode.slice(3)}</code>
-            </footer>
-          </div>
-        </div>
-      </section>
+      {snapshot ? (
+        <MfAgentWorkflow
+          snapshot={snapshot}
+          viewerRoleId={roleId}
+          selectedWorkflowId={selectedWorkflowId}
+          onSelectWorkflow={(workflowId) => setWorkflowSelection({ roleContextId: roleId, workflowId })}
+          onAdvance={onAdvance}
+          onOpenOutputs={() => onNavigate("artifacts")}
+        />
+      ) : <div className="mf-manager-loading" aria-busy="true" />}
     </div>
   );
 }
@@ -727,24 +323,29 @@ function BimScaffold({ active }: { active: boolean }) {
   );
 }
 
-export function ArtifactsView({ step, onNavigate, onAdvance, onOpenArtifact, artifactReviewStates }: ViewProps) {
+export function ArtifactsView({ step, roleId, onNavigate, onOpenArtifact, artifactReviewStates }: ViewProps) {
   const { language, t } = useMfLanguage();
   const l = (pt: string, en: string) => (language === "pt" ? pt : en);
+  const artifactAccess = deriveMfArtifactAccess(roleId);
+  const visibleArtifacts = artifacts.filter((artifact) =>
+    artifactAccess.canViewAll || artifactAccess.artifactIds.includes(artifact.id));
+  const canViewBimScaffold = artifactAccess.canViewAll
+    || artifactAccess.artifactIds.includes("bim-scaffold");
   return (
     <div className="mf-clarity-view">
-      <header className="mf-today-header"><div><span className="mf-eyebrow">{l("Trabalho produzido", "Work produced")}</span><h1>{l("O que os workflows entregam às equipes", "What workflows deliver to teams")}</h1><p>{l("Cada item abaixo é um rascunho, análise ou checklist criado para uma pessoa da MF revisar. Nada é emitido automaticamente.", "Each item below is a draft, analysis, or checklist created for an MF employee to review. Nothing is issued automatically.")}</p></div>{step >= 5 && step < 7 ? <button type="button" className="mf-primary-action" onClick={onAdvance}><Bot size={16} />{step < 6 ? l("Gerar resultados", "Generate results") : l("Enviar para revisão", "Send for review")}</button> : null}</header>
+      <header className="mf-today-header"><div><span className="mf-eyebrow">{l("Trabalho produzido", "Work produced")}</span><h1>{l("O que os workflows entregam às equipes", "What workflows deliver to teams")}</h1><p>{l("Cada item abaixo é um rascunho, análise ou checklist criado para uma pessoa da MF revisar. Nada é emitido automaticamente.", "Each item below is a draft, analysis, or checklist created for an MF employee to review. Nothing is issued automatically.")}</p></div></header>
 
       <section className="mf-output-definition" data-guide-key="work-produced"><FileCheck2 size={20} /><div><strong>{l("“Trabalho produzido” significa uma saída verificável", "“Work produced” means a verifiable output")}</strong><p>{l("Ela mostra as fontes usadas, o que Urso fez, quem precisa revisar e qual decisão depende dela.", "It shows the sources used, what Urso did, who must review it, and which decision depends on it.")}</p></div></section>
 
       <section className="mf-output-list">
-        {artifacts.map((artifact) => {
+        {visibleArtifacts.map((artifact) => {
           const unlocked = step >= artifact.availableAt;
           const reviewState = artifactReviewStates[artifact.id] ?? (step >= 8 ? "approved" : step >= 7 ? "validated" : "draft");
           return <article key={artifact.id} className={unlocked ? "is-ready" : "is-locked"}><div className="mf-output-type">{unlocked ? <FileCheck2 size={18} /> : <LockKeyhole size={17} />}<span><small>{t(artifact.type)}</small><strong>{t(artifact.title)}</strong></span></div><div><small>{l("O que é", "What it is")}</small><p>{unlocked ? t(artifact.description) : l(`Disponível quando o workflow chegar à etapa ${artifact.availableAt}.`, `Available when the workflow reaches step ${artifact.availableAt}.`)}</p></div><div><small>{l("Por que importa", "Why it matters")}</small><p>{unlocked ? t(artifact.validation) : l("Ainda não foi gerado.", "It has not been generated yet.")}</p></div><div><small>{l("Quem revisa", "Who reviews")}</small><p>{t(artifact.discipline)}</p></div><div className="mf-output-action"><span className={`mf-simple-status is-${reviewState}`}>{!unlocked ? l("Bloqueado", "Locked") : reviewState === "approved" ? l("Aprovado", "Approved") : reviewState === "validated" ? l("Pronto para aprovar", "Ready to approve") : l("Rascunho", "Draft")}</span><button type="button" onClick={() => onOpenArtifact(artifact.id)} disabled={!unlocked}><Maximize2 size={14} /> {l("Abrir e revisar", "Open and review")}</button></div></article>;
         })}
       </section>
 
-      <section className="mf-bim-output"><header><div><span className="mf-eyebrow">{l("Exemplo visual · workflow BIM", "Visual example · BIM workflow")}</span><h2>{l("Scaffold básico para iniciar coordenação", "Basic scaffold to start coordination")}</h2></div><span>{l("Rascunho · exige revisão BIM", "Draft · requires BIM review")}</span></header><BimScaffold active={step >= 6} /><footer><Box size={17} /><p>{l("Urso organiza geometria, conexões e áreas de interferência para a equipe começar. O Coordenador BIM decide o que entra no modelo oficial.", "Urso organizes geometry, connections, and clash areas so the team can begin. The BIM Coordinator decides what enters the official model.")}</p><button type="button" onClick={() => onNavigate("workflows")}>{l("Ver como o workflow funciona", "See how the workflow works")} <ArrowRight size={14} /></button></footer></section>
+      {canViewBimScaffold ? <section className="mf-bim-output"><header><div><span className="mf-eyebrow">{l("Exemplo visual · workflow BIM", "Visual example · BIM workflow")}</span><h2>{l("Scaffold básico para iniciar coordenação", "Basic scaffold to start coordination")}</h2></div><span>{l("Rascunho · exige revisão BIM", "Draft · requires BIM review")}</span></header><BimScaffold active={step >= 6} /><footer><Box size={17} /><p>{l("Urso organiza geometria, conexões e áreas de interferência para a equipe começar. O Coordenador BIM decide o que entra no modelo oficial.", "Urso organizes geometry, connections, and clash areas so the team can begin. The BIM Coordinator decides what enters the official model.")}</p><button type="button" onClick={() => onNavigate("workflows")}>{l("Ver como o workflow funciona", "See how the workflow works")} <ArrowRight size={14} /></button></footer></section> : null}
     </div>
   );
 }
@@ -760,16 +361,40 @@ export function BrainView({ step, roleId, onNavigate, sessionId, sessionToken }:
   );
 }
 
-export function AuditView({ step, onNavigate, artifactReviewStates }: ViewProps) {
+export function AuditView({ step, roleId, onNavigate, artifactReviewStates, snapshot }: ViewProps) {
   const { language, t } = useMfLanguage();
   const l = (pt: string, en: string) => (language === "pt" ? pt : en);
   const events = activityEvents.filter((event) => step >= event.availableAt).reverse();
-  const approvedArtifacts = artifacts.filter((artifact) => artifactReviewStates[artifact.id] === "approved" || step >= 8);
+  const artifactAccess = deriveMfArtifactAccess(roleId);
+  const visibleArtifacts = artifacts.filter((artifact) =>
+    artifactAccess.canViewAll || artifactAccess.artifactIds.includes(artifact.id));
+  const approvedArtifacts = visibleArtifacts.flatMap((artifact) => {
+    const workItems = snapshot?.workItems.filter((task) => task.artifactId === artifact.id) ?? [];
+    if (artifactReviewStates[artifact.id] !== "approved"
+      || workItems.length === 0
+      || workItems.some((task) => task.state !== "complete")) return [];
+    const workItem = [...workItems].sort((left, right) => right.completeAt - left.completeAt)[0];
+    return [{ artifact, workItem }];
+  });
+  const transitionReceipts = snapshot?.receipts ?? [];
+  const decisionApproved = snapshot?.decision.status === "approved";
+
   return (
     <div className="mf-clarity-view">
       <header className="mf-today-header"><div><span className="mf-eyebrow">{l("Decisões e histórico", "Decisions & history")}</span><h1>{l("Nada muda sem deixar uma explicação", "Nothing changes without leaving an explanation")}</h1><p>{l("Veja o que mudou, quem aprovou, quais fontes foram usadas e o que o sistema atualizou.", "See what changed, who approved it, which sources were used, and what the system updated.")}</p></div><button type="button" className="mf-secondary-action" onClick={() => onNavigate("brain")}>{l("Abrir relações no Brain", "Open relationships in the Brain")} <Network size={14} /></button></header>
-      <section className="mf-audit-summary"><div><Clock3 size={18} /><span><small>{l("Workflow", "Workflow")}</small><strong>change-propagation@1.4</strong></span></div><div><UserCheck size={18} /><span><small>{l("Decisão humana", "Human decision")}</small><strong>{step >= 3 ? "DEC-042 · " + l("Aprovada", "Approved") : l("Aguardando", "Waiting")}</strong></span></div><div><ShieldCheck size={18} /><span><small>{l("Trabalho aprovado", "Approved work")}</small><strong>{approvedArtifacts.length} / {artifacts.length}</strong></span></div></section>
-      <section className="mf-history-list"><header><span>{l("Horário", "Time")}</span><span>{l("O que aconteceu", "What happened")}</span><span>{l("Quem / sistema", "Who / system")}</span><span>{l("Evidência", "Evidence")}</span></header>{approvedArtifacts.map((artifact) => <div key={artifact.id}><time>{l("Agora", "Now")}</time><span><strong>{t(artifact.title)}</strong><small>{l("Resultado aprovado e conectado ao Brain", "Result approved and connected to the Brain")}</small></span><span>{t(artifact.discipline)}</span><code>RCPT-{artifact.id.slice(0, 4).toUpperCase()}</code></div>)}{events.map((event) => <div key={event.id}><time>{event.time}</time><span><strong>{t(event.title)}</strong><small>{t(event.detail)}</small></span><span>{event.id === "approved" ? l("Gerente do Projeto", "Project Manager") : "Urso Harness"}</span><code>RCPT-{String(event.availableAt + 41).padStart(3, "0")}</code></div>)}</section>
+      <section className="mf-audit-summary"><div><Clock3 size={18} /><span><small>{l("Workflow", "Workflow")}</small><strong>{mfScenarioManifest.workflow.id}</strong></span></div><div><UserCheck size={18} /><span><small>{l("Decisão humana", "Human decision")}</small><strong>{decisionApproved ? `${snapshot?.decision.id} · ${l("Aprovada", "Approved")}` : l("Aguardando", "Waiting")}</strong></span></div><div><ShieldCheck size={18} /><span><small>{l("Trabalho aprovado", "Approved work")}</small><strong>{approvedArtifacts.length} / {visibleArtifacts.length}</strong></span></div></section>
+
+      <section className="mf-history-list">
+        <header><span>{l("Horário", "Time")}</span><span>{l("Evidência canônica", "Canonical evidence")}</span><span>{l("Quem / sistema", "Who / system")}</span><span>{l("Recibo", "Receipt")}</span></header>
+        {approvedArtifacts.map(({ artifact, workItem }) => <div key={`artifact-${artifact.id}`}><time>{l("Agora", "Now")}</time><span><strong>{t(artifact.title)}</strong><small>{l("Resultado aprovado e conectado ao Brain", "Approved result connected to the Brain")}</small></span><span>{t(artifact.discipline)}</span>{workItem.receiptId ? <code>{workItem.receiptId}</code> : <span className="mf-simple-status is-draft">{l("Recibo pendente", "Receipt pending")}</span>}</div>)}
+        {transitionReceipts.map((receipt) => <div key={`transition-${receipt.id}`}><time>{l("Agora", "Now")}</time><span><strong>{l("Transição canônica do cenário", "Canonical scenario transition")} {receipt.fromStep} → {receipt.toStep}</strong><small>{receipt.action}</small></span><span>{receipt.actorRoleId}</span><code>{receipt.id}</code></div>)}
+        {approvedArtifacts.length === 0 && transitionReceipts.length === 0 ? <div><time>—</time><span><strong>{l("Nenhum recibo canônico registrado", "No canonical receipt recorded")}</strong><small>{l("A trilha permanece sem evidência emitida.", "The trail remains without issued evidence.")}</small></span><span>Urso Harness</span><span className="mf-simple-status is-draft">{l("Recibo pendente", "Receipt pending")}</span></div> : null}
+      </section>
+
+      <section className="mf-history-list">
+        <header><span>{l("Horário", "Time")}</span><span>{l("Atividade do cenário", "Scenario activity")}</span><span>{l("Quem / sistema", "Who / system")}</span><span>{l("Evidência", "Evidence")}</span></header>
+        {events.map((event) => <div key={`event-${event.id}`}><time>{event.time}</time><span><strong>{t(event.title)}</strong><small>{t(event.detail)}</small></span><span>{event.id === "approved" ? l("Gerente do Projeto", "Project Manager") : "Urso Harness"}</span><span className="mf-simple-status is-draft">{l("Recibo indisponível", "Receipt unavailable")}</span></div>)}
+      </section>
     </div>
   );
 }
