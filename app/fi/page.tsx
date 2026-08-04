@@ -13,7 +13,7 @@ import { CashFlowChart, DealAllocationChart } from "@/components/finance/finance
 import { FinanceEntryForm } from "@/components/finance/finance-entry-form";
 import { FinanceLedger } from "@/components/finance/finance-ledger";
 import { FinanceSubmitButton } from "@/components/finance/submit-button";
-import { createFinanceDeal } from "./actions";
+import { createFinanceDeal, updateDealCollectedRevenue } from "./actions";
 import { getFinanceSnapshot } from "@/lib/finance";
 
 const money = (cents: number) =>
@@ -30,11 +30,14 @@ const notices: Record<string, string> = {
   "entry-added": "Cash entry recorded and every total has been recalculated.",
   "entry-updated": "Transaction updated. Every finance total has been recalculated.",
   "entry-voided": "Transaction removed from finance totals. Its audit record is preserved.",
+  "revenue-updated": "Collected revenue updated. Cash flow and outstanding totals have been recalculated.",
 };
 const errors: Record<string, string> = {
   store: "The Urso finance store is not configured yet.",
   "deal-fields": "Complete the required deal fields with valid dollar amounts.",
   "deal-allocation": "Founder allocations cannot exceed the deal value.",
+  "deal-id": "That deal could not be found.",
+  "revenue-fields": "Enter a valid collected revenue amount.",
   "entry-fields": "Complete the required transaction fields with a valid amount and date.",
   "entry-founder": "Choose Han or Guga for this founder transaction.",
   "entry-deal": "Choose the deal associated with this client payment or refund.",
@@ -226,7 +229,32 @@ export default async function FinancePage({
                 <tr key={deal.id} className="transition-colors hover:bg-raise">
                   <td className="px-5 py-4"><p className="text-[13px] font-medium">{deal.clientName}</p><p className="mt-1 max-w-[280px] text-[10.5px] text-ink-dimmer">{deal.dealName}</p></td>
                   <td className="px-4 py-4 font-mono text-[12px] tabular-nums">{money(deal.contractedCents)}</td>
-                  <td className="px-4 py-4 font-mono text-[12px] tabular-nums text-[var(--color-good)]">{money(deal.collectedCents)}</td>
+                  <td className="px-4 py-4">
+                    <p className="font-mono text-[12px] tabular-nums text-[var(--color-good)]">{money(deal.collectedCents)}</p>
+                    <details className="group/revenue mt-1.5">
+                      <summary className="cursor-pointer list-none text-[10px] text-ink-dimmer underline decoration-edge-strong underline-offset-2 hover:text-ink [&::-webkit-details-marker]:hidden">
+                        Edit collected
+                      </summary>
+                      <form action={updateDealCollectedRevenue.bind(null, deal.id)} className="mt-2 flex min-w-[190px] items-end gap-2">
+                        <label className="block min-w-0 flex-1">
+                          <span className="sr-only">Collected revenue for {deal.clientName}</span>
+                          <input
+                            name="collected"
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            required
+                            defaultValue={(deal.collectedCents / 100).toFixed(2)}
+                            className="min-h-9 w-full border border-edge bg-raise px-2 font-mono text-[11px] text-ink focus:border-edge-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-orange/60"
+                          />
+                        </label>
+                        <input type="hidden" name="occurredOn" value={todayEt()} />
+                        <button type="submit" className="min-h-9 border border-orange bg-orange px-2.5 text-[10px] font-medium text-black hover:opacity-90">
+                          Save
+                        </button>
+                      </form>
+                    </details>
+                  </td>
                   <td className="px-4 py-4 font-mono text-[12px] tabular-nums text-orange">{money(deal.outstandingCents)}</td>
                   <td className="px-4 py-4 font-mono text-[10.5px] text-ink-dim">Han {money(deal.plannedHanDrawCents)}<br />Guga {money(deal.plannedGugaDrawCents)}</td>
                   <td className="px-4 py-4"><p className="font-mono text-[12px] font-medium tabular-nums">{money(deal.companyAllocationCents)}</p><p className="mt-1 text-[10px] text-ink-dimmer">{money(deal.businessSpentCents)} spent</p></td>

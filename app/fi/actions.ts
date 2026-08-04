@@ -72,6 +72,67 @@ export async function createFinanceDeal(formData: FormData) {
   redirect("/fi?notice=deal-added#deals");
 }
 
+const collectedRevenueSchema = z.object({
+  dealId: z.string().uuid(),
+  collectedCents: z.number().int().nonnegative().max(10_000_000_000),
+  occurredOn: z.string().regex(datePattern),
+});
+
+export async function updateDealCollectedRevenue(dealId: string, formData: FormData) {
+  const parsed = collectedRevenueSchema.safeParse({
+    dealId,
+    collectedCents: cents(formData.get("collected")),
+    occurredOn: text(formData.get("occurredOn")),
+  });
+  if (!parsed.success) redirect("/fi?error=revenue-fields#deals");
+
+  const { session, admin } = await financeContext();
+  const { data: deal, error: dealError } = await admin
+    .from("urso_finance_deals")
+    .select("id")
+    .eq("id", parsed.data.dealId)
+    .maybeSingle();
+  if (dealError || !deal) redirect("/fi?error=deal-id#deals");
+
+  const { data: entries, error: entriesError } = await admin
+    .from("urso_finance_entries")
+    .select("entry_type,amount_cents")
+    .eq("deal_id", parsed.data.dealId)
+    .in("entry_type", ["income", "refund"])
+    .is("voided_at", null);
+  if (entriesError) {
+    console.error("[finance] read collected revenue failed:", entriesError.message);
+    redirect("/fi?error=save#deals");
+  }
+
+  const currentCents = (entries ?? []).reduce(
+    (total, entry) => total + (entry.entry_type === "income" ? Number(entry.amount_cents) : -Number(entry.amount_cents)),
+    0,
+  );
+  const adjustmentCents = parsed.data.collectedCents - currentCents;
+  if (adjustmentCents !== 0) {
+    const { error } = await admin.from("urso_finance_entries").insert({
+      deal_id: parsed.data.dealId,
+      entry_type: adjustmentCents > 0 ? "income" : "refund",
+      amount_cents: Math.abs(adjustmentCents),
+      occurred_on: parsed.data.occurredOn,
+      category: "revenue adjustment",
+      counterparty: "",
+      founder: null,
+      notes: `Collected revenue adjusted from $${(currentCents / 100).toFixed(2)} to $${(parsed.data.collectedCents / 100).toFixed(2)}.`,
+      created_by: session.email,
+      updated_by: session.email,
+    });
+    if (error) {
+      console.error("[finance] update collected revenue failed:", error.message);
+      redirect("/fi?error=save#deals");
+    }
+  }
+
+  revalidatePath("/fi");
+  redirect("/fi?notice=revenue-updated#deals");
+}
+
 const entrySchema = z.object({
   entryType: z.enum(entryTypes),
   amountCents: z.number().int().positive().max(10_000_000_000),
