@@ -12,6 +12,7 @@ import {
   deriveMfManagerWorkspace,
   deriveMfTeamCommand,
 } from "../lib/mf-demo/manager-runtime.mjs";
+import { deriveMfWorkflowPresentation } from "../lib/mf-demo/workflow-runtime.mjs";
 import {
   consumeMfSessionUsage,
   createMfSessionRecord,
@@ -235,6 +236,77 @@ const workspaceAtStep8 = deriveMfManagerWorkspace(release);
 assert.equal(queueAtStep8.actionRequiredCount, 0);
 assert.equal(queueAtStep8.done.length, 4);
 assert(workspaceAtStep8.team.handoffStages.every((stage) => stage.state === "complete"));
+
+const coordinateWorkflow = mfScenarioManifest.workflow.catalog.find(
+  (workflow) => workflow.id === "coordinate-project-change",
+);
+const coordinateAtStep2 = deriveMfWorkflowPresentation(createMfHarnessSnapshot(2), coordinateWorkflow.id);
+assert.deepEqual(coordinateAtStep2.stages.map((stage) => stage.id), [
+  "connected_context",
+  "brain_boundary",
+  "agents_tools",
+  "human_gate",
+  "controlled_outputs",
+]);
+assert.equal(coordinateAtStep2.truth.currentRevision, "B");
+assert.equal(coordinateAtStep2.truth.revisionC, "unresolved");
+assert.equal(coordinateAtStep2.gate.state, "in_progress");
+assert.equal(coordinateAtStep2.gate.task.id, "approve-controlled-truth");
+assert.equal(coordinateAtStep2.gate.role.id, "project-manager");
+assert.deepEqual(
+  coordinateAtStep2.gate.evidenceSources.map((source) => source.id),
+  coordinateWorkflow.gate.evidenceSourceIds,
+);
+assert.equal(coordinateAtStep2.gate.evidenceCount, coordinateWorkflow.gate.evidenceSourceIds.length);
+assert.equal(coordinateAtStep2.gate.affectedRoleCount, coordinateWorkflow.gate.affectedRoleIds.length);
+assert.equal(coordinateAtStep2.outputsReady, false);
+assert.deepEqual(
+  coordinateAtStep2.sources.map((source) => source.technology.id),
+  ["slack", "cde", "revit", "primavera-p6", "teams"],
+);
+assert(coordinateAtStep2.sources.every((source) => source.authorizedRoleIds.includes(coordinateWorkflow.ownerRoleId)));
+
+const coordinateAtStep3 = deriveMfWorkflowPresentation(createMfHarnessSnapshot(3), coordinateWorkflow.id);
+assert.equal(coordinateAtStep3.gate.state, "complete");
+assert.equal(coordinateAtStep3.truth.currentRevision, "C");
+
+const coordinateAtStep5 = deriveMfWorkflowPresentation(createMfHarnessSnapshot(5), coordinateWorkflow.id);
+assert(coordinateAtStep5.roleDeliveries.every((delivery) =>
+  delivery.sources.every((source) => source.authorizedRoleIds.includes(delivery.role.id)),
+));
+assert(!coordinateAtStep5.roleDeliveries.find((delivery) => delivery.role.id === "electrical")
+  .sources.some((source) => source.id === "project-schedule"));
+for (const delivery of coordinateAtStep5.roleDeliveries) {
+  assert(delivery.role && delivery.objective && delivery.nextAction !== undefined && delivery.deliverable);
+  assert.equal(typeof delivery.openActionCount, "number");
+  assert.equal(typeof delivery.sourceCount, "number");
+}
+
+const coordinateAtStep8 = deriveMfWorkflowPresentation(release, coordinateWorkflow.id);
+assert.equal(coordinateAtStep8.outputsReady, true);
+assert.equal(coordinateAtStep8.gate.state, "complete");
+assert.deepEqual(coordinateAtStep8.outputs.map((output) => output.id), coordinateWorkflow.outputs.map((output) => output.id));
+assert(coordinateAtStep8.outputs.every((output) => output.ready && output.receipt.state === "available" && output.receipt.id));
+
+assert.throws(
+  () => deriveMfWorkflowPresentation(createMfHarnessSnapshot(0), "unknown-workflow"),
+  /unknown MF workflow: unknown-workflow/,
+);
+
+function deepFreeze(value) {
+  if (value && typeof value === "object" && !Object.isFrozen(value)) {
+    Object.freeze(value);
+    for (const child of Object.values(value)) deepFreeze(child);
+  }
+  return value;
+}
+
+const frozenSnapshot = deepFreeze(createMfHarnessSnapshot(2));
+const manifestBeforePresentation = JSON.stringify(mfScenarioManifest);
+const snapshotBeforePresentation = JSON.stringify(frozenSnapshot);
+assert.doesNotThrow(() => deriveMfWorkflowPresentation(frozenSnapshot, coordinateWorkflow.id));
+assert.equal(JSON.stringify(mfScenarioManifest), manifestBeforePresentation);
+assert.equal(JSON.stringify(frozenSnapshot), snapshotBeforePresentation);
 
 const rewoundManagerSnapshot = transitionMfHarness(createMfHarnessSnapshot(7), 2, "manager-rewind-2", "project-manager");
 const rewoundManagerQueue = deriveMfManagerQueue(rewoundManagerSnapshot);

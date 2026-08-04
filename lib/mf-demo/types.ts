@@ -85,6 +85,17 @@ export type {
   MfTeamCommand,
   MfTeamStatus,
 } from "./manager-runtime.mjs";
+export type {
+  MfWorkflowAgentPresentation,
+  MfWorkflowGatePresentation,
+  MfWorkflowOutputPresentation,
+  MfWorkflowPresentation,
+  MfWorkflowPresentationStage,
+  MfWorkflowReceiptPresentation,
+  MfWorkflowRoleDelivery,
+  MfWorkflowSourcePresentation,
+  MfWorkflowStageId,
+} from "./workflow-runtime.mjs";
 import type { MfHarnessSnapshot } from "./harness-runtime.mjs";
 
 export type MfDemoSessionCredentials = { sessionId: string; token: string };
