@@ -383,8 +383,8 @@ export default function ThreadScreen(): React.ReactElement {
             hitSlop={space.sm}
             style={({ pressed }) => [styles.back, pressed && styles.backPressed]}
           >
-            <Feather name="chevron-left" size={20} color={color.chromeMuted} />
-            <Text style={styles.backText}>Back</Text>
+            <Feather name="chevron-left" size={20} color={color.brand} />
+            <Text style={styles.backText}>Inbox</Text>
           </Pressable>
           {/* The conversation's call affordance, where the web puts it. The
               peer phone is the route param, so this works before the threads
@@ -403,7 +403,7 @@ export default function ThreadScreen(): React.ReactElement {
           >
             <Feather name="phone-call" size={15} color={color.brand} />
             <Text style={styles.callChipText} numberOfLines={1}>
-              {bridgeRun.isPending ? "Starting the call…" : "Call via business line"}
+              {bridgeRun.isPending ? "Starting…" : "Call"}
             </Text>
           </Pressable>
         </View>
@@ -547,10 +547,12 @@ const styles = StyleSheet.create({
   },
 
   chrome: {
-    backgroundColor: color.chrome,
+    backgroundColor: color.surface,
     paddingHorizontal: space.lg,
     paddingBottom: space.md,
     gap: space.xs,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: color.line,
   },
   chromeRow: {
     flexDirection: "row",
@@ -565,7 +567,7 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
   },
   backPressed: { opacity: 0.6 },
-  backText: { ...type.body, color: color.chromeMuted },
+  backText: { ...type.body, color: color.brand },
   // On the black chrome: raised fill, hairline, orange ink — the accent marks
   // it as the one action in the bar without becoming a second brand colour.
   callChip: {
@@ -577,10 +579,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.md,
     borderRadius: radius.md,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: color.chromeLine,
-    backgroundColor: color.chromeRaise,
+    borderColor: color.lineStrong,
+    backgroundColor: color.surface,
   },
-  callChipText: { ...type.body, color: color.brand, flexShrink: 1 },
+  callChipText: { ...type.body, color: color.ink, flexShrink: 1 },
   callBand: {
     backgroundColor: color.bg,
     paddingHorizontal: space.lg,
@@ -600,8 +602,8 @@ const styles = StyleSheet.create({
     gap: space.xs,
     maxWidth: "100%",
   },
-  chromeName: { ...type.display, color: color.chromeInk, flexShrink: 1 },
-  chromeMeta: { ...type.micro, color: color.chromeMuted },
+  chromeName: { ...type.titleLg, color: color.ink, flexShrink: 1 },
+  chromeMeta: { ...type.small, color: color.muted },
 
   streamBody: { padding: space.lg, gap: space.sm },
   empty: { ...type.small, color: color.muted, textAlign: "center", marginTop: space.xl },

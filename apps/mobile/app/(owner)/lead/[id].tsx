@@ -368,6 +368,7 @@ export default function LeadScreen(): React.ReactElement {
   const [resendGood, setResendGood] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [editing, setEditing] = useState(false);
+  const [outcomesOpen, setOutcomesOpen] = useState(false);
   const [visitOpen, setVisitOpen] = useState(false);
   const [visitValue, setVisitValue] = useState("");
   const [visitNotice, setVisitNotice] = useState<string | null>(null);
@@ -501,14 +502,24 @@ export default function LeadScreen(): React.ReactElement {
           </Pressable>
         ) : null}
       </View>
-      <Text style={styles.chromeName} numberOfLines={1}>
-        {leadTitle(lead)}
-      </Text>
       {lead ? (
-        <Text style={[styles.chromeMeta, lead.type === "hot" && styles.chromeMetaHot]}>
-          {lead.type === "hot" ? "Hot" : "Cold"} · {STATUS_LABEL[lead.status]}
-        </Text>
-      ) : null}
+        <>
+          <View style={styles.titleLine}>
+            <Text style={styles.chromeName} numberOfLines={1}>{leadTitle(lead)}</Text>
+            <View style={styles.headerChips}>
+              <View style={styles.headerChip}>
+                <Text style={styles.headerChipText}>{lead.type.toUpperCase()}</Text>
+              </View>
+              <View style={styles.headerChip}>
+                <Text style={styles.headerChipText}>{STATUS_LABEL[lead.status].toUpperCase()}</Text>
+              </View>
+            </View>
+          </View>
+          <Text style={styles.chromeMeta}>
+            <Text style={styles.chromePhone}>{fmtPhone(lead.phone)}</Text> · {SOURCE_LABEL[lead.source]}
+          </Text>
+        </>
+      ) : <Text style={styles.chromeName}>{leadTitle(lead)}</Text>}
     </View>
   );
 
@@ -554,6 +565,11 @@ export default function LeadScreen(): React.ReactElement {
     lead.snoozed_until !== null && new Date(lead.snoozed_until).getTime() > Date.now()
       ? lead.snoozed_until
       : null;
+  const urgent = lead.type === "cold" && lead.status === "new";
+  const waitingHours = Math.max(
+    1,
+    Math.floor((Date.now() - new Date(lead.created_at).getTime()) / 3_600_000),
+  );
 
   const applyStatus = async (status: LeadStatus, lostReason?: string) => {
     const r = await setStatusRun.mutateAsync({ status, lostReason });
@@ -663,7 +679,7 @@ export default function LeadScreen(): React.ReactElement {
       router.push({ pathname: "/(owner)/estimates" });
       return;
     }
-    router.push({ pathname: "/(owner)/estimate/build", params: { id: estimateId } });
+    router.push({ pathname: "/(owner)/estimate/new", params: { id: estimateId } });
   };
 
   // Not one precondition is tested here. The action owns all of them — no
@@ -712,6 +728,203 @@ export default function LeadScreen(): React.ReactElement {
       >
         <Notice text={notice} />
         <Notice text={actionNotice} />
+
+        <View style={styles.quickRow}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Call ${leadTitle(lead)} on the business line`}
+            disabled={phone === null || bridgeRun.isPending}
+            onPress={() => {
+              if (phone !== null) void startBridge(phone);
+            }}
+            style={({ pressed }) => [
+              styles.quick,
+              phone === null && styles.disabled,
+              pressed && styles.pressed,
+            ]}
+          >
+            <Feather name="phone" size={21} color={color.brand} />
+            <Text style={styles.quickText}>Call</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Text ${leadTitle(lead)}`}
+            disabled={phone === null}
+            onPress={() => {
+              if (phone !== null) {
+                router.push({ pathname: "/(owner)/thread/[phone]", params: { phone } });
+              }
+            }}
+            style={({ pressed }) => [
+              styles.quick,
+              phone === null && styles.disabled,
+              pressed && styles.pressed,
+            ]}
+          >
+            <Feather name="message-square" size={21} color={color.brand} />
+            <Text style={styles.quickText}>Text</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Directions"
+            disabled={lead.address === null}
+            onPress={() => {
+              if (lead.address !== null) {
+                Linking.openURL(
+                  `https://maps.apple.com/?q=${encodeURIComponent(lead.address)}`,
+                ).catch(() => setActionNotice("This phone couldn't open Maps."));
+              }
+            }}
+            style={({ pressed }) => [
+              styles.quick,
+              lead.address === null && styles.disabled,
+              pressed && styles.pressed,
+            ]}
+          >
+            <Feather name="navigation" size={21} color={color.brand} />
+            <Text style={styles.quickText}>Directions</Text>
+          </Pressable>
+        </View>
+
+        {urgent ? <Text style={styles.urgentLabel}>Call this now</Text> : null}
+        <View style={[styles.card, styles.nextCard]}>
+          <Text style={styles.cardTitle}>Next step</Text>
+          <View style={styles.nextLine}>
+            {urgent ? (
+              <View style={styles.waitChip}>
+                <Text style={styles.waitChipText}>{waitingHours}h waiting</Text>
+              </View>
+            ) : null}
+            <Text style={styles.nextCopy}>
+              {lead.status === "new"
+                ? "They asked for a quote — call while it’s warm."
+                : lead.status === "appointment_set"
+                  ? "Confirm the upcoming visit with the customer."
+                  : lead.status === "confirmed"
+                    ? "The visit is confirmed and ready to work."
+                    : "Keep this lead moving toward a booked job."}
+            </Text>
+          </View>
+          {phone !== null ? (
+            <Pressable
+              accessibilityRole="button"
+              disabled={bridgeRun.isPending}
+              onPress={() => void startBridge(phone)}
+              style={({ pressed }) => [
+                styles.primary,
+                styles.nextPrimary,
+                bridgeRun.isPending && styles.disabled,
+                pressed && styles.primaryPressed,
+              ]}
+            >
+              <Feather name="phone" size={18} color={color.chromeInk} />
+              <Text style={styles.primaryText}>
+                {bridgeRun.isPending ? "Starting the call…" : "Call now"}
+              </Text>
+            </Pressable>
+          ) : null}
+          <Notice text={bridgeNotice} />
+          <GoodNotice text={bridgeGood} />
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => setOutcomesOpen((value) => !value)}
+            style={({ pressed }) => [styles.outcomeToggle, pressed && styles.backPressed]}
+          >
+            <Text style={styles.outcomeToggleText}>
+              {outcomesOpen ? "Hide call outcomes" : "Already called? Log the outcome"}
+            </Text>
+          </Pressable>
+          {outcomesOpen ? (
+            <View style={styles.outcomeGrid}>
+              {OUTCOMES.map(({ outcome, label }) => (
+                <Pressable
+                  key={outcome}
+                  accessibilityRole="button"
+                  disabled={logCallRun.isPending}
+                  onPress={() => logCall(outcome)}
+                  style={({ pressed }) => [
+                    styles.button,
+                    styles.outcomeButton,
+                    logCallRun.isPending && styles.disabled,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <Text style={styles.buttonText}>{label}</Text>
+                </Pressable>
+              ))}
+              <Notice text={callNotice} />
+            </View>
+          ) : null}
+        </View>
+
+        {/* The lead → estimate → job → invoice path begins here. */}
+        <Section label="Estimates">
+          <Notice text={estimatesNotice} />
+          <View style={styles.card}>
+            {leadEstimates.length > 0 ? (
+              leadEstimates.map((estimate, index) => (
+                <Pressable
+                  key={estimate.id}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Open estimate ${estimate.number}`}
+                  onPress={() =>
+                    router.push({ pathname: "/(owner)/estimate/[id]", params: { id: estimate.id } })
+                  }
+                  style={({ pressed }) => [
+                    styles.pad,
+                    styles.linkedRow,
+                    index > 0 && styles.divided,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <View style={styles.linkedRowBody}>
+                    <View style={styles.rowBetween}>
+                      <Text style={styles.body}>{estimate.number}</Text>
+                      <Text style={styles.money}>{fmtMoney(estimate.total_cents)}</Text>
+                    </View>
+                    <Text style={styles.fieldLabel}>{ESTIMATE_STATUS_LABEL[estimate.status]}</Text>
+                  </View>
+                  <Feather name="chevron-right" size={18} color={color.faint} />
+                </Pressable>
+              ))
+            ) : (
+              <View style={styles.pad}>
+                <Text style={styles.muted}>
+                  {estimatesQuery.isPending
+                    ? "Looking for estimates on this lead…"
+                    : estimatesNotice !== null
+                      ? "Couldn't load this lead's estimates."
+                      : "No estimates yet for this lead."}
+                </Text>
+              </View>
+            )}
+            <View style={[styles.pad, styles.divided]}>
+              <Notice text={estimateNotice} />
+              <GoodNotice text={estimateGood} />
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Create estimate"
+                disabled={buildEstimateRun.isPending}
+                onPress={() => void buildEstimate()}
+                style={({ pressed }) => [
+                  styles.primary,
+                  buildEstimateRun.isPending && styles.disabled,
+                  pressed && styles.primaryPressed,
+                ]}
+              >
+                <Feather name="file-text" size={17} color={color.chromeInk} />
+                <Text style={styles.primaryText}>
+                  {buildEstimateRun.isPending ? "Starting…" : "Create estimate"}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </Section>
+
+        <View style={styles.moreOptions}>
+          <Text style={styles.cardTitle}>More options</Text>
+          <Feather name="chevron-down" size={18} color={color.muted} />
+        </View>
 
         <Section label="Contact">
           <View style={styles.card}>
@@ -989,78 +1202,6 @@ export default function LeadScreen(): React.ReactElement {
           </View>
         </Section>
 
-        {/* The lead → estimate → job → invoice path begins here. */}
-        <Section label="Estimates">
-          <Notice text={estimatesNotice} />
-          <View style={styles.card}>
-            {leadEstimates.length > 0 ? (
-              leadEstimates.map((estimate, index) => (
-                <Pressable
-                  key={estimate.id}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Open estimate ${estimate.number}`}
-                  onPress={() =>
-                    router.push({ pathname: "/(owner)/estimate/[id]", params: { id: estimate.id } })
-                  }
-                  style={({ pressed }) => [
-                    styles.pad,
-                    styles.linkedRow,
-                    index > 0 && styles.divided,
-                    pressed && styles.pressed,
-                  ]}
-                >
-                  <View style={styles.linkedRowBody}>
-                    <View style={styles.rowBetween}>
-                      <Text style={styles.body}>{estimate.number}</Text>
-                      <Text style={styles.money}>{fmtMoney(estimate.total_cents)}</Text>
-                    </View>
-                    <Text style={styles.fieldLabel}>
-                      {ESTIMATE_STATUS_LABEL[estimate.status]}
-                    </Text>
-                  </View>
-                  <Feather name="chevron-right" size={18} color={color.faint} />
-                </Pressable>
-              ))
-            ) : (
-              <View style={styles.pad}>
-                {/* "No quotes" is a CLAIM, and the quote book is a separate
-                    read that has not necessarily landed — asserting it while
-                    the read is in flight told the reader there was nothing
-                    here right above the button that would create a duplicate.
-                    An unread book says so; a failed one leaves the sentence to
-                    the notice below. */}
-                <Text style={styles.muted}>
-                  {estimatesQuery.isPending
-                    ? "Looking for quotes on this lead…"
-                    : estimatesNotice !== null
-                      ? "Couldn't load this lead's quotes."
-                      : "No quotes on this lead yet."}
-                </Text>
-              </View>
-            )}
-
-            <View style={[styles.pad, styles.divided]}>
-              <Notice text={estimateNotice} />
-              <GoodNotice text={estimateGood} />
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Build an estimate"
-                disabled={buildEstimateRun.isPending}
-                onPress={() => void buildEstimate()}
-                style={({ pressed }) => [
-                  styles.primary,
-                  buildEstimateRun.isPending && styles.disabled,
-                  pressed && styles.primaryPressed,
-                ]}
-              >
-                <Text style={styles.primaryText}>
-                  {buildEstimateRun.isPending ? "Starting…" : "Build an estimate"}
-                </Text>
-              </Pressable>
-            </View>
-          </View>
-        </Section>
-
         <Section label="Snooze">
           <View style={styles.card}>
             <View style={styles.pad}>
@@ -1247,7 +1388,7 @@ const styles = StyleSheet.create({
   },
 
   chrome: {
-    backgroundColor: color.chrome,
+    backgroundColor: color.bg,
     paddingHorizontal: space.lg,
     paddingBottom: space.md,
     gap: space.xs,
@@ -1259,10 +1400,21 @@ const styles = StyleSheet.create({
   },
   back: { minHeight: HIT, justifyContent: "center" },
   backPressed: { opacity: 0.6 },
-  backText: { ...type.body, color: color.chromeMuted },
+  backText: { ...type.body, color: color.muted },
   editText: { ...type.body, color: color.brand },
-  chromeName: { ...type.display, color: color.chromeInk },
-  chromeMeta: { ...type.micro, color: color.chromeMuted },
+  titleLine: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 8 },
+  chromeName: { ...type.chromeTitle, color: color.ink, flexShrink: 1 },
+  headerChips: { flexDirection: "row", alignItems: "center", gap: 7 },
+  headerChip: {
+    minHeight: 25,
+    justifyContent: "center",
+    borderRadius: radius.sm,
+    backgroundColor: color.hover,
+    paddingHorizontal: 9,
+  },
+  headerChipText: { ...type.micro, color: color.muted },
+  chromeMeta: { ...type.body, color: color.muted },
+  chromePhone: { color: color.brand },
   chromeMetaHot: { color: color.brand },
 
   scrollBody: { padding: space.lg, gap: space.lg },
@@ -1270,6 +1422,48 @@ const styles = StyleSheet.create({
 
   section: { gap: space.sm },
   sectionLabel: { ...type.micro, color: color.faint },
+
+  quickRow: { flexDirection: "row", gap: 10 },
+  quick: {
+    flex: 1,
+    minHeight: 98,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    borderRadius: radius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.line,
+    backgroundColor: color.surface,
+  },
+  quickText: { ...type.body, fontFamily: font.bodySemi, color: color.brand },
+  urgentLabel: { ...type.micro, color: color.danger, marginBottom: -8 },
+  nextCard: { padding: space.lg, gap: 14 },
+  cardTitle: { ...type.title, color: color.ink },
+  nextLine: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 10 },
+  waitChip: {
+    borderRadius: radius.sm,
+    backgroundColor: color.dangerBg,
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+  },
+  waitChipText: { ...type.micro, color: color.danger },
+  nextCopy: { ...type.body, color: color.muted, flex: 1, minWidth: 180 },
+  nextPrimary: { flexDirection: "row", gap: 8, minHeight: 54 },
+  outcomeToggle: { minHeight: HIT, alignItems: "center", justifyContent: "center" },
+  outcomeToggleText: { ...type.body, fontFamily: font.bodySemi, color: color.brand },
+  outcomeGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  outcomeButton: { flexBasis: "47%", flexGrow: 1 },
+  moreOptions: {
+    minHeight: 78,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderRadius: radius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.line,
+    backgroundColor: color.surface,
+    paddingHorizontal: space.lg,
+  },
 
   card: {
     backgroundColor: color.surface,

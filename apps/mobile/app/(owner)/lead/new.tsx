@@ -135,9 +135,6 @@ export default function NewLead(): React.ReactElement {
 
   return (
     <View style={styles.screen}>
-      {/* Cancel and Save live in the black chrome, outside the scroller: the
-          keyboard rises from the bottom, so the top is the one place it can
-          never cover the commit control. */}
       <View style={[styles.chrome, { paddingTop: insets.top + space.md }]}>
         <Pressable
           accessibilityRole="button"
@@ -145,20 +142,9 @@ export default function NewLead(): React.ReactElement {
           onPress={() => router.back()}
           hitSlop={8}
         >
-          <Text style={styles.chromeCancel}>Cancel</Text>
+          <Text style={styles.chromeCancel}>‹ Leads</Text>
         </Pressable>
-        <Text style={styles.chromeTitle}>New lead</Text>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Save lead"
-          disabled={!ready || busy}
-          onPress={() => void onSave()}
-          hitSlop={8}
-        >
-          <Text style={[styles.chromeSave, (!ready || busy) && styles.chromeSaveOff]}>
-            {busy ? "Saving…" : "Save"}
-          </Text>
-        </Pressable>
+        <Text style={styles.chromeTitle}>New lead<Text style={styles.stop}>.</Text></Text>
       </View>
 
       <ScrollView
@@ -278,6 +264,19 @@ export default function NewLead(): React.ReactElement {
             style={styles.input}
           />
         </Field>
+
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Save lead"
+          disabled={!ready || busy}
+          onPress={() => void onSave()}
+          style={[styles.primary, (!ready || busy) && styles.primaryOff]}
+        >
+          <Text style={styles.primaryText}>{busy ? "Saving…" : "Save lead"}</Text>
+        </Pressable>
+        <Pressable accessibilityRole="button" onPress={() => router.back()} style={styles.cancel}>
+          <Text style={styles.cancelText}>Cancel</Text>
+        </Pressable>
       </ScrollView>
     </View>
   );
@@ -286,18 +285,23 @@ export default function NewLead(): React.ReactElement {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: color.bg },
   chrome: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: color.chrome,
+    backgroundColor: color.bg,
     paddingHorizontal: space.lg,
     paddingBottom: space.md,
+    gap: 8,
   },
-  chromeTitle: { ...type.small, color: color.chromeInk, fontFamily: font.bodyMedium },
-  chromeCancel: { ...type.small, color: color.chromeMuted },
-  chromeSave: { ...type.small, color: color.brand, fontFamily: font.bodyMedium },
-  chromeSaveOff: { color: color.faint },
-  body: { padding: space.lg, gap: space.md },
+  chromeTitle: { ...type.chromeTitle, color: color.ink },
+  chromeCancel: { ...type.body, color: color.muted },
+  stop: { color: color.brand },
+  body: {
+    marginHorizontal: space.lg,
+    padding: space.lg,
+    gap: space.md,
+    backgroundColor: color.surface,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.line,
+    borderRadius: radius.lg,
+  },
   field: { gap: space.xs },
   label: { ...type.micro, color: color.muted },
   input: {
@@ -339,5 +343,24 @@ const styles = StyleSheet.create({
   chipText: { ...type.small, color: color.muted },
   chipTextOn: { color: color.brand, fontFamily: font.bodyMedium },
   optional: { ...type.small, color: color.faint, marginTop: space.sm },
+  primary: {
+    minHeight: 54,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: radius.md,
+    backgroundColor: color.brandFill,
+    marginTop: 8,
+  },
+  primaryOff: { backgroundColor: color.brandEdgeSoft },
+  primaryText: { ...type.title, color: color.surface },
+  cancel: {
+    minHeight: 54,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.lineStrong,
+  },
+  cancelText: { ...type.title, color: color.ink },
   pressed: { opacity: 0.72 },
 });

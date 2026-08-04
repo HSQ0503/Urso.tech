@@ -6,8 +6,9 @@ import { canesConfigured, canesDb } from "@/lib/canes/supabase";
 //
 // IMPORTED then re-exported, not `export type {..} from`: the latter does not
 // bring the names into local scope, and this module uses both internally.
-import type { Agenda, Overview } from "@urso/types";
-export type { Agenda, Overview };
+import type { Agenda, Overview, TodayFigure, TodayReport } from "@urso/types";
+export type { Agenda, Overview, TodayFigure, TodayReport };
+import { fmtEt } from "@urso/types";
 import {
   DEMO_CALLS,
   DEMO_CONTACTS,
@@ -535,5 +536,96 @@ export async function getOverview(): Promise<Overview> {
       kind: e.kind,
       detail: e.detail,
     })),
+  };
+}
+
+// ── Today's Report ───────────────────────────────────────────────────────────
+//
+// The six ET-calendar-day figures behind the mobile Dashboard's report grid.
+//
+// This is deliberately NOT folded into getOverview. Overview's money is rolling
+// 7-day, and the whole hazard of a "today" card is that it gets fed a week's
+// number by someone reaching for the nearest available field. Two windows, two
+// functions, and the names say which is which.
+//
+// DAY MATH: the day key is the ET calendar date, formatted en-CA so it comes
+// back as YYYY-MM-DD and sorts/compares as a plain string. Tomorrow is derived
+// by UTC calendar arithmetic on those parts, NOT by adding 86_400_000 to now —
+// across a DST boundary that is 23 or 25 hours, which either repeats or skips a
+// day. This project has already lost a cron cycle to a timezone bug; the day a
+// figure belongs to is not a place to be approximately right.
+
+type ReportJob = Pick<Job, "status" | "total_cents" | "scheduled_at" | "created_at">;
+
+async function readReportJobs(): Promise<ReportJob[]> {
+  if (isDemo()) return DEMO_JOBS;
+  const { data } = await canesDb()
+    .from("jobs")
+    .select("status, total_cents, scheduled_at, created_at")
+    .limit(500);
+  return (data ?? []) as ReportJob[];
+}
+
+type ReportEstimate = Pick<Estimate, "status" | "total_cents" | "created_at">;
+
+async function readReportEstimates(): Promise<ReportEstimate[]> {
+  if (isDemo()) return DEMO_ESTIMATES;
+  const { data } = await canesDb()
+    .from("estimates")
+    .select("status, total_cents, created_at")
+    .limit(500);
+  return (data ?? []) as ReportEstimate[];
+}
+
+const ET_DAY = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "America/New_York",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+const etDayOf = (iso: string): string => ET_DAY.format(new Date(iso));
+
+function sumFigure<T extends { total_cents: number }>(rows: T[]): TodayFigure {
+  return { cents: rows.reduce((total, row) => total + row.total_cents, 0), count: rows.length };
+}
+
+export async function getTodayReport(): Promise<TodayReport> {
+  const nowIso = new Date().toISOString();
+  const today = ET_DAY.format(new Date());
+  const [y, m, d] = today.split("-").map(Number);
+  const tomorrow = ET_DAY.format(new Date(Date.UTC(y, m - 1, d + 1, 12)));
+
+  // 48 hours back covers today under any offset without pulling the whole
+  // ledger; the ET day key below is what actually decides membership.
+  const paymentsSince = new Date(Date.now() - 2 * 86_400_000).toISOString();
+  const [jobs, estimates, payments, leads] = await Promise.all([
+    readReportJobs(),
+    readReportEstimates(),
+    readPaymentsSince(paymentsSince),
+    listLeads(),
+  ]);
+
+  // A canceled job is not work and not money — it must not inflate either the
+  // day's book or tomorrow's.
+  const live = jobs.filter((job) => job.status !== "canceled");
+
+  return {
+    dayLabel: fmtEt(nowIso, { weekday: "long", month: "long", day: "numeric" }),
+    jobsToday: sumFigure(
+      live.filter((job) => job.scheduled_at !== null && etDayOf(job.scheduled_at) === today),
+    ),
+    earnedTodayCents: payments
+      .filter((p) => p.status === "completed" && etDayOf(p.created_at) === today)
+      .reduce((total, p) => total + p.amount_cents, 0),
+    // Jobs SOLD today, whenever they are scheduled — the counterpart to
+    // jobsToday, which is jobs WORKED today. Sebastian reads these as two
+    // different questions and they are rarely the same number.
+    bookedToday: sumFigure(live.filter((job) => etDayOf(job.created_at) === today)),
+    tomorrowJobs: sumFigure(
+      live.filter((job) => job.scheduled_at !== null && etDayOf(job.scheduled_at) === tomorrow),
+    ),
+    estimatesToday: sumFigure(estimates.filter((e) => etDayOf(e.created_at) === today)),
+    leadsTodayCount: leads.filter((lead) => etDayOf(lead.created_at) === today).length,
   };
 }

@@ -21,6 +21,7 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Feather } from "@expo/vector-icons";
 import { fmtEt, fmtMoney, fmtPhone, type CustomerSummary } from "@urso/types";
 import { useCustomers } from "@/queries";
 import { noticeFrom, usePullToRefresh, useRefetchOnFocus } from "@/query";
@@ -41,6 +42,7 @@ function matches(customer: CustomerSummary, query: string): boolean {
   const text = query.trim().toLowerCase();
   if (!text) return true;
   if (customer.name && customer.name.toLowerCase().includes(text)) return true;
+  if (customer.primary_address?.toLowerCase().includes(text)) return true;
   const digits = text.replace(/\D/g, "");
   return digits.length > 0 && (customer.phone ?? "").includes(digits);
 }
@@ -72,17 +74,8 @@ function CustomerRow({
           <Text style={styles.name} numberOfLines={1}>
             {name}
           </Text>
-          {/* A customer who has never been billed shows nothing here. "$0.00"
-              reads as a figure that was calculated, and it put a column of zeroes
-              down the list where the eye is looking for real revenue. */}
-          {customer.lifetime_cents > 0 ? (
-            <Text style={styles.lifetime}>{fmtMoney(customer.lifetime_cents)}</Text>
-          ) : null}
+          <Text style={styles.lifetime}>{fmtMoney(customer.lifetime_cents)}</Text>
         </View>
-
-        {customer.phone !== null ? (
-          <Text style={styles.phone}>{fmtPhone(customer.phone)}</Text>
-        ) : null}
 
         {customer.primary_address !== null ? (
           <Text style={styles.address} numberOfLines={1}>
@@ -91,12 +84,10 @@ function CustomerRow({
         ) : null}
 
         <View style={styles.rowFoot}>
-          <Text style={styles.meta}>
-            {customer.jobs_count} {customer.jobs_count === 1 ? "job" : "jobs"}
-          </Text>
+          {customer.phone !== null ? <Text style={styles.meta}>{fmtPhone(customer.phone)}</Text> : null}
           {customer.last_job_at !== null ? (
             <Text style={styles.meta}>
-              Last {fmtEt(customer.last_job_at, { month: "short", day: "numeric", year: "numeric" })}
+              · Last job {fmtEt(customer.last_job_at, { month: "short", day: "numeric", year: "numeric" })}
             </Text>
           ) : null}
           {owes ? (
@@ -144,8 +135,7 @@ export default function CustomersScreen(): React.ReactElement {
     <View style={styles.screen}>
       <ChromeBar
         title="Customers"
-        stat={String(visible.length)}
-        statLabel={searching ? "Matches" : "Total"}
+        sub={searching ? `${visible.length} matches` : `${visible.length} customers`}
         action="New"
         /* A referral he already knows is a customer from the first word.
            Making him invent a lead to reach the record is paperwork. */
@@ -156,7 +146,7 @@ export default function CustomersScreen(): React.ReactElement {
         <TextInput
           value={query}
           onChangeText={setQuery}
-          placeholder="Search by name or phone"
+          placeholder="Search name, phone, or address"
           placeholderTextColor={color.faint}
           autoCapitalize="none"
           autoCorrect={false}
@@ -191,11 +181,24 @@ export default function CustomersScreen(): React.ReactElement {
             />
           }
           ListHeaderComponent={
-            notice !== null ? (
-              <View style={styles.notice}>
-                <Text style={styles.noticeText}>{notice}</Text>
-              </View>
-            ) : null
+            <View>
+              {notice !== null ? (
+                <View style={styles.notice}>
+                  <Text style={styles.noticeText}>{notice}</Text>
+                </View>
+              ) : null}
+              {!searching ? (
+                <View style={styles.recurringCard}>
+                  <View style={styles.recurringTitleRow}>
+                    <Feather name="repeat" size={16} color={color.brand} />
+                    <Text style={styles.recurringTitle}>Recurring plans</Text>
+                  </View>
+                  <Text style={styles.recurringCopy}>
+                    None yet — set a job to repeat from the job editor.
+                  </Text>
+                </View>
+              ) : null}
+            </View>
           }
           ListEmptyComponent={
             customers !== null ? (
@@ -242,12 +245,24 @@ const styles = StyleSheet.create({
   name: { ...type.title, color: color.ink, flexShrink: 1 },
   lifetime: { ...type.figureSm, color: color.ink, fontVariant: ["tabular-nums"] },
 
-  phone: { ...type.smaller, color: color.muted, marginTop: 4 },
   address: { ...type.smaller, color: color.muted, marginTop: 2 },
 
   rowFoot: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 9, marginTop: 6 },
   meta: { ...type.ruleSm, color: color.faint },
   owing: { ...type.ruleSm, fontFamily: font.monoMedium, color: color.danger },
+
+  recurringCard: {
+    backgroundColor: color.surface,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.line,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+    marginBottom: 14,
+  },
+  recurringTitleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  recurringTitle: { ...type.title, color: color.ink },
+  recurringCopy: { ...type.small, color: color.faint, marginTop: 6 },
 
   notice: {
     backgroundColor: color.dangerBg,

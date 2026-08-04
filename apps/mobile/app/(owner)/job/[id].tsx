@@ -37,9 +37,10 @@ import {
   INVOICE_STATUS_LABEL,
   JOB_STATUS_LABEL,
   PAYMENT_METHOD_LABEL,
+  RECURRENCE_LABEL,
+  type JobRecurrence,
 } from "@urso/types";
-import { jobActions, type JobDetailsPatch } from "@/api";
-import { Avatar } from "@/components/avatar";
+import { callActions, jobActions, type JobDetailsPatch } from "@/api";
 import { NavigateButton } from "@/components/navigate";
 import { Notice } from "@/components/notice";
 import { isCompleteWhen, SlotPicker } from "@/components/slot-picker";
@@ -156,6 +157,19 @@ export default function JobScreen(): React.ReactElement {
     (fields: JobDetailsPatch) => jobActions.updateDetails(id, fields),
     { invalidates: everywhere },
   );
+  const setRecurrence = useAction(
+    (recurrence: JobRecurrence) => jobActions.setRecurrence(id, recurrence),
+    { invalidates: everywhere },
+  );
+  const addChecklistItem = useAction(
+    (input: { name: string; required: boolean }) =>
+      jobActions.addChecklistItem(id, input.name, input.required),
+    { invalidates: everywhere },
+  );
+  const removeChecklistItem = useAction(
+    (itemId: string) => jobActions.removeChecklistItem(id, itemId),
+    { invalidates: everywhere },
+  );
   const cancel = useAction((reason: string | undefined) =>
     jobActions.setStatus(id, "canceled", reason), {
     invalidates: [keys.jobs.one(id), ["owner", "schedule"], keys.schedule.unscheduled(), keys.agenda(), keys.overview()],
@@ -163,14 +177,20 @@ export default function JobScreen(): React.ReactElement {
   const del = useAction<void, Record<string, never>>(() => jobActions.delete(id), {
     invalidates: everywhere,
   });
+  const bridge = useAction((phone: string) => callActions.bridge(phone));
 
   // One refusal surface per section, so the sentence lands next to the tap
   // that earned it instead of at the top of a long scroll.
   const [customerNotice, setCustomerNotice] = useState<string | null>(null);
+  const [customerGood, setCustomerGood] = useState<string | null>(null);
   const [scheduleNotice, setScheduleNotice] = useState<string | null>(null);
   const [goodNotice, setGoodNotice] = useState<string | null>(null);
   const [moneyNotice, setMoneyNotice] = useState<string | null>(null);
   const [siteNotice, setSiteNotice] = useState<string | null>(null);
+  const [recurrenceNotice, setRecurrenceNotice] = useState<string | null>(null);
+  const [checklistNotice, setChecklistNotice] = useState<string | null>(null);
+  const [newChecklistStep, setNewChecklistStep] = useState("");
+  const [newChecklistRequired, setNewChecklistRequired] = useState(true);
   const [dangerNotice, setDangerNotice] = useState<string | null>(null);
 
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -202,13 +222,12 @@ export default function JobScreen(): React.ReactElement {
         hitSlop={space.sm}
         style={({ pressed }) => [styles.back, pressed && styles.backPressed]}
       >
-        <Feather name="chevron-left" size={20} color={color.chromeMuted} />
-        <Text style={styles.backText}>Back</Text>
+        <Feather name="chevron-left" size={20} color={color.muted} />
+        <Text style={styles.backText}>Schedule</Text>
       </Pressable>
       <Text style={styles.chromeName} numberOfLines={1}>
-        {job?.job_name ?? "Job"}
+        Job editor
       </Text>
-      {job ? <Text style={styles.chromeMeta}>{JOB_STATUS_LABEL[job.status]}</Text> : null}
     </View>
   );
 
@@ -255,6 +274,18 @@ export default function JobScreen(): React.ReactElement {
   const goCustomer = () => {
     if (job.contact_id === null) return;
     router.push({ pathname: "/(owner)/customer/[id]", params: { id: job.contact_id } });
+  };
+
+  const callCustomer = async () => {
+    if (job.customer_phone === null) return;
+    setCustomerNotice(null);
+    setCustomerGood(null);
+    const result = await bridge.mutateAsync(job.customer_phone);
+    if (result.ok) {
+      setCustomerGood("Your phone should ring in a moment — answer to connect.");
+    } else {
+      setCustomerNotice(result.notice);
+    }
   };
 
   const openSlot = () => {
@@ -346,6 +377,31 @@ export default function JobScreen(): React.ReactElement {
     }
   };
 
+  const onSetRecurrence = async (recurrence: JobRecurrence) => {
+    setRecurrenceNotice(null);
+    const result = await setRecurrence.mutateAsync(recurrence);
+    if (!result.ok) setRecurrenceNotice(result.notice);
+  };
+
+  const onAddChecklistItem = async () => {
+    const name = newChecklistStep.trim();
+    if (!name) return;
+    setChecklistNotice(null);
+    const result = await addChecklistItem.mutateAsync({ name, required: newChecklistRequired });
+    if (!result.ok) {
+      setChecklistNotice(result.notice);
+      return;
+    }
+    setNewChecklistStep("");
+    setNewChecklistRequired(true);
+  };
+
+  const onRemoveChecklistItem = async (itemId: string) => {
+    setChecklistNotice(null);
+    const result = await removeChecklistItem.mutateAsync(itemId);
+    if (!result.ok) setChecklistNotice(result.notice);
+  };
+
   const openEdit = () => {
     setGateDraft(job.gate_code ?? "");
     setSiteDraft(job.site_notes ?? "");
@@ -415,6 +471,7 @@ export default function JobScreen(): React.ReactElement {
   // status past `scheduled`, and a confirmed job with no way to start would be
   // a dead end. The action still owns the actual rule.
   const canStart = job.status === "scheduled" || job.status === "confirmed";
+  const terminal = ["completed", "invoiced", "paid", "canceled"].includes(job.status);
 
   return (
     <View style={styles.screen}>
@@ -436,62 +493,114 @@ export default function JobScreen(): React.ReactElement {
       >
         <Notice text={notice} />
 
-        <Section label="Customer">
-          <Pressable
-            accessibilityRole={job.contact_id !== null ? "button" : undefined}
-            accessibilityLabel={
-              job.contact_id !== null
-                ? `Open customer ${job.customer_name ?? ""}`.trim()
-                : undefined
-            }
-            onPress={job.contact_id !== null ? goCustomer : undefined}
-            style={({ pressed }) => [
-              styles.card,
-              styles.customer,
-              pressed && job.contact_id !== null && styles.cardPressed,
-            ]}
-          >
-            <Avatar name={job.customer_name} />
-            <View style={styles.customerBody}>
-              <Text style={styles.customerName} numberOfLines={1}>
-                {job.customer_name ?? "No customer"}
-              </Text>
-              {job.customer_phone !== null ? (
-                <Text style={styles.customerPhone}>{fmtPhone(job.customer_phone)}</Text>
-              ) : null}
-              {job.job_address !== null ? (
-                <>
-                  <Text style={styles.customerAddress} numberOfLines={2}>
-                    {job.job_address}
-                  </Text>
-                  {/* Its own Pressable, like the call glyph below — opening
-                      Maps must never also push the customer screen. */}
-                  <View style={styles.navigate}>
-                    <NavigateButton address={job.job_address} onFail={setCustomerNotice} />
-                  </View>
-                </>
-              ) : null}
-            </View>
-            {job.customer_phone !== null ? (
-              // Its own Pressable so dialling never also navigates — the inner
-              // responder wins and the card press does not fire.
+        <View style={[styles.card, styles.summaryCard]}>
+          <View style={styles.summaryTop}>
+            <View style={styles.summaryIdentity}>
               <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Call customer"
-                onPress={() => open(`tel:${job.customer_phone}`)}
-                style={({ pressed }) => [styles.phoneGlyph, pressed && styles.phoneGlyphPressed]}
+                accessibilityRole={job.contact_id !== null ? "button" : undefined}
+                disabled={job.contact_id === null}
+                onPress={goCustomer}
+                style={({ pressed }) => [pressed && styles.backPressed]}
               >
-                <Feather name="phone" size={18} color={color.brandDeep} />
+                <Text style={styles.summaryName} numberOfLines={1}>
+                  {job.customer_name ?? "Unnamed job"}
+                </Text>
+                {job.contact_id !== null ? (
+                  <Text style={styles.profileLink}>♙ View customer profile</Text>
+                ) : null}
               </Pressable>
-            ) : null}
-            {job.contact_id !== null ? (
-              <Feather name="chevron-right" size={20} color={color.faint} />
-            ) : null}
-          </Pressable>
+              {job.job_name ? <Text style={styles.summaryJob}>{job.job_name}</Text> : null}
+            </View>
+            <Text style={styles.summaryTotal}>{fmtMoney(job.total_cents)}</Text>
+          </View>
+          <View style={styles.summaryChips}>
+            <View style={styles.summaryChip}>
+              <Text style={styles.summaryChipText}>{JOB_STATUS_LABEL[job.status]}</Text>
+            </View>
+            <View style={styles.summaryChip}>
+              <Text style={styles.summaryChipText} numberOfLines={1}>
+                {job.scheduled_at !== null
+                  ? fmtEtTimeRange(job.scheduled_at, job.ends_at)
+                  : "Not scheduled"}
+              </Text>
+            </View>
+          </View>
+          <View style={styles.quickRow}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Call customer through the business line"
+              disabled={job.customer_phone === null || bridge.isPending}
+              onPress={() => void callCustomer()}
+              style={({ pressed }) => [
+                styles.quick,
+                job.customer_phone === null && styles.disabled,
+                pressed && styles.pressed,
+              ]}
+            >
+              <Feather name="phone" size={17} color={color.ink} />
+              <Text style={styles.quickText}>Call</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Text customer"
+              disabled={job.customer_phone === null}
+              onPress={() => {
+                if (job.customer_phone !== null) {
+                  router.push({
+                    pathname: "/(owner)/thread/[phone]",
+                    params: { phone: job.customer_phone },
+                  });
+                }
+              }}
+              style={({ pressed }) => [
+                styles.quick,
+                job.customer_phone === null && styles.disabled,
+                pressed && styles.pressed,
+              ]}
+            >
+              <Feather name="message-square" size={17} color={color.ink} />
+              <Text style={styles.quickText}>Text</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Directions"
+              disabled={job.job_address === null}
+              onPress={() => {
+                if (job.job_address !== null) {
+                  open(`https://maps.apple.com/?q=${encodeURIComponent(job.job_address)}`);
+                }
+              }}
+              style={({ pressed }) => [
+                styles.quick,
+                job.job_address === null && styles.disabled,
+                pressed && styles.pressed,
+              ]}
+            >
+              <Feather name="map-pin" size={17} color={color.ink} />
+              <Text style={styles.quickText}>Directions</Text>
+            </Pressable>
+          </View>
           <Notice text={customerNotice} />
+          <GoodNotice text={customerGood} />
+        </View>
+
+        <Section label="Contact">
+          <View style={[styles.card, styles.contactCard]}>
+            <Field
+              label="Phone"
+              value={job.customer_phone !== null ? fmtPhone(job.customer_phone) : "—"}
+            />
+            <Field label="Email" value={job.customer_email ?? "—"} />
+            {job.job_address !== null ? (
+              <View style={styles.addressBlock}>
+                <Text style={styles.body}>{job.job_address}</Text>
+                <NavigateButton address={job.job_address} onFail={setCustomerNotice} />
+              </View>
+            ) : null}
+          </View>
         </Section>
 
-        <Section label="Schedule">
+        <Section label="Job">
           <Notice text={crewsNotice} />
           <View style={styles.card}>
             <View style={styles.pad}>
@@ -687,37 +796,150 @@ export default function JobScreen(): React.ReactElement {
           </View>
         </Section>
 
-        <Section label="Work">
-          <View style={styles.card}>
+        <Section label="Crew checklist">
+          <View style={[styles.card, styles.checklistCard]}>
+            <View style={styles.checklistHead}>
+              <Text style={styles.sectionTitle}>Crew checklist</Text>
+              <Text style={styles.sectionLabel}>
+                {job.items.filter((item) => item.done).length}/{job.items.length} complete
+              </Text>
+            </View>
+            <Notice text={checklistNotice} />
             {job.items.length > 0 ? (
-              job.items.map((item, index) =>
-                item.checklist_only === true ? (
-                  // Checklist rows carry no money — plain name, done state.
-                  <View key={item.id} style={[styles.itemRow, index > 0 && styles.divided]}>
-                    <Text style={[styles.body, styles.itemName]}>{item.name}</Text>
-                    {item.done ? <Text style={styles.doneMark}>Done</Text> : null}
-                  </View>
-                ) : (
-                  // JobItem carries no unit price, so a priced line shows its
-                  // quantity and the line total — never a computed unit figure.
-                  <View key={item.id} style={[styles.itemRow, index > 0 && styles.divided]}>
+              <View style={styles.checklistRows}>
+                {job.items.map((item) => (
+                  <View key={item.id} style={styles.checklistRow}>
+                    <View style={[styles.checkBox, item.done && styles.checkBoxDone]}>
+                      {item.done ? <Feather name="check" size={13} color={color.good} /> : null}
+                    </View>
                     <View style={styles.itemMain}>
                       <Text style={styles.body}>{item.name}</Text>
-                      <Text style={styles.itemQty}>Qty {item.quantity}</Text>
+                      <Text style={styles.itemQty}>
+                        {item.required === false ? "Optional" : "Required"}
+                        {item.blocked ? " · Blocked by technician" : ""}
+                        {!item.checklist_only ? " · Service item" : ""}
+                      </Text>
                     </View>
-                    <Text style={styles.money}>{fmtMoney(item.line_total_cents)}</Text>
+                    {item.checklist_only && !terminal ? (
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`Remove ${item.name}`}
+                        disabled={removeChecklistItem.isPending}
+                        onPress={() => void onRemoveChecklistItem(item.id)}
+                        style={({ pressed }) => [
+                          styles.removeStep,
+                          removeChecklistItem.isPending && styles.disabled,
+                          pressed && styles.dangerPressed,
+                        ]}
+                      >
+                        <Feather name="trash-2" size={16} color={color.danger} />
+                      </Pressable>
+                    ) : null}
                   </View>
-                ),
-              )
-            ) : (
-              <View style={styles.pad}>
-                <Text style={styles.muted}>No line items on this job.</Text>
+                ))}
               </View>
+            ) : (
+              <Text style={styles.muted}>No checklist steps yet.</Text>
             )}
+
+            {!terminal ? (
+              <View style={styles.addStepCard}>
+                <Text style={styles.fieldLabel}>Add step</Text>
+                <TextInput
+                  value={newChecklistStep}
+                  onChangeText={setNewChecklistStep}
+                  placeholder="Connect water supply"
+                  placeholderTextColor={color.faint}
+                  style={styles.input}
+                />
+                <View style={styles.addStepFoot}>
+                  <Pressable
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: newChecklistRequired }}
+                    onPress={() => setNewChecklistRequired((required) => !required)}
+                    style={styles.requiredToggle}
+                  >
+                    <View style={[styles.smallCheck, newChecklistRequired && styles.smallCheckOn]}>
+                      {newChecklistRequired ? (
+                        <Feather name="check" size={12} color={color.chromeInk} />
+                      ) : null}
+                    </View>
+                    <Text style={styles.muted}>Required before completion</Text>
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    disabled={!newChecklistStep.trim() || addChecklistItem.isPending}
+                    onPress={() => void onAddChecklistItem()}
+                    style={({ pressed }) => [
+                      styles.primary,
+                      styles.addStepButton,
+                      (!newChecklistStep.trim() || addChecklistItem.isPending) && styles.disabled,
+                      pressed && styles.primaryPressed,
+                    ]}
+                  >
+                    <Feather name="plus" size={15} color={color.chromeInk} />
+                    <Text style={styles.primaryText}>
+                      {addChecklistItem.isPending ? "Adding…" : "Add step"}
+                    </Text>
+                  </Pressable>
+                </View>
+              </View>
+            ) : null}
           </View>
         </Section>
 
-        <Section label="Money">
+        <Section label="Job photos">
+          <View style={[styles.card, styles.photosCard]}>
+            <View style={styles.photosIcon}>
+              <Feather name="camera" size={20} color={color.muted} />
+            </View>
+            <View style={styles.grow}>
+              <Text style={styles.sectionTitle}>Job photos</Text>
+              <Text style={styles.muted}>Before, progress, and after photos stay with this job.</Text>
+            </View>
+          </View>
+        </Section>
+
+        {job.status !== "canceled" ? (
+          <Section label="Repeats">
+            <View style={[styles.card, styles.repeatsCard]}>
+              <Notice text={recurrenceNotice} />
+              <View style={styles.recurrenceGrid}>
+                {(Object.entries(RECURRENCE_LABEL) as [JobRecurrence, string][]).map(
+                  ([recurrence, label]) => {
+                    const selected = (job.recurrence ?? "none") === recurrence;
+                    return (
+                      <Pressable
+                        key={recurrence}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected }}
+                        disabled={setRecurrence.isPending}
+                        onPress={() => void onSetRecurrence(recurrence)}
+                        style={({ pressed }) => [
+                          styles.recurrenceButton,
+                          selected && styles.recurrenceButtonOn,
+                          setRecurrence.isPending && styles.disabled,
+                          pressed && styles.pressed,
+                        ]}
+                      >
+                        <Text style={[styles.buttonText, selected && styles.recurrenceTextOn]}>
+                          {label}
+                        </Text>
+                      </Pressable>
+                    );
+                  },
+                )}
+              </View>
+              <Text style={styles.muted}>
+                {(job.recurrence ?? "none") === "none"
+                  ? "Mark a maintenance plan here — it rolls into recurring revenue on Customers."
+                  : "Counted as an active recurring plan. Visits are never booked automatically."}
+              </Text>
+            </View>
+          </Section>
+        ) : null}
+
+        <Section label="Billing">
           <Notice text={invoicesNotice} />
           <View style={styles.card}>
             <View style={styles.pad}>
@@ -979,7 +1201,7 @@ const styles = StyleSheet.create({
   },
 
   chrome: {
-    backgroundColor: color.chrome,
+    backgroundColor: color.bg,
     paddingHorizontal: space.lg,
     paddingBottom: space.md,
     gap: space.xs,
@@ -991,9 +1213,8 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
   },
   backPressed: { opacity: 0.6 },
-  backText: { ...type.body, color: color.chromeMuted },
-  chromeName: { ...type.display, color: color.chromeInk },
-  chromeMeta: { ...type.micro, color: color.chromeMuted },
+  backText: { ...type.body, color: color.muted },
+  chromeName: { ...type.chromeTitle, color: color.ink },
 
   scrollBody: { padding: space.lg, gap: space.lg },
   body: { ...type.body, color: color.ink },
@@ -1001,6 +1222,7 @@ const styles = StyleSheet.create({
 
   section: { gap: space.sm },
   sectionLabel: { ...type.micro, color: color.faint },
+  sectionTitle: { ...type.title, color: color.ink },
 
   card: {
     backgroundColor: color.surface,
@@ -1015,6 +1237,131 @@ const styles = StyleSheet.create({
   pad: { padding: space.lg, gap: space.sm },
   divided: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.line },
   actions: { gap: space.sm },
+
+  summaryCard: { padding: space.lg, gap: 13, backgroundColor: color.hover },
+  summaryTop: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: space.lg,
+  },
+  summaryIdentity: { flex: 1, minWidth: 0, gap: 4 },
+  summaryName: { ...type.display, fontSize: 22, color: color.ink },
+  profileLink: { ...type.small, fontFamily: font.bodySemi, color: color.brand },
+  summaryJob: { ...type.small, color: color.muted },
+  summaryTotal: {
+    fontFamily: font.bodySemi,
+    fontSize: 20,
+    color: color.ink,
+    fontVariant: ["tabular-nums"],
+  },
+  summaryChips: { flexDirection: "row", flexWrap: "wrap", gap: 7 },
+  summaryChip: {
+    minHeight: 28,
+    justifyContent: "center",
+    maxWidth: "100%",
+    borderRadius: radius.sm,
+    backgroundColor: color.surface,
+    paddingHorizontal: 9,
+  },
+  summaryChipText: { ...type.micro, color: color.muted },
+  quickRow: { flexDirection: "row", gap: 8 },
+  quick: {
+    flex: 1,
+    minHeight: HIT + 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.lineStrong,
+    backgroundColor: color.surface,
+  },
+  quickText: { ...type.body, fontFamily: font.bodySemi, color: color.ink },
+  contactCard: { padding: space.lg, gap: 14 },
+  addressBlock: { gap: 7 },
+
+  checklistCard: { padding: space.lg, gap: 13 },
+  checklistHead: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+    gap: space.md,
+  },
+  checklistRows: { gap: 8 },
+  checklistRow: {
+    minHeight: HIT,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.line,
+    paddingHorizontal: space.md,
+    paddingVertical: 11,
+  },
+  checkBox: {
+    width: 20,
+    height: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 4,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.lineStrong,
+  },
+  checkBoxDone: { borderColor: color.good, backgroundColor: color.goodBg },
+  removeStep: {
+    width: HIT,
+    height: HIT,
+    marginVertical: -11,
+    marginRight: -space.md,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  addStepCard: { gap: 10, borderRadius: radius.md, backgroundColor: color.bg, padding: space.md },
+  addStepFoot: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  requiredToggle: { minHeight: HIT, flexDirection: "row", alignItems: "center", gap: 8 },
+  smallCheck: {
+    width: 18,
+    height: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 4,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.lineStrong,
+    backgroundColor: color.surface,
+  },
+  smallCheckOn: { borderColor: color.brandFill, backgroundColor: color.brandFill },
+  addStepButton: { minHeight: HIT, flexDirection: "row", gap: 7 },
+  photosCard: { flexDirection: "row", alignItems: "center", gap: 12, padding: space.lg },
+  photosIcon: {
+    width: 44,
+    height: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: radius.md,
+    backgroundColor: color.hover,
+  },
+  repeatsCard: { padding: space.lg, gap: 12 },
+  recurrenceGrid: { flexDirection: "row", flexWrap: "wrap", gap: 7 },
+  recurrenceButton: {
+    minHeight: HIT,
+    justifyContent: "center",
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.lineStrong,
+    backgroundColor: color.surface,
+    paddingHorizontal: space.md,
+  },
+  recurrenceButtonOn: { borderColor: color.brand, backgroundColor: color.brandSoft },
+  recurrenceTextOn: { color: color.brandDeep, fontFamily: font.bodySemi },
 
   customer: {
     flexDirection: "row",

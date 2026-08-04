@@ -1,17 +1,8 @@
-// The bill book.
-//
-// The whole invoice list arrives in one read, so the search box filters what is
-// already in memory rather than asking the server on every keystroke — same
-// contract as the customer book. Every row opens the bill at
-// /(owner)/invoice/[id].
-//
-// Money is integer cents from the server, rendered with fmtMoney. Nothing here
-// divides, rounds, or adds — the figures are exactly what the API returned.
-
-import { useCallback, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  Modal,
   Pressable,
   RefreshControl,
   StyleSheet,
@@ -19,278 +10,307 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { useRouter } from "expo-router";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
-import { fmtMoney, INVOICE_STATUS_LABEL, type Invoice } from "@urso/types";
+import { router } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  fmtEt,
+  fmtMoney,
+  invoiceBalanceCents,
+  type Invoice,
+  type InvoiceStatus,
+} from "@urso/types";
+import { Notice } from "@/components/notice";
 import { useInvoices } from "@/queries";
 import { noticeFrom, usePullToRefresh, useRefetchOnFocus } from "@/query";
-import { color, font, HIT, radius, space, type } from "@/theme";
+import { color, font, HIT, radius, space } from "@/theme";
 
-// Number and customer name both match on plain text, so "1042" finds the bill
-// and "rodriguez" finds everything billed to the family.
-function matches(invoice: Invoice, query: string): boolean {
-  const text = query.trim().toLowerCase();
-  if (!text) return true;
-  if (invoice.number.toLowerCase().includes(text)) return true;
-  return (invoice.customer_name ?? "").toLowerCase().includes(text);
+type SummaryFilter = "all" | "due" | "paid";
+type StatusFilter = InvoiceStatus | "all";
+type DateHeader = { kind: "date"; key: string; label: string; totalCents: number };
+type InvoiceEntry = { kind: "invoice"; key: string; invoice: Invoice };
+type LedgerRow = DateHeader | InvoiceEntry;
+
+const STATUS_LABEL: Record<InvoiceStatus, string> = {
+  draft: "DRAFT",
+  sent: "SENT",
+  viewed: "VIEWED",
+  paid: "PAID",
+  void: "VOID",
+};
+
+function localDayKey(value: string): string {
+  const date = new Date(value);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
-function InvoiceRow({ invoice, onPress }: { invoice: Invoice; onPress: () => void }) {
-  // Partially paid and still open — the figure Sebastian is chasing.
-  const partiallyPaid = invoice.status !== "paid" && invoice.amount_paid_cents > 0;
+function statusTone(status: InvoiceStatus): { color: string; icon: "dollar-sign" | "send" | "eye" | "edit-3" | "x" } {
+  if (status === "paid") return { color: color.good, icon: "dollar-sign" };
+  if (status === "sent") return { color: color.brand, icon: "send" };
+  if (status === "viewed") return { color: color.brand, icon: "eye" };
+  if (status === "void") return { color: color.danger, icon: "x" };
+  return { color: color.muted, icon: "edit-3" };
+}
+
+function StatusPill({ status }: { status: InvoiceStatus }) {
+  const tone = statusTone(status);
+  return (
+    <View style={[styles.statusPill, { borderColor: tone.color }]}>
+      <Feather name={tone.icon} size={12} color={tone.color} />
+      <Text style={[styles.statusText, { color: tone.color }]}>{STATUS_LABEL[status]}</Text>
+    </View>
+  );
+}
+
+function SummaryTile({
+  label,
+  amount,
+  selected,
+  onPress,
+}: {
+  label: string;
+  amount: number;
+  selected: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="tab"
+      accessibilityLabel={`${label}, ${fmtMoney(amount)}`}
+      accessibilityState={{ selected }}
+      onPress={onPress}
+      style={({ pressed }) => [styles.summaryTile, selected && styles.summaryTileSelected, pressed && styles.pressed]}
+    >
+      <Text style={styles.summaryLabel}>{label}</Text>
+      <Text style={styles.summaryAmount} numberOfLines={1}>{fmtMoney(amount)}</Text>
+    </Pressable>
+  );
+}
+
+function InvoiceRow({ invoice }: { invoice: Invoice }) {
+  const customer = invoice.customer_name?.trim();
+  const job = invoice.job_name?.trim();
+  const title = customer && job && customer.toLowerCase() !== job.toLowerCase()
+    ? `${customer} (${job})`
+    : customer || job || "Untitled invoice";
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`Invoice ${invoice.number}`}
-      onPress={onPress}
-      style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+      accessibilityLabel={`Open invoice ${invoice.number} for ${invoice.customer_name ?? "customer"}`}
+      onPress={() => router.push({ pathname: "/(owner)/invoice/[id]", params: { id: invoice.id } })}
+      style={({ pressed }) => [styles.invoiceRow, pressed && styles.rowPressed]}
     >
-      <View style={styles.rowBody}>
-        <View style={styles.rowTop}>
-          <Text style={styles.number} numberOfLines={1}>
-            {invoice.number}
-          </Text>
-          <Text style={styles.total}>{fmtMoney(invoice.total_cents)}</Text>
-        </View>
-
-        <Text style={styles.name} numberOfLines={1}>
-          {invoice.customer_name ?? "No customer"}
-        </Text>
-
-        <View style={styles.rowFoot}>
-          <Text style={styles.meta}>{INVOICE_STATUS_LABEL[invoice.status]}</Text>
-          {partiallyPaid ? (
-            <Text style={styles.paid}>{fmtMoney(invoice.amount_paid_cents)} paid so far</Text>
-          ) : null}
-        </View>
+      <View style={styles.rowTop}>
+        <Text style={styles.customer} numberOfLines={2}>{title}</Text>
+        <Text style={styles.amount}>{fmtMoney(invoice.total_cents)}</Text>
       </View>
-      <Feather name="chevron-right" size={18} color={color.faint} />
+      <View style={styles.rowMeta}>
+        <Text style={styles.invoiceNumber}>{invoice.number}</Text>
+        {invoice.viewed_at ? <Feather name="eye" size={18} color={color.brand} /> : null}
+        <StatusPill status={invoice.status} />
+      </View>
+      {invoice.job_id ? (
+        <View style={styles.workOrderRow}>
+          <Feather name="calendar" size={16} color={color.faint} />
+          <Text style={styles.workOrder}>WORK ORDER</Text>
+        </View>
+      ) : invoice.customer_name && title !== invoice.customer_name ? (
+        <Text style={styles.customerName} numberOfLines={1}>{invoice.customer_name}</Text>
+      ) : null}
     </Pressable>
   );
 }
 
 export default function InvoicesScreen(): React.ReactElement {
-  const router = useRouter();
   const insets = useSafeAreaInsets();
-
-  const openInvoice = useCallback(
-    (id: string) => {
-      router.push({ pathname: "/(owner)/invoice/[id]", params: { id } });
-    },
-    [router],
-  );
-
-  // Refusal semantics mirror customers.tsx: an error keeps the last-good list
-  // on screen and the sentence shows in the notice banner, verbatim. Session
-  // death routes to /login in the query cache's onError, not here.
   const invoicesQuery = useInvoices();
   useRefetchOnFocus(invoicesQuery.refetch);
   const { refreshing, onRefresh } = usePullToRefresh(invoicesQuery.refetch);
+  const invoices = invoicesQuery.data ?? [];
+  const queryNotice = noticeFrom(invoicesQuery.error);
 
-  const invoices = invoicesQuery.data ?? null;
-  const notice = noticeFrom(invoicesQuery.error);
   const [query, setQuery] = useState("");
+  const [summaryFilter, setSummaryFilter] = useState<SummaryFilter>("all");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [filterOpen, setFilterOpen] = useState(false);
 
-  const visible = useMemo(
-    () => (invoices ?? []).filter((invoice) => matches(invoice, query)),
-    [invoices, query],
-  );
+  const totals = useMemo(() => {
+    const active = invoices.filter((invoice) => invoice.status !== "void");
+    return {
+      all: active.reduce((sum, invoice) => sum + invoice.total_cents, 0),
+      due: active.reduce((sum, invoice) => sum + invoiceBalanceCents(invoice), 0),
+      paid: active.reduce((sum, invoice) => sum + Math.min(invoice.total_cents, invoice.amount_paid_cents), 0),
+    };
+  }, [invoices]);
 
-  const searching = query.trim().length > 0;
-  const showSpinner = invoicesQuery.isPending;
+  const rows = useMemo<LedgerRow[]>(() => {
+    const normalized = query.trim().toLowerCase();
+    const visible = invoices
+      .filter((invoice) => {
+        if (summaryFilter === "paid") return invoice.status === "paid";
+        if (summaryFilter === "due") return invoice.status !== "paid" && invoice.status !== "void" && invoiceBalanceCents(invoice) > 0;
+        return invoice.status !== "void" || statusFilter === "void";
+      })
+      .filter((invoice) => statusFilter === "all" || invoice.status === statusFilter)
+      .filter((invoice) => {
+        if (!normalized) return true;
+        return `${invoice.customer_name ?? ""} ${invoice.job_name ?? ""} ${invoice.number}`.toLowerCase().includes(normalized);
+      })
+      .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
+
+    const grouped = new Map<string, Invoice[]>();
+    for (const invoice of visible) {
+      const key = localDayKey(invoice.created_at);
+      grouped.set(key, [...(grouped.get(key) ?? []), invoice]);
+    }
+
+    const result: LedgerRow[] = [];
+    for (const [key, dayInvoices] of grouped) {
+      const first = dayInvoices[0];
+      if (!first) continue;
+      result.push({
+        kind: "date",
+        key: `date-${key}`,
+        label: fmtEt(first.created_at, { weekday: "long", month: "short", day: "2-digit", year: "numeric" }),
+        totalCents: dayInvoices.reduce((sum, invoice) => sum + invoice.total_cents, 0),
+      });
+      result.push(...dayInvoices.map((invoice) => ({ kind: "invoice" as const, key: invoice.id, invoice })));
+    }
+    return result;
+  }, [invoices, query, statusFilter, summaryFilter]);
+
+  const chooseSummary = (filter: SummaryFilter) => {
+    setSummaryFilter(filter);
+    if (filter === "paid") setStatusFilter("paid");
+    else if (statusFilter === "paid") setStatusFilter("all");
+  };
 
   return (
     <View style={styles.screen}>
-      <View style={[styles.chrome, { paddingTop: insets.top + space.md }]}>
-        <Text style={styles.chromeTitle}>Invoices</Text>
-        <View style={styles.chromeRight}>
-          <View style={styles.chromeStat}>
-            <Text style={styles.chromeStatValue}>{visible.length}</Text>
-            <Text style={styles.chromeStatLabel}>{searching ? "Matches" : "Total"}</Text>
-          </View>
-          {/* Work that never went through the board — a repeat customer, a
-              fix-up, a Saturday referral — could not be billed from here. */}
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="New invoice"
-            onPress={() => router.push("/(owner)/invoice/new")}
-            style={({ pressed }) => [styles.newButton, pressed && styles.pressedButton]}
-          >
-            <Text style={styles.newButtonText}>+ New</Text>
-          </Pressable>
+      <View style={{ height: insets.top, backgroundColor: color.chrome }} />
+      <View style={styles.header}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => router.back()} style={styles.headerBack}>
+          <Feather name="chevron-left" size={31} color={color.brand} />
+          <Text style={styles.headerTitle}>MY INVOICES</Text>
+        </Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel="Create invoice" onPress={() => router.push("/(owner)/invoice/new")} style={styles.addButton}>
+          <Text style={styles.addText}>+</Text>
+        </Pressable>
+      </View>
+
+      <View style={styles.searchRow}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Filter invoices" onPress={() => setFilterOpen(true)} style={styles.filterButton}>
+          <Feather name="sliders" size={25} color={statusFilter === "all" ? color.muted : color.brand} />
+        </Pressable>
+        <View style={styles.searchBox}>
+          <Feather name="search" size={24} color={color.faint} />
+          <TextInput
+            value={query}
+            onChangeText={setQuery}
+            placeholder="Search Invoices"
+            placeholderTextColor={color.faint}
+            autoCapitalize="none"
+            autoCorrect={false}
+            clearButtonMode="while-editing"
+            accessibilityLabel="Search invoices"
+            style={styles.searchInput}
+          />
         </View>
       </View>
 
-      <View style={styles.searchBar}>
-        <TextInput
-          value={query}
-          onChangeText={setQuery}
-          placeholder="Search by number or name"
-          placeholderTextColor={color.faint}
-          autoCapitalize="none"
-          autoCorrect={false}
-          clearButtonMode="while-editing"
-          returnKeyType="search"
-          accessibilityLabel="Search invoices"
-          style={styles.search}
-        />
+      <View accessibilityRole="tablist" style={styles.summaryRow}>
+        <SummaryTile label="ALL" amount={totals.all} selected={summaryFilter === "all"} onPress={() => chooseSummary("all")} />
+        <SummaryTile label="DUE" amount={totals.due} selected={summaryFilter === "due"} onPress={() => chooseSummary("due")} />
+        <SummaryTile label="PAID" amount={totals.paid} selected={summaryFilter === "paid"} onPress={() => chooseSummary("paid")} />
       </View>
 
-      {showSpinner ? (
-        <View style={styles.centre}>
-          <ActivityIndicator color={color.brand} />
-        </View>
+      {queryNotice ? <Notice text={queryNotice} /> : null}
+      {invoicesQuery.isPending ? (
+        <View style={styles.centre}><ActivityIndicator size="large" color={color.brand} /></View>
       ) : (
         <FlatList
-          data={visible}
-          keyExtractor={(invoice) => invoice.id}
-          keyboardShouldPersistTaps="handled"
+          data={rows}
+          keyExtractor={(row) => row.key}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={color.brand} />}
           keyboardDismissMode="on-drag"
-          contentContainerStyle={[
-            styles.list,
-            { paddingBottom: insets.bottom + space.xxl },
-            visible.length === 0 && styles.listEmpty,
-          ]}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              tintColor={color.brand}
-              colors={[color.brand]}
-            />
-          }
-          ListHeaderComponent={
-            notice !== null ? (
-              <View style={styles.notice}>
-                <Text style={styles.noticeText}>{notice}</Text>
-              </View>
-            ) : null
-          }
-          ListEmptyComponent={
-            invoices !== null ? (
-              <View style={styles.empty}>
-                <Text style={styles.emptyText}>
-                  {searching
-                    ? "No invoices match that."
-                    : "No invoices yet. Completing a job creates its bill — or tap New to bill work that never went on the board."}
-                </Text>
-              </View>
-            ) : null
-          }
-          renderItem={({ item }) => (
-            <InvoiceRow invoice={item} onPress={() => openInvoice(item.id)} />
-          )}
+          contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + space.xxl }, rows.length === 0 && styles.emptyList]}
+          ListEmptyComponent={<Text style={styles.emptyText}>No invoices match this view.</Text>}
+          renderItem={({ item }) => item.kind === "date" ? (
+            <View style={styles.dateBand}>
+              <Text style={styles.dateLabel} numberOfLines={1}>{item.label}</Text>
+              <Text style={styles.dateTotal}>{fmtMoney(item.totalCents)}</Text>
+            </View>
+          ) : <InvoiceRow invoice={item.invoice} />}
         />
       )}
+
+      <Modal visible={filterOpen} transparent animationType="fade" onRequestClose={() => setFilterOpen(false)}>
+        <Pressable style={styles.modalScrim} onPress={() => setFilterOpen(false)}>
+          <View style={[styles.filterSheet, { paddingBottom: insets.bottom + 18 }]}>
+            <Text style={styles.filterTitle}>FILTER INVOICES</Text>
+            {(["all", "draft", "sent", "viewed", "paid", "void"] as StatusFilter[]).map((value) => (
+              <Pressable
+                key={value}
+                accessibilityRole="radio"
+                accessibilityState={{ checked: statusFilter === value }}
+                onPress={() => {
+                  setStatusFilter(value);
+                  setSummaryFilter(value === "paid" ? "paid" : "all");
+                  setFilterOpen(false);
+                }}
+                style={styles.filterOption}
+              >
+                <Text style={[styles.filterOptionText, statusFilter === value && styles.filterOptionTextOn]}>{value === "all" ? "All statuses" : STATUS_LABEL[value]}</Text>
+                {statusFilter === value ? <Feather name="check" size={22} color={color.brand} /> : null}
+              </Pressable>
+            ))}
+          </View>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: color.bg },
+  screen: { flex: 1, backgroundColor: color.surface },
   centre: { flex: 1, alignItems: "center", justifyContent: "center" },
-
-  chrome: {
-    backgroundColor: color.chrome,
-    flexDirection: "row",
-    alignItems: "flex-end",
-    justifyContent: "space-between",
-    gap: space.md,
-    paddingHorizontal: space.lg,
-    paddingBottom: space.md,
-  },
-  chromeTitle: { ...type.display, color: color.chromeInk },
-  chromeRight: { flexDirection: "row", alignItems: "center", gap: space.md },
-  newButton: {
-    minHeight: HIT - 12,
-    justifyContent: "center",
-    paddingHorizontal: space.md,
-    borderRadius: radius.md,
-    backgroundColor: color.brandFill,
-  },
-  newButtonText: { ...type.small, color: "#ffffff", fontFamily: font.bodyMedium },
-  pressedButton: { opacity: 0.72 },
-  chromeStat: { alignItems: "flex-end" },
-  chromeStatValue: {
-    fontFamily: font.bodySemi,
-    fontSize: 18,
-    color: color.chromeInk,
-    fontVariant: ["tabular-nums"],
-  },
-  chromeStatLabel: { ...type.micro, color: color.chromeMuted, marginTop: 2 },
-
-  searchBar: {
-    backgroundColor: color.surface,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: color.line,
-    paddingHorizontal: space.lg,
-    paddingVertical: space.sm,
-  },
-  search: {
-    // Deliberately NOT ...type.body: that spread carries lineHeight, and iOS
-    // renders a TextInput placeholder with visibly wrong tracking when a
-    // lineHeight is combined with a custom font. Height comes from minHeight.
-    fontFamily: font.body,
-    fontSize: 15,
-    color: color.ink,
-    minHeight: HIT,
-    paddingHorizontal: space.md,
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: color.line,
-    backgroundColor: color.bg,
-  },
-
-  list: { padding: space.lg, gap: space.sm },
-  listEmpty: { flexGrow: 1 },
-
-  notice: {
-    backgroundColor: color.dangerBg,
-    borderRadius: radius.md,
-    padding: space.md,
-    marginBottom: space.sm,
-  },
-  noticeText: { ...type.small, color: color.danger },
-
-  row: {
-    minHeight: HIT,
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: color.surface,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: color.line,
-    borderRadius: radius.lg,
-    padding: space.md,
-    gap: space.sm,
-  },
-  pressed: { backgroundColor: color.hover },
-  rowBody: { flex: 1, gap: space.xs },
-  rowTop: {
-    flexDirection: "row",
-    alignItems: "baseline",
-    justifyContent: "space-between",
-    gap: space.sm,
-  },
-  number: { ...type.title, color: color.ink, flexShrink: 1 },
-  total: {
-    fontFamily: font.bodySemi,
-    fontSize: 15,
-    color: color.ink,
-    fontVariant: ["tabular-nums"],
-  },
-  name: { ...type.small, color: color.muted },
-
-  rowFoot: {
-    flexDirection: "row",
-    alignItems: "center",
-    flexWrap: "wrap",
-    gap: space.sm,
-    marginTop: space.xs,
-  },
-  meta: { ...type.micro, color: color.faint },
-  paid: { ...type.small, color: color.good, fontVariant: ["tabular-nums"] },
-
-  empty: { flex: 1, alignItems: "center", justifyContent: "center", padding: space.xl },
-  emptyText: { ...type.body, color: color.muted, textAlign: "center" },
+  header: { minHeight: 92, paddingHorizontal: 18, flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: color.surface },
+  headerBack: { minHeight: HIT, flexDirection: "row", alignItems: "center", marginLeft: -8 },
+  headerTitle: { fontFamily: font.bodyMedium, fontSize: 19, letterSpacing: 1.15, color: color.ink },
+  addButton: { width: 54, height: 54, borderRadius: 27, alignItems: "center", justifyContent: "center", backgroundColor: color.brandFill },
+  addText: { fontFamily: font.body, fontSize: 45, lineHeight: 49, color: color.surface, marginTop: -4 },
+  searchRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 18, paddingBottom: 18 },
+  filterButton: { width: 42, height: 58, alignItems: "center", justifyContent: "center" },
+  searchBox: { flex: 1, height: 58, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: color.hover, borderRadius: radius.md },
+  searchInput: { flex: 1, fontFamily: font.body, fontSize: 17, color: color.ink },
+  summaryRow: { flexDirection: "row", gap: 7, paddingHorizontal: 18, paddingBottom: 18 },
+  summaryTile: { flex: 1, height: 76, alignItems: "center", justifyContent: "center", borderWidth: StyleSheet.hairlineWidth, borderColor: "transparent", backgroundColor: color.hover },
+  summaryTileSelected: { borderWidth: 2, borderColor: color.muted, backgroundColor: color.surface },
+  summaryLabel: { fontFamily: font.bodySemi, fontSize: 18, letterSpacing: 0.6, color: color.muted },
+  summaryAmount: { marginTop: 5, fontFamily: font.bodyMedium, fontSize: 13.5, color: color.muted, fontVariant: ["tabular-nums"] },
+  pressed: { opacity: 0.72 },
+  list: { flexGrow: 1 },
+  emptyList: { justifyContent: "center" },
+  emptyText: { fontFamily: font.body, fontSize: 16, color: color.muted, textAlign: "center", padding: 32 },
+  dateBand: { minHeight: 38, paddingHorizontal: 18, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10, backgroundColor: color.hover },
+  dateLabel: { flex: 1, fontFamily: font.bodySemi, fontSize: 16, letterSpacing: 1.05, color: color.muted },
+  dateTotal: { fontFamily: font.bodySemi, fontSize: 18, color: color.muted, fontVariant: ["tabular-nums"] },
+  invoiceRow: { minHeight: 148, paddingHorizontal: 18, paddingVertical: 22, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: color.lineStrong, backgroundColor: color.surface },
+  rowPressed: { backgroundColor: color.brandWash },
+  rowTop: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 16 },
+  customer: { flex: 1, fontFamily: font.bodyMedium, fontSize: 20, lineHeight: 25, color: color.ink },
+  amount: { fontFamily: font.bodySemi, fontSize: 18, color: color.ink, fontVariant: ["tabular-nums"] },
+  rowMeta: { marginTop: 14, flexDirection: "row", alignItems: "center", gap: 12 },
+  invoiceNumber: { flex: 1, fontFamily: font.body, fontSize: 17, color: color.muted },
+  statusPill: { minHeight: 28, paddingHorizontal: 10, flexDirection: "row", alignItems: "center", gap: 5, borderWidth: 1.5, borderRadius: 15 },
+  statusText: { fontFamily: font.bodyMedium, fontSize: 13, letterSpacing: 0.35 },
+  workOrderRow: { marginTop: 14, flexDirection: "row", alignItems: "center", gap: 12 },
+  workOrder: { fontFamily: font.body, fontSize: 15, color: color.muted, letterSpacing: 0.5 },
+  customerName: { marginTop: 12, fontFamily: font.body, fontSize: 15, color: color.muted },
+  modalScrim: { flex: 1, justifyContent: "flex-end", backgroundColor: color.scrim },
+  filterSheet: { paddingHorizontal: 18, paddingTop: 22, borderTopLeftRadius: 28, borderTopRightRadius: 28, backgroundColor: color.surface },
+  filterTitle: { fontFamily: font.bodySemi, fontSize: 20, letterSpacing: 1, color: color.ink, marginBottom: 10 },
+  filterOption: { minHeight: 56, flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: color.line },
+  filterOptionText: { fontFamily: font.body, fontSize: 17, color: color.muted },
+  filterOptionTextOn: { fontFamily: font.bodySemi, color: color.brandDeep },
 });

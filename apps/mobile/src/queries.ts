@@ -10,6 +10,7 @@ import { unwrap } from "./query";
 export const keys = {
   overview: () => ["owner", "overview"] as const,
   agenda: () => ["owner", "agenda"] as const,
+  todayReport: () => ["owner", "today-report"] as const,
   threads: {
     all: () => ["owner", "threads"] as const,
     messages: (phone: string) => ["owner", "threads", phone, "messages"] as const,
@@ -36,7 +37,12 @@ export const keys = {
   },
   crews: () => ["owner", "crews"] as const,
   catalog: () => ["owner", "catalog"] as const,
+  expenses: () => ["owner", "expenses"] as const,
+  payouts: (range: string) => ["owner", "payouts", range] as const,
+  insights: (range: string) => ["owner", "insights", range] as const,
+  settings: () => ["owner", "settings"] as const,
   jobs: {
+    all: () => ["owner", "jobs"] as const,
     one: (id: string) => ["owner", "jobs", id] as const,
   },
 };
@@ -46,6 +52,9 @@ export const useOverview = () =>
 
 export const useAgenda = () =>
   useQuery({ queryKey: keys.agenda(), queryFn: () => owner.agenda().then(unwrap) });
+
+export const useTodayReport = () =>
+  useQuery({ queryKey: keys.todayReport(), queryFn: () => owner.todayReport().then(unwrap) });
 
 export const useThreads = () =>
   useQuery({ queryKey: keys.threads.all(), queryFn: () => owner.threads().then(unwrap) });
@@ -111,14 +120,25 @@ export const useUnscheduled = () =>
 export const useCrews = () =>
   useQuery({ queryKey: keys.crews(), queryFn: () => owner.crews().then(unwrap) });
 
+export const useJobs = () =>
+  useQuery({ queryKey: keys.jobs.all(), queryFn: () => owner.jobs().then(unwrap) });
+
 export const useJob = (id: string) =>
   useQuery({ queryKey: keys.jobs.one(id), queryFn: () => owner.job(id).then(unwrap) });
 
-export const useEstimate = (id: string) =>
-  useQuery({ queryKey: keys.estimateOne(id), queryFn: () => owner.estimate(id).then(unwrap) });
+export const useEstimate = (id: string | null) =>
+  useQuery({
+    queryKey: keys.estimateOne(id ?? "new"),
+    queryFn: () => owner.estimate(id ?? "").then(unwrap),
+    enabled: id !== null,
+  });
 
-export const useInvoice = (id: string) =>
-  useQuery({ queryKey: keys.invoiceOne(id), queryFn: () => owner.invoice(id).then(unwrap) });
+export const useInvoice = (id: string | null) =>
+  useQuery({
+    queryKey: keys.invoiceOne(id ?? "new"),
+    queryFn: () => owner.invoice(id ?? "").then(unwrap),
+    enabled: id !== null,
+  });
 
 export const useInvoiceRewards = (id: string) =>
   useQuery({
@@ -128,3 +148,15 @@ export const useInvoiceRewards = (id: string) =>
 
 export const useCatalog = () =>
   useQuery({ queryKey: keys.catalog(), queryFn: () => owner.catalog().then(unwrap) });
+
+export const useExpenses = () =>
+  useQuery({ queryKey: keys.expenses(), queryFn: () => owner.expenses().then(unwrap) });
+
+export const usePayouts = (range: "day" | "week" | "month" | "year") =>
+  useQuery({ queryKey: keys.payouts(range), queryFn: () => owner.payouts(range).then(unwrap) });
+
+export const useInsights = (range: "7d" | "30d" | "90d" | "12m") =>
+  useQuery({ queryKey: keys.insights(range), queryFn: () => owner.insights(range).then(unwrap) });
+
+export const useSettings = () =>
+  useQuery({ queryKey: keys.settings(), queryFn: () => owner.settings().then(unwrap) });

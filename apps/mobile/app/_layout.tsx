@@ -11,6 +11,19 @@ import {
   GeistMono_400Regular,
   GeistMono_500Medium,
 } from "@expo-google-fonts/geist-mono";
+import {
+  Fraunces_500Medium,
+  Fraunces_600SemiBold,
+} from "@expo-google-fonts/fraunces";
+import {
+  IBMPlexSans_400Regular,
+  IBMPlexSans_500Medium,
+  IBMPlexSans_600SemiBold,
+} from "@expo-google-fonts/ibm-plex-sans";
+import {
+  IBMPlexMono_400Regular,
+  IBMPlexMono_500Medium,
+} from "@expo-google-fonts/ibm-plex-mono";
 import { QueryProvider } from "@/query";
 import { ToastProvider } from "@/components/toast";
 import { color } from "@/theme";
@@ -28,6 +41,13 @@ export default function RootLayout(): React.ReactElement | null {
     Geist_600SemiBold,
     GeistMono_400Regular,
     GeistMono_500Medium,
+    Fraunces_500Medium,
+    Fraunces_600SemiBold,
+    IBMPlexSans_400Regular,
+    IBMPlexSans_500Medium,
+    IBMPlexSans_600SemiBold,
+    IBMPlexMono_400Regular,
+    IBMPlexMono_500Medium,
   });
 
   // Hold the app back rather than flash system type and reflow under the crew's

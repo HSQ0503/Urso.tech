@@ -24,7 +24,15 @@ import {
 } from "@urso/types";
 import { useThreads } from "@/queries";
 import { noticeFrom, usePullToRefresh, useRefetchOnFocus } from "@/query";
-import { color, font, HIT, radius, space, type } from "@/theme";
+import { color, HIT, radius, space, type } from "@/theme";
+import {
+  Avatar,
+  Chip,
+  ChromeBar,
+  SearchStrip,
+  listRowStyle,
+  searchInputStyle,
+} from "@/components/ledger";
 
 // The shared inbox — every phone number the shop has ever texted or been called
 // by, newest first.
@@ -172,16 +180,10 @@ function matchesThread(thread: Thread, query: string): boolean {
 // Kind, plus the lead's stage when there is a lead. Whether the person texting
 // is already booked changes what the owner does about them, and it costs no
 // extra line to say so.
-function markerOf(thread: Thread): string {
-  const kind = KIND_LABEL[thread.kind];
-  const status = thread.lead ? STATUS_LABEL[thread.lead.status] : null;
-  return status ? `${kind} · ${status}` : kind;
-}
-
 // ── Rows ────────────────────────────────────────────────────────────────────
 
 type Row =
-  | { kind: "label"; key: string; label: string }
+  | { kind: "label"; key: string; label: string; count: number }
   | {
       kind: "thread";
       key: string;
@@ -189,12 +191,14 @@ type Row =
       name: string;
       when: string;
       preview: string;
-      marker: string;
+      category: ThreadKind;
+      status: string | null;
       waiting: boolean;
-      vendor: boolean;
+      first: boolean;
+      last: boolean;
     };
 
-function toRow(thread: Thread, dayKeys: string[]): Row {
+function toRow(thread: Thread, dayKeys: string[], first: boolean, last: boolean): Row {
   return {
     kind: "thread",
     key: thread.peer_phone,
@@ -202,10 +206,18 @@ function toRow(thread: Thread, dayKeys: string[]): Row {
     name: threadName(thread),
     when: relativeEt(thread.last_activity_at, dayKeys),
     preview: previewOf(thread),
-    marker: markerOf(thread),
+    category: thread.kind,
+    status: thread.lead ? STATUS_LABEL[thread.lead.status] : null,
     waiting: isWaiting(thread),
-    vendor: thread.kind === "vendor",
+    first,
+    last,
   };
+}
+
+function threadGroup(threads: Thread[], dayKeys: string[]): Row[] {
+  return threads.map((thread, index) =>
+    toRow(thread, dayKeys, index === 0, index === threads.length - 1),
+  );
 }
 
 // `grouped` is false while a search is running — see the note beside the search
@@ -216,20 +228,25 @@ function buildRows(threads: Thread[], nowMs: number, grouped: boolean): Row[] {
   // guarantee rather than a borrowed one.
   const sorted = [...threads].sort((a, b) => b.last_activity_at.localeCompare(a.last_activity_at));
 
-  if (!grouped) return sorted.map((thread) => toRow(thread, dayKeys));
+  if (!grouped) return threadGroup(sorted, dayKeys);
 
-  const waiting = sorted.filter(isWaiting);
-  const rest = sorted.filter((thread) => !isWaiting(thread));
+  const vendors = sorted.filter((thread) => thread.kind === "vendor");
+  const leads = sorted.filter((thread) => thread.kind === "lead");
+  const customers = sorted.filter((thread) => thread.kind === "customer");
+  const rows: Row[] = [...threadGroup(vendors, dayKeys)];
 
-  // With nothing waiting there is nothing to separate, and two headings over one
-  // undivided list would be noise.
-  if (waiting.length === 0) return rest.map((thread) => toRow(thread, dayKeys));
-
-  const rows: Row[] = [{ kind: "label", key: "label-waiting", label: "Waiting on you" }];
-  for (const thread of waiting) rows.push(toRow(thread, dayKeys));
-  if (rest.length > 0) {
-    rows.push({ kind: "label", key: "label-rest", label: "Everything else" });
-    for (const thread of rest) rows.push(toRow(thread, dayKeys));
+  if (leads.length > 0) {
+    rows.push({ kind: "label", key: "label-leads", label: "Leads", count: leads.length });
+    rows.push(...threadGroup(leads, dayKeys));
+  }
+  if (customers.length > 0) {
+    rows.push({
+      kind: "label",
+      key: "label-customers",
+      label: "Customers",
+      count: customers.length,
+    });
+    rows.push(...threadGroup(customers, dayKeys));
   }
   return rows;
 }
@@ -242,43 +259,48 @@ function ThreadRow({
   row: Extract<Row, { kind: "thread" }>;
   onPress: () => void;
 }) {
+  const vendor = row.category === "vendor";
+  const callPreview = row.preview.toLowerCase().includes("call");
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={`${row.name}. ${row.preview}. ${row.when}.`}
       onPress={onPress}
       style={({ pressed }) => [
+        ...listRowStyle(row.first, row.last),
         styles.thread,
-        row.waiting ? styles.threadWaiting : null,
         pressed && styles.pressed,
       ]}
     >
+      {vendor ? (
+        <View style={styles.vendorAvatar}>
+          <Feather name="volume-2" size={17} color={color.brand} />
+        </View>
+      ) : (
+        <Avatar name={row.name} />
+      )}
       <View style={styles.threadMain}>
         <View style={styles.threadTop}>
-          <Text style={[styles.name, row.vendor && styles.nameQuiet]} numberOfLines={1}>
+          <Text style={styles.name} numberOfLines={1}>
             {row.name}
           </Text>
-          <Text style={[styles.when, row.waiting && styles.whenWaiting]} numberOfLines={1}>
+          {row.category === "lead" && row.status ? (
+            <Chip label={row.status} tone="neutral" />
+          ) : row.category === "customer" ? (
+            <Chip label={KIND_LABEL.customer} tone="neutral" />
+          ) : null}
+          <Text style={styles.when} numberOfLines={1}>
             {row.when}
           </Text>
         </View>
 
-        <Text
-          style={[
-            styles.preview,
-            row.waiting && styles.previewWaiting,
-            row.vendor && styles.previewQuiet,
-          ]}
-          numberOfLines={1}
-        >
-          {row.preview}
-        </Text>
-
-        <Text style={[styles.marker, row.vendor && styles.markerQuiet]} numberOfLines={1}>
-          {row.marker}
-        </Text>
+        <View style={styles.previewRow}>
+          {callPreview ? <Feather name="phone-call" size={13} color={color.muted} /> : null}
+          <Text style={styles.preview} numberOfLines={1}>
+            {row.preview}
+          </Text>
+        </View>
       </View>
-      <Feather name="chevron-right" size={18} color={color.faint} />
     </Pressable>
   );
 }
@@ -355,41 +377,10 @@ export default function InboxScreen(): React.ReactElement {
     [visible, nowMs, searching],
   );
 
-  // The backlog count is over everything loaded, not over the matches: it is the
-  // shop's real number, and it would be a lie if a search could shrink it. While
-  // searching the chrome shows the match count instead, so the backlog is one
-  // clear-the-box away.
-  const waitingCount = useMemo(
-    () => (threads ? threads.filter(isWaiting).length : 0),
-    [threads],
-  );
-
-  const header = (
-    <View style={[styles.chrome, { paddingTop: insets.top }]}>
-      <View style={styles.chromeTop}>
-        <Text style={styles.heading}>Inbox</Text>
-        {threads !== null &&
-          (searching ? (
-            <View style={styles.count}>
-              {/* Neutral, not orange: orange on this stat means "owed a reply",
-                  and a match count is not that. */}
-              <Text style={[styles.countValue, styles.countValueNeutral]}>{visible.length}</Text>
-              <Text style={styles.countLabel}>Matches</Text>
-            </View>
-          ) : waitingCount > 0 ? (
-            <View style={styles.count}>
-              <Text style={styles.countValue}>{waitingCount}</Text>
-              <Text style={styles.countLabel}>Waiting</Text>
-            </View>
-          ) : (
-            <Text style={styles.caughtUp}>All caught up</Text>
-          ))}
-      </View>
-    </View>
-  );
+  const header = <ChromeBar title="Inbox" />;
 
   const searchBar = (
-    <View style={styles.searchBar}>
+    <SearchStrip>
       <TextInput
         value={query}
         onChangeText={setQuery}
@@ -400,9 +391,9 @@ export default function InboxScreen(): React.ReactElement {
         clearButtonMode="while-editing"
         returnKeyType="search"
         accessibilityLabel="Search conversations"
-        style={styles.search}
+        style={searchInputStyle}
       />
-    </View>
+    </SearchStrip>
   );
 
   if (threadsQuery.isPending) {
@@ -499,7 +490,10 @@ export default function InboxScreen(): React.ReactElement {
         }
         renderItem={({ item }) =>
           item.kind === "label" ? (
-            <Text style={styles.sectionLabel}>{item.label}</Text>
+            <View style={styles.sectionLabelRow}>
+              <Text style={styles.sectionLabel}>{item.label}</Text>
+              <Text style={styles.sectionCount}>— {item.count}</Text>
+            </View>
           ) : (
             <ThreadRow
               row={item}
@@ -524,97 +518,53 @@ const styles = StyleSheet.create({
     gap: space.md,
   },
 
-  chrome: { backgroundColor: color.chrome },
-  chromeTop: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    justifyContent: "space-between",
-    gap: space.md,
-    paddingHorizontal: space.lg,
-    paddingTop: space.md,
-    paddingBottom: space.md,
-  },
-  heading: { ...type.display, fontSize: 22, color: color.chromeInk },
-  count: { alignItems: "flex-end" },
-  countValue: {
-    fontFamily: font.bodySemi,
-    fontSize: 16,
-    color: color.brand,
-    fontVariant: ["tabular-nums"],
-  },
-  countValueNeutral: { color: color.chromeInk },
-  countLabel: { ...type.micro, color: color.chromeMuted, marginTop: 2 },
-  caughtUp: { ...type.micro, color: color.chromeFaint, paddingBottom: space.xs },
-
-  searchBar: {
-    backgroundColor: color.surface,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: color.line,
-    paddingHorizontal: space.lg,
-    paddingVertical: space.sm,
-  },
-  search: {
-    // Deliberately NOT ...type.body: that spread carries lineHeight, and iOS
-    // renders a TextInput placeholder with visibly wrong tracking when a
-    // lineHeight is combined with a custom font. Height comes from minHeight.
-    fontFamily: font.body,
-    fontSize: 15,
-    color: color.ink,
-    minHeight: HIT,
-    paddingHorizontal: space.md,
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: color.line,
-    backgroundColor: color.bg,
-  },
-
   list: { paddingHorizontal: space.lg, paddingTop: space.md },
   listEmpty: { flexGrow: 1 },
 
-  sectionLabel: {
-    ...type.micro,
-    color: color.faint,
-    marginTop: space.lg,
-    marginBottom: space.sm,
-  },
-
-  thread: {
-    minHeight: HIT,
+  sectionLabelRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: space.sm,
-    backgroundColor: color.surface,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: color.line,
-    // The left rule is the unread signal. It is always drawn, so a row never
-    // shifts sideways as it is answered — only its colour changes.
-    borderLeftWidth: 3,
-    borderLeftColor: color.line,
-    borderRadius: radius.lg,
-    paddingVertical: space.md,
-    paddingHorizontal: space.md,
-    marginBottom: space.sm,
+    gap: 8,
+    marginTop: 22,
+    marginBottom: 8,
+    paddingHorizontal: 4,
   },
-  threadWaiting: { borderLeftColor: color.brand },
-  threadMain: { flex: 1 },
+  sectionLabel: {
+    ...type.rule,
+    color: color.faint,
+  },
+  sectionCount: { ...type.rule, color: color.faint },
+
+  thread: {
+    minHeight: 66,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 11,
+  },
+  vendorAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: color.brandSoft,
+  },
+  threadMain: { flex: 1, minWidth: 0 },
 
   threadTop: {
     flexDirection: "row",
-    alignItems: "baseline",
-    justifyContent: "space-between",
-    gap: space.sm,
+    alignItems: "center",
+    gap: 7,
   },
   name: { ...type.title, color: color.ink, flexShrink: 1 },
-  nameQuiet: { color: color.muted },
-  when: { ...type.small, color: color.faint, fontVariant: ["tabular-nums"] },
-  whenWaiting: { color: color.brand },
-
-  preview: { ...type.small, color: color.muted, marginTop: 2 },
-  previewWaiting: { color: color.ink },
-  previewQuiet: { color: color.faint },
-
-  marker: { ...type.micro, color: color.muted, marginTop: space.xs },
-  markerQuiet: { color: color.faint },
+  when: {
+    ...type.small,
+    color: color.faint,
+    fontVariant: ["tabular-nums"],
+    marginLeft: "auto",
+  },
+  previewRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 3 },
+  preview: { ...type.small, color: color.muted, flexShrink: 1 },
 
   noticeSlot: { marginBottom: space.md },
   notice: {

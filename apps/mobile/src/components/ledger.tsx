@@ -85,16 +85,7 @@ export function ChromeGreeting({ date, greeting }: { date: string; greeting: str
   const insets = useSafeAreaInsets();
   return (
     <View style={[styles.chrome, { paddingTop: insets.top + space.md }]}>
-      <ChromeFurniture />
-      <View style={styles.chromeTop}>
-        <View style={styles.lockup}>
-          <Mark size={22} />
-          <Text style={styles.wordmark}>
-            Canes<Text style={styles.stop}>.</Text>
-          </Text>
-        </View>
-        <Text style={styles.chromeDate}>{date}</Text>
-      </View>
+      <Text style={styles.chromeDate}>{date}</Text>
       <Text style={styles.greeting}>
         {greeting}
         <Text style={styles.stop}>.</Text>
@@ -127,7 +118,6 @@ export function ChromeBar({
   const insets = useSafeAreaInsets();
   return (
     <View style={[styles.chrome, { paddingTop: insets.top + space.md }]}>
-      <ChromeFurniture />
       <View style={styles.barRow}>
         <View style={styles.barLeft}>
           {onBack ? (
@@ -137,7 +127,7 @@ export function ChromeBar({
               onPress={onBack}
               style={({ pressed }) => [styles.backBox, pressed && styles.chromePressed]}
             >
-              <Feather name="chevron-left" size={17} color={color.chromeInk} />
+              <Feather name="chevron-left" size={24} color={color.ink} />
             </Pressable>
           ) : null}
           <View style={styles.barTitles}>
@@ -163,8 +153,7 @@ export function ChromeBar({
               onPress={onAction}
               style={({ pressed }) => [styles.chromeAction, pressed && styles.actionPressed]}
             >
-              <Feather name="plus" size={15} color={color.surface} />
-              <Text style={styles.chromeActionText}>{action}</Text>
+              <Text style={styles.chromeActionPlus}>+</Text>
             </Pressable>
           ) : null}
         </View>
@@ -522,7 +511,12 @@ export function Chip({ label, tone = "neutral" }: { label: string; tone?: ChipTo
 
 // ── Filter chips ─────────────────────────────────────────────────────────────
 
-export type Filter<K extends string> = { key: K; label: string; count?: number };
+export type Filter<K extends string> = {
+  key: K;
+  label: string;
+  count?: number;
+  weight?: number;
+};
 
 // The tinted-outline filter strip a list carries under its search bar.
 export function FilterChips<K extends string>({
@@ -549,13 +543,23 @@ export function FilterChips<K extends string>({
             onPress={() => onPick(filter.key)}
             style={({ pressed }) => [
               styles.filterChip,
+              filter.weight !== undefined ? { flex: filter.weight } : null,
               on && styles.filterChipOn,
               pressed && styles.rowPressed,
             ]}
           >
-            <Text style={[styles.filterLabel, on && styles.filterTextOn]}>{filter.label}</Text>
+            <Text
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.82}
+              style={[styles.filterLabel, on && styles.filterTextOn]}
+            >
+              {filter.label}
+            </Text>
             {filter.count === undefined ? null : (
-              <Text style={[styles.filterCount, on && styles.filterTextOn]}>{filter.count}</Text>
+              <Text numberOfLines={1} style={[styles.filterCount, on && styles.filterTextOn]}>
+                {filter.count}
+              </Text>
             )}
           </Pressable>
         );
@@ -609,21 +613,20 @@ export const searchInputStyle = {
 
 // The screen padding every ledger body uses.
 export const bodyStyle = {
-  paddingHorizontal: 14,
-  paddingTop: 18,
-  paddingBottom: 26,
-  gap: 22,
+  paddingHorizontal: 16,
+  paddingTop: 20,
+  paddingBottom: 28,
+  gap: 24,
 } as const;
 
 const styles = StyleSheet.create({
   chrome: {
-    backgroundColor: color.chrome,
-    paddingHorizontal: 18,
-    paddingBottom: 15,
-    overflow: "hidden",
+    backgroundColor: color.bg,
+    paddingHorizontal: 16,
+    paddingBottom: 14,
     position: "relative",
   },
-  chromePressed: { backgroundColor: color.chromeRaise },
+  chromePressed: { backgroundColor: color.hover },
   chromeTop: {
     flexDirection: "row",
     alignItems: "center",
@@ -633,8 +636,8 @@ const styles = StyleSheet.create({
   lockup: { flexDirection: "row", alignItems: "center", gap: 9 },
   wordmark: { ...type.wordmark, color: color.chromeInk },
   stop: { color: color.brand },
-  chromeDate: { ...type.rule, color: color.chromeMuted },
-  greeting: { ...type.display, color: color.chromeInk, marginTop: 11 },
+  chromeDate: { ...type.rule, color: color.muted },
+  greeting: { ...type.display, color: color.ink, marginTop: 5 },
 
   authChrome: {
     backgroundColor: color.chrome,
@@ -649,38 +652,43 @@ const styles = StyleSheet.create({
 
   barRow: {
     flexDirection: "row",
-    alignItems: "flex-end",
+    alignItems: "center",
     justifyContent: "space-between",
     gap: space.md,
   },
-  barLeft: { flexDirection: "row", alignItems: "flex-end", gap: 11, flex: 1, minWidth: 0 },
+  barLeft: { flexDirection: "row", alignItems: "center", gap: 8, flex: 1, minWidth: 0 },
   backBox: {
-    width: 34,
-    height: 34,
-    marginBottom: 2,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: color.chromeEdge,
+    width: HIT,
+    height: HIT,
+    marginLeft: -10,
     alignItems: "center",
     justifyContent: "center",
   },
   barTitles: { flex: 1, minWidth: 0 },
-  eyebrow: { ...type.rule, color: color.chromeMuted, marginBottom: 5 },
-  barTitle: { ...type.chromeTitle, color: color.chromeInk },
-  chromeSub: { ...type.rule, color: color.chromeMuted, marginTop: 6 },
+  eyebrow: { ...type.rule, color: color.muted, marginBottom: 5 },
+  barTitle: { ...type.chromeTitle, color: color.ink },
+  chromeSub: { ...type.small, color: color.muted, marginTop: 5 },
   barRight: { flexDirection: "row", alignItems: "center", gap: 9, paddingBottom: 3 },
   statBox: { alignItems: "flex-end" },
-  statValue: { ...type.figureLg, color: color.chromeInk },
-  statLabel: { ...type.ruleSm, letterSpacing: 1.5, color: color.chromeFaint, marginTop: 4 },
+  statValue: { ...type.figureLg, color: color.ink },
+  statLabel: { ...type.ruleSm, letterSpacing: 1.5, color: color.faint, marginTop: 4 },
   chromeAction: {
-    flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    height: 40,
-    paddingHorizontal: 14,
+    height: 52,
+    width: 52,
+    borderRadius: 26,
+    justifyContent: "center",
     backgroundColor: color.brandFill,
   },
   actionPressed: { opacity: 0.85 },
   actionPressedSoft: { backgroundColor: color.hover },
+  chromeActionPlus: {
+    fontFamily: font.body,
+    fontSize: 32,
+    lineHeight: 34,
+    color: color.surface,
+    marginTop: -2,
+  },
   chromeActionText: { fontFamily: font.bodySemi, fontSize: 14, color: color.surface },
 
   moneyHead: {
@@ -812,52 +820,66 @@ const styles = StyleSheet.create({
   chipText: { ...type.ruleSm, lineHeight: 12 },
 
   filterStrip: {
-    backgroundColor: color.surface,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: color.line,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    backgroundColor: color.hover,
+    marginHorizontal: 16,
+    marginTop: 4,
+    padding: 3,
     flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 6,
+    borderRadius: 10,
   },
   filterChip: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 38,
     flexDirection: "row",
     alignItems: "center",
-    gap: 7,
-    paddingVertical: 9,
-    paddingHorizontal: 12,
-    borderRadius: radius.sm,
+    justifyContent: "center",
+    gap: 5,
+    paddingHorizontal: 4,
+    borderRadius: 7,
+  },
+  filterChipOn: {
+    backgroundColor: color.surface,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: color.line,
-    backgroundColor: color.surface,
   },
-  filterChipOn: { borderColor: color.brandEdgeStrong, backgroundColor: color.brandSoft },
-  filterLabel: { ...type.rule, letterSpacing: 1.4, color: color.muted },
-  filterCount: { fontFamily: font.monoMedium, fontSize: 11, color: color.muted },
-  filterTextOn: { color: color.brandDeep },
+  filterLabel: {
+    minWidth: 0,
+    flexShrink: 1,
+    fontFamily: font.bodySemi,
+    fontSize: 12.5,
+    color: color.muted,
+  },
+  filterCount: {
+    flexShrink: 0,
+    fontFamily: font.monoMedium,
+    fontSize: 10.5,
+    color: color.muted,
+  },
+  filterTextOn: { color: color.ink },
 
   avatar: {
-    width: 34,
-    height: 34,
-    borderRadius: radius.sm,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: color.hover,
     alignItems: "center",
     justifyContent: "center",
   },
   avatarHot: { backgroundColor: color.brandSoft },
-  avatarText: { fontFamily: font.monoMedium, fontSize: 12, color: color.muted },
+  avatarText: { fontFamily: font.monoMedium, fontSize: 12.5, color: color.muted },
   avatarTextHot: { color: color.brandDeep },
 
   searchStrip: {
-    backgroundColor: color.surface,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: color.line,
-    paddingHorizontal: 14,
-    paddingVertical: 11,
+    backgroundColor: color.hover,
+    marginHorizontal: 16,
+    marginBottom: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
     minHeight: HIT,
+    borderRadius: 10,
   },
 });

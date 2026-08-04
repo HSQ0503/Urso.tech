@@ -10,8 +10,11 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@expo-google-fonts/fraunces": "^0.4.1",
     "@expo-google-fonts/geist": "^0.4.2",
     "@expo-google-fonts/geist-mono": "^0.4.3",
+    "@expo-google-fonts/ibm-plex-mono": "^0.4.1",
+    "@expo-google-fonts/ibm-plex-sans": "^0.4.1",
     "@expo/metro-runtime": "~57.0.7",
     "@expo/vector-icons": "^15.0.2",
     "@supabase/supabase-js": "^2.111.0",
@@ -31,8 +34,7 @@
     "react-native-safe-area-context": "~5.7.0",
     "react-native-screens": "~4.26.0",
     "react-native-svg": "15.15.4",
-    "react-native-url-polyfill": "^4.0.0",
-    "react-native-webview": "13.16.1"
+    "react-native-url-polyfill": "^4.0.0"
   },
   "devDependencies": {
     "@types/react": "~19.2.2",

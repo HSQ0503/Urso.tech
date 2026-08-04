@@ -11,10 +11,8 @@ import { color, HIT, radius, space, type } from "@/theme";
 // stock iPhone and falls through to the browser anywhere else, and it is the
 // scheme the crew app already proved on a real device.
 //
-// This is a Linking.openURL, NOT a WebView navigation — the console's own maps
-// links are target="_blank" to an external origin, which the WebView shell
-// refuses on purpose (it will not put a page carrying our session cookie in a
-// frame pointed off-origin).
+// Use Linking so Maps remains an external, phone-native destination instead of
+// becoming another route inside the app.
 
 export function navigateUrl(address: string | null): string | null {
   const trimmed = (address ?? "").trim();

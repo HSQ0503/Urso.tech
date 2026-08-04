@@ -98,12 +98,14 @@ type BoardJob = {
   scheduled_at: string | null;
   ends_at: string | null;
   crew_id: string | null;
+  // Already in the payload — getScheduleBoard returns JobWithItems[], and Job
+  // carries total_cents. This local narrowing simply had not declared it, so
+  // the money was arriving and being thrown away.
+  total_cents: number;
 };
 
 // A lead narrowed to the shape a visit row can rely on.
 type Visit = Lead & { appointment_at: string };
-
-type ViewMode = "day" | "week";
 
 type DayCell = {
   key: string; // ET calendar key, "2026-07-28"
@@ -119,6 +121,10 @@ type Row =
   | { kind: "job"; key: string; job: BoardJob; crewName: string | null }
   | { kind: "visit"; key: string; visit: Visit }
   | { kind: "tray"; key: string; job: Job }
+  // The whole selected day as one hour-rail item. It replaces that day's rows
+  // rather than sitting beside them — the same events drawn twice, once as a
+  // list and once on a grid, is two answers to one question.
+  | { kind: "timeline"; key: string; blocks: Block[] }
   | { kind: "calm"; key: string; text: string };
 
 // fmtEt formats en-US, so 2-digit parts arrive as MM/DD/YYYY. Reordered here
@@ -186,6 +192,31 @@ function weekLabel(cell: DayCell): string {
   if (cell.key === todayKey) return "Today";
   if (cell.key === nextDayKey(todayKey)) return "Tomorrow";
   return fmtEt(cell.instant, { weekday: "short", month: "short", day: "numeric" });
+}
+
+function weekTitle(days: DayCell[]): string {
+  const first = days[0];
+  const last = days.at(-1);
+  if (!first || !last) return "";
+  const firstMonth = fmtEt(first.instant, { month: "short" });
+  const lastMonth = fmtEt(last.instant, { month: "short" });
+  const firstDay = fmtEt(first.instant, { day: "numeric" });
+  const lastDay = fmtEt(last.instant, { day: "numeric" });
+  return `${firstMonth} ${firstDay} – ${lastMonth} ${lastDay}`;
+}
+
+// The figure on the right of a date band. Only JOBS carry money — a quote visit
+// is work that has not been sold — so a day of visits returns null and the band
+// simply has no figure. Rendering $0.00 there would say the day earned nothing,
+// which is a different and wrong claim.
+function dayTotal(
+  entries: readonly { kind: string; job?: { total_cents: number } }[],
+): string | null {
+  const cents = entries.reduce(
+    (sum, entry) => (entry.kind === "job" && entry.job ? sum + entry.job.total_cents : sum),
+    0,
+  );
+  return cents > 0 ? fmtMoney(cents) : null;
 }
 
 // A success payload can carry a sentence of its own (apiResult keeps ok:true
@@ -824,6 +855,12 @@ function VisitSheet({
   );
 }
 
+// Markate's row anatomy, applied to a booked job: the NAME leads at full weight
+// with the money on the same line, and everything that qualifies it — the time,
+// the address, the crew — sits underneath in one muted stack. Their list rows
+// read that way because the two things being scanned for are who and how much;
+// the old row led with the time, which is the one fact the date band above it
+// has already established.
 function JobRow({
   job,
   crewName,
@@ -833,37 +870,47 @@ function JobRow({
   crewName: string | null;
   onPress: () => void;
 }) {
+  const total = job.total_cents > 0 ? fmtMoney(job.total_cents) : null;
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={job.customer_name ?? "Customer"}
       onPress={onPress}
-      style={({ pressed }) => [styles.row, pressed && styles.pressedSurface]}
+      style={({ pressed }) => [styles.row, styles.jobCard, pressed && styles.pressedSurface]}
     >
+      {/* Markate leads the card with the TIME and puts the money opposite it,
+          then stacks who and where underneath. The time earns the lead here (it
+          did not on a flat list) because the card is inside a day already — what
+          you scan for next is when, not which day. */}
       <View style={styles.rowTop}>
         <Text style={styles.time}>{fmtEtTimeRange(job.scheduled_at, job.ends_at)}</Text>
-        {/* Green only where green MEANS something. Rendering every status in the
-            sold-job colour made the chip pure decoration: a job in progress and
-            one merely scheduled looked identical, which is the one distinction
-            an owner glancing at the day actually needs. */}
-        <Text style={IN_FLIGHT.includes(job.status) ? styles.statusLive : styles.status}>
-          {JOB_STATUS_LABEL[job.status]}
-        </Text>
+        {total !== null && <Text style={styles.money}>{total}</Text>}
       </View>
-      <Text style={styles.customer} numberOfLines={1}>
+      <Text style={styles.customerLead} numberOfLines={1}>
         {job.customer_name ?? "Customer"}
       </Text>
       <Text style={styles.address} numberOfLines={1}>
         {job.job_address ?? "Address pending"}
       </Text>
-      {/* Unassigned is the highest-signal item on this screen — a job nobody is
-          going to — and it was rendering in the faintest, smallest token in the
-          system, visually identical to a named crew. */}
-      {crewName !== null && (
-        <Text style={crewName === UNASSIGNED ? styles.crewUnassigned : styles.crew}>
-          {crewName}
-        </Text>
-      )}
+      <View style={styles.rowMeta}>
+        {/* Green only where green MEANS something. Rendering every status in the
+            sold-job colour made the chip pure decoration: a job in progress and
+            one merely scheduled looked identical, which is the one distinction
+            an owner glancing at the day actually needs. */}
+        <View style={IN_FLIGHT.includes(job.status) ? styles.pillLive : styles.pill}>
+          <Text style={IN_FLIGHT.includes(job.status) ? styles.statusLive : styles.status}>
+            {JOB_STATUS_LABEL[job.status]}
+          </Text>
+        </View>
+        {/* Unassigned is the highest-signal item on this screen — a job nobody is
+            going to — and it was rendering in the faintest, smallest token in the
+            system, visually identical to a named crew. */}
+        {crewName !== null && (
+          <Text style={crewName === UNASSIGNED ? styles.crewUnassigned : styles.crew}>
+            {crewName}
+          </Text>
+        )}
+      </View>
     </Pressable>
   );
 }
@@ -878,26 +925,179 @@ function VisitRow({ visit, onPress }: { visit: Visit; onPress: () => void }) {
       accessibilityRole="button"
       accessibilityLabel={`Quote visit — ${visit.name ?? "no name"}`}
       onPress={onPress}
-      style={({ pressed }) => [styles.row, pressed && styles.pressedSurface]}
+      style={({ pressed }) => [styles.row, styles.quoteCard, pressed && styles.pressedSurface]}
     >
+      {/* Same card as a job, in the quote rail's colour — Markate's whole
+          calendar is readable at a glance because sold work and quotes are two
+          colours, never two layouts. Where a job prints money a visit prints
+          nothing: a quote is not sold work, and $0.00 would claim it was. */}
       <View style={styles.rowTop}>
         <Text style={styles.time}>
           {fmtEt(visit.appointment_at, { hour: "numeric", minute: "2-digit" })}
         </Text>
-        <Text style={styles.visitTag}>Quote visit</Text>
       </View>
-      <Text style={styles.customer} numberOfLines={1}>
+      <Text style={styles.customerLead} numberOfLines={1}>
         {visit.name ?? "Estimate visit"}
       </Text>
       <Text style={styles.address} numberOfLines={1}>
         {visit.address ?? "Address pending"}
       </Text>
-      <Text style={styles.crew}>
-        {visit.service !== null
-          ? `${STATUS_LABEL[visit.status]} · ${visit.service}`
-          : STATUS_LABEL[visit.status]}
-      </Text>
+      <View style={styles.rowMeta}>
+        <View style={styles.pillQuote}>
+          <Text style={styles.visitTag}>Quote visit</Text>
+        </View>
+        <Text style={styles.crew} numberOfLines={1}>
+          {visit.service !== null
+            ? `${STATUS_LABEL[visit.status]} · ${visit.service}`
+            : STATUS_LABEL[visit.status]}
+        </Text>
+      </View>
     </Pressable>
+  );
+}
+
+// ── Day timeline ─────────────────────────────────────────────────────────────
+//
+// Markate's Day View: an hour rail down the left and events drawn as coloured
+// blocks positioned and sized by their real times, so a day reads as shape
+// before it reads as text — where the gaps are, what overlaps, how long the
+// morning job actually runs.
+//
+// ALL TIME MATH IS ET. Minutes-from-midnight is derived through Intl with an
+// explicit timeZone, never through getHours(): a phone that has travelled would
+// otherwise draw every block at the wrong height on the rail, which is a
+// worse failure than a wrong label because it looks authoritative.
+
+const HOUR_HEIGHT = 62;
+const RAIL_WIDTH = 56;
+// A 30-minute block is 31pt tall, which is under the tap floor and too short
+// for two lines. Blocks never render shorter than this; they just overlap their
+// own slot slightly, which is what Markate does too.
+const MIN_BLOCK = 40;
+
+const ET_CLOCK = new Intl.DateTimeFormat("en-GB", {
+  timeZone: "America/New_York",
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+});
+
+// "14:30" → 870. Returns null rather than guessing if the platform hands back
+// something unparseable — a block at the wrong height is worse than no block.
+function etMinutes(iso: string): number | null {
+  const parts = ET_CLOCK.format(new Date(iso)).match(/(\d{1,2}):(\d{2})/);
+  if (!parts) return null;
+  const hours = Number(parts[1]) % 24;
+  const minutes = Number(parts[2]);
+  return Number.isFinite(hours) && Number.isFinite(minutes) ? hours * 60 + minutes : null;
+}
+
+function hourLabel(hour: number): string {
+  const h = hour % 24;
+  if (h === 0) return "12AM";
+  if (h === 12) return "12PM";
+  return h < 12 ? `${h}AM` : `${h - 12}PM`;
+}
+
+type Block = {
+  key: string;
+  kind: "job" | "visit";
+  startMin: number;
+  endMin: number;
+  title: string;
+  sub: string | null;
+  onPress: () => void;
+};
+
+// Column packing for overlaps: walk blocks in start order and drop each into
+// the first column whose last block has already ended. Two jobs at the same
+// hour then sit side by side instead of on top of each other.
+function packColumns(blocks: Block[]): { block: Block; column: number; columns: number }[] {
+  const ordered = [...blocks].sort((a, b) => a.startMin - b.startMin || a.endMin - b.endMin);
+  const columnEnds: number[] = [];
+  const placed = ordered.map((block) => {
+    let column = columnEnds.findIndex((end) => end <= block.startMin);
+    if (column === -1) {
+      column = columnEnds.length;
+      columnEnds.push(block.endMin);
+    } else {
+      columnEnds[column] = block.endMin;
+    }
+    return { block, column };
+  });
+  // One width for the whole day rather than per-cluster: a block that changes
+  // width as you scroll past an unrelated overlap reads as a different object.
+  const columns = Math.max(1, columnEnds.length);
+  return placed.map((entry) => ({ ...entry, columns }));
+}
+
+function DayTimeline({ blocks }: { blocks: Block[] }): React.ReactElement {
+  const packed = packColumns(blocks);
+
+  // The visible span: the day's own events, padded an hour either side, but
+  // never narrower than a working day. An empty day still shows a real
+  // calendar rather than a single blank hour.
+  const startHour = Math.max(
+    0,
+    Math.min(8, ...blocks.map((b) => Math.floor(b.startMin / 60) - 1)),
+  );
+  const endHour = Math.min(
+    24,
+    Math.max(19, ...blocks.map((b) => Math.ceil(b.endMin / 60) + 1)),
+  );
+  const hours = Array.from({ length: Math.max(1, endHour - startHour) }, (_, i) => startHour + i);
+  const originMin = startHour * 60;
+
+  return (
+    <View style={styles.timeline}>
+      {hours.map((hour) => (
+        <View key={hour} style={styles.hourRow}>
+          <Text style={styles.hourLabel}>{hourLabel(hour)}</Text>
+          <View style={styles.hourLine} />
+        </View>
+      ))}
+
+      {/* Absolute layer over the rail. pointerEvents box-none so the empty grid
+          underneath keeps scrolling normally where there is no block. */}
+      <View style={styles.blockLayer} pointerEvents="box-none">
+        {packed.map(({ block, column, columns }) => {
+          const top = ((block.startMin - originMin) / 60) * HOUR_HEIGHT;
+          const height = Math.max(
+            MIN_BLOCK,
+            ((block.endMin - block.startMin) / 60) * HOUR_HEIGHT,
+          );
+          const widthPct = 100 / columns;
+          return (
+            <Pressable
+              key={block.key}
+              accessibilityRole="button"
+              accessibilityLabel={block.title}
+              onPress={block.onPress}
+              style={({ pressed }) => [
+                styles.block,
+                block.kind === "job" ? styles.blockJob : styles.blockVisit,
+                {
+                  top,
+                  height,
+                  left: `${column * widthPct}%`,
+                  width: `${widthPct}%`,
+                },
+                pressed && styles.blockPressed,
+              ]}
+            >
+              <Text style={styles.blockTitle} numberOfLines={1}>
+                {block.title}
+              </Text>
+              {block.sub !== null && height > 52 ? (
+                <Text style={styles.blockSub} numberOfLines={1}>
+                  {block.sub}
+                </Text>
+              ) : null}
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
   );
 }
 
@@ -925,8 +1125,8 @@ function TrayRow({
     <View style={styles.trayRow}>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={job.customer_name ?? "Customer"}
-        onPress={onPress}
+        accessibilityLabel={`Schedule ${job.customer_name ?? "customer"}`}
+        onPress={onBook}
         style={({ pressed }) => [styles.trayBody, pressed && styles.pressedSurface]}
       >
         <View style={styles.rowTop}>
@@ -936,16 +1136,17 @@ function TrayRow({
           {total !== null && <Text style={styles.money}>{total}</Text>}
         </View>
         <Text style={styles.address} numberOfLines={1}>
-          {job.job_address ?? "Address pending"}
+          {job.job_name ?? job.job_address ?? "Job"}
         </Text>
+        <Text style={styles.tapToSchedule}>Tap to schedule</Text>
       </Pressable>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={`Book ${job.customer_name ?? "this job"}`}
-        onPress={onBook}
+        accessibilityLabel={`Open actions for ${job.customer_name ?? "this job"}`}
+        onPress={onPress}
         style={({ pressed }) => [styles.trayBook, pressed && styles.pressedSurface]}
       >
-        <Text style={styles.trayBookText}>Book</Text>
+        <Feather name="more-horizontal" size={20} color={color.faint} />
       </Pressable>
     </View>
   );
@@ -963,8 +1164,9 @@ export default function ScheduleScreen(): React.ReactElement {
   );
 
   const [win, setWin] = useState<Window>(buildWindow);
-  const [selectedKey, setSelectedKey] = useState<string>(() => win.days[0].key);
-  const [view, setView] = useState<ViewMode>("day");
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [showAllUnscheduled, setShowAllUnscheduled] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
   const [eventOpen, setEventOpen] = useState(false);
   // The job whose "Book" was tapped, held by value rather than by id: the tray
   // it came from re-reads the moment the booking lands, and looking the job up
@@ -984,7 +1186,7 @@ export default function ScheduleScreen(): React.ReactElement {
   const rollWindow = useCallback(() => {
     const next = buildWindow(anchorKey ?? undefined);
     setWin(next);
-    setSelectedKey((key) => (next.days.some((d) => d.key === key) ? key : next.days[0].key));
+    setSelectedKey((key) => (key !== null && next.days.some((d) => d.key === key) ? key : null));
   }, [anchorKey]);
   useFocusEffect(rollWindow);
 
@@ -992,11 +1194,19 @@ export default function ScheduleScreen(): React.ReactElement {
   // jump is one read, not a scroll through reads. Three weeks out is three
   // taps rather than a long swipe on a strip that only moves a day at a time.
   const shiftWeeks = useCallback((weeks: number) => {
+    setSelectedKey(null);
     setAnchorKey((current) => {
       const from = current ?? etDateKey(new Date().toISOString());
       const noon = Date.parse(etLocalToIso(`${from}T12:00`));
       return etDateKey(new Date(noon + weeks * DAYS * DAY_MS).toISOString());
     });
+  }, []);
+
+  const goToday = useCallback(() => {
+    const next = buildWindow();
+    setAnchorKey(null);
+    setSelectedKey(null);
+    setWin(next);
   }, []);
 
   // One trip each, in parallel: the board covers the whole week, so switching
@@ -1115,24 +1325,81 @@ export default function ScheduleScreen(): React.ReactElement {
         .map((entry) => entry.row);
     };
 
+    // Match the mobile website: urgent unscheduled work comes first and is
+    // capped at three rows until explicitly expanded.
+    if (tray !== null && tray.length > 0) {
+      out.push({
+        kind: "section",
+        key: "section-tray",
+        label: `Unscheduled · ${tray.length}`,
+        meta: null,
+      });
+      const visibleTray = showAllUnscheduled ? tray : tray.slice(0, 3);
+      for (const job of visibleTray) out.push({ kind: "tray", key: `tray-${job.id}`, job });
+    }
+
     if (calendarReadable) {
-      if (view === "day") {
+      if (selectedKey !== null) {
         const entries = entriesFor(selectedKey);
         out.push({
           kind: "section",
           key: "section-day",
-          label: "On the calendar",
-          meta: entries.length > 0 ? String(entries.length) : null,
+          label: weekLabel(win.days.find((day) => day.key === selectedKey) ?? win.days[0]),
+          // The money booked on the day, the way Markate ends every date band
+          // with that day's figure. Only JOBS contribute — a quote visit is not
+          // sold work, so a day of visits shows no figure rather than $0.00,
+          // which would read as a day that earned nothing.
+          meta: dayTotal(entries),
         });
         if (entries.length === 0) {
           out.push({ kind: "calm", key: "calm-day", text: "Nothing booked for this day." });
+        } else {
+          // A single day is drawn on the hour rail, not listed. The week view
+          // keeps the list — seven days of grid would be a scroll, not a glance.
+          const blocks: Block[] = [];
+          for (const entry of entries) {
+            if (entry.kind === "job") {
+              const start = entry.job.scheduled_at === null ? null : etMinutes(entry.job.scheduled_at);
+              if (start === null) continue;
+              const end =
+                entry.job.ends_at === null ? null : etMinutes(entry.job.ends_at);
+              blocks.push({
+                key: entry.key,
+                kind: "job",
+                startMin: start,
+                // No end on the row means an unbounded job; an hour is the
+                // schedule's own default duration, so it is what we draw.
+                endMin: end !== null && end > start ? end : start + 60,
+                title:
+                  entry.job.total_cents > 0
+                    ? fmtMoney(entry.job.total_cents)
+                    : (entry.job.customer_name ?? "Job"),
+                sub: entry.crewName ?? entry.job.customer_name,
+                onPress: () => openJob(entry.job.id),
+              });
+            } else {
+              const start = etMinutes(entry.visit.appointment_at);
+              if (start === null) continue;
+              blocks.push({
+                key: entry.key,
+                kind: "visit",
+                startMin: start,
+                // A quote visit carries no end time. Thirty minutes is what the
+                // slot picker offers for one, so it is what the block shows.
+                endMin: start + 30,
+                title: `Quote — ${entry.visit.name ?? "Estimate visit"}`,
+                sub: entry.visit.service,
+                onPress: () => setVisitId(entry.visit.id),
+              });
+            }
+          }
+          out.push({ kind: "timeline", key: "timeline-day", blocks });
         }
-        out.push(...entries);
       } else {
         // Empty days are skipped rather than listed. Seven "nothing booked"
         // lines is the same information as one, spread over a scroll.
         let any = false;
-        win.days.forEach((cell, index) => {
+        win.days.forEach((cell) => {
           const entries = entriesFor(cell.key);
           if (entries.length === 0) return;
           any = true;
@@ -1140,37 +1407,27 @@ export default function ScheduleScreen(): React.ReactElement {
             kind: "section",
             key: `section-${cell.key}`,
             label: weekLabel(cell),
-            meta: String(entries.length),
+            meta: dayTotal(entries),
           });
           out.push(...entries);
         });
         if (!any) {
-          out.push({ kind: "section", key: "section-week", label: "On the calendar", meta: null });
           out.push({ kind: "calm", key: "calm-week", text: "Nothing booked this week." });
         }
       }
     }
 
-    if (tray !== null) {
-      // The count alone understates the pile. Six unscheduled jobs reads as a
-      // tidy list; $15,400 of sold work with no date on it reads as the problem
-      // it is, and it is the number that decides whether he books today or
-      // keeps scrolling. Jobs with no total simply do not add to it.
-      const trayCents = tray.reduce((sum, job) => sum + Math.max(0, job.total_cents), 0);
-      out.push({
-        kind: "section",
-        key: "section-tray",
-        label: "Unscheduled",
-        meta: trayCents > 0 ? `${tray.length} · ${fmtMoney(trayCents)}` : String(tray.length),
-      });
-      if (tray.length === 0) {
-        out.push({ kind: "calm", key: "calm-tray", text: "Every sold job has a slot." });
-      }
-      for (const job of tray) out.push({ kind: "tray", key: `tray-${job.id}`, job });
-    }
-
     return out;
-  }, [board, tray, visits, selectedKey, crewNames, view, win.days, calendarReadable]);
+  }, [
+    board,
+    tray,
+    visits,
+    selectedKey,
+    crewNames,
+    win.days,
+    calendarReadable,
+    showAllUnscheduled,
+  ]);
 
   const selected = win.days.find((d) => d.key === selectedKey) ?? win.days[0];
   // "Loading" in the old sense — any of the reads in flight. isPending alone
@@ -1184,133 +1441,56 @@ export default function ScheduleScreen(): React.ReactElement {
   const header = (
     <View style={[styles.chrome, { paddingTop: insets.top + space.md }]}>
       <View style={styles.chromeText}>
-        <Text style={styles.title}>Schedule</Text>
-        <Text style={styles.subtitle}>
-          {view === "day"
-            ? fmtEt(selected.instant, { weekday: "long", month: "long", day: "numeric" })
-            : `${fmtEt(win.days[0].instant, { month: "short", day: "numeric" })} – ${fmtEt(
-                win.days[DAYS - 1].instant,
-                { month: "short", day: "numeric" },
-              )}`}
+        <Text style={styles.title}>
+          Schedule<Text style={styles.stop}>.</Text>
         </Text>
+        <Text style={styles.subtitle}>Tap a job to schedule it. Tap anything on the calendar for details.</Text>
       </View>
-      {/* Work that never had a quote behind it. This is where a dispatcher
-          thinks about it, so this is where it starts — and the day on screen
-          seeds the picker, because that is the day he is staffing.
-          A plain string href, not {pathname, params}: typed routes are
-          generated into .expo/types, a dev artifact, so the object form does
-          not typecheck until someone runs the app. */}
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="New job"
-        onPress={() => router.push(`/(owner)/job/new?day=${encodeURIComponent(selectedKey)}`)}
-        style={({ pressed }) => [styles.chromeAction, pressed && styles.chromeActionPressed]}
-      >
-        <Feather name="plus" size={16} color={color.chromeInk} />
-        <Text style={styles.chromeActionText}>New job</Text>
-      </Pressable>
     </View>
   );
 
-  // Day / Week, and the other thing that can go on a calendar: a block, a
-  // holiday, an afternoon off — anything that is not a job.
+  // The website's mobile scheduler has one compact week control. Day/week and
+  // Event controls belong to the desktop board and consumed almost the entire
+  // first viewport when copied onto a phone.
   const bar = (
-    <View style={styles.bar}>
-      <View style={styles.segment}>
-        {(["day", "week"] as ViewMode[]).map((mode, index) => {
-          const on = mode === view;
-          return (
-            <Pressable
-              key={mode}
-              accessibilityRole="button"
-              accessibilityState={{ selected: on }}
-              accessibilityLabel={mode === "day" ? "Day view" : "Week view"}
-              onPress={() => setView(mode)}
-              style={({ pressed }) => [
-                styles.segmentCell,
-                index > 0 && styles.segmentDivide,
-                on && styles.segmentOn,
-                pressed && !on && styles.pressedSurface,
-              ]}
-            >
-              <Text style={[styles.segmentText, on && styles.segmentTextOn]}>
-                {mode === "day" ? "Day" : "Week"}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
-
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Create a calendar event"
-        onPress={() => setEventOpen(true)}
-        style={({ pressed }) => [styles.eventButton, pressed && styles.pressedSurface]}
-      >
-        <Feather name="plus" size={15} color={color.brandDeep} />
-        <Text style={styles.eventText}>Event</Text>
-      </Pressable>
-    </View>
-  );
-
-  // Seven cells have to fit one screen width — a strip you scroll to see Sunday
-  // defeats the point. Cells run taller than HIT so the touch area stays well
-  // past the 48pt floor even on a 375pt phone, where seven columns leave ~47pt
-  // of width each.
-  const strip = (
-    <>
-      {/* Week arrows either side of a Today reset. The strip itself still
-          scrolls a day at a time; this is for the question it could not answer
-          — "what does the week after next look like" — which used to mean
-          swiping seven cells at a time forever. */}
-      <View style={styles.weekNav}>
+    <View style={styles.weekNav}>
+      <Text style={styles.weekTitle}>{weekTitle(win.days)}</Text>
+      <View style={styles.weekActions}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Back to today"
+          onPress={goToday}
+          style={({ pressed }) => [styles.todayButton, pressed && styles.pressedSurface]}
+        >
+          <Text style={styles.todayText}>Today</Text>
+        </Pressable>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Previous week"
           onPress={() => shiftWeeks(-1)}
-          style={({ pressed }) => [styles.weekNavBtn, pressed && styles.pressedSurface]}
+          style={({ pressed }) => [styles.weekArrow, pressed && styles.pressedSurface]}
         >
-          <Text style={styles.weekNavText}>‹ Prev</Text>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Back to today"
-          disabled={anchorKey === null}
-          onPress={() => setAnchorKey(null)}
-          style={({ pressed }) => [
-            styles.weekNavToday,
-            anchorKey === null && styles.weekNavTodayOff,
-            pressed && styles.pressedSurface,
-          ]}
-        >
-          <Text
-            style={[
-              styles.weekNavText,
-              anchorKey !== null && styles.weekNavTodayOn,
-            ]}
-          >
-            Today
-          </Text>
+          <Feather name="chevron-left" size={17} color={color.ink} />
         </Pressable>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Next week"
           onPress={() => shiftWeeks(1)}
-          style={({ pressed }) => [styles.weekNavBtn, pressed && styles.pressedSurface]}
+          style={({ pressed }) => [styles.weekArrow, pressed && styles.pressedSurface]}
         >
-          <Text style={styles.weekNavText}>Next ›</Text>
+          <Feather name="chevron-right" size={17} color={color.ink} />
         </Pressable>
       </View>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.strip}
-      >
+    </View>
+  );
+
+  // Seven 44pt-or-larger cells fit at 375pt with compact gaps. Keeping the
+  // whole week visible is the reason this control exists.
+  const strip = (
+    <View style={styles.strip}>
       {win.days.map((cell) => {
-        // In week view nothing is "the selected day" — the list shows them all —
-        // so no cell is marked, and a tap means "show me THIS one", which is what
-        // a day-cell click means on the desktop board too.
-        const marked = cell.key === selectedKey && view === "day";
+        const marked = cell.key === selectedKey;
+        const today = cell.key === etDateKey(new Date().toISOString());
         const count = countsByDay.get(cell.key) ?? 0;
         return (
           <Pressable
@@ -1323,8 +1503,7 @@ export default function ScheduleScreen(): React.ReactElement {
               day: "numeric",
             })}
             onPress={() => {
-              setSelectedKey(cell.key);
-              setView("day");
+              setSelectedKey((current) => (current === cell.key ? null : cell.key));
             }}
             style={({ pressed }) => [
               styles.cell,
@@ -1332,22 +1511,80 @@ export default function ScheduleScreen(): React.ReactElement {
               pressed && !marked && styles.pressedSurface,
             ]}
           >
-            <Text style={[styles.cellWeekday, marked && styles.cellInkOn]}>{cell.weekday}</Text>
-            <Text style={[styles.cellDay, marked && styles.cellInkOn]}>{cell.day}</Text>
-            <Text style={[styles.cellCount, marked && styles.cellInkOn]}>
-              {count > 0 ? count : ""}
+            <Text style={[styles.cellDay, today && !marked && styles.cellToday, marked && styles.cellInkOn]}>
+              {cell.day}
+            </Text>
+            <Text style={[styles.cellWeekday, marked && styles.cellInkOn]}>
+              {cell.weekday}{count > 0 ? ` · ${count}` : ""}
             </Text>
           </Pressable>
         );
       })}
-      </ScrollView>
-    </>
+    </View>
   );
 
   // Mounted in every branch: a refused board is exactly the moment he still
   // wants to block out the afternoon.
   const eventSheet = (
     <>
+      <Modal
+        visible={createOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setCreateOpen(false)}
+      >
+        <View style={styles.menuOverlay}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Close create menu"
+            onPress={() => setCreateOpen(false)}
+            style={styles.menuBackdrop}
+          />
+          <View style={[styles.createMenu, { paddingBottom: insets.bottom + space.lg }]}>
+            <View style={styles.createMenuHead}>
+              <Text style={styles.createMenuTitle}>Create</Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Close"
+                onPress={() => setCreateOpen(false)}
+                style={({ pressed }) => [styles.menuClose, pressed && styles.pressedSurface]}
+              >
+                <Feather name="x" size={20} color={color.muted} />
+              </Pressable>
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => {
+                setCreateOpen(false);
+                router.push(`/(owner)/job/new?day=${encodeURIComponent(selected.key)}`);
+              }}
+              style={({ pressed }) => [styles.createChoice, pressed && styles.pressedSurface]}
+            >
+              <Feather name="tool" size={18} color={color.brandDeep} />
+              <View style={styles.createChoiceBody}>
+                <Text style={styles.createChoiceTitle}>Job</Text>
+                <Text style={styles.createChoiceSub}>Add manual work for a customer</Text>
+              </View>
+              <Feather name="chevron-right" size={18} color={color.faint} />
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => {
+                setCreateOpen(false);
+                setEventOpen(true);
+              }}
+              style={({ pressed }) => [styles.createChoice, pressed && styles.pressedSurface]}
+            >
+              <Feather name="calendar" size={18} color={color.brandDeep} />
+              <View style={styles.createChoiceBody}>
+                <Text style={styles.createChoiceTitle}>Event</Text>
+                <Text style={styles.createChoiceSub}>Block time, time off, or a holiday</Text>
+              </View>
+              <Feather name="chevron-right" size={18} color={color.faint} />
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
       {eventOpen ? (
         <CreateEventSheet
           crews={crews}
@@ -1423,12 +1660,37 @@ export default function ScheduleScreen(): React.ReactElement {
         renderItem={({ item }) => {
           if (item.kind === "section") {
             return (
-              <View style={styles.sectionHead}>
-                <Text style={styles.sectionLabel}>{item.label}</Text>
-                {item.meta !== null && <Text style={styles.sectionMeta}>{item.meta}</Text>}
+              <View>
+                {/* Markate's date band: a full-width tinted strip with the day
+                    on the left and what it is worth on the right, rather than a
+                    faint label floating over the rows. It is the piece that
+                    makes their lists scannable — you find the day, then the
+                    money, without reading a single row. */}
+                <View style={styles.sectionHead}>
+                  <Text style={styles.sectionLabel} numberOfLines={1}>
+                    {item.label}
+                  </Text>
+                  {item.key === "section-tray" && (tray?.length ?? 0) > 3 ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() => setShowAllUnscheduled((shown) => !shown)}
+                      hitSlop={space.sm}
+                    >
+                      <Text style={styles.sectionAction}>
+                        {showAllUnscheduled ? "Show less" : `Show all ${tray?.length ?? 0}`}
+                      </Text>
+                    </Pressable>
+                  ) : item.meta !== null ? (
+                    <Text style={styles.sectionMeta}>{item.meta}</Text>
+                  ) : null}
+                </View>
+                {item.key === "section-tray" ? (
+                  <Text style={styles.sectionHint}>Swipe left or tap ••• to remove old jobs.</Text>
+                ) : null}
               </View>
             );
           }
+          if (item.kind === "timeline") return <DayTimeline blocks={item.blocks} />;
           if (item.kind === "calm") return <Text style={styles.calm}>{item.text}</Text>;
           if (item.kind === "tray") {
             return (
@@ -1447,6 +1709,14 @@ export default function ScheduleScreen(): React.ReactElement {
           );
         }}
       />
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Create"
+        onPress={() => setCreateOpen(true)}
+        style={({ pressed }) => [styles.fab, pressed && styles.chromeActionPressed]}
+      >
+        <Feather name="plus" size={25} color={color.surface} />
+      </Pressable>
       {eventSheet}
       {activeVisit !== null ? (
         <VisitSheet
@@ -1460,7 +1730,7 @@ export default function ScheduleScreen(): React.ReactElement {
           }}
           onOpenEstimate={(estimateId) => {
             setVisitId(null);
-            router.push({ pathname: "/(owner)/estimate/build", params: { id: estimateId } });
+            router.push({ pathname: "/(owner)/estimate/new", params: { id: estimateId } });
           }}
         />
       ) : null}
@@ -1473,7 +1743,7 @@ const styles = StyleSheet.create({
   centre: { flex: 1, alignItems: "center", justifyContent: "center", padding: space.lg, gap: space.md },
 
   chrome: {
-    backgroundColor: color.chrome,
+    backgroundColor: color.bg,
     flexDirection: "row",
     alignItems: "flex-end",
     justifyContent: "space-between",
@@ -1482,82 +1752,30 @@ const styles = StyleSheet.create({
     paddingBottom: space.md,
   },
   chromeText: { flex: 1, gap: space.xs },
-  title: { ...type.display, color: color.chromeInk },
-  subtitle: { ...type.micro, color: color.chromeMuted },
-  chromeAction: {
-    minHeight: HIT,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.xs,
-    paddingHorizontal: space.md,
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: color.chromeLine,
-    backgroundColor: color.chromeRaise,
-  },
+  title: { ...type.chromeTitle, color: color.ink },
+  stop: { color: color.brand },
+  subtitle: { ...type.body, color: color.muted },
   chromeActionPressed: { opacity: 0.6 },
-  chromeActionText: { ...type.body, color: color.chromeInk },
-
-  bar: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: space.sm,
-    paddingHorizontal: space.lg,
-    paddingTop: space.md,
-  },
-  segment: {
-    flexDirection: "row",
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: color.lineStrong,
-    backgroundColor: color.surface,
-    overflow: "hidden",
-  },
-  segmentCell: {
-    minHeight: HIT,
-    minWidth: 72,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: space.md,
-  },
-  segmentDivide: { borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: color.lineStrong },
-  segmentOn: { backgroundColor: color.brandFill },
-  segmentText: { ...type.body, color: color.ink },
-  segmentTextOn: { color: color.chromeInk },
-  eventButton: {
-    minHeight: HIT,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: space.xs + 2,
-    paddingHorizontal: space.md,
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: color.lineStrong,
-    backgroundColor: color.surface,
-  },
-  eventText: { ...type.small, color: color.brandDeep },
 
   strip: {
     flexDirection: "row",
     gap: space.xs,
-    paddingHorizontal: space.md,
-    paddingTop: space.md,
-    paddingBottom: space.sm,
+    paddingHorizontal: space.lg,
+    paddingTop: space.sm,
+    paddingBottom: space.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: color.line,
   },
   cell: {
-    // FIXED width, not flex. Seven flex cells across a 375pt phone (iPhone SE,
-    // 13 mini) compute to 46.7pt each — under the HIT floor, in a control used
-    // one-handed outdoors. No arrangement of seven fixed columns clears 48pt on
-    // a narrow phone, so the axis scrolls instead of the cell shrinking.
-    width: 56,
-    minHeight: HIT + space.sm,
+    flex: 1,
+    minWidth: 0,
+    minHeight: HIT,
     alignItems: "center",
     justifyContent: "center",
-    gap: 2,
-    paddingVertical: space.sm,
-    borderRadius: radius.md,
+    gap: 1,
+    paddingHorizontal: 1,
+    paddingVertical: 5,
+    borderRadius: radius.sm,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: color.line,
     backgroundColor: color.surface,
@@ -1566,16 +1784,24 @@ const styles = StyleSheet.create({
   pressedSurface: { backgroundColor: color.hover },
   dim: { opacity: 0.6 },
   disabled: { opacity: 0.5 },
-  cellWeekday: { ...type.micro, color: color.faint },
+  cellWeekday: {
+    fontFamily: font.body,
+    fontSize: 10.5,
+    lineHeight: 13,
+    color: color.muted,
+    fontVariant: ["tabular-nums"],
+  },
   cellDay: {
-    ...type.title,
+    fontFamily: font.bodySemi,
+    fontSize: 14,
+    lineHeight: 17,
     color: color.ink,
     fontVariant: ["tabular-nums"],
   },
-  cellCount: { ...type.micro, color: color.brand, fontVariant: ["tabular-nums"] },
+  cellToday: { color: color.brandDeep },
   cellInkOn: { color: color.chromeInk },
 
-  list: { paddingHorizontal: space.lg, paddingTop: space.sm },
+  list: { paddingHorizontal: space.lg, paddingTop: space.xs },
 
   noticeStack: { gap: space.sm, marginBottom: space.md },
   notice: { backgroundColor: color.dangerBg, borderRadius: radius.md, padding: space.md },
@@ -1583,24 +1809,48 @@ const styles = StyleSheet.create({
   goodNotice: { backgroundColor: color.goodBg, borderRadius: radius.md, padding: space.md },
   goodNoticeText: { ...type.small, color: color.good },
 
+  // The date band. Tinted and full-bleed to the list's padding so it reads as a
+  // divider between days rather than as another row.
   sectionHead: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginTop: space.lg,
+    gap: space.md,
+    minHeight: 42,
+    paddingHorizontal: 14,
+    marginHorizontal: -space.md,
+    marginTop: space.md,
     marginBottom: space.sm,
+    backgroundColor: color.hover,
   },
-  sectionLabel: { ...type.micro, color: color.faint },
-  sectionMeta: { ...type.micro, color: color.ink, fontVariant: ["tabular-nums"] },
+  sectionLabel: { ...type.rule, color: color.ink, flexShrink: 1 },
+  sectionMeta: {
+    fontFamily: font.monoMedium,
+    fontSize: 14,
+    color: color.ink,
+    fontVariant: ["tabular-nums"],
+  },
+  sectionAction: { ...type.small, fontFamily: font.bodySemi, color: color.brandDeep },
+  sectionHint: { ...type.smaller, color: color.muted, marginBottom: space.sm },
 
+  // The event card. A thick coloured rail down the left and a wash of the same
+  // colour across the card — Markate's calendar reads as green work and purple
+  // quotes before a single word is read, and the rail is what does it.
   row: {
     minHeight: HIT,
     backgroundColor: color.surface,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: color.line,
+    borderLeftWidth: 6,
     borderRadius: radius.lg,
     padding: space.md,
     marginBottom: space.sm,
+  },
+  jobCard: { borderLeftColor: color.job, backgroundColor: color.jobBg, borderColor: color.line },
+  quoteCard: {
+    borderLeftColor: color.quote,
+    backgroundColor: color.quoteBg,
+    borderColor: color.line,
   },
   rowTop: {
     flexDirection: "row",
@@ -1609,17 +1859,94 @@ const styles = StyleSheet.create({
     gap: space.sm,
   },
   time: { ...type.small, color: color.muted, flexShrink: 1, fontVariant: ["tabular-nums"] },
-  money: { ...type.small, color: color.ink, flexShrink: 1, fontVariant: ["tabular-nums"] },
-  status: { ...type.micro, color: color.muted },
-  statusLive: { ...type.micro, color: color.job },
-  visitTag: { ...type.micro, color: color.quote },
+  money: {
+    fontFamily: font.monoMedium,
+    fontSize: 14,
+    color: color.ink,
+    flexShrink: 0,
+    fontVariant: ["tabular-nums"],
+  },
+  // The outlined status pill Markate ends every list row with.
+  rowMeta: { flexDirection: "row", alignItems: "center", gap: space.sm, marginTop: space.sm },
+  pill: {
+    borderRadius: radius.chip,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.lineStrong,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  pillLive: {
+    borderRadius: radius.chip,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.good,
+    backgroundColor: color.goodBg,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  status: { ...type.ruleSm, color: color.muted },
+  statusLive: { ...type.ruleSm, color: color.job },
+  visitTag: { ...type.ruleSm, color: color.quote },
+  pillQuote: {
+    borderRadius: radius.chip,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.quote,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
   customer: { ...type.title, color: color.ink, marginTop: space.sm },
   // TrayRow puts the name IN the top row beside the amount, so it must not
   // carry the stacked variant's top margin.
   customerLead: { ...type.title, color: color.ink, flexShrink: 1 },
   address: { ...type.small, color: color.muted, marginTop: space.xs },
-  crew: { ...type.micro, color: color.faint, marginTop: space.sm },
-  crewUnassigned: { ...type.small, color: color.danger, marginTop: space.sm },
+  // No top margin: these now sit inside rowMeta, which owns the spacing.
+  crew: { ...type.ruleSm, color: color.muted, flexShrink: 1 },
+  crewUnassigned: { ...type.small, color: color.danger, flexShrink: 1 },
+
+  // ── Day timeline ───────────────────────────────────────────────────────────
+  timeline: {
+    position: "relative",
+    backgroundColor: color.surface,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.line,
+    borderRadius: radius.lg,
+    overflow: "hidden",
+    marginBottom: space.sm,
+  },
+  hourRow: { height: HOUR_HEIGHT, flexDirection: "row", alignItems: "flex-start" },
+  hourLabel: {
+    width: RAIL_WIDTH,
+    paddingTop: 6,
+    paddingLeft: 10,
+    ...type.ruleSm,
+    color: color.muted,
+    fontVariant: ["tabular-nums"],
+  },
+  // The rule sits at the TOP of its hour, so a block's offset and the line it
+  // starts against are the same coordinate.
+  hourLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: color.line },
+  blockLayer: {
+    position: "absolute",
+    left: RAIL_WIDTH,
+    right: 4,
+    top: 0,
+    bottom: 0,
+  },
+  block: {
+    position: "absolute",
+    borderRadius: radius.sm,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    justifyContent: "flex-start",
+    gap: 2,
+    // Blocks in adjacent columns must not touch, or two jobs read as one.
+    borderWidth: 1.5,
+    borderColor: color.surface,
+  },
+  blockJob: { backgroundColor: color.job },
+  blockVisit: { backgroundColor: color.quote },
+  blockPressed: { opacity: 0.82 },
+  blockTitle: { ...type.smaller, fontFamily: font.bodySemi, color: color.surface },
+  blockSub: { ...type.smaller, color: color.surface, opacity: 0.86 },
 
   calm: { ...type.body, color: color.muted, paddingVertical: space.md },
 
@@ -1670,59 +1997,124 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: space.lg,
-    paddingTop: space.sm,
+    paddingTop: space.xs,
     gap: space.sm,
   },
-  weekNavBtn: {
-    minHeight: HIT - 14,
+  weekTitle: {
+    flexShrink: 1,
+    fontFamily: font.displayMedium,
+    fontSize: 16,
+    lineHeight: 20,
+    color: color.ink,
+    fontVariant: ["tabular-nums"],
+  },
+  weekActions: { flexDirection: "row", alignItems: "center", gap: space.xs },
+  todayButton: {
+    minHeight: HIT,
     justifyContent: "center",
     paddingHorizontal: space.md,
-    borderRadius: radius.md,
+    borderRadius: radius.sm,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: color.line,
+    borderColor: color.lineStrong,
     backgroundColor: color.surface,
   },
-  weekNavToday: {
-    minHeight: HIT - 14,
+  todayText: { ...type.small, fontFamily: font.bodySemi, color: color.ink },
+  weekArrow: {
+    width: HIT,
+    height: HIT,
+    alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: space.md,
-    borderRadius: radius.md,
+    borderRadius: radius.sm,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: color.brand,
-    backgroundColor: color.brandSoft,
+    borderColor: color.lineStrong,
+    backgroundColor: color.surface,
   },
-  // Off when it would do nothing: the board is already on today.
-  weekNavTodayOff: { borderColor: color.line, backgroundColor: color.surface, opacity: 0.5 },
-  weekNavTodayOn: { color: color.brand, fontFamily: font.bodyMedium },
-  weekNavText: { ...type.small, color: color.muted },
-  // Card and button side by side; the card takes the slack so the button keeps
-  // a constant, thumb-sized width down the whole list.
   trayRow: {
     flexDirection: "row",
     alignItems: "stretch",
-    gap: space.sm,
-    marginBottom: space.sm,
+    marginBottom: StyleSheet.hairlineWidth,
+    borderRadius: radius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.line,
+    backgroundColor: color.surface,
+    overflow: "hidden",
   },
   trayBody: {
     flex: 1,
     minHeight: HIT,
     backgroundColor: color.surface,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: color.line,
-    borderRadius: radius.lg,
     padding: space.md,
   },
   trayBook: {
-    minWidth: 72,
+    minWidth: HIT,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: space.md,
-    borderRadius: radius.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: color.brand,
-    backgroundColor: color.brandSoft,
+    backgroundColor: color.surface,
   },
-  trayBookText: { ...type.small, color: color.brand, fontFamily: font.bodyMedium },
+  tapToSchedule: {
+    ...type.smaller,
+    color: color.brandDeep,
+    fontFamily: font.bodySemi,
+    marginTop: 2,
+  },
+  fab: {
+    position: "absolute",
+    right: space.lg,
+    bottom: space.lg,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: color.brandFill,
+    shadowColor: color.chrome,
+    shadowOpacity: 0.2,
+    shadowRadius: 9,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 6,
+  },
+  menuOverlay: { flex: 1, justifyContent: "flex-end" },
+  menuBackdrop: {
+    position: "absolute",
+    inset: 0,
+    backgroundColor: color.scrim,
+  },
+  createMenu: {
+    backgroundColor: color.surface,
+    borderTopLeftRadius: radius.sheet,
+    borderTopRightRadius: radius.sheet,
+    paddingHorizontal: space.lg,
+    paddingTop: space.sm,
+    gap: space.sm,
+  },
+  createMenuHead: {
+    minHeight: HIT,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  createMenuTitle: { ...type.heading, color: color.ink },
+  menuClose: {
+    width: HIT,
+    height: HIT,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: radius.md,
+  },
+  createChoice: {
+    minHeight: 68,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    paddingHorizontal: space.md,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.line,
+    backgroundColor: color.surface,
+  },
+  createChoiceBody: { flex: 1, minWidth: 0 },
+  createChoiceTitle: { ...type.title, color: color.ink },
+  createChoiceSub: { ...type.small, color: color.muted, marginTop: 2 },
   sheetBody: { padding: space.lg, gap: space.lg },
 
   body: { ...type.body, color: color.ink },

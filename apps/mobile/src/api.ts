@@ -1,6 +1,8 @@
 import type {
   Agenda,
+  BusinessExpense,
   Call,
+  CanesSettings,
   Crew,
   CrewAccountRole,
   CatalogItem,
@@ -19,7 +21,9 @@ import type {
   LeadSource,
   Message,
   Overview,
+  PayoutSummary,
   TeamMember,
+  TodayReport,
   TechnicianJob,
   TechnicianWeek,
   Thread,
@@ -166,9 +170,43 @@ export const api = {
 
 export type ScheduleJob = Job & { crew: Crew | null };
 
+export type InsightsRange = "7d" | "30d" | "90d" | "12m";
+export type OwnerInsights = {
+  rangeKey: InsightsRange;
+  rangeLabel: string;
+  kpis: {
+    collectedCents: number;
+    collectedPrevCents: number;
+    outstandingCents: number;
+    outstandingCount: number;
+    wonCents: number;
+    wonCount: number;
+    avgJobCents: number | null;
+    paidJobs: number;
+  };
+  methodShare: { cash: number; card: number; other: number };
+  expensesCents: number;
+  marginCents: number;
+  topServices: { name: string; cents: number; count: number }[];
+  funnel: { label: string; count: number }[];
+  revenueByCrew: {
+    name: string;
+    color: string;
+    cents: number;
+    jobs: number;
+    expenseCents: number;
+    marginCents: number;
+  }[];
+};
+
 export const owner = {
   overview: () => request<Overview>("/canes/overview"),
   agenda: () => request<Agenda>("/canes/agenda"),
+
+  // The Dashboard's report grid. Separate from overview because its window is
+  // the ET CALENDAR DAY, not overview's rolling seven — a "today" card fed a
+  // week's number is the exact mistake one shared payload would invite.
+  todayReport: () => request<TodayReport>("/canes/today-report"),
 
   threads: () => request<Thread[]>("/canes/threads"),
   threadMessages: (phone: string) =>
@@ -197,15 +235,13 @@ export const owner = {
       `/canes/schedule/board?from=${encodeURIComponent(fromIso)}&to=${encodeURIComponent(toIso)}`,
     ),
   unscheduled: () => request<Job[]>("/canes/schedule/unscheduled"),
+
+  // Every job — the Work Orders list. There is no web equivalent: on that
+  // surface a job is only reachable through the schedule or its customer.
+  jobs: () => request<Job[]>("/canes/jobs"),
   crews: () => request<Crew[]>("/canes/crews"),
 
   job: (id: string) => request<JobWithItems>(`/canes/jobs/${id}`),
-
-  // Mints a single-use, 60-second URL that opens a web console surface inside
-  // the WebView already signed in. `to` is whitelisted SERVER side — the app
-  // names a destination, it does not get to choose an arbitrary one.
-  webviewUrl: (to: string) =>
-    request<{ url: string }>("/canes/webview-ticket", { method: "POST", body: { to } }),
 
   // OWNER ONLY server-side (the roster carries pay terms). Fetched lazily at
   // the moments that need a name — never on screen mount — so an ops manager
@@ -215,6 +251,12 @@ export const owner = {
   // The service catalog behind both builders — quick-add without typing a
   // price from memory.
   catalog: () => request<CatalogItem[]>("/canes/catalog"),
+  expenses: () => request<BusinessExpense[]>("/canes/expenses"),
+  payouts: (range: "day" | "week" | "month" | "year") =>
+    request<PayoutSummary>(`/canes/payouts?range=${range}`),
+  insights: (range: InsightsRange) =>
+    request<OwnerInsights>(`/canes/insights?range=${range}`),
+  settings: () => request<CanesSettings>("/canes/settings"),
 };
 
 // ── Owner mutations (O1) ─────────────────────────────────────────────────────
@@ -243,11 +285,43 @@ export type CallOutcome = "closed" | "follow_up" | "no_answer" | "lost";
 
 // Click-to-call through the Twilio bridge. NOT a tel: link: this rings
 // Sebastian first and dials the customer with the BUSINESS number as caller ID,
-// writing a call row and a lead event. The tel: links elsewhere in the app stay
-// — they are the fast path when the record does not matter.
+// writing a call row and a lead event. The explicitly labelled direct-dial
+// fallback remains available when the bridge itself is unavailable.
 export const callActions = {
   bridge: (phone: string, leadId?: string) =>
     act("/canes/calls/bridge", { phone, leadId }),
+};
+
+export const expenseActions = {
+  addBusiness: (input: {
+    name: string;
+    amountCents: number;
+    category: string;
+    recurring: boolean;
+    frequency: string;
+    note?: string;
+  }) => act("/canes/expenses", { action: "addBusiness", ...input }),
+  deleteBusiness: (id: string) => act("/canes/expenses", { action: "deleteBusiness", id }),
+};
+
+export const catalogActions = {
+  upsert: (input: {
+    id?: string;
+    name: string;
+    kind: "service" | "product";
+    defaultPriceCents: number;
+    description?: string | null;
+    unit?: string;
+    taxable?: boolean;
+    active?: boolean;
+    position?: number;
+  }) => act("/canes/catalog/actions", { action: "upsert", ...input }),
+  delete: (id: string) => act("/canes/catalog/actions", { action: "delete", id }),
+};
+
+export const settingsActions = {
+  save: (settings: Record<string, unknown>) =>
+    act("/canes/settings/actions", { action: "save", settings }),
 };
 
 // Creating a lead and creating a customer post to the COLLECTION, not to a
@@ -335,6 +409,12 @@ export const jobActions = {
     act(`/canes/jobs/${id}/actions`, { action: "setStatus", status, reason }),
   updateDetails: (id: string, fields: JobDetailsPatch) =>
     act(`/canes/jobs/${id}/actions`, { action: "updateDetails", fields }),
+  setRecurrence: (id: string, recurrence: string) =>
+    act(`/canes/jobs/${id}/actions`, { action: "setRecurrence", recurrence }),
+  addChecklistItem: (id: string, name: string, required: boolean) =>
+    act(`/canes/jobs/${id}/items`, { action: "add", name, required }),
+  removeChecklistItem: (id: string, itemId: string) =>
+    act(`/canes/jobs/${id}/items`, { action: "remove", itemId }),
   start: (id: string) => act(`/canes/jobs/${id}/actions`, { action: "start" }),
   // On success the payload carries invoiceId — completing a job mints its bill.
   complete: (id: string) =>
@@ -397,6 +477,9 @@ export const invoiceActions = {
       customerName: string;
       customerPhone: string;
       customerEmail: string;
+      contactId: string | null;
+      jobName: string;
+      jobAddress: string;
       adjustmentCents: number;
       messageToCustomer: string;
       terms: string;
@@ -451,7 +534,8 @@ export const estimateActions = {
   createForCustomer: (contactId: string) =>
     act<{ estimateId?: string }>("/canes/estimates", { action: "createForCustomer", contactId }),
   create: (input: {
-    estimateType: string;
+    estimateType: "standard" | "options" | "packages";
+    contactId?: string;
     customerName?: string;
     customerPhone?: string;
     customerEmail?: string;
@@ -464,7 +548,22 @@ export const estimateActions = {
     act(`/canes/estimates/${id}/actions`, { action: "saveItems", items }),
   update: (
     id: string,
-    patch: Partial<{ adjustmentCents: number; depositPercent: number; expiresAtIso: string | null }>,
+    patch: Partial<{
+      customerName: string;
+      customerPhone: string;
+      customerEmail: string;
+      contactId: string | null;
+      jobAddress: string;
+      jobName: string;
+      estimateType: "standard" | "options" | "packages";
+      adjustmentCents: number;
+      depositPercent: number;
+      messageToCustomer: string;
+      terms: string;
+      internalNotes: string;
+      expiresAtIso: string | null;
+      employee: string;
+    }>,
   ) => act(`/canes/estimates/${id}/actions`, { action: "update", patch }),
   send: (id: string, opts?: { channels?: { email?: boolean; text?: boolean }; toEmail?: string; toPhone?: string }) =>
     act(`/canes/estimates/${id}/actions`, { action: "send", ...opts }),

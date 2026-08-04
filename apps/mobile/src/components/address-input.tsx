@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Pressable,
   StyleSheet,
   Text,
@@ -7,7 +8,9 @@ import {
   View,
   type StyleProp,
   type TextStyle,
+  type ViewStyle,
 } from "react-native";
+import { Feather } from "@expo/vector-icons";
 import { API_BASE } from "@/api";
 import { color, font, HIT, radius, space, type } from "@/theme";
 
@@ -55,15 +58,20 @@ export function AddressInput({
   placeholder = "Street, city",
   editable = true,
   style,
+  containerStyle,
+  accessibilityLabel = "Street address",
 }: {
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
   editable?: boolean;
   style?: StyleProp<TextStyle>;
+  containerStyle?: StyleProp<ViewStyle>;
+  accessibilityLabel?: string;
 }) {
   const [sugs, setSugs] = useState<string[]>([]);
   const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
   // Ignore out-of-order responses: a slow answer for "390 e" must never
   // overwrite the list for "390 evergreen".
   const seq = useRef(0);
@@ -72,10 +80,12 @@ export function AddressInput({
     const query = value.trim();
     if (!open || query.length < 3) {
       setSugs([]);
+      setLoading(false);
       return;
     }
     const mine = ++seq.current;
     const timer = setTimeout(async () => {
+      setLoading(true);
       try {
         const res = await fetch(
           `${API_BASE}/api/canes/address-search?q=${encodeURIComponent(query)}`,
@@ -90,39 +100,56 @@ export function AddressInput({
         setSugs([...new Set(labels)].slice(0, 5));
       } catch {
         // Free text still works; suggestions just stay away.
+      } finally {
+        if (mine === seq.current) setLoading(false);
       }
     }, 250);
     return () => clearTimeout(timer);
   }, [value, open]);
 
   return (
-    <View style={styles.wrap}>
-      <TextInput
-        value={value}
-        onChangeText={(v) => {
-          setOpen(true);
-          onChange(v);
-        }}
-        onFocus={() => setOpen(true)}
-        onBlur={() => {
-          // Let a suggestion tap land before the list unmounts.
-          setTimeout(() => setOpen(false), 150);
-        }}
-        placeholder={placeholder}
-        placeholderTextColor={color.faint}
-        autoCapitalize="words"
-        autoCorrect={false}
-        autoComplete="street-address"
-        textContentType="fullStreetAddress"
-        editable={editable}
-        accessibilityLabel="Street address"
-        style={[styles.input, style]}
-      />
+    <View style={[styles.wrap, containerStyle]}>
+      <View style={styles.inputWrap}>
+        <TextInput
+          value={value}
+          onChangeText={(v) => {
+            setOpen(true);
+            onChange(v);
+          }}
+          onFocus={() => setOpen(true)}
+          onBlur={() => {
+            // Let a suggestion tap land before the list unmounts.
+            setTimeout(() => setOpen(false), 150);
+          }}
+          onSubmitEditing={() => {
+            const first = sugs[0];
+            if (!first) return;
+            onChange(first);
+            setOpen(false);
+            setSugs([]);
+          }}
+          placeholder={placeholder}
+          placeholderTextColor={color.faint}
+          autoCapitalize="words"
+          autoCorrect={false}
+          autoComplete="street-address"
+          textContentType="fullStreetAddress"
+          importantForAutofill="yes"
+          returnKeyType={sugs.length > 0 ? "done" : "next"}
+          editable={editable}
+          accessibilityLabel={accessibilityLabel}
+          accessibilityHint="Type at least three characters, then choose a suggested address"
+          style={[styles.input, style]}
+        />
+        {loading ? <ActivityIndicator size="small" color={color.brand} style={styles.spinner} /> : null}
+      </View>
       {open && sugs.length > 0 ? (
-        <View style={styles.list}>
+        <View accessibilityRole="list" style={styles.list}>
           {sugs.map((s) => (
             <Pressable
               key={s}
+              accessibilityRole="button"
+              accessibilityLabel={`Use address ${s}`}
               onPress={() => {
                 onChange(s);
                 setOpen(false);
@@ -130,7 +157,8 @@ export function AddressInput({
               }}
               style={({ pressed }) => [styles.item, pressed && styles.itemPressed]}
             >
-              <Text style={styles.itemText} numberOfLines={1}>
+              <Feather name="map-pin" size={15} color={color.faint} />
+              <Text style={styles.itemText} numberOfLines={2}>
                 {s}
               </Text>
             </Pressable>
@@ -143,6 +171,7 @@ export function AddressInput({
 
 const styles = StyleSheet.create({
   wrap: { position: "relative" },
+  inputWrap: { position: "relative" },
   input: {
     // No lineHeight — same iOS placeholder-tracking gotcha as every TextInput.
     fontFamily: font.body,
@@ -155,6 +184,7 @@ const styles = StyleSheet.create({
     borderColor: color.line,
     backgroundColor: color.surface,
   },
+  spinner: { position: "absolute", right: space.md, top: 15 },
   list: {
     marginTop: space.xs,
     backgroundColor: color.surface,
@@ -165,11 +195,13 @@ const styles = StyleSheet.create({
   },
   item: {
     minHeight: HIT,
-    justifyContent: "center",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
     paddingHorizontal: space.md,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: color.line,
   },
   itemPressed: { backgroundColor: color.hover },
-  itemText: { ...type.small, color: color.ink },
+  itemText: { ...type.small, flex: 1, color: color.ink },
 });

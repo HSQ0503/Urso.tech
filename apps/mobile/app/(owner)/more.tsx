@@ -118,39 +118,41 @@ export default function MoreScreen(): React.ReactElement {
       icon: "dollar-sign",
       go: () => router.push("/(owner)/invoices"),
     },
-    // The WebView tail. These five open the real console inside the app —
-    // recharts has no RN equivalent and the price list is a dense form, so
-    // rebuilding them natively would cost more than every native screen so far
-    // and show the owner nothing new.
+    {
+      key: "jobs",
+      label: "Work orders",
+      icon: "briefcase",
+      go: () => router.push("/(owner)/jobs"),
+    },
     {
       key: "insights",
       label: "Insights",
       icon: "bar-chart-2",
-      go: () => router.push({ pathname: "/(owner)/web/[surface]", params: { surface: "insights" } }),
+      go: () => router.push("/(owner)/insights"),
     },
     {
       key: "payouts",
       label: "Payouts",
       icon: "pie-chart",
-      go: () => router.push({ pathname: "/(owner)/web/[surface]", params: { surface: "payouts" } }),
+      go: () => router.push("/(owner)/payouts"),
     },
     {
       key: "expenses",
       label: "Expenses",
       icon: "trending-down",
-      go: () => router.push({ pathname: "/(owner)/web/[surface]", params: { surface: "expenses" } }),
+      go: () => router.push("/(owner)/expenses"),
     },
     {
       key: "catalog",
       label: "Price list",
       icon: "list",
-      go: () => router.push({ pathname: "/(owner)/web/[surface]", params: { surface: "catalog" } }),
+      go: () => router.push("/(owner)/catalog"),
     },
     {
       key: "settings",
       label: "Settings",
       icon: "settings",
-      go: () => router.push({ pathname: "/(owner)/web/[surface]", params: { surface: "settings" } }),
+      go: () => router.push("/(owner)/settings"),
     },
   ];
 

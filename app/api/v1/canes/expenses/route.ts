@@ -1,4 +1,4 @@
-import { apiFail, apiResult, apiRoute } from "@/lib/api/v1";
+import { apiFail, apiOk, apiResult, apiRoute, denyUnlessOwner } from "@/lib/api/v1";
 import {
   addJobExpense,
   deleteJobExpense,
@@ -8,6 +8,7 @@ import {
   deleteBusinessExpense,
 } from "@/app/CanesPressure/actions";
 import type { ExpenseFrequency } from "@urso/types";
+import { listBusinessExpenses } from "@/lib/canes/overhead";
 
 // POST /api/v1/canes/expenses — the cost side of the money model.
 //
@@ -34,6 +35,12 @@ import type { ExpenseFrequency } from "@urso/types";
 // through untouched so the caller sees the sentence the action wrote.
 
 export const dynamic = "force-dynamic";
+
+export const GET = apiRoute(async ({ actor }) => {
+  const denied = denyUnlessOwner(actor);
+  if (denied) return denied;
+  return apiOk(await listBusinessExpenses());
+});
 
 type Body = {
   action?: unknown;

@@ -9,7 +9,7 @@
 // formats with fmtMoney and never adds. Timestamps render in ET via fmtEt,
 // never the device clock.
 
-import { useState, type ReactNode } from "react";
+import { useState, type ComponentProps, type ReactNode } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -35,8 +35,9 @@ import {
   fmtPhone,
   INVOICE_STATUS_LABEL,
   JOB_STATUS_LABEL,
+  SOURCE_LABEL,
 } from "@urso/types";
-import { customerActions, estimateActions, type CustomerPatch } from "@/api";
+import { callActions, customerActions, estimateActions, type CustomerPatch } from "@/api";
 import { AddressInput } from "@/components/address-input";
 import { Avatar } from "@/components/avatar";
 import { NavigateButton } from "@/components/navigate";
@@ -75,6 +76,38 @@ function GoodNotice({ text }: { text: string | null }) {
   );
 }
 
+function ProfileAction({
+  label,
+  icon,
+  disabled = false,
+  onPress,
+}: {
+  label: string;
+  icon: ComponentProps<typeof Feather>["name"];
+  disabled?: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled }}
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.profileAction,
+        disabled && styles.profileActionDisabled,
+        pressed && styles.rowPressed,
+      ]}
+    >
+      <Feather name={icon} size={18} color={disabled ? color.brandEdge : color.brand} />
+      <Text style={[styles.profileActionText, disabled && styles.profileActionTextDisabled]}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
 export default function CustomerScreen(): React.ReactElement {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
@@ -98,6 +131,7 @@ export default function CustomerScreen(): React.ReactElement {
   const [manageNotice, setManageNotice] = useState<string | null>(null);
   const [estimateNotice, setEstimateNotice] = useState<string | null>(null);
   const [estimateGood, setEstimateGood] = useState<string | null>(null);
+  const [callGood, setCallGood] = useState<string | null>(null);
 
   // Edit sheet fields, seeded from the contact each time the sheet opens.
   const [editOpen, setEditOpen] = useState(false);
@@ -137,9 +171,18 @@ export default function CustomerScreen(): React.ReactElement {
     (contactId) => estimateActions.createForCustomer(contactId),
     { invalidates: [keys.estimates(), keys.customers.one(id)] },
   );
+  const runBridge = useAction((phone: string) => callActions.bridge(phone));
 
   const open = (url: string) => {
     Linking.openURL(url).catch(() => setActionNotice("This phone couldn't open that."));
+  };
+
+  const callCustomer = async (phone: string) => {
+    setActionNotice(null);
+    setCallGood(null);
+    const result = await runBridge.mutateAsync(phone);
+    if (result.ok) setCallGood("Your phone should ring in a moment — answer to connect.");
+    else setActionNotice(result.notice);
   };
 
   const header = (
@@ -151,9 +194,9 @@ export default function CustomerScreen(): React.ReactElement {
         hitSlop={space.sm}
         style={({ pressed }) => [styles.back, pressed && styles.backPressed]}
       >
-        <Feather name="chevron-left" size={24} color={color.chromeInk} />
+        <Feather name="chevron-left" size={24} color={color.muted} />
       </Pressable>
-      <Text style={styles.chromeLabel}>Customer</Text>
+      <Text style={styles.chromeLabel}>Customers</Text>
     </View>
   );
 
@@ -277,7 +320,7 @@ export default function CustomerScreen(): React.ReactElement {
       router.push({ pathname: "/(owner)/estimates" });
       return;
     }
-    router.push({ pathname: "/(owner)/estimate/build", params: { id: estimateId } });
+    router.push({ pathname: "/(owner)/estimate/new", params: { id: estimateId } });
   };
 
   const setArchived = async (archived: boolean) => {
@@ -336,53 +379,80 @@ export default function CustomerScreen(): React.ReactElement {
         <Notice text={queryNotice} />
         <Notice text={actionNotice} />
 
-        {/* Identity. */}
-        <View style={styles.card}>
-          <View style={styles.identity}>
-            <Avatar name={contact.name} size={64} />
-            <View style={styles.identityText}>
-              <Text style={styles.name}>{contact.name ?? "Unnamed customer"}</Text>
-              {contact.archived ? <Text style={styles.archivedTag}>Archived</Text> : null}
-            </View>
-          </View>
-          {phone !== null ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Call ${contact.name ?? "customer"}`}
-              onPress={() => open(`tel:${phone}`)}
-              style={({ pressed }) => [styles.contactRow, styles.divided, pressed && styles.rowPressed]}
-            >
-              <Text style={styles.fieldLabel}>Phone</Text>
-              <Text style={[styles.body, styles.tabular]}>{fmtPhone(phone)}</Text>
-            </Pressable>
-          ) : null}
-          {email !== null ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Email ${contact.name ?? "customer"}`}
-              onPress={() => open(`mailto:${email}`)}
-              style={({ pressed }) => [styles.contactRow, styles.divided, pressed && styles.rowPressed]}
-            >
-              <Text style={styles.fieldLabel}>Email</Text>
-              <Text style={styles.body}>{email}</Text>
-            </Pressable>
-          ) : null}
+        <View style={styles.profileHero}>
+          <Avatar name={contact.name} size={64} />
+          <Text style={styles.name}>{contact.name ?? "Unnamed customer"}</Text>
+          <Text style={styles.profileSource}>{SOURCE_LABEL[contact.source]}</Text>
+          {contact.archived ? <Text style={styles.archivedTag}>Archived</Text> : null}
         </View>
 
-        {/* Money strip. Both figures arrive computed server-side — rendered,
-            never derived here. */}
-        <View style={[styles.card, styles.statRow]}>
-          <View style={styles.stat}>
-            <Text style={styles.fieldLabel}>Lifetime</Text>
-            <Text style={styles.statValue}>{fmtMoney(detail.payments_total_cents)}</Text>
-          </View>
-          <View style={[styles.stat, styles.statDivider]}>
-            <Text style={styles.fieldLabel}>Open balance</Text>
-            <Text style={[styles.statValue, detail.open_balance_cents > 0 && styles.statOwing]}>
-              {fmtMoney(detail.open_balance_cents)}
-            </Text>
-          </View>
+        <View style={styles.profileActions}>
+          <ProfileAction
+            label="Call"
+            icon="phone"
+            disabled={phone === null}
+            onPress={() => phone !== null && void callCustomer(phone)}
+          />
+          <ProfileAction
+            label="Text"
+            icon="message-square"
+            disabled={phone === null}
+            onPress={() =>
+              phone !== null &&
+              router.push({ pathname: "/(owner)/thread/[phone]", params: { phone } })
+            }
+          />
+          <ProfileAction
+            label="Email"
+            icon="mail"
+            disabled={email === null}
+            onPress={() => email !== null && open(`mailto:${email}`)}
+          />
+          <ProfileAction label="Edit" icon="edit-2" onPress={openEdit} />
         </View>
+        <GoodNotice text={callGood} />
+
+        <Section label="Contact info">
+          <View style={styles.card}>
+            <View style={styles.contactRow}>
+              <Text style={styles.contactLabel}>Phone</Text>
+              <Text style={[styles.body, styles.tabular, phone === null && styles.mutedText]}>
+                {phone !== null ? fmtPhone(phone) : "None on file"}
+              </Text>
+            </View>
+            <View style={[styles.contactRow, styles.divided]}>
+              <Text style={styles.contactLabel}>Email</Text>
+              <Text style={[styles.body, email === null && styles.mutedText]}>
+                {email ?? "None on file"}
+              </Text>
+            </View>
+            <View style={[styles.contactRow, styles.divided]}>
+              <Text style={styles.contactLabel}>Source</Text>
+              <Text style={styles.body}>{SOURCE_LABEL[contact.source]}</Text>
+            </View>
+            <View style={[styles.contactRow, styles.divided]}>
+              <Text style={styles.contactLabel}>Customer since</Text>
+              <Text style={styles.body}>
+                {fmtEt(contact.created_at, { month: "short", day: "numeric", year: "numeric" })}
+              </Text>
+            </View>
+          </View>
+        </Section>
+
+        <Section label="Balance">
+          <View style={[styles.card, styles.statRow]}>
+            <View style={styles.stat}>
+              <Text style={styles.contactLabel}>Lifetime collected</Text>
+              <Text style={styles.statValue}>{fmtMoney(detail.payments_total_cents)}</Text>
+            </View>
+            <View style={[styles.stat, styles.statDivider]}>
+              <Text style={styles.contactLabel}>Open balance</Text>
+              <Text style={[styles.statValue, detail.open_balance_cents > 0 && styles.statOwing]}>
+                {fmtMoney(detail.open_balance_cents)}
+              </Text>
+            </View>
+          </View>
+        </Section>
 
         <Section label="Addresses">
           <Notice text={addressNotice} />
@@ -819,7 +889,7 @@ const styles = StyleSheet.create({
   },
 
   chrome: {
-    backgroundColor: color.chrome,
+    backgroundColor: color.bg,
     flexDirection: "row",
     alignItems: "center",
     gap: space.sm,
@@ -828,7 +898,7 @@ const styles = StyleSheet.create({
   },
   back: { minWidth: HIT, minHeight: HIT, justifyContent: "center", alignItems: "flex-start" },
   backPressed: { opacity: 0.6 },
-  chromeLabel: { ...type.micro, color: color.chromeMuted },
+  chromeLabel: { ...type.body, color: color.muted },
 
   scrollBody: { padding: space.lg, gap: space.lg },
 
@@ -848,10 +918,25 @@ const styles = StyleSheet.create({
   linkedRow: { flexDirection: "row", alignItems: "center", minHeight: HIT },
   linkedRowBody: { flex: 1, gap: space.sm },
 
-  identity: { flexDirection: "row", alignItems: "center", gap: space.md, padding: space.lg },
-  identityText: { flex: 1, gap: 2 },
-  name: { ...type.display, color: color.ink },
+  profileHero: { alignItems: "center", gap: 8 },
+  name: { ...type.chromeTitle, color: color.ink, textAlign: "center" },
+  profileSource: { ...type.rule, color: color.muted },
   archivedTag: { ...type.micro, color: color.muted },
+  profileActions: { flexDirection: "row", gap: 8 },
+  profileAction: {
+    flex: 1,
+    minHeight: 54,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 5,
+    backgroundColor: color.surface,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.line,
+    borderRadius: radius.md,
+  },
+  profileActionDisabled: { opacity: 0.45 },
+  profileActionText: { ...type.small, fontFamily: font.bodyMedium, color: color.brand },
+  profileActionTextDisabled: { color: color.brandEdge },
 
   contactRow: {
     minHeight: HIT,
@@ -876,6 +961,7 @@ const styles = StyleSheet.create({
   mutedText: { ...type.small, color: color.muted },
   dangerInk: { color: color.danger },
   fieldLabel: { ...type.micro, color: color.faint },
+  contactLabel: { ...type.small, color: color.muted },
   tabular: { fontVariant: ["tabular-nums"] },
   money: { ...type.small, color: color.ink, fontVariant: ["tabular-nums"] },
   metaMicro: { ...type.micro, color: color.faint },

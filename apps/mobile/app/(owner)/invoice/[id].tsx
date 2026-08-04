@@ -1,26 +1,8 @@
-// The bill — everything about one invoice on one screen.
-//
-// Customer card first (who owes this, one tap to reach them), then the lines
-// and the totals ladder, the payments ledger, the review rewards, and the
-// status actions. The dangerous thing is one row at the bottom behind a
-// confirm. Every mutation refusal is the server's own sentence, shown verbatim
-// in the section where the tap happened.
-//
-// MONEY: integer cents formatted with fmtMoney, tabular-nums. The screen
-// computes nothing — the single display subtraction (balance due) goes through
-// the same shared helper the web uses. The one dollars-to-cents conversion is
-// the cash-payment input at the edge, via the web's own inputToCents contract.
-//
-// Two things arrived late and both are about what the OWNER checks before money
-// moves: the customer pay link (the page the customer actually pays on, safe to
-// surface here — see customerUrl), and the reward VERIFY step, which puts the
-// review's own destination in front of the Approve button.
-
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useState, type ComponentProps } from "react";
 import {
   ActivityIndicator,
   Alert,
-  Linking,
+  Modal,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -37,1300 +19,437 @@ import type { QueryKey } from "@tanstack/react-query";
 import {
   fmtEt,
   fmtMoney,
-  fmtPhone,
   invoiceBalanceCents,
-  INVOICE_STATUS_LABEL,
   PAYMENT_METHOD_LABEL,
-  REWARD_KIND_LABEL,
-  type CanesSettings,
-  type InvoiceReward,
-  type InvoiceRewardKind,
-  type InvoiceRewardStatus,
+  type InvoiceStatus,
 } from "@urso/types";
-import { API_BASE, invoiceActions, owner } from "@/api";
-import { getAccessToken } from "@/auth";
-import { getAdminToken } from "@/session";
-import { Avatar } from "@/components/avatar";
-import { NavigateButton } from "@/components/navigate";
+import { API_BASE, invoiceActions } from "@/api";
+import { Mark } from "@/components/ledger";
 import { Notice } from "@/components/notice";
-import { PhoneInput, toPhoneDisplay } from "@/components/phone-input";
-import { keys, useInvoice, useInvoiceRewards } from "@/queries";
+import { keys, useInvoice } from "@/queries";
 import { noticeFrom, useAction, usePullToRefresh } from "@/query";
-import { color, font, HIT, radius, space, type } from "@/theme";
+import { color, font, HIT, radius, space } from "@/theme";
 
-// The web's own dollars-to-cents contract (estimate-builder.tsx), copied
-// character for character — the one place this screen converts money instead
-// of formatting it.
-function inputToCents(v: string): number {
-  const n = Number(v.replace(/[^0-9.\-]/g, ""));
-  return Number.isFinite(n) ? Math.round(n * 100) : 0;
-}
+type PreviewTab = "from" | "to" | "job";
 
-// ok:true can still carry a sentence — a QUALIFIED success ("Texted, but the
-// email failed."). The envelope parks it inside data; it renders like every
-// other server sentence: verbatim, next to the tap that earned it.
-function qualifiedNotice(data: unknown): string | null {
-  const notice = (data as { notice?: unknown } | null)?.notice;
-  return typeof notice === "string" && notice.length > 0 ? notice : null;
-}
-
-// Display casing only — reward statuses have no shared label map in
-// @urso/types. Kind labels DO come from the shared REWARD_KIND_LABEL.
-const REWARD_STATUS_LABEL: Record<InvoiceRewardStatus, string> = {
-  offered: "Offered",
-  claimed: "Claimed",
-  approved: "Approved",
-  declined: "Declined",
+const STATUS_LABEL: Record<InvoiceStatus, string> = {
+  draft: "DRAFT",
+  sent: "SENT",
+  viewed: "VIEWED",
+  paid: "PAID",
+  void: "VOID",
 };
 
-// ── The verify step's destinations ──────────────────────────────────────────
-//
-// Approving a reward takes money off the bill, so the web offers "Check Google"
-// / "Check Facebook" / "Check profiles" BEFORE Approve: the owner confirms the
-// review actually exists first. Those destinations live in settings, under
-// review_rewards.
-//
-// GET /canes/settings is denyUnlessOwner — an ops manager holding `invoices`
-// can approve a reward but cannot read settings at all. So it is fetched
-// LAZILY, only once a claimed reward is actually sitting on this bill, the same
-// shape as the team roster fetched at tap time for the Credit picker below. A
-// refusal degrades to no Check buttons; showing an ops manager a notice about a
-// settings page they can't open would be noise about someone else's permission.
-//
-// It goes straight through fetch rather than the api client or the query cache
-// on purpose: a one-off, best-effort side read whose failure is invisible by
-// design. A 401 is deliberately NOT escalated here either — the invoice reads
-// own the session-death path, and an optional side read must never be the thing
-// that signs Sebastian out mid-approval.
-type ReviewLink = { label: string; url: string };
-type ReviewLinks = Record<InvoiceRewardKind, ReviewLink[]>;
-
-// The url sets mirror rewardConfigFrom (lib/canes/rewards.ts) exactly. The web
-// labels every social_follow link "Check profiles", which renders the same word
-// twice when both profiles are configured; naming the platform is the phone's
-// version of that, because two identical buttons is not a choice.
-function reviewLinksFrom(r: CanesSettings["review_rewards"]): ReviewLinks {
-  return {
-    google_review: r.google_url ? [{ label: "Check Google", url: r.google_url }] : [],
-    facebook_review: r.facebook_url ? [{ label: "Check Facebook", url: r.facebook_url }] : [],
-    social_follow: [
-      ...(r.instagram_url ? [{ label: "Check Instagram", url: r.instagram_url }] : []),
-      ...(r.facebook_url ? [{ label: "Check Facebook", url: r.facebook_url }] : []),
-    ],
-  };
+function dollarsToCents(value: string): number {
+  const amount = Number(value.replace(/[^0-9.]/g, ""));
+  return Number.isFinite(amount) ? Math.round(amount * 100) : 0;
 }
 
-async function fetchReviewLinks(): Promise<ReviewLinks | null> {
-  // Same identity resolution the api client uses: an owner carries the admin
-  // token, a crew account a Supabase one, and whichever exists is the actor.
-  const token = (await getAdminToken()) ?? (await getAccessToken());
-  if (token === null) return null;
-  try {
-    const res = await fetch(`${API_BASE}/api/v1/canes/settings`, {
-      headers: { authorization: `Bearer ${token}` },
-    });
-    const body = (await res.json()) as { ok?: boolean; data?: CanesSettings } | null;
-    if (!body || body.ok !== true || body.data === undefined) return null;
-    return reviewLinksFrom(body.data.review_rewards);
-  } catch {
-    return null;
-  }
-}
-
-// The green sibling of Notice — same shape, good colours. Qualified successes
-// and confirmations land here.
 function GoodNotice({ text }: { text: string | null }) {
-  if (text === null) return null;
+  if (!text) return null;
+  return <View style={styles.goodNotice}><Text style={styles.goodNoticeText}>{text}</Text></View>;
+}
+
+function PreviewTabButton({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
   return (
-    <View style={styles.goodNotice}>
-      <Text style={styles.goodNoticeText}>{text}</Text>
+    <Pressable accessibilityRole="tab" accessibilityState={{ selected: active }} onPress={onPress} style={[styles.previewTab, active && styles.previewTabOn]}>
+      <Text style={[styles.previewTabText, active && styles.previewTabTextOn]}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function Accordion({ title, open, onPress, children }: { title: string; open: boolean; onPress: () => void; children: React.ReactNode }) {
+  return (
+    <View style={styles.accordion}>
+      <Pressable accessibilityRole="button" accessibilityState={{ expanded: open }} onPress={onPress} style={styles.accordionHead}>
+        <Text style={styles.accordionTitle}>{title}</Text>
+        <Feather name={open ? "chevron-up" : "chevron-down"} size={28} color={color.brand} />
+      </Pressable>
+      {open ? <View style={styles.accordionBody}>{children}</View> : null}
     </View>
   );
 }
 
-function Section({ label, children }: { label: string; children: ReactNode }) {
+function ActionTile({
+  label,
+  icon,
+  danger = false,
+  disabled = false,
+  onPress,
+}: {
+  label: string;
+  icon: ComponentProps<typeof Feather>["name"];
+  danger?: boolean;
+  disabled?: boolean;
+  onPress: () => void;
+}) {
   return (
-    <View style={styles.section}>
-      <Text style={styles.sectionLabel}>{label}</Text>
-      {children}
-    </View>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled }}
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => [styles.actionTile, disabled && styles.disabled, pressed && styles.actionTilePressed]}
+    >
+      <Feather name={icon} size={23} color={disabled ? color.faint : danger ? color.danger : color.muted} />
+      <Text style={[styles.actionTileText, danger && styles.actionTileDanger, disabled && styles.actionTileDisabledText]}>{label}</Text>
+    </Pressable>
   );
 }
 
-export default function InvoiceScreen(): React.ReactElement {
+export default function InvoicePreviewScreen(): React.ReactElement {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
-
-  // The invoice read blocks the screen; the rewards read says its sentence in
-  // its own section. Like job/[id], no focus refetch — pull-to-refresh is the
-  // reader's explicit refresh on a pushed detail screen.
   const invoiceQuery = useInvoice(id);
-  const rewardsQuery = useInvoiceRewards(id);
-  const { refreshing, onRefresh } = usePullToRefresh(() =>
-    Promise.all([invoiceQuery.refetch(), rewardsQuery.refetch()]),
-  );
-
-  // Every surface this bill's money shows on. The job key rides along when the
-  // bill is tied to a job — voiding releases it, payments settle it — and
-  // ["owner","schedule"] is the prefix covering every board window.
-  const invoiceJobId = invoiceQuery.data?.job_id ?? null;
-  const everywhere: QueryKey[] = [
-    keys.invoiceOne(id),
-    keys.invoices(),
-    keys.invoiceRewards(id),
-    ...(invoiceJobId !== null ? [keys.jobs.one(invoiceJobId)] : []),
-    ["owner", "schedule"],
-    keys.overview(),
-  ];
-
-  // Zero-payload actions get explicit generics: a zero-arg fn gives TVars no
-  // inference site, and `unknown` there would make mutateAsync demand an
-  // argument.
-  const send = useAction<void, Record<string, never>>(() => invoiceActions.send(id), {
-    invalidates: everywhere,
-  });
-  const recordCash = useAction(
-    (amountCents: number) => invoiceActions.recordCashPayment(id, amountCents),
-    { invalidates: everywhere },
-  );
-  const voidInvoice = useAction<void, Record<string, never>>(() => invoiceActions.void(id), {
-    invalidates: everywhere,
-  });
-  const del = useAction<void, Record<string, never>>(() => invoiceActions.delete(id), {
-    invalidates: everywhere,
-  });
-  const rewardApproval = useAction(
-    (vars: { rewardId: string; approve: boolean; attributedMemberId?: string | null }) =>
-      invoiceActions.setRewardApproval(id, vars.rewardId, vars.approve, vars.attributedMemberId),
-    { invalidates: everywhere },
-  );
-  // Contact fields are the exception to the action's draft-only rule — a wrong
-  // phone on a SENT bill is exactly when fixing it matters (then Send again).
-  const updateContact = useAction(
-    (fields: Partial<{ customerName: string; customerPhone: string; customerEmail: string }>) =>
-      invoiceActions.update(id, fields),
-    { invalidates: everywhere },
-  );
-  const rewardOffer = useAction(
-    (vars: { kind: string; enabled: boolean }) =>
-      invoiceActions.setRewardOffer(id, vars.kind, vars.enabled),
-    { invalidates: everywhere },
-  );
-
-  // One refusal surface per section, so the sentence lands next to the tap
-  // that earned it instead of at the top of a long scroll.
-  const [customerNotice, setCustomerNotice] = useState<string | null>(null);
-  const [rewardNotice, setRewardNotice] = useState<string | null>(null);
-  const [rewardGood, setRewardGood] = useState<string | null>(null);
-  const [actionNotice, setActionNotice] = useState<string | null>(null);
-  const [actionGood, setActionGood] = useState<string | null>(null);
-  const [dangerNotice, setDangerNotice] = useState<string | null>(null);
-
-  const [linkNotice, setLinkNotice] = useState<string | null>(null);
-  const [cashOpen, setCashOpen] = useState(false);
-  const [contactOpen, setContactOpen] = useState(false);
-  const [contactName, setContactName] = useState("");
-  const [contactPhone, setContactPhone] = useState("");
-  const [contactEmail, setContactEmail] = useState("");
-  const [cashAmount, setCashAmount] = useState("");
-
+  const { refreshing, onRefresh } = usePullToRefresh(invoiceQuery.refetch);
   const invoice = invoiceQuery.data ?? null;
-  const notice = noticeFrom(invoiceQuery.error);
-  const rewardsNotice = noticeFrom(rewardsQuery.error);
-  const rewards = rewardsQuery.data ?? [];
 
-  // The lazy settings read: nothing is claimed on most bills, and those never
-  // touch the owner-only endpoint at all. Asked once per screen — a ref rather
-  // than a state flag so a second claimed reward landing in a refetch cannot
-  // start a second request. Must sit above the early returns below, like every
-  // other hook here.
-  const [reviewLinks, setReviewLinks] = useState<ReviewLinks | null>(null);
-  // Latched only on SUCCESS. Latching on attempt meant one transient failure of
-  // this best-effort side read — a dropped bar in a driveway — permanently
-  // suppressed the Check buttons for every invoice for the rest of the session,
-  // on a Tabs route the navigator never unmounts. A failure now simply leaves
-  // the flag down, so the next bill with a claimed reward tries again.
-  const linksLoaded = useRef(false);
-  const hasClaimedReward = rewards.some((r) => r.status === "claimed");
-  useEffect(() => {
-    if (!hasClaimedReward || linksLoaded.current) return;
-    let alive = true;
-    void (async () => {
-      const links = await fetchReviewLinks();
-      if (alive && links !== null) {
-        linksLoaded.current = true;
-        setReviewLinks(links);
-      }
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [hasClaimedReward]);
+  const [tab, setTab] = useState<PreviewTab>("job");
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [paymentsOpen, setPaymentsOpen] = useState(false);
+  const [paymentMethodsOpen, setPaymentMethodsOpen] = useState(false);
+  const [messageOpen, setMessageOpen] = useState(false);
+  const [termsOpen, setTermsOpen] = useState(false);
+  const [recordOpen, setRecordOpen] = useState(false);
+  const [cashText, setCashText] = useState("");
+  const [notice, setNotice] = useState<string | null>(null);
+  const [good, setGood] = useState<string | null>(null);
 
-  const loading = invoiceQuery.isPending || rewardsQuery.isPending;
+  const invoiceKeys: QueryKey[] = [keys.invoiceOne(id), keys.invoices(), keys.overview()];
+  const send = useAction<void, Record<string, never>>(() => invoiceActions.send(id), { invalidates: invoiceKeys });
+  const recordCash = useAction((amountCents: number) => invoiceActions.recordCashPayment(id, amountCents), { invalidates: invoiceKeys });
+  const voidInvoice = useAction<void, Record<string, never>>(() => invoiceActions.void(id), { invalidates: invoiceKeys });
+  const deleteInvoice = useAction<void, Record<string, never>>(() => invoiceActions.delete(id), { invalidates: [keys.invoices(), keys.overview()] });
+  const busy = send.isPending || recordCash.isPending || voidInvoice.isPending || deleteInvoice.isPending;
 
-  const header = (
-    <View style={[styles.chrome, { paddingTop: insets.top + space.sm }]}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Back"
-        onPress={() => router.back()}
-        hitSlop={space.sm}
-        style={({ pressed }) => [styles.back, pressed && styles.backPressed]}
-      >
-        <Feather name="chevron-left" size={20} color={color.chromeMuted} />
-        <Text style={styles.backText}>Back</Text>
-      </Pressable>
-      <Text style={styles.chromeName} numberOfLines={1}>
-        {invoice !== null ? `Invoice ${invoice.number}` : "Invoice"}
-      </Text>
-      {invoice !== null ? (
-        <Text style={styles.chromeMeta}>{INVOICE_STATUS_LABEL[invoice.status]}</Text>
-      ) : null}
-    </View>
-  );
+  if (invoiceQuery.isPending) {
+    return <View style={styles.loading}><ActivityIndicator size="large" color={color.brand} /></View>;
+  }
 
-  if (loading) {
+  if (!invoice) {
     return (
-      <View style={styles.screen}>
-        {header}
-        <View style={styles.centre}>
-          <ActivityIndicator color={color.brand} size="large" />
-        </View>
+      <View style={styles.loading}>
+        <Notice text={noticeFrom(invoiceQuery.error) ?? "Invoice not found."} />
+        <Pressable accessibilityRole="button" onPress={() => router.back()} style={styles.backButton}><Text style={styles.backButtonText}>Go back</Text></Pressable>
       </View>
     );
   }
 
-  if (invoice === null) {
-    return (
-      <View style={styles.screen}>
-        {header}
-        <View style={styles.centre}>
-          {notice !== null ? <Notice text={notice} /> : <Text style={styles.muted}>Not found.</Text>}
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => router.back()}
-            style={({ pressed }) => [styles.button, styles.wide, pressed && styles.pressed]}
-          >
-            <Text style={styles.buttonText}>Go back</Text>
-          </Pressable>
-        </View>
-      </View>
-    );
-  }
-
-  const jobId = invoice.job_id;
-  const payUrl = invoice.hosted_payment_url;
-
-  // BALANCE DUE — the one display subtraction on the phone (total − paid,
-  // floored at zero), done through the same shared helper the web performs it
-  // with client-side. Nowhere else in this app subtracts money.
-  const balanceCents = invoiceBalanceCents(invoice);
-
-  const open = (url: string, setNotice: (text: string | null) => void) => {
-    Linking.openURL(url).catch(() => setNotice("This phone couldn't open that."));
-  };
-
-  const goCustomer = () => {
-    if (invoice.contact_id === null) return;
-    router.push({ pathname: "/(owner)/customer/[id]", params: { id: invoice.contact_id } });
-  };
-
-  // The customer's own pay page — the web console's "Customer link", built off
-  // API_BASE so a dev build links at the dev origin. Distinct from payUrl above:
-  // that one is Square's hosted checkout, this is the Canes page the customer is
-  // texted, which carries the bill, the reward offers and the pay button.
-  //
-  // public_token is a CREDENTIAL, not an identifier: /CanesPressure/i/<token> is
-  // an unauthenticated page anyone holding the value can open. Safe to surface
-  // HERE because this screen only renders behind the `invoices` permission — the
-  // same gate the token sits behind on the web invoice page — and redacted from
-  // GET /canes/customers/:id for the mirrored reason, since `customers` is a
-  // lower bar than `invoices`. Never logged, never put in a notice, never drawn
-  // as text; the share sheet hands it to the OS without it appearing on screen.
+  const balance = invoiceBalanceCents(invoice);
+  const statusGood = invoice.status === "paid";
+  const statusBad = invoice.status === "void";
   const customerUrl = `${API_BASE}/CanesPressure/i/${invoice.public_token}`;
 
-  const onOpenLink = () => {
-    setLinkNotice(null);
-    open(customerUrl, setLinkNotice);
+  const sendNow = async () => {
+    setNotice(null);
+    setGood(null);
+    const result = await send.mutateAsync();
+    if (!result.ok) setNotice(result.notice);
+    else setGood(invoice.status === "draft" ? "Invoice sent." : "Invoice re-sent.");
+    setMenuOpen(false);
   };
 
-  // Sharing IS the job — the link exists to reach the customer, and the OS sheet
-  // is how a phone hands something to Messages or Mail. Share is a core
-  // react-native export; no dependency was added to reach it.
-  const onShareLink = async () => {
-    setLinkNotice(null);
+  const shareNow = async () => {
     try {
       await Share.share({ message: customerUrl });
     } catch {
-      setLinkNotice("This phone couldn't share that.");
+      setNotice("This phone couldn’t share the invoice link.");
     }
+    setMenuOpen(false);
   };
 
-  const onSend = async () => {
-    setActionNotice(null);
-    setActionGood(null);
-    // No opts: the action texts AND emails whatever the snapshot's contact
-    // fields carry. The returned sentence may be a qualified success.
-    const r = await send.mutateAsync();
-    if (!r.ok) setActionNotice(r.notice);
-    else setActionGood(qualifiedNotice(r.data) ?? "Invoice sent.");
-  };
-
-  const onRecordCash = () => {
-    const cents = inputToCents(cashAmount);
-    Alert.alert("Record cash payment?", `${fmtMoney(cents)} against invoice ${invoice.number}.`, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Record",
-        onPress: () => {
-          void (async () => {
-            setActionNotice(null);
-            setActionGood(null);
-            const r = await recordCash.mutateAsync(cents);
-            if (!r.ok) setActionNotice(r.notice);
-            else {
-              setCashOpen(false);
-              setCashAmount("");
-              const qualified = qualifiedNotice(r.data);
-              if (qualified !== null) setActionGood(qualified);
-            }
-          })();
-        },
-      },
-    ]);
-  };
-
-  const onVoid = () => {
-    Alert.alert(
-      "Void invoice?",
-      "The job is released for re-billing and the Square pay link is cancelled.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Void",
-          style: "destructive",
-          onPress: () => {
-            void (async () => {
-              setActionNotice(null);
-              setActionGood(null);
-              const r = await voidInvoice.mutateAsync();
-              if (!r.ok) setActionNotice(r.notice);
-              else {
-                const qualified = qualifiedNotice(r.data);
-                if (qualified !== null) setActionGood(qualified);
-              }
-            })();
-          },
-        },
-      ],
-    );
-  };
-
-  const onDelete = () => {
-    Alert.alert("Delete invoice?", undefined, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: () => {
-          void (async () => {
-            setDangerNotice(null);
-            const r = await del.mutateAsync();
-            if (r.ok) router.back();
-            else setDangerNotice(r.notice);
-          })();
-        },
-      },
-    ]);
-  };
-
-  const approveReward = (reward: InvoiceReward, attributedMemberId?: string | null) => {
-    void (async () => {
-      setRewardNotice(null);
-      setRewardGood(null);
-      const r = await rewardApproval.mutateAsync({
-        rewardId: reward.id,
-        approve: true,
-        attributedMemberId,
-      });
-      if (!r.ok) setRewardNotice(r.notice);
-      else {
-        const qualified = qualifiedNotice(r.data);
-        if (qualified !== null) setRewardGood(qualified);
-      }
-    })();
-  };
-
-  const openContact = () => {
-    setContactName(invoice?.customer_name ?? "");
-    setContactPhone(toPhoneDisplay(invoice?.customer_phone ?? ""));
-    setContactEmail(invoice?.customer_email ?? "");
-    setActionNotice(null);
-    setContactOpen((v) => !v);
-  };
-
-  const onSaveContact = async () => {
-    if (!invoice) return;
-    // Changed keys only — absent leaves the column alone, "" clears it.
-    const fields: Partial<{ customerName: string; customerPhone: string; customerEmail: string }> =
-      {};
-    if (contactName !== (invoice.customer_name ?? "")) fields.customerName = contactName;
-    if (contactPhone !== toPhoneDisplay(invoice.customer_phone ?? ""))
-      fields.customerPhone = contactPhone;
-    if (contactEmail !== (invoice.customer_email ?? "")) fields.customerEmail = contactEmail;
-    if (Object.keys(fields).length === 0) {
-      setContactOpen(false);
+  const recordNow = async () => {
+    const amount = dollarsToCents(cashText);
+    if (amount <= 0) {
+      setNotice("Enter a payment amount.");
       return;
     }
-    setActionNotice(null);
-    const r = await updateContact.mutateAsync(fields);
-    if (!r.ok) setActionNotice(r.notice);
-    else setContactOpen(false);
+    const result = await recordCash.mutateAsync(amount);
+    if (!result.ok) setNotice(result.notice);
+    else {
+      setGood(`${fmtMoney(amount)} payment recorded.`);
+      setRecordOpen(false);
+      setCashText("");
+    }
   };
 
-  const onApproveReward = (reward: InvoiceReward) => {
-    Alert.alert("Approve reward?", "Approving subtracts the reward from the bill.", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Approve",
-        onPress: () => {
-          void (async () => {
-            // Attribution feeds the review leaderboard, so the web's verify
-            // step offers a "Credit" picker — losing it on mobile would erase
-            // who earned the review. The roster read is OWNER-ONLY (it carries
-            // pay terms), fetched here at tap time: an ops manager's refusal
-            // just means approving without credit, not a payroll notice.
-            const roster = await owner.team();
-            const workers = roster.ok ? roster.data.filter((m) => m.active) : [];
-            if (workers.length === 0) {
-              approveReward(reward);
-              return;
-            }
-            Alert.alert("Credit the review to…", undefined, [
-              ...workers.map((m) => ({
-                text: m.name,
-                onPress: () => approveReward(reward, m.id),
-              })),
-              { text: "No one", onPress: () => approveReward(reward, null) },
-              { text: "Cancel", style: "cancel" as const },
-            ]);
-          })();
-        },
-      },
+  const voidNow = () => {
+    setMenuOpen(false);
+    Alert.alert("Void this invoice?", "The customer will no longer be able to pay it.", [
+      { text: "Keep invoice", style: "cancel" },
+      { text: "Void invoice", style: "destructive", onPress: () => void (async () => {
+        const result = await voidInvoice.mutateAsync();
+        if (!result.ok) setNotice(result.notice);
+        else setGood("Invoice voided.");
+      })() },
     ]);
   };
 
-  const onDeclineReward = (reward: InvoiceReward) => {
-    Alert.alert("Decline reward?", undefined, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Decline",
-        style: "destructive",
-        onPress: () => {
-          void (async () => {
-            setRewardNotice(null);
-            setRewardGood(null);
-            const r = await rewardApproval.mutateAsync({ rewardId: reward.id, approve: false });
-            if (!r.ok) setRewardNotice(r.notice);
-            else {
-              // Decline answers ok:true WITH a sentence ("Declined — no
-              // discount applied.", or the already-resolved CAS notice) —
-              // qualified successes surface, same as approve.
-              const qualified = qualifiedNotice(r.data);
-              if (qualified !== null) setRewardGood(qualified);
-            }
-          })();
-        },
-      },
+  const deleteNow = () => {
+    setMenuOpen(false);
+    Alert.alert("Delete invoice?", "This cannot be undone.", [
+      { text: "Keep invoice", style: "cancel" },
+      { text: "Delete", style: "destructive", onPress: () => void (async () => {
+        const result = await deleteInvoice.mutateAsync();
+        if (!result.ok) setNotice(result.notice);
+        else router.replace("/(owner)/invoices");
+      })() },
     ]);
   };
-
-  // Pre-send offer toggle. Removing deletes the `offered` row, and with no
-  // reward-config read on the phone a removed kind can't be re-added here — so
-  // removal gets a confirm even though no money moves.
-  const onRemoveOffer = (reward: InvoiceReward) => {
-    Alert.alert("Remove this offer?", undefined, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Remove",
-        style: "destructive",
-        onPress: () => {
-          void (async () => {
-            setRewardNotice(null);
-            setRewardGood(null);
-            const r = await rewardOffer.mutateAsync({ kind: reward.kind, enabled: false });
-            if (!r.ok) setRewardNotice(r.notice);
-          })();
-        },
-      },
-    ]);
-  };
-
-  const onOfferAgain = async (reward: InvoiceReward) => {
-    setRewardNotice(null);
-    setRewardGood(null);
-    const r = await rewardOffer.mutateAsync({ kind: reward.kind, enabled: true });
-    if (!r.ok) setRewardNotice(r.notice);
-  };
-
-  const canSend = invoice.status === "draft";
-  const canResend = invoice.status === "sent" || invoice.status === "viewed";
-  // Cash and void belong to ANY open bill — completing a job mints a DRAFT,
-  // and cash on the spot is the field norm, so gating these behind sent/viewed
-  // hid them exactly when Sebastian needs them. The web offers both on every
-  // non-paid, non-void bill, and the actions claim those statuses themselves.
-  const openBill = invoice.status !== "paid" && invoice.status !== "void";
-  const canDelete = invoice.status === "draft" || invoice.status === "void";
-  // The web's `isPublic`, mirrored exactly: a draft's token 404s and a void's
-  // page is dead, so the customer link shows for everything else — a PAID bill
-  // included, where the customer's receipt is what they ask for.
-  const isPublic = invoice.status !== "draft" && invoice.status !== "void";
-  const rewardBusy = rewardApproval.isPending || rewardOffer.isPending;
 
   return (
     <View style={styles.screen}>
-      {header}
+      <View style={{ height: insets.top, backgroundColor: color.chrome }} />
+      <View style={styles.header}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => router.back()} style={styles.headerBack}>
+          <Feather name="chevron-left" size={31} color={color.brand} />
+          <Text style={styles.headerTitle}>PREVIEW</Text>
+        </Pressable>
+        <View style={styles.headerActions}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Home" onPress={() => router.push("/(owner)")} style={styles.headerIcon}><Feather name="home" size={25} color={color.muted} /></Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel="Invoice actions" onPress={() => setMenuOpen(true)} style={styles.headerIcon}><Feather name="more-vertical" size={27} color={color.muted} /></Pressable>
+        </View>
+      </View>
+
       <ScrollView
-        contentContainerStyle={[styles.scrollBody, { paddingBottom: insets.bottom + space.xxl }]}
-        keyboardShouldPersistTaps="handled"
-        // The cash-payment input opens near the bottom of this page, exactly
-        // where the keyboard rises.
-        automaticallyAdjustKeyboardInsets
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={color.brand}
-            colors={[color.brand]}
-          />
-        }
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={color.brand} />}
+        contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + 84 }]}
       >
-        <Notice text={notice} />
+        {notice ? <Notice text={notice} /> : null}
+        <GoodNotice text={good} />
 
-        <Section label="Customer">
-          <View style={styles.card}>
-            <Pressable
-              accessibilityRole={invoice.contact_id !== null ? "button" : undefined}
-              accessibilityLabel={
-                invoice.contact_id !== null
-                  ? `Open customer ${invoice.customer_name ?? ""}`.trim()
-                  : undefined
-              }
-              onPress={invoice.contact_id !== null ? goCustomer : undefined}
-              style={({ pressed }) => [
-                styles.customer,
-                pressed && invoice.contact_id !== null && styles.pressed,
-              ]}
-            >
-              <Avatar name={invoice.customer_name} />
-              <View style={styles.customerBody}>
-                <Text style={styles.customerName} numberOfLines={1}>
-                  {invoice.customer_name ?? "No customer"}
-                </Text>
-                {invoice.customer_phone !== null ? (
-                  <Text style={styles.customerPhone}>{fmtPhone(invoice.customer_phone)}</Text>
-                ) : null}
-                {invoice.job_address !== null ? (
-                  <>
-                    <Text style={styles.customerAddress} numberOfLines={2}>
-                      {invoice.job_address}
-                    </Text>
-                    {/* Its own Pressable, like the call glyph below — opening
-                        Maps must never also push the customer screen. */}
-                    <View style={styles.navigate}>
-                      <NavigateButton address={invoice.job_address} onFail={setCustomerNotice} />
-                    </View>
-                  </>
-                ) : null}
-              </View>
-              {invoice.customer_phone !== null ? (
-                // Its own Pressable so dialling never also navigates — the
-                // inner responder wins and the card press does not fire.
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Call customer"
-                  onPress={() => open(`tel:${invoice.customer_phone}`, setCustomerNotice)}
-                  style={({ pressed }) => [styles.phoneGlyph, pressed && styles.phoneGlyphPressed]}
-                >
-                  <Feather name="phone" size={18} color={color.brandDeep} />
-                </Pressable>
-              ) : null}
-              {invoice.contact_id !== null ? (
-                <Feather name="chevron-right" size={20} color={color.faint} />
-              ) : null}
-            </Pressable>
-
-            {jobId !== null ? (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="View job"
-                onPress={() =>
-                  router.push({ pathname: "/(owner)/job/[id]", params: { id: jobId } })
-                }
-                style={({ pressed }) => [styles.jobRow, styles.divided, pressed && styles.pressed]}
-              >
-                <Text style={styles.body} numberOfLines={1}>
-                  View job{invoice.job_name !== null ? ` — ${invoice.job_name}` : ""}
-                </Text>
-                <Feather name="chevron-right" size={18} color={color.faint} />
-              </Pressable>
-            ) : null}
-          </View>
-          <Notice text={customerNotice} />
-        </Section>
-
-        <Section label="Lines">
-          <View style={styles.card}>
-            {invoice.items.length > 0 ? (
-              invoice.items.map((item, index) => (
-                <View key={item.id} style={[styles.itemRow, index > 0 && styles.divided]}>
-                  <View style={styles.itemMain}>
-                    <Text style={styles.body}>{item.name}</Text>
-                    <Text style={styles.itemQty}>Qty {item.quantity}</Text>
-                  </View>
-                  <Text style={styles.money}>{fmtMoney(item.line_total_cents)}</Text>
-                </View>
-              ))
-            ) : (
-              <View style={styles.pad}>
-                <Text style={styles.muted}>No line items on this invoice.</Text>
-              </View>
-            )}
-
-            {/* Lines are write-once on every other surface; O3c opened them on
-                a DRAFT. The editor owns the rules (and the server refuses the
-                rest in its own words) — this is only the door. */}
-            {/* Draft is only ONE of saveInvoiceItems' refusals. A job that took
-                a booking deposit mints a draft that already carries a payment,
-                and that is the commonest bill here — so a door opened on status
-                alone leads straight to an editor whose every Save is refused.
-                The editor states the reason and blocks its own Save too; this
-                just stops the walk being offered in the first place. */}
-            {invoice.status === "draft"
-            && invoice.square_invoice_id === null
-            && invoice.payments.length === 0 ? (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Edit lines"
-                onPress={() =>
-                  router.push({ pathname: "/(owner)/invoice/lines", params: { id } })
-                }
-                style={({ pressed }) => [styles.jobRow, styles.divided, pressed && styles.pressed]}
-              >
-                <Text style={styles.body}>Edit lines</Text>
-                <Feather name="chevron-right" size={18} color={color.faint} />
-              </Pressable>
-            ) : null}
-
-            <View style={[styles.pad, styles.divided]}>
-              <View style={styles.moneyRow}>
-                <Text style={styles.fieldLabel}>Subtotal</Text>
-                <Text style={styles.money}>{fmtMoney(invoice.subtotal_cents)}</Text>
-              </View>
-              {invoice.adjustment_cents !== 0 ? (
-                <View style={styles.moneyRow}>
-                  <Text style={styles.fieldLabel}>Adjustment</Text>
-                  <Text style={styles.money}>{fmtMoney(invoice.adjustment_cents)}</Text>
-                </View>
-              ) : null}
-              {invoice.tax_cents !== 0 ? (
-                <View style={styles.moneyRow}>
-                  <Text style={styles.fieldLabel}>Tax</Text>
-                  <Text style={styles.money}>{fmtMoney(invoice.tax_cents)}</Text>
-                </View>
-              ) : null}
-              <View style={styles.moneyRow}>
-                <Text style={styles.fieldLabel}>Total</Text>
-                <Text style={styles.moneyBig}>{fmtMoney(invoice.total_cents)}</Text>
-              </View>
-              <View style={styles.moneyRow}>
-                <Text style={styles.fieldLabel}>Amount paid</Text>
-                <Text style={styles.money}>{fmtMoney(invoice.amount_paid_cents)}</Text>
-              </View>
-              <View style={styles.moneyRow}>
-                <Text style={styles.fieldLabel}>Balance due</Text>
-                <Text style={[styles.moneyBig, balanceCents > 0 && styles.moneyDue]}>
-                  {fmtMoney(balanceCents)}
-                </Text>
-              </View>
+        <View style={styles.identity}>
+          <View style={styles.identityMark}>
+            <Mark size={104} />
+            <View style={[styles.statusBadge, statusGood && styles.statusBadgeGood, statusBad && styles.statusBadgeBad]}>
+              <Text style={[styles.statusBadgeText, statusGood && styles.statusBadgeTextGood, statusBad && styles.statusBadgeTextBad]}>{STATUS_LABEL[invoice.status]}</Text>
             </View>
           </View>
-        </Section>
-
-        <Section label="Payments">
-          <View style={styles.card}>
-            {invoice.payments.length > 0 ? (
-              invoice.payments.map((payment, index) => (
-                <View key={payment.id} style={[styles.itemRow, index > 0 && styles.divided]}>
-                  <View style={styles.itemMain}>
-                    <Text style={styles.body}>{PAYMENT_METHOD_LABEL[payment.method]}</Text>
-                    <View style={styles.paymentMeta}>
-                      <Text style={styles.itemQty}>
-                        {fmtEt(payment.created_at, {
-                          month: "short",
-                          day: "numeric",
-                          year: "numeric",
-                        })}
-                      </Text>
-                      {payment.kind !== undefined ? (
-                        <Text style={styles.itemQty}>
-                          {payment.kind === "deposit" ? "Deposit" : "Balance"}
-                        </Text>
-                      ) : null}
-                      {payment.status === "refunded" ? (
-                        <Text style={styles.refunded}>Refunded</Text>
-                      ) : null}
-                    </View>
-                  </View>
-                  <Text style={styles.money}>{fmtMoney(payment.amount_cents)}</Text>
-                </View>
-              ))
-            ) : (
-              <View style={styles.pad}>
-                <Text style={styles.muted}>No payments yet.</Text>
-              </View>
-            )}
+          <View style={styles.identityCopy}>
+            <Text style={styles.identityTitle}>Invoice</Text>
+            <View style={styles.identityLine}><Text style={styles.identityLabel}>Invoice #</Text><Text style={styles.identityValue}>{invoice.number}</Text></View>
+            <View style={styles.identityLine}><Text style={styles.identityLabel}>Invoice Date</Text><Text style={styles.identityValue}>{fmtEt(invoice.created_at, { month: "short", day: "2-digit", year: "numeric" })}</Text></View>
+            <View style={styles.identityLine}><Text style={styles.identityLabel}>Due Date</Text><Text style={styles.identityValue}>{fmtEt(invoice.created_at, { month: "short", day: "2-digit", year: "numeric" })}</Text></View>
+            <View style={styles.identityLine}><Text style={styles.identityLabel}>Type</Text><Text style={styles.identityValue}>Total Due</Text></View>
+            <View style={styles.identityLine}><Text style={styles.identityLabel}>Balance Due</Text><Text style={styles.identityValue}>{fmtMoney(balance)}</Text></View>
+            {invoice.job_id ? <Pressable accessibilityRole="button" accessibilityLabel="Open work order" onPress={() => router.push({ pathname: "/(owner)/job/[id]", params: { id: invoice.job_id ?? "" } })} style={styles.identityLine}><Text style={styles.identityLabel}>Work order #</Text><Text style={styles.jobLink}>OPEN</Text></Pressable> : null}
           </View>
-        </Section>
+        </View>
 
-        {rewards.length > 0 || rewardsNotice !== null ? (
-          <Section label="Rewards">
-            <Notice text={rewardsNotice} />
-            {rewards.length > 0 ? (
-              <View style={styles.card}>
-                {rewards.map((reward, index) => (
-                  <View key={reward.id} style={[styles.pad, index > 0 && styles.divided]}>
-                    <View style={styles.moneyRow}>
-                      <View style={styles.itemMain}>
-                        <Text style={styles.body}>{REWARD_KIND_LABEL[reward.kind]}</Text>
-                        <Text
-                          style={[
-                            styles.rewardStatus,
-                            reward.status === "approved" && styles.rewardStatusGood,
-                            reward.status === "claimed" && styles.rewardStatusHot,
-                          ]}
-                        >
-                          {REWARD_STATUS_LABEL[reward.status]}
-                        </Text>
-                      </View>
-                      <Text style={styles.money}>−{fmtMoney(reward.amount_cents)}</Text>
-                    </View>
+        <View style={styles.dividerBand} />
 
-                    {reward.status === "claimed" ? (
-                      <>
-                        {/* The verify step, in the web's own words: the review
-                            is a claim by the customer until Sebastian has seen
-                            it, and Approve is what takes the money off. */}
-                        <Text style={styles.muted}>
-                          Verify it exists, then approve to take{" "}
-                          {fmtMoney(reward.amount_cents)} off.
-                        </Text>
-                        {(reviewLinks?.[reward.kind] ?? []).length > 0 ? (
-                          <View style={styles.buttonRow}>
-                            {(reviewLinks?.[reward.kind] ?? []).map((link) => (
-                              <Pressable
-                                key={link.url}
-                                accessibilityRole="button"
-                                accessibilityLabel={link.label}
-                                onPress={() => open(link.url, setRewardNotice)}
-                                style={({ pressed }) => [
-                                  styles.button,
-                                  styles.grow,
-                                  pressed && styles.pressed,
-                                ]}
-                              >
-                                <Text style={styles.buttonText}>{link.label}</Text>
-                              </Pressable>
-                            ))}
-                          </View>
-                        ) : null}
-                        <View style={styles.buttonRow}>
-                          <Pressable
-                            accessibilityRole="button"
-                            onPress={() => onApproveReward(reward)}
-                            disabled={rewardBusy}
-                            style={({ pressed }) => [
-                              styles.primary,
-                              styles.grow,
-                              pressed && styles.primaryPressed,
-                              rewardBusy && styles.disabled,
-                            ]}
-                          >
-                            <Text style={styles.primaryText}>Approve</Text>
-                          </Pressable>
-                          <Pressable
-                            accessibilityRole="button"
-                            onPress={() => onDeclineReward(reward)}
-                            disabled={rewardBusy}
-                            style={({ pressed }) => [
-                              styles.button,
-                              styles.grow,
-                              pressed && styles.pressed,
-                              rewardBusy && styles.disabled,
-                            ]}
-                          >
-                            <Text style={styles.buttonText}>Decline</Text>
-                          </Pressable>
-                        </View>
-                      </>
-                    ) : null}
+        <View style={styles.partyBlock}>
+          <View style={styles.previewTabs}>
+            <PreviewTabButton label="From" active={tab === "from"} onPress={() => setTab("from")} />
+            <PreviewTabButton label="To" active={tab === "to"} onPress={() => setTab("to")} />
+            <PreviewTabButton label="Job Details" active={tab === "job"} onPress={() => setTab("job")} />
+          </View>
+          {tab === "from" ? <View style={styles.partyCopy}><Text style={styles.partyName}>Canes Pressure Washing</Text><Text style={styles.partyText}>Professional exterior cleaning</Text></View> : null}
+          {tab === "to" ? <View style={styles.partyCopy}><Text style={styles.partyName}>{invoice.customer_name ?? "Customer"}</Text>{invoice.customer_phone ? <Text style={styles.partyText}>{invoice.customer_phone}</Text> : null}{invoice.customer_email ? <Text style={styles.partyText}>{invoice.customer_email}</Text> : null}</View> : null}
+          {tab === "job" ? <View style={styles.partyCopy}><Text style={styles.partyName}>{invoice.job_name || invoice.customer_name || "Services"}</Text>{invoice.customer_phone ? <Text style={styles.partyText}>{invoice.customer_phone}</Text> : null}<Text style={styles.partyText}>{invoice.job_address || "No job address"}</Text>{invoice.job_id ? <Text style={styles.partyText}>Work order linked</Text> : null}</View> : null}
+          <Pressable accessibilityRole="button" accessibilityLabel="View payments" onPress={() => setPaymentsOpen(true)} style={styles.primaryButton}><Text style={styles.primaryButtonText}>VIEW PAYMENTS</Text></Pressable>
+        </View>
 
-                    {canSend && reward.status === "offered" ? (
-                      <Pressable
-                        accessibilityRole="button"
-                        onPress={() => onRemoveOffer(reward)}
-                        disabled={rewardBusy}
-                        style={({ pressed }) => [
-                          styles.button,
-                          pressed && styles.pressed,
-                          rewardBusy && styles.disabled,
-                        ]}
-                      >
-                        <Text style={styles.buttonText}>Remove offer</Text>
-                      </Pressable>
-                    ) : null}
+        <View style={styles.dividerBand} />
 
-                    {canSend && reward.status === "declined" ? (
-                      <Pressable
-                        accessibilityRole="button"
-                        onPress={() => void onOfferAgain(reward)}
-                        disabled={rewardBusy}
-                        style={({ pressed }) => [
-                          styles.button,
-                          pressed && styles.pressed,
-                          rewardBusy && styles.disabled,
-                        ]}
-                      >
-                        <Text style={styles.buttonText}>Offer again</Text>
-                      </Pressable>
-                    ) : null}
-                  </View>
-                ))}
-              </View>
-            ) : null}
-            <GoodNotice text={rewardGood} />
-            <Notice text={rewardNotice} />
-          </Section>
-        ) : null}
-
-        {canSend || canResend || openBill || payUrl !== null ? (
-          <Section label="Actions">
-            <View style={styles.card}>
-              <View style={[styles.pad, styles.actions]}>
-                <GoodNotice text={actionGood} />
-                <Notice text={actionNotice} />
-
-                {canSend ? (
-                  <Pressable
-                    accessibilityRole="button"
-                    onPress={() => void onSend()}
-                    disabled={send.isPending}
-                    style={({ pressed }) => [
-                      styles.primary,
-                      pressed && styles.primaryPressed,
-                      send.isPending && styles.disabled,
-                    ]}
-                  >
-                    <Text style={styles.primaryText}>
-                      {send.isPending ? "Sending…" : "Send invoice"}
-                    </Text>
-                  </Pressable>
-                ) : null}
-
-                {canResend ? (
-                  <Pressable
-                    accessibilityRole="button"
-                    onPress={() => void onSend()}
-                    disabled={send.isPending}
-                    style={({ pressed }) => [
-                      styles.button,
-                      pressed && styles.pressed,
-                      send.isPending && styles.disabled,
-                    ]}
-                  >
-                    <Text style={styles.buttonText}>
-                      {send.isPending ? "Sending…" : "Send again"}
-                    </Text>
-                  </Pressable>
-                ) : null}
-
-                {openBill ? (
-                  <>
-                    {cashOpen ? (
-                      <View style={styles.cashCard}>
-                        <Text style={styles.fieldLabel}>Amount</Text>
-                        <TextInput
-                          value={cashAmount}
-                          onChangeText={setCashAmount}
-                          placeholder="0.00"
-                          placeholderTextColor={color.faint}
-                          keyboardType="decimal-pad"
-                          accessibilityLabel="Payment amount in dollars"
-                          style={styles.input}
-                        />
-                        <View style={styles.buttonRow}>
-                          <Pressable
-                            accessibilityRole="button"
-                            onPress={() => setCashOpen(false)}
-                            style={({ pressed }) => [
-                              styles.button,
-                              styles.grow,
-                              pressed && styles.pressed,
-                            ]}
-                          >
-                            <Text style={styles.buttonText}>Cancel</Text>
-                          </Pressable>
-                          <Pressable
-                            accessibilityRole="button"
-                            onPress={onRecordCash}
-                            disabled={recordCash.isPending}
-                            style={({ pressed }) => [
-                              styles.primary,
-                              styles.grow,
-                              pressed && styles.primaryPressed,
-                              recordCash.isPending && styles.disabled,
-                            ]}
-                          >
-                            <Text style={styles.primaryText}>Record</Text>
-                          </Pressable>
-                        </View>
-                      </View>
-                    ) : (
-                      <Pressable
-                        accessibilityRole="button"
-                        onPress={() => setCashOpen(true)}
-                        style={({ pressed }) => [styles.button, pressed && styles.pressed]}
-                      >
-                        <Text style={styles.buttonText}>Record cash payment</Text>
-                      </Pressable>
-                    )}
-
-                    {contactOpen ? (
-                      <View style={styles.cashCard}>
-                        <Text style={styles.fieldLabel}>Name</Text>
-                        <TextInput
-                          value={contactName}
-                          onChangeText={setContactName}
-                          placeholder="Customer name"
-                          placeholderTextColor={color.faint}
-                          accessibilityLabel="Customer name"
-                          style={styles.input}
-                        />
-                        <Text style={styles.fieldLabel}>Phone</Text>
-                        <PhoneInput value={contactPhone} onChange={setContactPhone} />
-                        <Text style={styles.fieldLabel}>Email</Text>
-                        <TextInput
-                          value={contactEmail}
-                          onChangeText={setContactEmail}
-                          placeholder="name@email.com"
-                          placeholderTextColor={color.faint}
-                          keyboardType="email-address"
-                          autoCapitalize="none"
-                          autoCorrect={false}
-                          accessibilityLabel="Customer email"
-                          style={styles.input}
-                        />
-                        <View style={styles.buttonRow}>
-                          <Pressable
-                            accessibilityRole="button"
-                            disabled={updateContact.isPending}
-                            onPress={() => setContactOpen(false)}
-                            style={({ pressed }) => [
-                              styles.button,
-                              styles.grow,
-                              pressed && styles.pressed,
-                              updateContact.isPending && styles.disabled,
-                            ]}
-                          >
-                            <Text style={styles.buttonText}>Cancel</Text>
-                          </Pressable>
-                          <Pressable
-                            accessibilityRole="button"
-                            onPress={() => void onSaveContact()}
-                            disabled={updateContact.isPending}
-                            style={({ pressed }) => [
-                              styles.primary,
-                              styles.grow,
-                              pressed && styles.primaryPressed,
-                              updateContact.isPending && styles.disabled,
-                            ]}
-                          >
-                            <Text style={styles.primaryText}>
-                              {updateContact.isPending ? "Saving…" : "Save"}
-                            </Text>
-                          </Pressable>
-                        </View>
-                      </View>
-                    ) : (
-                      <Pressable
-                        accessibilityRole="button"
-                        onPress={openContact}
-                        style={({ pressed }) => [styles.button, pressed && styles.pressed]}
-                      >
-                        <Text style={styles.buttonText}>Fix contact details</Text>
-                      </Pressable>
-                    )}
-
-                    <Pressable
-                      accessibilityRole="button"
-                      onPress={onVoid}
-                      disabled={voidInvoice.isPending}
-                      style={({ pressed }) => [
-                        styles.button,
-                        pressed && styles.pressed,
-                        voidInvoice.isPending && styles.disabled,
-                      ]}
-                    >
-                      <Text style={styles.dangerText}>Void</Text>
-                    </Pressable>
-                  </>
-                ) : null}
-
-                {payUrl !== null ? (
-                  <Pressable
-                    accessibilityRole="button"
-                    onPress={() => open(payUrl, setActionNotice)}
-                    style={({ pressed }) => [styles.button, pressed && styles.pressed]}
-                  >
-                    <Text style={styles.buttonText}>Open pay page</Text>
-                  </Pressable>
-                ) : null}
+        <View style={styles.services}>
+          <Text style={styles.servicesTitle}>Services</Text>
+          <View style={styles.tableHead}>
+            <Text style={styles.colQty}>Qty</Text><Text style={styles.colPrice}>Price</Text><Text style={styles.colDsc}>Dsc</Text><Text style={styles.colTax}>Tax</Text><Text style={styles.colTotal}>Total</Text>
+          </View>
+          {invoice.items.length === 0 ? <Text style={styles.noItems}>No services on this invoice.</Text> : invoice.items.map((item) => (
+            <View key={item.id} style={styles.serviceRow}>
+              <Text style={styles.serviceName}>{item.name}</Text>
+              {item.description ? <Text style={styles.serviceDescription}>{item.description}</Text> : null}
+              <View style={styles.serviceFigures}>
+                <Text style={styles.colQty}>{item.quantity.toFixed(2)}</Text>
+                <Text style={styles.colPrice}>{fmtMoney(item.unit_price_cents)}</Text>
+                <Text style={styles.colDsc}>$0.00</Text>
+                <Text style={styles.colTax}>$0.00</Text>
+                <Text style={styles.colTotal}>{fmtMoney(item.line_total_cents)}</Text>
               </View>
             </View>
-          </Section>
-        ) : null}
-
-        {isPublic ? (
-          <Section label="Customer link">
-            <View style={styles.card}>
-              <View style={[styles.pad, styles.actions]}>
-                <Text style={styles.muted}>
-                  The page the customer pays on. Anyone holding this link can open the bill, so
-                  it goes to the customer and no one else.
-                </Text>
-                <Notice text={linkNotice} />
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Open the customer's invoice page"
-                  onPress={onOpenLink}
-                  style={({ pressed }) => [styles.button, pressed && styles.pressed]}
-                >
-                  <Text style={styles.buttonText}>Open customer view</Text>
-                </Pressable>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Share the customer's invoice link"
-                  onPress={() => void onShareLink()}
-                  style={({ pressed }) => [styles.button, pressed && styles.pressed]}
-                >
-                  <Text style={styles.buttonText}>Share link</Text>
-                </Pressable>
-              </View>
-            </View>
-          </Section>
-        ) : null}
-
-        {canDelete ? (
-          <View style={styles.section}>
-            <Notice text={dangerNotice} />
-            <Pressable
-              accessibilityRole="button"
-              onPress={onDelete}
-              disabled={del.isPending}
-              style={({ pressed }) => [
-                styles.danger,
-                pressed && styles.dangerPressed,
-                del.isPending && styles.disabled,
-              ]}
-            >
-              <Text style={styles.dangerText}>Delete invoice</Text>
-            </Pressable>
+          ))}
+          <View style={styles.totalRows}>
+            <View style={styles.totalRow}><Text style={styles.totalRowLabel}>Subtotal</Text><Text style={styles.totalRowValue}>{fmtMoney(invoice.subtotal_cents)}</Text></View>
+            {invoice.adjustment_cents !== 0 ? <View style={styles.totalRow}><Text style={styles.totalRowLabel}>Adjustment</Text><Text style={styles.totalRowValue}>{fmtMoney(invoice.adjustment_cents)}</Text></View> : null}
+            {invoice.tax_cents !== 0 ? <View style={styles.totalRow}><Text style={styles.totalRowLabel}>Taxes</Text><Text style={styles.totalRowValue}>{fmtMoney(invoice.tax_cents)}</Text></View> : null}
           </View>
-        ) : null}
+          <View style={styles.grandTotal}><Text style={styles.grandTotalLabel}>Grand Total</Text><Text style={styles.grandTotalValue}>{fmtMoney(invoice.total_cents)}</Text></View>
+
+          <View style={styles.paymentSummary}>
+            {invoice.payments.map((payment) => (
+              <View key={payment.id} style={styles.paymentRow}>
+                <View style={styles.paymentCopy}><Text style={styles.paymentLabel}>Payment via {PAYMENT_METHOD_LABEL[payment.method]}</Text><Text style={styles.paymentDate}>on {fmtEt(payment.created_at, { month: "short", day: "2-digit", year: "numeric" })}</Text></View>
+                <Text style={styles.paymentAmount}>(-) {fmtMoney(payment.amount_cents)}</Text>
+              </View>
+            ))}
+            <View style={styles.paymentRow}><Text style={styles.balanceLabel}>Balance Due</Text><Text style={styles.balanceValue}>{fmtMoney(balance)}</Text></View>
+          </View>
+        </View>
+
+        <Accordion title="Accepted Payment Methods" open={paymentMethodsOpen} onPress={() => setPaymentMethodsOpen((value) => !value)}>
+          <Text style={styles.accordionText}>Credit card, cash, or another method agreed with Canes Pressure Washing.</Text>
+        </Accordion>
+        <Accordion title="Message" open={messageOpen} onPress={() => setMessageOpen((value) => !value)}>
+          <Text style={styles.accordionText}>{invoice.message_to_customer || "No customer message."}</Text>
+        </Accordion>
+        <Accordion title="Terms" open={termsOpen} onPress={() => setTermsOpen((value) => !value)}>
+          <Text style={styles.accordionText}>{invoice.terms || "No terms added."}</Text>
+        </Accordion>
+
+        <View style={styles.bottomButtonWrap}><Pressable accessibilityRole="button" accessibilityLabel="View payments" onPress={() => setPaymentsOpen(true)} style={styles.primaryButton}><Text style={styles.primaryButtonText}>VIEW PAYMENTS</Text></Pressable></View>
       </ScrollView>
+
+      <Pressable accessibilityRole="button" accessibilityLabel="Invoice actions" onPress={() => setMenuOpen(true)} style={styles.cornerAction}><Feather name="more-horizontal" size={27} color={color.surface} /></Pressable>
+
+      <Modal visible={menuOpen} transparent animationType="slide" onRequestClose={() => setMenuOpen(false)}>
+        <View style={styles.sheetScrim}>
+          <Pressable style={StyleSheet.absoluteFill} accessibilityLabel="Close actions" onPress={() => setMenuOpen(false)} />
+          <View style={[styles.actionSheet, { paddingBottom: insets.bottom + space.lg }]}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Close actions" onPress={() => setMenuOpen(false)} style={styles.sheetClose}><View style={styles.sheetHandle} /></Pressable>
+            {busy ? <ActivityIndicator color={color.brand} style={styles.busy} /> : null}
+            <View style={styles.actionGrid}>
+              <ActionTile label="Edit" icon="edit-3" disabled={invoice.status !== "draft" || busy} onPress={() => { setMenuOpen(false); router.push({ pathname: "/(owner)/invoice/new", params: { id } }); }} />
+              <ActionTile label={invoice.sent_at ? "Re-Send" : "Send"} icon="send" disabled={invoice.status === "paid" || invoice.status === "void" || busy} onPress={() => void sendNow()} />
+              <ActionTile label="Record Payment" icon="dollar-sign" disabled={invoice.status === "paid" || invoice.status === "void" || busy} onPress={() => { setMenuOpen(false); setCashText((balance / 100).toFixed(2)); setRecordOpen(true); }} />
+              <ActionTile label="Share Invoice Link" icon="link" disabled={invoice.status === "void" || busy} onPress={() => void shareNow()} />
+              <ActionTile label="View Customer" icon="user" disabled={!invoice.contact_id} onPress={() => { setMenuOpen(false); if (invoice.contact_id) router.push({ pathname: "/(owner)/customer/[id]", params: { id: invoice.contact_id } }); }} />
+              <ActionTile label="Void Invoice" icon="slash" danger disabled={invoice.status === "paid" || invoice.status === "void" || busy} onPress={voidNow} />
+              <ActionTile label="Delete Invoice" icon="trash-2" danger disabled={invoice.status !== "draft" || busy} onPress={deleteNow} />
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={paymentsOpen} transparent animationType="slide" onRequestClose={() => setPaymentsOpen(false)}>
+        <View style={styles.sheetScrim}>
+          <Pressable style={StyleSheet.absoluteFill} accessibilityLabel="Close payments" onPress={() => setPaymentsOpen(false)} />
+          <View style={[styles.paymentsSheet, { paddingBottom: insets.bottom + 18 }]}>
+            <View style={styles.modalHeader}><Text style={styles.modalTitle}>PAYMENTS</Text><Pressable accessibilityRole="button" accessibilityLabel="Close payments" onPress={() => setPaymentsOpen(false)}><Feather name="x" size={28} color={color.muted} /></Pressable></View>
+            {invoice.payments.length === 0 ? <Text style={styles.noPayments}>No payments have been recorded.</Text> : invoice.payments.map((payment) => <View key={payment.id} style={styles.modalPaymentRow}><View><Text style={styles.modalPaymentMethod}>{PAYMENT_METHOD_LABEL[payment.method]}</Text><Text style={styles.paymentDate}>{fmtEt(payment.created_at, { month: "short", day: "numeric", year: "numeric" })}</Text></View><Text style={styles.modalPaymentAmount}>{fmtMoney(payment.amount_cents)}</Text></View>)}
+            <View style={styles.modalBalance}><Text style={styles.balanceLabel}>Balance Due</Text><Text style={styles.balanceValue}>{fmtMoney(balance)}</Text></View>
+            {invoice.status !== "paid" && invoice.status !== "void" ? <Pressable accessibilityRole="button" accessibilityLabel="Record payment" onPress={() => { setPaymentsOpen(false); setCashText((balance / 100).toFixed(2)); setRecordOpen(true); }} style={styles.primaryButton}><Text style={styles.primaryButtonText}>RECORD PAYMENT</Text></Pressable> : null}
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={recordOpen} transparent animationType="fade" onRequestClose={() => setRecordOpen(false)}>
+        <View style={styles.centerScrim}>
+          <View style={styles.recordCard}>
+            <Text style={styles.modalTitle}>RECORD CASH PAYMENT</Text>
+            <Text style={styles.recordCopy}>Balance due {fmtMoney(balance)}</Text>
+            <TextInput value={cashText} onChangeText={setCashText} keyboardType="decimal-pad" autoFocus accessibilityLabel="Payment amount" style={styles.cashInput} />
+            <View style={styles.recordActions}><Pressable accessibilityRole="button" onPress={() => setRecordOpen(false)} style={styles.secondaryButton}><Text style={styles.secondaryButtonText}>Cancel</Text></Pressable><Pressable accessibilityRole="button" disabled={recordCash.isPending} onPress={() => void recordNow()} style={styles.recordButton}><Text style={styles.recordButtonText}>{recordCash.isPending ? "Saving…" : "Record"}</Text></Pressable></View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: color.bg },
-  centre: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: space.lg,
-    gap: space.md,
-  },
-
-  chrome: {
-    backgroundColor: color.chrome,
-    paddingHorizontal: space.lg,
-    paddingBottom: space.md,
-    gap: space.xs,
-  },
-  back: {
-    minHeight: HIT,
-    flexDirection: "row",
-    alignItems: "center",
-    alignSelf: "flex-start",
-  },
-  backPressed: { opacity: 0.6 },
-  backText: { ...type.body, color: color.chromeMuted },
-  chromeName: { ...type.display, color: color.chromeInk },
-  chromeMeta: { ...type.micro, color: color.chromeMuted },
-
-  scrollBody: { padding: space.lg, gap: space.lg },
-  body: { ...type.body, color: color.ink },
-  muted: { ...type.small, color: color.muted },
-
-  section: { gap: space.sm },
-  sectionLabel: { ...type.micro, color: color.faint },
-
-  card: {
-    backgroundColor: color.surface,
-    borderRadius: radius.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: color.line,
-    overflow: "hidden",
-  },
-  pad: { padding: space.lg, gap: space.sm },
-  divided: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.line },
-  actions: { gap: space.sm },
-
-  customer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.md,
-    padding: space.lg,
-    minHeight: HIT,
-  },
-  customerBody: { flex: 1, gap: 2 },
-  customerName: { ...type.title, color: color.ink },
-  customerPhone: { ...type.small, color: color.muted, fontVariant: ["tabular-nums"] },
-  customerAddress: { ...type.small, color: color.faint },
-  navigate: { alignSelf: "flex-start", marginTop: space.xs },
-  phoneGlyph: {
-    width: HIT,
-    height: HIT,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: color.lineStrong,
-  },
-  phoneGlyphPressed: { backgroundColor: color.brandSoft },
-
-  jobRow: {
-    minHeight: HIT,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: space.sm,
-    paddingHorizontal: space.lg,
-  },
-
-  fieldLabel: { ...type.micro, color: color.faint },
-
-  itemRow: {
-    minHeight: HIT,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: space.md,
-    paddingHorizontal: space.lg,
-    paddingVertical: space.md,
-  },
-  itemMain: { flex: 1, gap: 2 },
-  itemQty: { ...type.micro, color: color.faint },
-  paymentMeta: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
-  refunded: { ...type.micro, color: color.danger },
-
-  money: { ...type.body, color: color.ink, fontVariant: ["tabular-nums"] },
-  moneyBig: {
-    fontFamily: font.bodySemi,
-    fontSize: 17,
-    color: color.ink,
-    fontVariant: ["tabular-nums"],
-  },
-  moneyDue: { color: color.brandDeep },
-  moneyRow: {
-    flexDirection: "row",
-    alignItems: "baseline",
-    justifyContent: "space-between",
-    gap: space.sm,
-  },
-
-  rewardStatus: { ...type.micro, color: color.muted },
-  rewardStatusGood: { color: color.good },
-  rewardStatusHot: { color: color.brandDeep },
-
-  primary: {
-    minHeight: HIT,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: radius.md,
-    backgroundColor: color.brandFill,
-    paddingHorizontal: space.lg,
-  },
-  primaryPressed: { backgroundColor: color.brandDown },
-  primaryText: { ...type.title, color: color.chromeInk },
-
-  button: {
-    minHeight: HIT,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: color.lineStrong,
-    backgroundColor: color.surface,
-    paddingHorizontal: space.lg,
-  },
-  buttonText: { ...type.body, color: color.ink },
-  pressed: { backgroundColor: color.hover },
-  wide: { alignSelf: "stretch" },
-  disabled: { opacity: 0.5 },
-  buttonRow: { flexDirection: "row", gap: space.sm },
-  grow: { flex: 1 },
-
-  cashCard: {
-    gap: space.sm,
-    padding: space.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: color.line,
-    borderRadius: radius.md,
-    backgroundColor: color.bg,
-  },
-  input: {
-    // No lineHeight — the iOS placeholder-tracking gotcha every TextInput in
-    // this app avoids (see customers.tsx search).
-    fontFamily: font.body,
-    fontSize: 15,
-    color: color.ink,
-    minHeight: HIT,
-    paddingHorizontal: space.md,
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: color.line,
-    backgroundColor: color.surface,
-  },
-
-  danger: {
-    minHeight: HIT,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: color.lineStrong,
-    backgroundColor: color.surface,
-  },
-  dangerPressed: { backgroundColor: color.dangerBg },
-  dangerText: { ...type.body, color: color.danger },
-
-  goodNotice: {
-    backgroundColor: color.goodBg,
-    borderRadius: radius.md,
-    padding: space.md,
-  },
-  goodNoticeText: { ...type.small, color: color.good },
+  screen: { flex: 1, backgroundColor: color.surface },
+  loading: { flex: 1, alignItems: "center", justifyContent: "center", gap: 16, padding: 24, backgroundColor: color.surface },
+  backButton: { minHeight: HIT, minWidth: 180, alignItems: "center", justifyContent: "center", borderRadius: radius.md, backgroundColor: color.hover },
+  backButtonText: { fontFamily: font.bodyMedium, fontSize: 16, color: color.ink },
+  header: { minHeight: 92, paddingHorizontal: 18, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  headerBack: { minHeight: HIT, flexDirection: "row", alignItems: "center", marginLeft: -8 },
+  headerTitle: { fontFamily: font.bodyMedium, fontSize: 19, letterSpacing: 1.2, color: color.ink },
+  headerActions: { flexDirection: "row", alignItems: "center", gap: 8 },
+  headerIcon: { width: HIT, height: HIT, alignItems: "center", justifyContent: "center" },
+  body: { flexGrow: 1 },
+  goodNotice: { marginHorizontal: 16, marginVertical: 6, padding: 12, borderRadius: radius.md, backgroundColor: color.goodBg },
+  goodNoticeText: { fontFamily: font.body, fontSize: 14, color: color.good },
+  identity: { minHeight: 318, paddingHorizontal: 18, paddingVertical: 34, flexDirection: "row", alignItems: "center", gap: 22 },
+  identityMark: { width: 112, alignItems: "center", gap: 16 },
+  statusBadge: { minWidth: 108, minHeight: 30, paddingHorizontal: 12, alignItems: "center", justifyContent: "center", borderRadius: 15, backgroundColor: color.brandSoft },
+  statusBadgeGood: { backgroundColor: color.goodBg },
+  statusBadgeBad: { backgroundColor: color.dangerBg },
+  statusBadgeText: { fontFamily: font.bodySemi, fontSize: 12, letterSpacing: 1.2, color: color.brandDeep },
+  statusBadgeTextGood: { color: color.good },
+  statusBadgeTextBad: { color: color.danger },
+  identityCopy: { flex: 1, gap: 11 },
+  identityTitle: { fontFamily: font.bodySemi, fontSize: 27, color: color.ink, marginBottom: 8 },
+  identityLine: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", gap: 10 },
+  identityLabel: { flex: 1, fontFamily: font.body, fontSize: 14, color: color.muted },
+  identityValue: { fontFamily: font.bodyMedium, fontSize: 14, color: color.ink, textAlign: "right" },
+  jobLink: { fontFamily: font.bodySemi, fontSize: 14, color: color.brandDeep, textDecorationLine: "underline" },
+  dividerBand: { height: 12, backgroundColor: color.hover },
+  partyBlock: { minHeight: 350, paddingHorizontal: 18, paddingVertical: 46 },
+  previewTabs: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 38 },
+  previewTab: { minHeight: 43, paddingHorizontal: 18, alignItems: "center", justifyContent: "center", borderRadius: 22, backgroundColor: color.hover },
+  previewTabOn: { backgroundColor: color.brandFill },
+  previewTabText: { fontFamily: font.bodyMedium, fontSize: 16, color: color.muted },
+  previewTabTextOn: { color: color.surface },
+  partyCopy: { minHeight: 130, gap: 14 },
+  partyName: { fontFamily: font.bodySemi, fontSize: 22, color: color.brandDeep, textDecorationLine: "underline", textDecorationColor: color.lineStrong },
+  partyText: { fontFamily: font.body, fontSize: 17, lineHeight: 25, color: color.ink },
+  primaryButton: { minHeight: 62, flexDirection: "row", alignItems: "center", justifyContent: "center", borderRadius: radius.md, backgroundColor: color.brandFill },
+  primaryButtonText: { fontFamily: font.bodySemi, fontSize: 19, letterSpacing: 1.15, color: color.surface },
+  services: { paddingTop: 46 },
+  servicesTitle: { paddingHorizontal: 18, marginBottom: 24, fontFamily: font.bodySemi, fontSize: 28, color: color.ink },
+  tableHead: { height: 42, marginHorizontal: 18, flexDirection: "row", alignItems: "center", borderRadius: radius.sm, backgroundColor: color.hover },
+  colQty: { width: "15%", textAlign: "center", fontFamily: font.bodyMedium, fontSize: 13, color: color.muted },
+  colPrice: { width: "22%", textAlign: "center", fontFamily: font.bodyMedium, fontSize: 13, color: color.muted },
+  colDsc: { width: "20%", textAlign: "center", fontFamily: font.bodyMedium, fontSize: 13, color: color.muted },
+  colTax: { width: "18%", textAlign: "center", fontFamily: font.bodyMedium, fontSize: 13, color: color.muted },
+  colTotal: { width: "25%", textAlign: "center", fontFamily: font.bodyMedium, fontSize: 13, color: color.muted },
+  noItems: { padding: 30, textAlign: "center", fontFamily: font.body, fontSize: 16, color: color.muted },
+  serviceRow: { marginHorizontal: 18, paddingVertical: 22, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: color.lineStrong },
+  serviceName: { fontFamily: font.bodyMedium, fontSize: 20, color: color.ink, marginBottom: 8 },
+  serviceDescription: { marginBottom: 15, fontFamily: font.body, fontSize: 14, color: color.muted },
+  serviceFigures: { flexDirection: "row", alignItems: "center" },
+  totalRows: { paddingHorizontal: 18, paddingVertical: 24, gap: 22 },
+  totalRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 14 },
+  totalRowLabel: { flex: 1, fontFamily: font.bodySemi, fontSize: 18, color: color.ink },
+  totalRowValue: { fontFamily: font.bodyMedium, fontSize: 17, color: color.ink },
+  grandTotal: { minHeight: 76, paddingHorizontal: 18, flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: color.hover },
+  grandTotalLabel: { fontFamily: font.bodySemi, fontSize: 22, color: color.ink },
+  grandTotalValue: { fontFamily: font.bodySemi, fontSize: 25, color: color.ink },
+  paymentSummary: { paddingHorizontal: 18, paddingVertical: 28, gap: 24 },
+  paymentRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 16 },
+  paymentCopy: { flex: 1 },
+  paymentLabel: { fontFamily: font.bodyMedium, fontSize: 17, color: color.ink },
+  paymentDate: { marginTop: 4, fontFamily: font.body, fontSize: 14, color: color.muted },
+  paymentAmount: { fontFamily: font.bodyMedium, fontSize: 17, color: color.danger },
+  balanceLabel: { fontFamily: font.bodySemi, fontSize: 19, color: color.ink },
+  balanceValue: { fontFamily: font.bodySemi, fontSize: 19, color: color.ink },
+  accordion: { borderBottomWidth: 12, borderBottomColor: color.hover },
+  accordionHead: { minHeight: 96, paddingHorizontal: 18, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
+  accordionTitle: { flex: 1, fontFamily: font.bodySemi, fontSize: 21, color: color.ink },
+  accordionBody: { paddingHorizontal: 18, paddingBottom: 24 },
+  accordionText: { fontFamily: font.body, fontSize: 16, lineHeight: 24, color: color.muted },
+  bottomButtonWrap: { paddingHorizontal: 18, paddingVertical: 36 },
+  cornerAction: { position: "absolute", right: 0, bottom: 0, width: 76, height: 76, paddingTop: 30, paddingLeft: 28, backgroundColor: color.brandFill, borderTopLeftRadius: 76 },
+  sheetScrim: { flex: 1, justifyContent: "flex-end", backgroundColor: color.scrim },
+  actionSheet: { maxHeight: "78%", paddingHorizontal: 18, paddingTop: 10, borderTopLeftRadius: 28, borderTopRightRadius: 28, backgroundColor: color.surface },
+  sheetClose: { minHeight: 30, alignItems: "center", justifyContent: "flex-start" },
+  sheetHandle: { width: 52, height: 5, borderRadius: 3, backgroundColor: color.lineStrong },
+  busy: { marginBottom: 10 },
+  actionGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
+  actionTile: { flexBasis: "47%", flexGrow: 1, minHeight: 74, paddingHorizontal: 14, flexDirection: "row", alignItems: "center", gap: 11, borderWidth: StyleSheet.hairlineWidth, borderColor: color.lineStrong, borderRadius: radius.md, backgroundColor: color.hover },
+  actionTilePressed: { backgroundColor: color.brandWash },
+  disabled: { opacity: 0.42 },
+  actionTileText: { flex: 1, fontFamily: font.bodyMedium, fontSize: 15, lineHeight: 20, color: color.ink },
+  actionTileDanger: { color: color.danger },
+  actionTileDisabledText: { color: color.faint },
+  paymentsSheet: { maxHeight: "76%", paddingHorizontal: 18, paddingTop: 18, borderTopLeftRadius: 28, borderTopRightRadius: 28, backgroundColor: color.surface },
+  modalHeader: { minHeight: 50, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  modalTitle: { fontFamily: font.bodySemi, fontSize: 20, letterSpacing: 1, color: color.ink },
+  noPayments: { paddingVertical: 30, textAlign: "center", fontFamily: font.body, fontSize: 16, color: color.muted },
+  modalPaymentRow: { minHeight: 72, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 16, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: color.line },
+  modalPaymentMethod: { fontFamily: font.bodyMedium, fontSize: 17, color: color.ink },
+  modalPaymentAmount: { fontFamily: font.bodySemi, fontSize: 18, color: color.good },
+  modalBalance: { minHeight: 76, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  centerScrim: { flex: 1, alignItems: "center", justifyContent: "center", padding: 22, backgroundColor: color.scrim },
+  recordCard: { width: "100%", padding: 20, borderRadius: 22, backgroundColor: color.surface },
+  recordCopy: { marginTop: 8, fontFamily: font.body, fontSize: 15, color: color.muted },
+  cashInput: { minHeight: 58, marginTop: 22, paddingHorizontal: 14, fontFamily: font.bodyMedium, fontSize: 24, color: color.ink, borderWidth: 1.5, borderColor: color.lineStrong, borderRadius: radius.md },
+  recordActions: { marginTop: 18, flexDirection: "row", gap: 10 },
+  secondaryButton: { flex: 1, minHeight: 52, alignItems: "center", justifyContent: "center", borderWidth: StyleSheet.hairlineWidth, borderColor: color.lineStrong, borderRadius: radius.md },
+  secondaryButtonText: { fontFamily: font.bodyMedium, fontSize: 16, color: color.muted },
+  recordButton: { flex: 1, minHeight: 52, alignItems: "center", justifyContent: "center", borderRadius: radius.md, backgroundColor: color.brandFill },
+  recordButtonText: { fontFamily: font.bodySemi, fontSize: 16, color: color.surface },
 });

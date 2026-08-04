@@ -1,6 +1,29 @@
-import { apiFail, apiResult, apiRoute, isCents, isIsoInstant, isPaymentMethod } from "@/lib/api/v1";
+import {
+  apiFail,
+  apiOk,
+  apiResult,
+  apiRoute,
+  denyUnlessPagePermitted,
+  isCents,
+  isIsoInstant,
+  isPaymentMethod,
+} from "@/lib/api/v1";
 import { createManualJob } from "@/app/CanesPressure/actions";
+import { listJobs } from "@/lib/canes/estimates";
 import type { PaymentMethod } from "@urso/types";
+
+// GET /api/v1/canes/jobs — every job, newest work first.
+//
+// The web console has no jobs LIST: on that surface a job is only ever reached
+// through the schedule or the customer it belongs to. The phone needs the list
+// itself — Sebastian's mental model coming off Markate is a "work orders"
+// screen he searches — so this is the one read that exists for mobile before it
+// exists for web. It adds no logic: listJobs() is the same domain function the
+// scheduler already reads through.
+//
+// Guarded on `schedule`, matching /schedule/board and /schedule/unscheduled,
+// because that is the page a job belongs to on the web and the permission that
+// gates it there.
 
 // POST /api/v1/canes/jobs — collection-level job mutations, same `action`
 // discriminator as /jobs/:id/actions so the mobile client has one call shape.
@@ -49,6 +72,12 @@ const OPTIONAL_STRINGS = [
   "notes",
   "depositMethod",
 ] as const;
+
+export const GET = apiRoute(async ({ actor }) => {
+  const denied = denyUnlessPagePermitted(actor, "schedule");
+  if (denied) return denied;
+  return apiOk(await listJobs());
+});
 
 export const POST = apiRoute(async ({ req }) => {
   let body: Body;

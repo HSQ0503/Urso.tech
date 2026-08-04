@@ -46,6 +46,9 @@ type Body = {
   customerName?: unknown;
   customerPhone?: unknown;
   customerEmail?: unknown;
+  contactId?: unknown;
+  jobName?: unknown;
+  jobAddress?: unknown;
   adjustmentCents?: unknown;
   messageToCustomer?: unknown;
   terms?: unknown;
@@ -111,6 +114,18 @@ export const POST = apiRoute<{ id: string }>(async ({ req, params }) => {
       if (body.customerEmail !== undefined) {
         if (typeof body.customerEmail !== "string") return apiFail("`customerEmail` must be a string.", 422);
         patch.customerEmail = body.customerEmail;
+      }
+      if (body.contactId !== undefined) {
+        if (body.contactId !== null && typeof body.contactId !== "string") return apiFail("`contactId` must be a string or null.", 422);
+        patch.contactId = body.contactId;
+      }
+      if (body.jobName !== undefined) {
+        if (typeof body.jobName !== "string") return apiFail("`jobName` must be a string.", 422);
+        patch.jobName = body.jobName;
+      }
+      if (body.jobAddress !== undefined) {
+        if (typeof body.jobAddress !== "string") return apiFail("`jobAddress` must be a string.", 422);
+        patch.jobAddress = body.jobAddress;
       }
       if (body.adjustmentCents !== undefined) {
         // MONEY. This is the "actual amount" lever on the bill.

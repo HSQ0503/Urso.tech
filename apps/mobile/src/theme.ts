@@ -1,19 +1,6 @@
-// The Canes design system, ported from app/CanesPressure/canes.css.
-//
-// The target is the CREW PORTAL specifically, not the owner console: a light
-// bone/grey ground with a true-black chrome header, which is what the web crew
-// portal renders (it deliberately sits outside the .theme-scope dark mapping).
-// Values are copied literally from the .canes base block so the app and the web
-// portal are the same colours, not similar ones.
-//
-// Design rules carried over: flat surfaces, hairline borders, radii 6/5/4, one
-// easing curve, orange as the single accent. No gradients, no washes.
-//
-// TYPEFACE (2026-08-03): the mobile app is Geist + Geist Mono, not the web's
-// Fraunces + IBM Plex. The redesign mock is drawn in Geist throughout — every
-// display moment that was a serif on the web is a 500/600 sans here. This is a
-// deliberate mobile-only fork; canes.css is unchanged and the web console still
-// renders Fraunces.
+// The Canes mobile design system. app/CanesPressure/canes.css is the source of
+// truth: native uses the same colors, Fraunces display face, Plex body/mono,
+// inset grouped cards and orange-only accent as the responsive website.
 
 export const color = {
   bg: "#eceef1",
@@ -45,7 +32,12 @@ export const color = {
   goodBg: "rgba(17, 147, 90, 0.12)",
   // Sold jobs are always green, independent of the assigned crew colour.
   job: "#15803d",
+  // The pale card behind a rail. Markate fills the whole event card with a wash
+  // of its rail colour, which is what makes a day scannable by kind before you
+  // read a word of it.
+  jobBg: "rgba(21, 128, 61, 0.08)",
   quote: "#6d28d9",
+  quoteBg: "rgba(109, 40, 217, 0.07)",
   danger: "#b42318",
   dangerBg: "rgba(180, 35, 24, 0.10)",
   dangerWash: "rgba(180, 35, 24, 0.06)",
@@ -62,18 +54,19 @@ export const color = {
   scrimHeavy: "rgba(7, 7, 7, 0.86)",
 } as const;
 
-export const radius = { sheet: 10, lg: 6, md: 5, sm: 4, chip: 3 } as const;
+export const radius = { sheet: 22, lg: 12, md: 12, sm: 9, chip: 6 } as const;
 
 export const space = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 } as const;
 
 // Font family names as registered with expo-font in app/_layout.tsx.
 export const font = {
-  display: "Geist_500Medium",
-  body: "Geist_400Regular",
-  bodyMedium: "Geist_500Medium",
-  bodySemi: "Geist_600SemiBold",
-  mono: "GeistMono_400Regular",
-  monoMedium: "GeistMono_500Medium",
+  display: "Fraunces_600SemiBold",
+  displayMedium: "Fraunces_500Medium",
+  body: "IBMPlexSans_400Regular",
+  bodyMedium: "IBMPlexSans_500Medium",
+  bodySemi: "IBMPlexSans_600SemiBold",
+  mono: "IBMPlexMono_400Regular",
+  monoMedium: "IBMPlexMono_500Medium",
 } as const;
 
 // The mock specifies tracking in em; React Native's letterSpacing is in points.
@@ -81,14 +74,14 @@ export const font = {
 export const type = {
   // ── Display ───────────────────────────────────────────────────────────────
   // The greeting on Today, and the auth lockup.
-  display: { fontFamily: font.display, fontSize: 26, letterSpacing: -1.1 },
-  lockup: { fontFamily: font.display, fontSize: 30, letterSpacing: -1.3 },
+  display: { fontFamily: font.display, fontSize: 30, lineHeight: 34, letterSpacing: -0.9 },
+  lockup: { fontFamily: font.display, fontSize: 31, letterSpacing: -0.9 },
   // The chrome title every non-Today screen carries.
-  chromeTitle: { fontFamily: font.bodySemi, fontSize: 27, lineHeight: 28, letterSpacing: -0.9 },
+  chromeTitle: { fontFamily: font.display, fontSize: 28, lineHeight: 31, letterSpacing: -0.8 },
   // "Canes." in the black bar.
-  wordmark: { fontFamily: font.display, fontSize: 19, letterSpacing: -0.7 },
+  wordmark: { fontFamily: font.display, fontSize: 20, letterSpacing: -0.6 },
   // Card and sheet headings.
-  heading: { fontFamily: font.display, fontSize: 20, lineHeight: 22, letterSpacing: -0.7 },
+  heading: { fontFamily: font.display, fontSize: 21, lineHeight: 25, letterSpacing: -0.5 },
 
   // ── Body ──────────────────────────────────────────────────────────────────
   // A row's primary line — a customer, a lead, a document.

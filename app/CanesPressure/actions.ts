@@ -569,9 +569,10 @@ export async function sendConfirmationNow(leadId: string): Promise<ActionResult>
 
 // Click-to-call, the one true outbound-voice path: Twilio rings Sebastian's own
 // phone first, then bridges the customer with the BUSINESS number as caller ID
-// (see app/api/canes/twilio/bridge). Every "Call" button in the app routes
-// through here, so customers only ever see the business line and callbacks come
-// back into our system — never Sebastian's personal cell. Requires Twilio + a
+// (see app/api/canes/twilio/bridge). Every owner-app button labelled "Call"
+// routes through here, so customers see the business line and callbacks return
+// to our system. The explicitly labelled direct-dial fallback still uses the
+// handset carrier and therefore exposes its caller ID. Requires Twilio + a
 // public deployment URL.
 export async function bridgeCall(
   phone: string | null | undefined,
@@ -591,7 +592,9 @@ export async function bridgeCall(
   if (!to) return { ok: false, notice: "No phone number to call." };
   const owner = process.env.CANES_OWNER_PHONE;
   const { accountSid, authToken, from } = canesTwilioCreds();
-  if (!owner || !accountSid) return { ok: false, notice: "Twilio isn't configured yet." };
+  if (!owner || !accountSid || !authToken || !from) {
+    return { ok: false, notice: "Twilio isn't configured yet." };
+  }
   const base = process.env.NEXT_PUBLIC_APP_URL ?? "https://urso.ws";
   const twimlUrl = `${base}/api/canes/twilio/bridge?to=${encodeURIComponent(to)}`;
   const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Calls.json`, {
@@ -2673,6 +2676,9 @@ export async function updateInvoice(
     customerName?: string;
     customerPhone?: string;
     customerEmail?: string;
+    contactId?: string | null;
+    jobName?: string;
+    jobAddress?: string;
     adjustmentCents?: number;
     messageToCustomer?: string;
     terms?: string;
@@ -2702,6 +2708,21 @@ export async function updateInvoice(
     row.customer_phone = phone;
   }
   if (patch.customerEmail !== undefined) row.customer_email = patch.customerEmail || null;
+  if (patch.contactId !== undefined) {
+    row.contact_id =
+      patch.contactId ??
+      (await resolveEstimateContact({
+        name: patch.customerName ?? invoice.customer_name,
+        phone: patch.customerPhone !== undefined
+          ? ((row.customer_phone as string | null) ?? null)
+          : invoice.customer_phone,
+        email: patch.customerEmail ?? invoice.customer_email,
+        address: patch.jobAddress ?? invoice.job_address,
+        leadId: invoice.lead_id,
+      }));
+  }
+  if (patch.jobName !== undefined) row.job_name = patch.jobName || null;
+  if (patch.jobAddress !== undefined) row.job_address = patch.jobAddress || null;
   if (patch.adjustmentCents !== undefined) row.adjustment_cents = Math.round(patch.adjustmentCents);
   if (patch.messageToCustomer !== undefined) row.message_to_customer = patch.messageToCustomer || null;
   if (patch.terms !== undefined) row.terms = patch.terms || null;

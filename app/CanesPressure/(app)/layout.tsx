@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import Link from "next/link";
 import { hasAccess, gateEnabled } from "@/lib/canes/gate";
 import { isDemo } from "@/lib/canes/data";
@@ -17,10 +18,16 @@ import { ThemeToggle } from "@/components/dashboard/theme-toggle";
 // bottom tabs + a More sheet on mobile.
 
 export default async function CanesAppLayout({ children }: { children: React.ReactNode }) {
-  const [admin, technician] = await Promise.all([
+  const [admin, technician, requestHeaders] = await Promise.all([
     getAdminSession(),
     getTechnicianActor(),
+    headers(),
   ]);
+  // The Expo app supplies this product token as an appended user-agent value.
+  // Embedded pages keep the web content and authorization shell, but the app
+  // owns navigation: rendering the site's mobile tabs here would put a second
+  // tab bar directly above the native one.
+  const embedded = requestHeaders.get("user-agent")?.includes("UrsoMobileWebView/") ?? false;
   const demo = isDemo();
   // 0015: an ops-manager crew account (DJ) works from the owner console, with
   // the nav filtered to its permission flags. The server-side page + action
@@ -71,7 +78,7 @@ export default async function CanesAppLayout({ children }: { children: React.Rea
     <div className="theme-scope min-h-screen bg-[var(--cp-bg)] text-[var(--cp-ink)]">
     <div className="mx-auto flex min-h-screen w-full max-w-[1440px]">
       {/* Sidebar (desktop) — the dashboard's theme-aware sidebar material */}
-      <aside className="cp-sidebar-rail sticky top-0 hidden h-screen w-60 shrink-0 flex-col gap-1 overflow-y-auto px-3 py-5 text-[var(--cp-chrome-ink)] md:flex">
+      {!embedded && <aside className="cp-sidebar-rail sticky top-0 hidden h-screen w-60 shrink-0 flex-col gap-1 overflow-y-auto px-3 py-5 text-[var(--cp-chrome-ink)] md:flex">
         {/* Wordmark, not an icon-in-a-box — real trade software leads with the name */}
         <Link href="/CanesPressure" className="mb-6 block px-2.5 pt-1">
           <span className="cp-display block text-[19px] leading-tight">
@@ -128,23 +135,29 @@ export default async function CanesAppLayout({ children }: { children: React.Rea
             Powered by Urso
           </p>
         </div>
-      </aside>
+      </aside>}
 
       {/* Main — mobile content clears the notch (top) and the tab bar (bottom) */}
       <div className="flex min-h-screen min-w-0 flex-1 flex-col">
-        <main className="min-w-0 flex-1 px-4 pb-24 pt-[max(1.25rem,env(safe-area-inset-top))] md:px-8 md:pb-10 md:pt-6">
+        <main
+          className={
+            embedded
+              ? "min-w-0 flex-1 px-4 pb-8 pt-5 md:px-8 md:pb-10 md:pt-6"
+              : "min-w-0 flex-1 px-4 pb-24 pt-[max(1.25rem,env(safe-area-inset-top))] md:px-8 md:pb-10 md:pt-6"
+          }
+        >
           {children}
         </main>
         {/* Bottom tabs (mobile) — translucent iOS tab bar */}
-        <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-[var(--cp-line)] bg-[var(--cp-surface)]/80 px-1 backdrop-blur-xl md:hidden">
+        {!embedded && <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-[var(--cp-line)] bg-[var(--cp-surface)]/80 px-1 backdrop-blur-xl md:hidden">
           <CanesNav mobile allowed={allowedNav} />
-        </nav>
+        </nav>}
       </div>
 
       {/* First-login onboarding tour — self-contained; never blocks the page */}
-      <Suspense fallback={null}>
+      {!embedded && <Suspense fallback={null}>
         <CanesTour />
-      </Suspense>
+      </Suspense>}
 
       {/* Re-lock a tab the moment its PIN unlock window lapses */}
       {pinRelockMs !== null && (

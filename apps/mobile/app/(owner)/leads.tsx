@@ -21,13 +21,11 @@ import {
   RefreshControl,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
-  fmtEt,
   fmtPhone,
   minutesSince,
   SOURCE_LABEL,
@@ -38,13 +36,14 @@ import { useLeads } from "@/queries";
 import { noticeFrom, usePullToRefresh, useRefetchOnFocus } from "@/query";
 import { color, font, space, type } from "@/theme";
 import {
+  Avatar,
+  Chevron,
   Chip,
   ChromeBar,
   EmptyState,
   FilterChips,
-  SearchStrip,
+  SectionRule,
   listRowStyle,
-  searchInputStyle,
 } from "@/components/ledger";
 
 // The pipeline tabs, copied from the web list (app/CanesPressure/(app)/leads)
@@ -81,23 +80,11 @@ const LOW_CONFIDENCE = 0.8;
 // Name, phone and service — the three things he actually remembers about a
 // person he spoke to once. Digits-only on the phone so "5615375674" finds a
 // number stored and displayed as (561) 537-5674.
-function matchesQuery(lead: Lead, query: string): boolean {
-  const text = query.trim().toLowerCase();
-  if (!text) return true;
-  const digits = text.replace(/\D/g, "");
-  return (
-    (lead.name ?? "").toLowerCase().includes(text) ||
-    (lead.service ?? "").toLowerCase().includes(text) ||
-    (digits.length > 0 && (lead.phone ?? "").replace(/\D/g, "").includes(digits))
-  );
-}
-
 function ageLabel(iso: string): string {
   const minutes = minutesSince(iso);
-  if (minutes < 1) return "Just now";
-  if (minutes < 60) return `${minutes}m ago`;
-  if (minutes < 1440) return `${Math.floor(minutes / 60)}h ago`;
-  return fmtEt(iso, { month: "short", day: "numeric" });
+  if (minutes < 1) return "Now";
+  if (minutes < 60) return `${minutes}m waiting`;
+  return `${Math.floor(minutes / 60)}h waiting`;
 }
 
 // The vendor feed often has no name at all, only a number. Showing "—" there
@@ -128,30 +115,36 @@ function LeadRow({
       onPress={onPress}
       style={({ pressed }) => [
         ...listRowStyle(first, last),
+        styles.row,
         hot && styles.rowHot,
         pressed && styles.pressed,
       ]}
     >
-      <View style={styles.rowTop}>
-        <Text style={styles.name} numberOfLines={1}>
-          {leadTitle(lead)}
+      <Avatar name={leadTitle(lead)} hot={hot} />
+      <View style={styles.rowBody}>
+        <View style={styles.rowTop}>
+          <Text style={styles.name} numberOfLines={1}>
+            {leadTitle(lead)}
+          </Text>
+          <Chip label={lead.type} tone={hot ? "brand" : "neutral"} />
+        </View>
+        <Text style={styles.service} numberOfLines={1}>
+          {SOURCE_LABEL[lead.source]}
         </Text>
-        <Text style={[styles.age, hot && styles.ageHot]}>{ageLabel(lead.created_at)}</Text>
       </View>
-
-      <Text style={styles.service} numberOfLines={1}>
-        {lead.service ?? "Service not stated"}
-      </Text>
-
-      <View style={styles.rowFoot}>
-        <Chip label={STATUS_LABEL[lead.status]} tone={hot ? "brand" : "neutral"} />
+      <View style={styles.rowEnd}>
+        {lead.status === "new" ? (
+          <View style={styles.ageBadge}>
+            <Text style={styles.age}>{ageLabel(lead.created_at)}</Text>
+          </View>
+        ) : (
+          <Chip label={STATUS_LABEL[lead.status]} tone="neutral" />
+        )}
         {/* Ahead of the source, which is the one thing here allowed to shrink:
             a badly parsed row is a row whose name and number may be somebody
             else's, and that has to survive a long service line. */}
-        {reviewParse ? <Chip label="Review parse" tone="danger" /> : null}
-        <Text style={styles.source} numberOfLines={1}>
-          {SOURCE_LABEL[lead.source]}
-        </Text>
+        {reviewParse ? <Chip label="Review" tone="danger" /> : null}
+        <Chevron />
       </View>
     </Pressable>
   );
@@ -173,16 +166,7 @@ export default function LeadsScreen(): React.ReactElement {
   const leads = leadsQuery.data ?? null;
   const notice = noticeFrom(leadsQuery.error);
 
-  // "All" is where this list has always opened, so it stays the landing tab —
-  // the web defaults to Needs first call, but it also groups and sorts the rows
-  // underneath, which this list does not; opening on a subset here would just
-  // hide leads with no sign that it had.
-  const [filter, setFilter] = useState<Filter>("all");
-
-  // Search filters what is already loaded, like the customers list — no second
-  // read, and it composes with the pipeline tabs rather than replacing them.
-  // This was the only list screen without it, and it is the fastest-growing one.
-  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<Filter>("new");
 
   // Every count comes off the one page of leads already loaded — no second
   // read, and no count that claims to know about rows this screen has not seen.
@@ -198,11 +182,7 @@ export default function LeadsScreen(): React.ReactElement {
     };
   }, [leads]);
 
-  const searching = query.trim().length > 0;
-  const rows = useMemo(
-    () => subsets[filter].filter((lead) => matchesQuery(lead, query)),
-    [subsets, filter, query],
-  );
+  const rows = subsets[filter];
 
   const openLead = useCallback(
     (id: string) => {
@@ -217,28 +197,12 @@ export default function LeadsScreen(): React.ReactElement {
     <View style={styles.screen}>
       <ChromeBar
         title="Leads"
-        stat={String(searching ? rows.length : (leads?.length ?? 0))}
-        statLabel={searching ? "Matches" : "Total"}
+        sub="Vendor texts, website requests, and referrals."
         action="New"
         /* The leak this closes: a neighbour who walks up while a crew is
            working had nowhere to go except Sebastian's memory. */
         onAction={() => router.push("/(owner)/lead/new")}
       />
-
-      <SearchStrip>
-        <TextInput
-          value={query}
-          onChangeText={setQuery}
-          placeholder="Search by name, phone or service"
-          placeholderTextColor={color.faint}
-          autoCapitalize="none"
-          autoCorrect={false}
-          clearButtonMode="while-editing"
-          returnKeyType="search"
-          accessibilityLabel="Search leads"
-          style={searchInputStyle}
-        />
-      </SearchStrip>
 
       {leads !== null ? (
         <FilterChips
@@ -248,6 +212,16 @@ export default function LeadsScreen(): React.ReactElement {
             key,
             label: FILTER_LABEL[key],
             count: subsets[key].length,
+            weight:
+              key === "new"
+                ? 1.85
+                : key === "working"
+                  ? 1.3
+                  : key === "won"
+                    ? 0.98
+                    : key === "lost"
+                      ? 0.97
+                      : 0.85,
           }))}
         />
       ) : null}
@@ -274,11 +248,18 @@ export default function LeadsScreen(): React.ReactElement {
             />
           }
           ListHeaderComponent={
-            notice !== null ? (
-              <View style={styles.notice}>
-                <Text style={styles.noticeText}>{notice}</Text>
-              </View>
-            ) : null
+            <View>
+              {notice !== null ? (
+                <View style={styles.notice}>
+                  <Text style={styles.noticeText}>{notice}</Text>
+                </View>
+              ) : null}
+              <SectionRule
+                label={filter === "new" ? "Call these now" : FILTER_LABEL[filter]}
+                meta={rows.length}
+                tone={filter === "new" ? "danger" : "muted"}
+              />
+            </View>
           }
           ListEmptyComponent={
             // Empty says WHICH empty — an unworked pipeline and a filter with
@@ -288,7 +269,7 @@ export default function LeadsScreen(): React.ReactElement {
               // saying "No leads yet" to someone holding 40 leads reads as
               // data loss.
               <EmptyState
-                text={searching ? `Nobody matching “${query.trim()}”.` : EMPTY_COPY[filter]}
+                text={EMPTY_COPY[filter]}
               />
             ) : null
           }
@@ -314,23 +295,28 @@ const styles = StyleSheet.create({
   listEmpty: { flexGrow: 1 },
 
   // The one accent on this screen: a hot lead is a person waiting on a call.
-  rowHot: { borderLeftWidth: 3, borderLeftColor: color.brand },
+  row: { minHeight: 72, flexDirection: "row", alignItems: "center", gap: 11 },
+  rowHot: { borderLeftColor: color.brand },
   pressed: { backgroundColor: color.hover },
+
+  rowBody: { flex: 1, minWidth: 0 },
 
   rowTop: {
     flexDirection: "row",
-    alignItems: "baseline",
-    justifyContent: "space-between",
-    gap: 10,
+    alignItems: "center",
+    gap: 7,
   },
   name: { fontFamily: font.bodySemi, fontSize: 16.5, lineHeight: 20, color: color.ink, flexShrink: 1 },
-  age: { ...type.rule, letterSpacing: 1.3, color: color.faint },
-  ageHot: { color: color.brand },
+  rowEnd: { flexDirection: "row", alignItems: "center", gap: 8 },
+  ageBadge: {
+    borderRadius: 6,
+    backgroundColor: color.dangerBg,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
+  age: { ...type.ruleSm, letterSpacing: 1.2, color: color.danger },
 
-  service: { ...type.small, lineHeight: 18, color: color.muted, marginTop: 5 },
-
-  rowFoot: { flexDirection: "row", alignItems: "center", gap: 9, marginTop: 9 },
-  source: { ...type.ruleSm, color: color.faint, flexShrink: 1 },
+  service: { ...type.small, lineHeight: 18, color: color.muted, marginTop: 3 },
 
   notice: {
     backgroundColor: color.dangerBg,

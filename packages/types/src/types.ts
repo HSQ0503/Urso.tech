@@ -706,6 +706,29 @@ export function approvedRewardCents(
 
 export type Agenda = { day: string; leads: Lead[] }[];
 
+// ── Today's Report ───────────────────────────────────────────────────────────
+//
+// Six figures scoped to the ET CALENDAR DAY, for the mobile Dashboard's report
+// grid. Deliberately separate from Overview, whose money is rolling 7-day: a
+// card that says "today" must not be fed a week's number, and the two windows
+// are different enough that sharing one payload would guarantee that mistake.
+//
+// Every figure carries its own count so the card can print "$1,000.00 (1)"
+// without a second call. Money is integer cents, as everywhere.
+export type TodayFigure = { cents: number; count: number };
+
+export type TodayReport = {
+  // Formatted server-side in ET so the phone never has to derive the day it is
+  // reporting on — the device clock is not the business's clock.
+  dayLabel: string;
+  jobsToday: TodayFigure; // scheduled to be worked today
+  earnedTodayCents: number; // completed payments stamped today
+  bookedToday: TodayFigure; // jobs CREATED today, whenever they are scheduled
+  tomorrowJobs: TodayFigure; // scheduled to be worked tomorrow
+  estimatesToday: TodayFigure; // quotes written today
+  leadsTodayCount: number;
+};
+
 export type Overview = {
   counts: { open: number; hot: number; cold: number; wonThisWeek: number };
   coldNeedingCall: Lead[]; // status new, type cold — the "call now" queue
