@@ -260,6 +260,7 @@ for (const [step, featuredActionId, actionPlacement, primaryActionId, scenarioCo
   const presentation = deriveMfManagerCockpitPresentation(cockpitSnapshot);
   const actionableQueueIds = deriveMfManagerQueue(cockpitSnapshot).now.map((item) => item.actionId);
   assert.equal(presentation.featuredManagerAction.actionId, featuredActionId, `featured action at step ${step}`);
+  assert.equal(presentation.consistent, true, `cockpit consistency at step ${step}`);
   assert.equal(presentation.managerActionPlacement, actionPlacement, `action placement at step ${step}`);
   assert.equal(presentation.primaryManagerAction?.actionId ?? null, primaryActionId, `primary action at step ${step}`);
   assert.deepEqual(actionableQueueIds, primaryActionId ? [primaryActionId] : [], `actionable queue at step ${step}`);
@@ -280,6 +281,40 @@ for (const [step, featuredActionId, actionPlacement, primaryActionId, scenarioCo
     assert(["ready", "in_progress"].includes(presentation.primaryManagerAction.state));
   }
 }
+
+const step4ActionStillRunning = {
+  ...createMfHarnessSnapshot(4),
+  workItems: createMfHarnessSnapshot(4).workItems.map((task) => task.id === "map-impact"
+    ? { ...task, state: "in_progress", receiptId: null }
+    : task),
+};
+const driftedStep4Cockpit = deriveMfManagerCockpitPresentation(step4ActionStillRunning);
+assert.equal(driftedStep4Cockpit.consistent, false);
+assert.equal(driftedStep4Cockpit.featuredManagerAction, null);
+assert.equal(driftedStep4Cockpit.primaryManagerAction, null);
+assert.equal(driftedStep4Cockpit.scenarioControl, null);
+
+const step4MissingFeaturedAction = {
+  ...createMfHarnessSnapshot(4),
+  workItems: createMfHarnessSnapshot(4).workItems.map((task) => task.id === "map-impact"
+    ? { ...task, managerAction: null }
+    : task),
+};
+const missingFeaturedCockpit = deriveMfManagerCockpitPresentation(step4MissingFeaturedAction);
+assert.equal(missingFeaturedCockpit.consistent, false);
+assert.equal(missingFeaturedCockpit.featuredManagerAction, null);
+assert.equal(missingFeaturedCockpit.scenarioControl, null);
+
+const step3ExtraActionableItem = {
+  ...createMfHarnessSnapshot(3),
+  workItems: createMfHarnessSnapshot(3).workItems.map((task) => task.id === "approve-controlled-truth"
+    ? { ...task, state: "in_progress", receiptId: null }
+    : task),
+};
+const extraActionableCockpit = deriveMfManagerCockpitPresentation(step3ExtraActionableItem);
+assert.equal(extraActionableCockpit.consistent, false);
+assert.equal(extraActionableCockpit.primaryManagerAction, null);
+assert.equal(extraActionableCockpit.scenarioControl, null);
 
 const coordinateWorkflow = mfScenarioManifest.workflow.catalog.find(
   (workflow) => workflow.id === "coordinate-project-change",

@@ -82,6 +82,7 @@ export type MfManagerScenarioControl = Readonly<{
 }>;
 
 export type MfManagerCockpitPresentation = Readonly<{
+  consistent: boolean;
   featuredManagerAction: MfManagerActionItem | null;
   managerActionPlacement: "upcoming" | "actionable" | "completed" | null;
   primaryManagerAction: MfManagerActionItem | null;
