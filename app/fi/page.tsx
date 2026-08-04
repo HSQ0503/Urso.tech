@@ -167,7 +167,7 @@ export default async function FinancePage({
               <div className="flex h-7 overflow-hidden bg-track" aria-label="Contract allocation">
                 {totals.contractedCents > 0 && (
                   <>
-                    <div className="h-full bg-orange" style={{ width: `${(totals.companyAllocationCents / totals.contractedCents) * 100}%` }} title={`Company cash: ${money(totals.companyAllocationCents)}`} />
+                    <div className="h-full bg-orange" style={{ width: `${(totals.companyAllocationCents / totals.contractedCents) * 100}%` }} title={`Company allocation: ${money(totals.companyAllocationCents)}`} />
                     <div className="h-full bg-[var(--color-period-1)]" style={{ width: `${(allocatedBusinessSpend / totals.contractedCents) * 100}%` }} title={`Business spent: ${money(allocatedBusinessSpend)}`} />
                     <div className="h-full bg-[var(--color-period-2)]" style={{ width: `${(plannedHan / totals.contractedCents) * 100}%` }} title={`Han: ${money(plannedHan)}`} />
                     <div className="h-full bg-[var(--color-period-3)]" style={{ width: `${(plannedGuga / totals.contractedCents) * 100}%` }} title={`Guga: ${money(plannedGuga)}`} />
@@ -175,7 +175,7 @@ export default async function FinancePage({
                 )}
               </div>
               <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 font-mono text-[9.5px] uppercase tracking-[0.08em] text-ink-dim sm:grid-cols-4 lg:grid-cols-2 2xl:grid-cols-4">
-                <span className="flex items-center gap-1.5"><span className="size-2 bg-orange" />Company {money(totals.companyAllocationCents)}</span>
+                <span className="flex items-center gap-1.5"><span className="size-2 bg-orange" />Company plan {money(totals.companyAllocationCents)}</span>
                 <span className="flex items-center gap-1.5"><span className="size-2 bg-[var(--color-period-1)]" />Spent {money(allocatedBusinessSpend)}</span>
                 <span className="flex items-center gap-1.5"><span className="size-2 bg-[var(--color-period-2)]" />Han {money(plannedHan)}</span>
                 <span className="flex items-center gap-1.5"><span className="size-2 bg-[var(--color-period-3)]" />Guga {money(plannedGuga)}</span>
@@ -189,7 +189,7 @@ export default async function FinancePage({
         <Stat label="Contracted" value={money(totals.contractedCents)} note="signed deal value" icon={BriefcaseBusiness} />
         <Stat label="Collected" value={money(totals.collectedCents)} note="client cash received, net of refunds" icon={CircleDollarSign} tone="good" />
         <Stat label="Still to collect" value={money(totals.outstandingCents)} note="contracted, not cash" icon={WalletCards} tone="orange" />
-        <Stat label="Company cash" value={money(totals.companyAllocationCents)} note={`${money(totals.retainedTargetCents)} before expenses`} icon={Landmark} />
+        <Stat label="Company cash" value={money(totals.availableCashCents)} note="cleared cash after all outflows" icon={Landmark} />
         <Stat label="Founder draws" value={money(totals.founderDrawsCents)} note={`${money(totals.plannedFounderDrawsCents)} planned`} icon={HandCoins} />
         <Stat label="Business spent" value={money(totals.expensesCents)} note="contractors, tools, and operating costs" icon={ReceiptText} />
       </section>
@@ -222,7 +222,7 @@ export default async function FinancePage({
         <div className="overflow-x-auto">
           <table className="w-full min-w-[860px] text-left">
             <thead className="font-mono text-[9px] uppercase tracking-[0.12em] text-ink-dimmer">
-              <tr className="border-b border-edge"><th className="px-5 py-3 font-normal">Client / deal</th><th className="px-4 py-3 font-normal">Contract</th><th className="px-4 py-3 font-normal">Collected</th><th className="px-4 py-3 font-normal">Outstanding</th><th className="px-4 py-3 font-normal">Founder plan</th><th className="px-4 py-3 font-normal">Company</th><th className="px-5 py-3 font-normal">Status</th></tr>
+              <tr className="border-b border-edge"><th className="px-5 py-3 font-normal">Client / deal</th><th className="px-4 py-3 font-normal">Contract</th><th className="px-4 py-3 font-normal">Collected</th><th className="px-4 py-3 font-normal">Outstanding</th><th className="px-4 py-3 font-normal">Founder plan</th><th className="px-4 py-3 font-normal">Company plan</th><th className="px-5 py-3 font-normal">Status</th></tr>
             </thead>
             <tbody className="divide-y divide-edge">
               {deals.map((deal) => (
