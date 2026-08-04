@@ -1060,16 +1060,19 @@ for (const truthLabel of ["Connected", "Available in pilot", "Recorded", "Pendin
   assert(agentWorkflowSource.includes(truthLabel), `missing workflow truth label: ${truthLabel}`);
 }
 for (const semanticLabel of [
-  "Connected context",
-  "Brain boundary",
-  "Agents + tools",
-  "Human gate",
-  "Controlled outputs",
-  "Everything returns to the Brain",
-  "What each employee receives",
+  "Authorized inputs",
+  "Context control",
+  "Controlled execution",
+  "Human authorization",
+  "Issued records",
+  "Audit return",
+  "Role-specific work orders",
 ]) {
   assert(agentWorkflowSource.includes(semanticLabel), `missing agent workflow semantics: ${semanticLabel}`);
 }
+assert.match(agentWorkflowSource, /className="mf-workflow-schematic"/);
+assert.match(agentWorkflowSource, /className="mf-flowchart-grid"/);
+assert.match(agentWorkflowSource, /className="mf-workflow-stage-register"/);
 
 const mfCssSource = readFileSync(new URL("../app/mf/mf.css", import.meta.url), "utf8");
 assert.doesNotMatch(mfCssSource, /\.mf-team-row-owner\s*\{\s*display:\s*none;\s*\}/);
@@ -1079,6 +1082,9 @@ assert.match(mfCssSource, /\/\* Agent workflow canvas \*\//);
 assert.match(mfCssSource, /\.mf-brain-composer:focus-within\s*\{/);
 assert.match(mfCssSource, /\.mf-brain-composer input:focus-visible\s*\{[\s\S]*?outline:\s*none/);
 assert.match(mfCssSource, /\.mf-workflow-vitals\s*\{/);
+assert.match(mfCssSource, /\.mf-flowchart-grid\s*\{/);
+assert.match(mfCssSource, /\.mf-flow-gate\s*\{/);
+assert.match(mfCssSource, /\.mf-workflow-stage-register\s*\{/);
 assert.match(mfCssSource, /\.mf-source-connection-status/);
 assert.match(mfCssSource, /\.mf-receipt-status/);
 for (const obsoleteClassName of [
@@ -1146,6 +1152,7 @@ assert.doesNotMatch(retainedStoryCss, /background:\s*#101010/);
 
 const demoViewsSource = readFileSync(new URL("../components/mf/demo-views.tsx", import.meta.url), "utf8");
 const mfDemoSource = readFileSync(new URL("../components/mf/mf-demo.tsx", import.meta.url), "utf8");
+const mfLayoutSource = readFileSync(new URL("../app/mf/layout.tsx", import.meta.url), "utf8");
 const projectBrainSource = readFileSync(
   new URL("../components/mf/project-brain-workspace.tsx", import.meta.url),
   "utf8",
@@ -1155,6 +1162,12 @@ assert.match(projectBrainSource, /<path key=\{edge\.key\}/);
 assert.match(projectBrainSource, /<RichText text=\{document\.content\} \/>/);
 assert.match(projectBrainSource, /error, clearError, setMessages/);
 assert.match(projectBrainSource, /function newConversation\(\)[\s\S]*?clearError\(\)/);
+assert.doesNotMatch(projectBrainSource, /Sparkles/);
+assert.match(projectBrainSource, /Query project records/);
+assert.match(mfLayoutSource, /Archivo/);
+assert.match(mfLayoutSource, /IBM_Plex_Sans/);
+assert.match(mfLayoutSource, /IBM_Plex_Mono/);
+assert.doesNotMatch(mfCssSource, /Gemini-inspired Project Brain chat/);
 for (const accessibilityContract of [
   "trapTabFocus",
   "presentationDialogRef",

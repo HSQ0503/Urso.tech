@@ -145,7 +145,7 @@ export function OutcomeComparisonPanel({ snapshot }: { snapshot: MfHarnessSnapsh
   ];
   return (
     <section className="mf-story-panel mf-outcome-comparison" data-guide-key="pilot-outcome">
-      <header className="mf-story-panel-header"><span><FileCheck2 size={18} /></span><div><small>{l("Resultado operacional", "Operational outcome")}</small><h2>{l("O valor não é a resposta. É o projeto coordenado.", "The value is not the answer. It is the coordinated project.")}</h2></div><strong>{tower.releaseReadiness}%</strong></header>
+      <header className="mf-story-panel-header"><span><FileCheck2 size={18} /></span><div><small>{l("Resultado operacional", "Operational outcome")}</small><h2>{l(`${tower.impactedDisciplines} disciplinas mapeadas. ${tower.daysRecovered} dias recuperados.`, `${tower.impactedDisciplines} disciplines mapped. ${tower.daysRecovered} days recovered.`)}</h2></div><strong>{tower.releaseReadiness}%</strong></header>
       <div><header><span>{l("Sem Urso", "Without Urso")}</span><span>{l("Com Urso", "With Urso")}</span></header>{rows.map(([without, withUrso]) => <p key={without}><span data-label={l("Sem Urso", "Without Urso")}>{without}</span><ArrowRight size={14} /><strong data-label={l("Com Urso", "With Urso")}>{withUrso}</strong></p>)}</div>
     </section>
   );

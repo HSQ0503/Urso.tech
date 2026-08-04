@@ -1,17 +1,23 @@
 import type { Metadata } from "next";
-import { Montserrat, Roboto } from "next/font/google";
+import { Archivo, IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
 import "./mf.css";
 
-const montserrat = Montserrat({
+const archivo = Archivo({
   variable: "--font-mf-display",
   subsets: ["latin"],
-  weight: ["500", "600", "700", "800"],
+  weight: ["500", "600", "700"],
 });
 
-const roboto = Roboto({
+const plexSans = IBM_Plex_Sans({
   variable: "--font-mf-body",
   subsets: ["latin"],
-  weight: ["400", "500", "700"],
+  weight: ["400", "500", "600", "700"],
+});
+
+const plexMono = IBM_Plex_Mono({
+  variable: "--font-mf-mono",
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
 });
 
 export const metadata: Metadata = {
@@ -21,7 +27,7 @@ export const metadata: Metadata = {
 
 export default function MfLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div lang="pt-BR" className={`mf-surface ${montserrat.variable} ${roboto.variable}`}>
+    <div lang="pt-BR" className={`mf-surface ${archivo.variable} ${plexSans.variable} ${plexMono.variable}`}>
       {children}
     </div>
   );

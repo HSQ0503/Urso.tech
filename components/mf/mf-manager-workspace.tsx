@@ -72,7 +72,7 @@ export function MfManagerWorkspace(props: MfManagerWorkspaceProps): React.JSX.El
     },
     {
       badge: l("Coordenação iniciada", "Coordination started"),
-      title: l("A verdade foi controlada; agora coordene o impacto", "Truth is controlled; now coordinate the impact"),
+      title: l("Revisão C aprovada. Agora mapeie o impacto.", "Revision C approved. Now map the impact."),
       detail: l("DEC-042 foi registrada e o plano de impacto pode definir responsáveis e critérios de fechamento.", "DEC-042 is recorded, and the impact plan can now define owners and closure criteria."),
       tone: "warning",
     },
@@ -122,7 +122,7 @@ export function MfManagerWorkspace(props: MfManagerWorkspaceProps): React.JSX.El
         </header>
         <article className="mf-primary-decision">
           <header><div><span>{l("Ação do gerente", "Manager action")}</span><strong>{l("Indisponível", "Unavailable")}</strong></div><span className="mf-decision-state"><LockKeyhole size={15} aria-hidden="true" />{l("Bloqueado", "Blocked")}</span></header>
-          <div className="mf-primary-decision-copy"><h2>{l("Nenhuma ação material pode avançar", "No material action can advance")}</h2><p>{l("Atualize o estado do cenário para reconstruir a fila canônica.", "Refresh the scenario state to rebuild the canonical queue.")}</p></div>
+          <div className="mf-primary-decision-copy"><h2>{l("Nenhuma ação material pode avançar", "No material action can advance")}</h2><p>{l("Atualize o estado do projeto para reconstruir a fila de trabalho.", "Refresh the project state to rebuild the work queue.")}</p></div>
           <footer><button type="button" className="mf-primary-action" disabled aria-label={l("Ação material indisponível", "Material action unavailable")}><LockKeyhole size={15} />{l("Ação indisponível", "Action unavailable")}</button></footer>
         </article>
       </section>

@@ -619,7 +619,7 @@ function MfDemoShell() {
           <span className="mf-brand-divider" />
           <span className="mf-product-name">
             Project Intelligence
-            <small>Powered by Urso</small>
+            <small>MF / URSO CONTROL LAYER</small>
           </span>
         </div>
 
@@ -877,9 +877,9 @@ function MfDemoShell() {
 
             <div className="mf-presentation-lobby-grid">
               <div className="mf-presentation-intro">
-                <span className="mf-eyebrow">{t("Demonstração interativa MF × Urso")}</span>
-                <h1 id="mf-presentation-title">{t("Controle a mudança antes que ela controle o projeto.")}</h1>
-                <p>{t("Uma apresentação guiada de como o Brain e o harness transformam uma revisão em decisões, trabalho coordenado e liberação segura.")}</p>
+                <span className="mf-eyebrow">{t("Cenário de projeto MF × Urso")}</span>
+                <h1 id="mf-presentation-title">{t("Aprovar a Revisão C sem perder o marco EXE-02.")}</h1>
+                <p>{t("Acompanhe a revisão desde as fontes autorizadas até a decisão do PM, os pacotes de trabalho e o registro de auditoria.")}</p>
 
                 <div className="mf-presentation-route" aria-label={t("Roteiro da apresentação")}>
                   {presenterCues[language].map((cue, index) => (

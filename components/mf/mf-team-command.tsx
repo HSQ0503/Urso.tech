@@ -166,7 +166,7 @@ export function MfTeamCommand(props: MfTeamCommandProps): React.JSX.Element {
               return (
                 <article className={`mf-team-row is-${state}${selected ? " is-selected" : ""}`} key={team.roleId} aria-current={selected ? "true" : undefined}>
                   <div className="mf-team-row-role"><span>{localize(team.role).slice(0, 2).toUpperCase()}</span><div><small>{l("Objetivo", "Objective")}</small><strong>{role ? localize(role.name) : localize(team.role)}</strong><p>{role ? localize(role.objective) : "—"}</p></div></div>
-                  <div className="mf-team-row-task"><small>{l("Tarefa canônica atual", "Current canonical task")}</small><strong>{team.currentTask ? localize(team.currentTask.title) : l("Sem tarefa aberta", "No open task")}</strong><p>{team.currentTask ? localize(team.currentTask.detail) : l("O pacote deste papel está concluído.", "This role's package is complete.")}</p></div>
+                  <div className="mf-team-row-task"><small>{l("Tarefa atual", "Current task")}</small><strong>{team.currentTask ? localize(team.currentTask.title) : l("Sem tarefa aberta", "No open task")}</strong><p>{team.currentTask ? localize(team.currentTask.detail) : l("O pacote deste papel está concluído.", "This role's package is complete.")}</p></div>
                   <div className="mf-team-row-owner"><small>{l("Responsável", "Accountable")}</small><strong>{localize(team.role)}</strong></div>
                   <span className={`mf-team-state is-${state}`}>{stateIcon(state)}{stateLabels[state]}</span>
                 </article>
@@ -176,7 +176,7 @@ export function MfTeamCommand(props: MfTeamCommandProps): React.JSX.Element {
         </section>
 
         <aside className="mf-manager-decision-rail" aria-labelledby="mf-manager-attention-title">
-          <header><div><span className="mf-eyebrow">{l("Fila canônica", "Canonical queue")}</span><h3 id="mf-manager-attention-title">{l("Atenção do gerente", "Manager attention")}</h3></div><span>{managerQueue.actionRequiredCount}</span></header>
+          <header><div><span className="mf-eyebrow">{l("Fila do projeto", "Project queue")}</span><h3 id="mf-manager-attention-title">{l("Atenção do gerente", "Manager attention")}</h3></div><span>{managerQueue.actionRequiredCount}</span></header>
           <div>
             {managerGroups.map((group) => (
               <section key={group.id}>
@@ -216,7 +216,7 @@ export function MfTeamCommand(props: MfTeamCommandProps): React.JSX.Element {
       </header>
       <div className="mf-role-command-brief-grid">
         <article>
-          <small>{l("Próxima ação canônica", "Next canonical action")}</small>
+          <small>{l("Próxima ação", "Next action")}</small>
           <strong>{roleTask ? localize(roleTask.title) : l("Trabalho concluído", "Work complete")}</strong>
           <span className={`mf-team-state is-${roleState}`}>{stateIcon(roleState)}{stateLabels[roleState]}</span>
         </article>

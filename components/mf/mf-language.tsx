@@ -77,10 +77,10 @@ const english: Record<string, string> = {
   "Iniciar apresentação": "Start presentation",
   "Reiniciar apresentação": "Restart presentation",
   "Encerrar apresentação": "End presentation",
-  "Demonstração interativa MF × Urso": "MF × Urso interactive demonstration",
-  "Controle a mudança antes que ela controle o projeto.": "Control change before it controls the project.",
-  "Uma apresentação guiada de como o Brain e o harness transformam uma revisão em decisões, trabalho coordenado e liberação segura.":
-    "A guided demonstration of how the Brain and harness turn a revision into decisions, coordinated work, and safe release.",
+  "Cenário de projeto MF × Urso": "MF × Urso project scenario",
+  "Aprovar a Revisão C sem perder o marco EXE-02.": "Approve Revision C without missing the EXE-02 milestone.",
+  "Acompanhe a revisão desde as fontes autorizadas até a decisão do PM, os pacotes de trabalho e o registro de auditoria.":
+    "Trace the revision from authorized sources through the PM decision, work packages, and audit record.",
   "Roteiro da apresentação": "Presentation route",
   "Explorar o sistema": "Explore the system",
   "Prontidão da demonstração": "Demo readiness",

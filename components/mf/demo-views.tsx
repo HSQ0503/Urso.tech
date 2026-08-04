@@ -287,7 +287,7 @@ export function WorkflowsView({ roleId, onNavigate, onAdvance, snapshot }: ViewP
 
   return (
     <div className="mf-clarity-view">
-      <header className="mf-today-header"><div><span className="mf-eyebrow">{l("Harness · workflows agentivos", "Harness · agentic workflows")}</span><h1>{l("Escolha o trabalho. Veja exatamente o que os agentes farão.", "Choose the work. See exactly what the agents will do.")}</h1><p>{l("Cada workflow mostra suas fontes, agentes, ferramentas, controle humano e resultado antes de ser implantado.", "Every workflow shows its sources, agents, tools, human control, and outcome before it is deployed.")}</p></div></header>
+      <header className="mf-today-header"><div><span className="mf-eyebrow">{l("Fluxos de projeto", "Project workflows")}</span><h1>{l("Revise fontes, etapas e aprovações antes da execução.", "Review sources, steps, and approvals before execution.")}</h1><p>{l("Cada fluxo identifica as entradas, a análise autorizada, o ponto de aprovação e os registros emitidos.", "Each workflow identifies its inputs, authorized analysis, approval point, and issued records.")}</p></div></header>
       {snapshot ? (
         <MfAgentWorkflow
           snapshot={snapshot}
@@ -355,7 +355,7 @@ export function BrainView({ step, roleId, onNavigate, sessionId, sessionToken }:
   const l = (pt: string, en: string) => (language === "pt" ? pt : en);
   return (
     <div className="mf-clarity-view is-brain-view">
-      <header className="mf-today-header"><div><span className="mf-eyebrow">{l("Urso Brain · verdade do projeto", "Urso Brain · project truth")}</span><h1>{l("Tudo que o projeto sabe, conectado e explicável", "Everything the project knows, connected and explainable")}</h1><p>{l("Explore relações, abra os documentos usados pelo sistema ou converse com o Brain no contexto do seu papel.", "Explore relationships, open the documents used by the system, or talk to the Brain in the context of your role.")}</p></div><button type="button" className="mf-secondary-action" onClick={() => onNavigate("audit")}>{l("Ver histórico de decisões", "View decision history")} <ArrowRight size={14} /></button></header>
+      <header className="mf-today-header"><div><span className="mf-eyebrow">{l("Urso Brain · registros do projeto", "Urso Brain · project records")}</span><h1>{l("Documentos, decisões e dependências em um único mapa.", "Documents, decisions, and dependencies in one map.")}</h1><p>{l("Inspecione as relações, abra os registros de origem ou consulte o Brain dentro das permissões da sua função.", "Inspect relationships, open source records, or query the Brain within your role permissions.")}</p></div><button type="button" className="mf-secondary-action" onClick={() => onNavigate("audit")}>{l("Ver histórico de decisões", "View decision history")} <ArrowRight size={14} /></button></header>
       <ProjectBrainWorkspace step={step} roleId={roleId} sessionId={sessionId} sessionToken={sessionToken} />
     </div>
   );

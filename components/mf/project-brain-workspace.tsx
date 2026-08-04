@@ -22,7 +22,6 @@ import {
   Plus,
   Search,
   ShieldCheck,
-  Sparkles,
   UsersRound,
   Workflow,
 } from "lucide-react";
@@ -225,7 +224,7 @@ function BrainComposer({
         aria-label={l("Pergunta para o Urso", "Question for Urso")}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        placeholder={l("Pergunte ao Brain deste projeto", "Ask this project Brain")}
+        placeholder={l("Consulte os registros ou faça uma pergunta", "Search project records or ask a question")}
         disabled={busy}
       />
       <div className="mf-brain-composer-tools">
@@ -563,8 +562,8 @@ export function ProjectBrainWorkspace({
             <div className="mf-gemini-empty">
               <div className="mf-gemini-glow" aria-hidden="true" />
               <div className="mf-gemini-intro">
-                <span className="mf-gemini-mark"><Sparkles size={19} /></span>
-                <h2>{l("Pergunte ao projeto", "Ask the project")}</h2>
+                <span className="mf-gemini-mark"><Search size={19} /></span>
+                <h2>{l("Consulte os registros do projeto", "Query project records")}</h2>
                 <p>{l(
                   `Você está falando como ${t(selectedRole.name)}. Antes de responder, o Brain autoriza, recupera e registra exatamente as evidências usadas.`,
                   `You are speaking as ${t(selectedRole.name)}. Before answering, the Brain authorizes, retrieves, and records the exact evidence it used.`,
@@ -588,7 +587,7 @@ export function ProjectBrainWorkspace({
                     <div className="mf-gemini-user-message" key={message.id}><span>{text}</span></div>
                   ) : (
                     <article className="mf-gemini-answer" key={message.id}>
-                      <header><span className="mf-gemini-mark"><Sparkles size={17} /></span><strong>Urso</strong></header>
+                      <header><span className="mf-gemini-mark"><Database size={17} /></span><strong>Urso</strong></header>
                       <div className="mf-gemini-answer-copy"><RichText text={text} /></div>
                     </article>
                   );
@@ -696,7 +695,7 @@ function ContextReceipt({
       {receipt.missing.length ? <p><AlertTriangle size={14} /> {receipt.missing.join(" ")}</p> : null}
       <div className="mf-live-learning">
         <span>
-          <Sparkles size={14} />
+          <GitBranch size={14} />
           <span>
             <strong>{l("Aprendizado controlado", "Controlled learning")}</strong>
             <small>{l("Analisa esta conversa sem alterar a verdade automaticamente.", "Reviews this conversation without changing truth automatically.")}</small>
@@ -712,7 +711,7 @@ function ContextReceipt({
           </em>
         ) : (
           <button type="button" disabled={disabled || learningState.status === "running"} onClick={() => void reviewForLearning()}>
-            {learningState.status === "running" ? <LoaderCircle className="mf-spin" size={13} /> : <Sparkles size={13} />}
+            {learningState.status === "running" ? <LoaderCircle className="mf-spin" size={13} /> : <GitBranch size={13} />}
             {learningState.status === "running" ? l("Analisando…", "Reviewing…") : l("Revisar aprendizado", "Review learning")}
           </button>
         )}
