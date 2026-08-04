@@ -916,6 +916,43 @@ const artifactWorkspaceSource = readFileSync(
   new URL("../components/mf/artifact-workspace.tsx", import.meta.url),
   "utf8",
 );
+const recoveryPreviewSource = artifactWorkspaceSource.match(
+  /function RecoveryPreview[\s\S]*?(?=\nfunction ChecklistPreview)/,
+)?.[0] ?? "";
+assert.match(recoveryPreviewSource, /mfScenarioManifest\.outcome\.recoveredDays/);
+assert.match(recoveryPreviewSource, /mfScenarioManifest\.outcome\.exposureDays/);
+assert.match(recoveryPreviewSource, /<span>\{recoveredDaysLabel\}<\/span>/);
+assert.match(recoveryPreviewSource, /<span>\{exposureDaysLabel\}<\/span>/);
+assert.match(recoveryPreviewSource, /recoveryNote[\s\S]*?recoveredDays/);
+assert.doesNotMatch(recoveryPreviewSource, /<span>7 |recupera oito dias/);
+
+const checklistPreviewSource = artifactWorkspaceSource.match(
+  /function ChecklistPreview[\s\S]*?(?=\nfunction TeamsPreview)/,
+)?.[0] ?? "";
+const teamsPreviewSource = artifactWorkspaceSource.match(
+  /function TeamsPreview[\s\S]*?(?=\nfunction ImpactPreview)/,
+)?.[0] ?? "";
+const artifactPreviewSource = artifactWorkspaceSource.match(
+  /function ArtifactPreview[\s\S]*?(?=\nexport function ArtifactWorkspace)/,
+)?.[0] ?? "";
+for (const source of [checklistPreviewSource, teamsPreviewSource, artifactPreviewSource]) {
+  assert.match(source, /reviewState/);
+  assert.match(source, /receiptId/);
+}
+assert.match(checklistPreviewSource, /reviewState === "approved" && Boolean\(receiptId\)/);
+assert.match(checklistPreviewSource, /Verified/);
+assert.match(checklistPreviewSource, /Complete/);
+assert.match(checklistPreviewSource, /Receipt pending/);
+assert.match(checklistPreviewSource, /Receipt unavailable/);
+assert.match(checklistPreviewSource, /\{receiptId\}/);
+assert.match(teamsPreviewSource, /Approved · ready for controlled publication/);
+assert.match(teamsPreviewSource, /Validated · awaiting controlled approval/);
+assert.match(teamsPreviewSource, /Draft · not published/);
+assert.match(teamsPreviewSource, /Receipt unavailable/);
+assert.match(teamsPreviewSource, /\{receiptId\}/);
+assert.match(artifactPreviewSource, /<ChecklistPreview artifact=\{artifact\} reviewState=\{reviewState\} receiptId=\{receiptId\}/);
+assert.match(artifactPreviewSource, /<TeamsPreview reviewState=\{reviewState\} receiptId=\{receiptId\}/);
+assert.match(artifactWorkspaceSource, /<ArtifactPreview artifact=\{artifact\} reviewState=\{reviewState\} receiptId=\{receiptId\}/);
 const artifactWorkspaceInvocation = mfDemoSource.match(
   /\{selectedArtifact \? \([\s\S]*?<ArtifactWorkspace[\s\S]*?\) : null\}/,
 )?.[0] ?? "";
