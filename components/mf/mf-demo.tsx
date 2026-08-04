@@ -9,7 +9,6 @@ import {
   Check,
   ChevronDown,
   CircleGauge,
-  FileClock,
   FileStack,
   GitPullRequestArrow,
   History,
@@ -21,7 +20,6 @@ import {
   Play,
   Presentation,
   RotateCcw,
-  Search,
   ShieldCheck,
   Timer,
   UsersRound,
@@ -30,17 +28,12 @@ import {
   X,
 } from "lucide-react";
 import {
-  activityEvents,
   artifacts,
   askUrsoAnswers,
   project,
   roles,
 } from "@/lib/mf-demo/fixtures";
-import {
-  nextActionLabels,
-  projectRisk,
-  scenarioLabels,
-} from "@/lib/mf-demo/scenario";
+import { scenarioLabels } from "@/lib/mf-demo/scenario";
 import { deriveMfArtifactAccess } from "@/lib/mf-demo/workflow-runtime.mjs";
 import type {
   ArtifactReviewState,
@@ -60,7 +53,6 @@ import {
 import { ArtifactWorkspace } from "./artifact-workspace";
 import { MfLogo } from "./mf-logo";
 import { MfLanguageProvider, useMfLanguage } from "./mf-language";
-import { ExecutiveValueBar, StoryRail } from "./mf-story-panels";
 
 const navigation = [
   { id: "control", label: "Projeto hoje", icon: CircleGauge },
@@ -236,8 +228,6 @@ function MfDemoShell() {
       return [artifact.id, reviewState];
     }),
   ), [demoSession?.snapshot]);
-  const risk = projectRisk(step);
-  const visibleActivity = activityEvents.filter((event) => step >= event.availableAt).reverse();
   const artifactAccess = deriveMfArtifactAccess(roleId);
   const selectedArtifact = artifacts.find((artifact) =>
     artifact.id === selectedArtifactId
@@ -258,13 +248,9 @@ function MfDemoShell() {
   const managerConfirmationReceiptId = managerConfirmationState === "complete"
     ? managerConfirmationWorkItem?.receiptId ?? null
     : null;
-  const approvedArtifacts = artifacts.flatMap((artifact) => {
-    if (artifactReviewStates[artifact.id] !== "approved") return [];
-    const workItems = demoSession?.snapshot.workItems.filter((task) => task.artifactId === artifact.id) ?? [];
-    if (workItems.length === 0 || workItems.some((task) => task.state !== "complete")) return [];
-    const terminalWorkItem = [...workItems].sort((left, right) => right.completeAt - left.completeAt)[0];
-    return [{ artifact, receiptId: terminalWorkItem.receiptId }];
-  });
+  const authorizedEvidenceRecordCount = demoSession?.snapshot.sources
+    .filter((source) => source.authorizedRoleIds.includes(roleId))
+    .reduce((count, source) => count + source.evidencePaths.length, 0) ?? 0;
   const activeAnswer = answerForScenario(step, selectedQuestion);
   const presenterCue = presenterCues[language][step];
   const selectedRole = roles.find((role) => role.id === roleId) ?? roles[0];
@@ -606,22 +592,6 @@ function MfDemoShell() {
           <small className="mf-demo-tag">DEMO</small>
         </div>
 
-        <div className="mf-ribbon-stat">
-          <span>{t("Etapa")}</span>
-          <strong>{t(project.stage)}</strong>
-        </div>
-        <div className="mf-ribbon-stat mf-milestone-stat">
-          <span>{t("Próximo marco")}</span>
-          <strong>EXE-02 · {step >= 3 && step < 8 ? t("em risco") : t("14 dias")}</strong>
-        </div>
-        <div className={`mf-risk-badge is-${risk.tone}`}>
-          <span />
-          <div>
-            <small>{t("Risco")}</small>
-            <strong>{t(risk.label)}</strong>
-          </div>
-        </div>
-
         <div className="mf-topbar-actions">
           <div className="mf-language-toggle" role="group" aria-label={language === "pt" ? "Idioma" : "Language"}>
             <Languages size={14} aria-hidden="true" />
@@ -705,15 +675,6 @@ function MfDemoShell() {
               );
             })}
           </nav>
-          <div className="mf-system-health">
-            <span className="mf-eyebrow">{t("Conexões")}</span>
-            <ul>
-              <li><span className="is-online" /> Slack / Teams <small>{t("ativo")}</small></li>
-              <li><span className="is-online" /> {language === "pt" ? "Documentos" : "Documents"} <small>{t("ativo")}</small></li>
-              <li><span className="is-demo" /> BIM / CDE <small>demo</small></li>
-              <li><span className="is-demo" /> {t("Cronograma")} <small>demo</small></li>
-            </ul>
-          </div>
           <div className="mf-presenter-controls">
             <span className="mf-eyebrow">{t("Controles da demo")}</span>
             <div>
@@ -759,7 +720,6 @@ function MfDemoShell() {
         ) : null}
 
         <main ref={mainRef} id="mf-main" className="mf-main" tabIndex={-1}>
-          {demoSession ? <div className="mf-main-story"><ExecutiveValueBar snapshot={demoSession.snapshot} /><StoryRail step={step} /></div> : null}
           <ViewContent
             view={activeView}
             step={step}
@@ -773,64 +733,6 @@ function MfDemoShell() {
             snapshot={demoSession?.snapshot}
           />
         </main>
-
-        <aside className="mf-activity-rail" aria-label={t("Atividade do projeto")}>
-          <div className="mf-run-card">
-            <div className="mf-run-card-topline">
-              <span className={step > 0 && step < 8 ? "is-running" : ""} />
-              <small>DEMO RUN · WF-REV-C-001</small>
-            </div>
-            <strong aria-live="polite">{t(scenarioLabels[step])}</strong>
-            <div className="mf-run-progress" aria-label={`${t("Etapa")} ${step} / 8`}>
-              {Array.from({ length: 8 }, (_, index) => (
-                <span key={index} className={step > index ? "is-complete" : step === index ? "is-current" : ""} />
-              ))}
-            </div>
-            <button type="button" onClick={advance} disabled={step === 8 || sessionHydrating || transitioning}>
-              {step === 8 ? <Check size={15} /> : <ArrowRight size={15} />}
-              {t(nextActionLabels[step])}
-            </button>
-          </div>
-
-          <div className="mf-rail-heading">
-            <span>{t("Atividade recente")}</span>
-            <FileClock size={15} />
-          </div>
-          <div className="mf-activity-list" aria-live="polite">
-            {approvedArtifacts.slice().reverse().map(({ artifact, receiptId }) => (
-              <div className="mf-activity-item" key={`approval-${artifact.id}`}>
-                <span className="mf-activity-marker is-positive" />
-                <div>
-                  <time>{t("AGORA")}</time>
-                  <strong>{t("Artefato aprovado")}</strong>
-                  <small>{t(artifact.title)} · {receiptId ?? (language === "pt" ? "Recibo indisponível" : "Receipt unavailable")}</small>
-                </div>
-              </div>
-            ))}
-            {visibleActivity.slice(0, 6).map((event) => (
-              <div className="mf-activity-item" key={event.id}>
-                <span className={`mf-activity-marker is-${event.tone}`} />
-                <div>
-                  <time>{event.time}</time>
-                  <strong>{t(event.title)}</strong>
-                  <small>{t(event.detail)}</small>
-                </div>
-              </div>
-            ))}
-          </div>
-          <button type="button" className="mf-rail-link" onClick={() => navigate("audit")}>
-            {t("Ver histórico completo")} <ArrowRight size={14} />
-          </button>
-
-          <div className="mf-context-card">
-            <Search size={16} />
-            <div>
-              <span>{t("Contexto carregado")}</span>
-              <strong>19 {t("fontes")} · 15 {t("disciplinas")}</strong>
-              <small>{t("Escopo")}: {t(roles.find((role) => role.id === roleId)?.name ?? "")}</small>
-            </div>
-          </div>
-        </aside>
       </div>
 
       {assistantOpen ? (
@@ -855,7 +757,9 @@ function MfDemoShell() {
               </button>
             </header>
             <div className="mf-assistant-context">
-              <ShieldCheck size={15} /> {t("Respostas usam apenas fontes autorizadas deste projeto.")}
+              <ShieldCheck size={15} /> {language === "pt"
+                ? "Respostas pré-configuradas sobre este projeto sintético."
+                : "Preconfigured answers about this synthetic project."}
             </div>
             <div className="mf-question-list">
               {askUrsoAnswers.map((item, index) => (
@@ -1004,7 +908,7 @@ function MfDemoShell() {
                   <li><ShieldCheck size={17} /><span><small>{t("Fixture do projeto")}</small><strong>{t("Carregado")}</strong></span><i /></li>
                   <li><RotateCcw size={17} /><span><small>{t("Motor do cenário")}</small><strong>{t("Determinístico")}</strong></span><i /></li>
                   <li><Languages size={17} /><span><small>{t("Idiomas")}</small><strong>PT + EN</strong></span><i /></li>
-                  <li><BrainCircuit size={17} /><span><small>{t("Contexto autorizado")}</small><strong>{t("39 docs conectados")}</strong></span><i /></li>
+                  <li><BrainCircuit size={17} /><span><small>{t("Contexto autorizado")}</small><strong>{authorizedEvidenceRecordCount} {language === "pt" ? "registros autorizados" : "authorized records"}</strong></span><i /></li>
                 </ul>
                 <div className="mf-presentation-meta">
                   <span><Presentation size={15} /><strong>9 {t("cenas")}</strong></span>

@@ -792,31 +792,98 @@ assert.doesNotMatch(demoClientSource, /void fetch\(["']\/api\/mf\/brain\/scenari
 assert.match(demoClientSource, /sessionStorage/);
 assert.match(demoClientSource, /expectedStep/);
 assert.match(demoClientSource, /transitionError/);
-
-const storyPanelSource = readFileSync(new URL("../components/mf/mf-story-panels.tsx", import.meta.url), "utf8");
-for (const componentName of [
+for (const obsoleteShellToken of [
   "ExecutiveValueBar",
   "StoryRail",
+  "mf-main-story",
+  "mf-activity-rail",
+  "mf-ribbon-stat",
+  "mf-risk-badge",
+  "mf-system-health",
+  "activityEvents",
+  "nextActionLabels",
+  "projectRisk",
+  "visibleActivity",
+  "approvedArtifacts",
+]) {
+  assert(!demoClientSource.includes(obsoleteShellToken), `obsolete shell token remains: ${obsoleteShellToken}`);
+}
+for (const preservedShellToken of [
+  "mf-brand-block",
+  "mf-project-selector",
+  "mf-role-context",
+  "navigation.map",
+  "mf-language-toggle",
+  "mf-ask-button",
+  "mf-presenter-controls",
+  "mf-guided-entry",
+  "mf-presenter-guide",
+  "mf-presentation-lobby",
+]) {
+  assert(demoClientSource.includes(preservedShellToken), `preserved shell token is missing: ${preservedShellToken}`);
+}
+assert.match(demoClientSource, /const authorizedEvidenceRecordCount/);
+assert.match(demoClientSource, /source\.authorizedRoleIds\.includes\(roleId\)/);
+assert.match(demoClientSource, /source\.evidencePaths\.length/);
+assert.doesNotMatch(demoClientSource, /39 docs conectados/);
+assert.doesNotMatch(demoClientSource, /Respostas usam apenas fontes autorizadas deste projeto\./);
+
+const storyPanelSource = readFileSync(new URL("../components/mf/mf-story-panels.tsx", import.meta.url), "utf8");
+assert.deepEqual(
+  [...storyPanelSource.matchAll(/export function (\w+)/g)].map(([, name]) => name),
+  [
   "ConnectedSourcesPanel",
   "ControlledChangePanel",
-  "ObjectiveWorkflowPanel",
-  "EmployeeObjectivePanel",
   "OutcomeComparisonPanel",
   "PilotProposalPanel",
+  ],
+  "story panels must expose exactly the four retained surfaces",
+);
+for (const obsoleteComponent of [
+  "ExecutiveValueBar",
+  "StoryRail",
+  "ObjectiveWorkflowPanel",
+  "EmployeeObjectivePanel",
+  "taskStateLabel",
 ]) {
-  assert.match(storyPanelSource, new RegExp(`export function ${componentName}`));
+  assert(!storyPanelSource.includes(obsoleteComponent), `obsolete story component remains: ${obsoleteComponent}`);
 }
 for (const semanticLabel of [
   "Connection mode",
   "Authority",
   "Freshness",
-  "Evidence",
-  "Human gate",
-  "Definition of done",
+  "Evidence details",
+  "Connected",
+  "Available in pilot",
+  "Decision requested",
   "Approve the pilot, select the project, and nominate the team",
 ]) {
   assert(storyPanelSource.includes(semanticLabel), `missing story semantics: ${semanticLabel}`);
 }
+assert.match(storyPanelSource, /source\.authorizedRoleIds\.includes\(roleId\)/);
+assert.match(storyPanelSource, /source\.technology\.name/);
+assert.match(storyPanelSource, /source\.status/);
+assert.match(storyPanelSource, /source\.evidencePaths\.map/);
+assert.match(storyPanelSource, /tower\.impactedDisciplines/);
+assert.match(storyPanelSource, /tower\.exposureDays/);
+assert.doesNotMatch(storyPanelSource, /10 affected disciplines|Likely 10-day delay/);
+assert.match(storyPanelSource, /<details className=["']mf-source-evidence["']/);
+assert.match(storyPanelSource, /<summary>/);
+assert.match(storyPanelSource, /data-label=\{l\(["']Sem Urso["'],\s*["']Without Urso["']\)\}/);
+assert.match(storyPanelSource, /data-label=\{l\(["']Com Urso["'],\s*["']With Urso["']\)\}/);
+assert.match(storyPanelSource, /task\.id === ["']approve-controlled-truth["']/);
+assert.match(storyPanelSource, /decisionTask\?\.receiptId/);
+assert.doesNotMatch(storyPanelSource, /snapshot\.receipts\.at\(-1\)/);
+assert.match(
+  storyPanelSource,
+  /decisionTask\?\.receiptId\s*\?\?\s*\(approved\s*\?\s*l\(["']Recibo indisponível["'],\s*["']Receipt unavailable["']\)/,
+);
+const pilotProposalSource = storyPanelSource.match(
+  /export function PilotProposalPanel[\s\S]*?(?=\n}|$)/,
+)?.[0] ?? "";
+assert.match(pilotProposalSource, /mf-pilot-commitment/);
+assert.doesNotMatch(pilotProposalSource, /<button/);
+assert.doesNotMatch(pilotProposalSource, /<(?:ArrowRight|Link2)\b/);
 
 const managerWorkspaceSource = readFileSync(
   new URL("../components/mf/mf-manager-workspace.tsx", import.meta.url),
@@ -957,6 +1024,59 @@ assert.doesNotMatch(mfCssSource, /\.mf-agentic-map\s*>\s*:nth-child/);
 assert.match(mfCssSource, /\/\* Agent workflow canvas \*\//);
 assert.match(mfCssSource, /\.mf-source-connection-status/);
 assert.match(mfCssSource, /\.mf-receipt-status/);
+for (const obsoleteClassName of [
+  "mf-main-story",
+  "mf-executive-value",
+  "mf-story-rail",
+  "mf-objective-workflow",
+  "mf-employee-objective",
+  "mf-employee-objective-grid",
+  "mf-employee-gate",
+  "mf-activity-rail",
+  "mf-run-card",
+  "mf-run-progress",
+  "mf-rail-heading",
+  "mf-activity-list",
+  "mf-activity-item",
+  "mf-activity-marker",
+  "mf-rail-link",
+  "mf-context-card",
+  "mf-ribbon-stat",
+  "mf-risk-badge",
+  "mf-milestone-stat",
+  "mf-system-health",
+]) {
+  assert(!mfCssSource.includes(`.${obsoleteClassName}`), `obsolete MF class remains: ${obsoleteClassName}`);
+}
+for (const retainedClassName of [
+  "mf-story-panel",
+  "mf-source-registry",
+  "mf-source-row",
+  "mf-source-technology",
+  "mf-source-evidence",
+  "mf-truth-transition",
+  "mf-proof-drawer",
+  "mf-outcome-comparison",
+  "mf-pilot-grid",
+  "mf-pilot-commitment",
+]) {
+  assert(mfCssSource.includes(`.${retainedClassName}`), `retained MF class is missing: ${retainedClassName}`);
+}
+const storyCssStart = mfCssSource.indexOf(".mf-story-panel");
+const storyCssEnd = mfCssSource.indexOf("/* MF Fieldbook direction", storyCssStart);
+const retainedStoryCss = storyCssStart >= 0 && storyCssEnd > storyCssStart
+  ? mfCssSource.slice(storyCssStart, storyCssEnd)
+  : "";
+for (const lightToken of [
+  "--mf-ui-panel",
+  "--mf-ui-subtle",
+  "--mf-ui-border",
+  "--mf-ui-ink",
+  "--mf-ui-muted",
+]) {
+  assert(retainedStoryCss.includes(lightToken), `story CSS does not use light token: ${lightToken}`);
+}
+assert.doesNotMatch(retainedStoryCss, /background:\s*#101010/);
 
 const demoViewsSource = readFileSync(new URL("../components/mf/demo-views.tsx", import.meta.url), "utf8");
 const mfDemoSource = readFileSync(new URL("../components/mf/mf-demo.tsx", import.meta.url), "utf8");
@@ -1042,12 +1162,12 @@ assert.match(openArtifactSource, /artifactAccess\.canViewAll/);
 assert.match(openArtifactSource, /if \(!allowed\)/);
 assert.match(openArtifactSource, /setSelectedArtifactId\(null\);[\s\S]*?return;/);
 const artifactReviewStateSource = mfDemoSource.match(
-  /const artifactReviewStates = useMemo[\s\S]*?(?=\n\s*const risk)/,
+  /const artifactReviewStates = useMemo[\s\S]*?(?=\n\s*const artifactAccess)/,
 )?.[0] ?? "";
 assert.doesNotMatch(artifactReviewStateSource, /step >= 8/);
 assert.match(artifactReviewStateSource, /workItems\.length > 0 && workItems\.every/);
 const selectedArtifactReceiptSource = mfDemoSource.match(
-  /const selectedArtifactWorkItems[\s\S]*?(?=\n\s*const approvedArtifacts)/,
+  /const selectedArtifactWorkItems[\s\S]*?(?=\n\s*const activeAnswer)/,
 )?.[0] ?? "";
 assert.match(selectedArtifactReceiptSource, /right\.completeAt - left\.completeAt/);
 assert.match(selectedArtifactReceiptSource, /selectedArtifactWorkItems\.every/);
@@ -1057,7 +1177,6 @@ assert.match(selectedArtifactReceiptSource, /managerConfirmationState === "compl
 assert.doesNotMatch(selectedArtifactReceiptSource, /RCPT-/);
 assert.match(mfDemoSource, /useEffect\(\(\) => \{[\s\S]*?selectedArtifactId[\s\S]*?!selectedArtifact[\s\S]*?setSelectedArtifactId\(null\)[\s\S]*?\}, \[selectedArtifact, selectedArtifactId\]\)/);
 assert.doesNotMatch(mfDemoSource, /receipt registrado/);
-assert.match(mfDemoSource, /const approvedArtifacts[\s\S]*?receiptId[\s\S]*?Receipt unavailable/);
 assert.doesNotMatch(artifactWorkspaceSource, /\bRCPT-/);
 const fixturesSource = readFileSync(new URL("../lib/mf-demo/fixtures.ts", import.meta.url), "utf8");
 const impactPlanArtifactSource = fixturesSource.match(

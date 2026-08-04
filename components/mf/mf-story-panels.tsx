@@ -2,68 +2,26 @@
 
 import {
   ArrowRight,
-  Check,
-  CircleDot,
   Clock3,
   Database,
   FileCheck2,
   GitBranch,
-  Link2,
-  LockKeyhole,
   Network,
   ShieldCheck,
   Target,
   UserCheck,
-  UsersRound,
   Workflow,
 } from "lucide-react";
-import { deriveMfControlTower, getMfRoleWorkspace } from "@/lib/mf-demo/harness-runtime.mjs";
+import { deriveMfControlTower } from "@/lib/mf-demo/harness-runtime.mjs";
 import { mfScenarioManifest, mfText } from "@/lib/mf-demo/manifest.mjs";
-import type { MfHarnessSnapshot, MfWorkItem } from "@/lib/mf-demo/types";
+import type { MfHarnessSnapshot } from "@/lib/mf-demo/types";
 import { useMfLanguage } from "./mf-language";
 
 function useLabels() {
   const { language } = useMfLanguage();
   const l = (pt: string, en: string) => language === "pt" ? pt : en;
   const localize = (value: { pt: string; en: string }) => mfText(value, language);
-  return { language, l, localize };
-}
-
-export function ExecutiveValueBar({ snapshot }: { snapshot: MfHarnessSnapshot }) {
-  const { l } = useLabels();
-  const tower = deriveMfControlTower(snapshot);
-  const values = [
-    [l("Marco protegido", "Protected milestone"), tower.milestone],
-    [l("Disciplinas afetadas", "Affected disciplines"), `${tower.impactedDisciplines} / 15`],
-    [l("Bloqueios abertos", "Open blockers"), String(tower.openBlockers)],
-    [l("Exposição", "Exposure"), `${tower.exposureDays} ${l("dias", "days")}`],
-    [l("Dias recuperados", "Days recovered"), String(tower.daysRecovered)],
-    [l("Prontidão", "Readiness"), `${tower.releaseReadiness}%`],
-  ];
-  return (
-    <section className="mf-executive-value" aria-label={l("Valor operacional", "Operational value")}>
-      {values.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
-    </section>
-  );
-}
-
-export function StoryRail({ step }: { step: number }) {
-  const { l } = useLabels();
-  const phases = [
-    [1, l("Mudança detectada", "Change detected")],
-    [3, l("Verdade controlada", "Truth controlled")],
-    [4, l("Impacto compreendido", "Impact understood")],
-    [5, l("Trabalho coordenado", "Work coordinated")],
-    [8, l("Liberação protegida", "Release protected")],
-  ];
-  return (
-    <nav className="mf-story-rail" aria-label={l("História de valor", "Value story")}>
-      {phases.map(([threshold, label], index) => {
-        const active = step >= Number(threshold);
-        return <span key={String(label)} className={active ? "is-complete" : ""}><i>{active ? <Check size={11} /> : index + 1}</i>{label}</span>;
-      })}
-    </nav>
-  );
+  return { l, localize };
 }
 
 export function ConnectedSourcesPanel({
@@ -79,6 +37,10 @@ export function ConnectedSourcesPanel({
     live: l("Ingestão real do Brain", "Live Brain ingestion"),
     demo: l("Adaptador da demo", "Demo adapter"),
     pilot: l("Integração do piloto", "Pilot integration"),
+  } as const;
+  const statusLabel = {
+    connected: l("Conectado", "Connected"),
+    available_in_pilot: l("Disponível no piloto", "Available in pilot"),
   } as const;
   const authorityLabel: Record<string, string> = {
     evidence: l("evidência", "evidence"),
@@ -98,15 +60,40 @@ export function ConnectedSourcesPanel({
       </header>
       <div className="mf-source-registry">
         {sources.map((source) => (
-          <article key={source.id}>
-            <header><Database size={16} /><span><small>{source.system}</small><strong>{localize(source.name)}</strong></span><em className={`is-${source.mode}`}>{modeLabel[source.mode]}</em></header>
-            <dl>
-              <div><dt>{l("Modo de conexão", "Connection mode")}</dt><dd>{modeLabel[source.mode]}</dd></div>
+          <article className="mf-source-row" key={source.id}>
+            <div className="mf-source-identity">
+              <span className="mf-source-technology">{source.technology.name}</span>
+              <span><small>{source.system}</small><strong>{localize(source.name)}</strong></span>
+            </div>
+            <dl className="mf-source-facts">
               <div><dt>{l("Autoridade", "Authority")}</dt><dd>{authorityLabel[source.authority] ?? source.authority}</dd></div>
               <div><dt>{l("Atualização", "Freshness")}</dt><dd>{localize(source.freshness)}</dd></div>
-              <div><dt>{l("Evidência", "Evidence")}</dt><dd>{source.evidencePaths.length} {source.evidencePaths.length === 1 ? l("registro", "record") : l("registros", "records")}</dd></div>
             </dl>
-            <footer><UserCheck size={13} /> {localize(source.owner)}</footer>
+            <div className="mf-source-connection">
+              <em className={`is-${source.status}`}>{statusLabel[source.status]}</em>
+              <small>{l("Modo de conexão", "Connection mode")} · {modeLabel[source.mode]}</small>
+            </div>
+            <details className="mf-source-evidence">
+              <summary>
+                <Database size={15} />
+                <span>{l("Detalhes da evidência", "Evidence details")}</span>
+                <strong>{source.evidencePaths.length} {source.evidencePaths.length === 1 ? l("registro", "record") : l("registros", "records")}</strong>
+              </summary>
+              <div>
+                <div className="mf-source-evidence-meta">
+                  <span><UserCheck size={13} /><small>{l("Responsável", "Owner")}</small><strong>{localize(source.owner)}</strong></span>
+                  <span><Database size={13} /><small>{l("Tipo de contexto", "Context type")}</small><strong>{localize(source.type)}</strong></span>
+                </div>
+                <ul aria-label={l("Registros de evidência", "Evidence records")}>
+                  {source.evidencePaths.map((path) => (
+                    <li key={path} title={path}>
+                      <FileCheck2 size={13} />
+                      <span>{path.split("/").at(-1) ?? path}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </details>
           </article>
         ))}
       </div>
@@ -119,6 +106,7 @@ export function ControlledChangePanel({ snapshot }: { snapshot: MfHarnessSnapsho
   const before = mfScenarioManifest.revisions.B;
   const after = mfScenarioManifest.revisions.C;
   const approved = snapshot.decision.status === "approved";
+  const decisionTask = snapshot.workItems.find((task) => task.id === "approve-controlled-truth");
   return (
     <section className="mf-story-panel" data-guide-key="controlled-change">
       <header className="mf-story-panel-header">
@@ -133,68 +121,8 @@ export function ControlledChangePanel({ snapshot }: { snapshot: MfHarnessSnapsho
       </div>
       <details className="mf-proof-drawer">
         <summary><ShieldCheck size={14} /> {l("Mostrar a prova", "Show the proof")}</summary>
-        <div><span><strong>{l("Fonte", "Source")}</strong><small>Data Sheet Rev. C · SUP-118</small></span><span><strong>{l("Regra", "Rule")}</strong><small>{l("Mudança material exige aprovação do PM", "Material change requires PM approval")}</small></span><span><strong>{l("Efeito temporal", "Temporal effect")}</strong><small>{approved ? l("Rev. B preservada como histórica", "Rev. B preserved as historical") : l("Nenhuma verdade alterada", "No truth changed")}</small></span><span><strong>{l("Recibo", "Receipt")}</strong><small>{snapshot.receipts.at(-1)?.id ?? l("Emitido na aprovação", "Issued on approval")}</small></span></div>
+        <div><span><strong>{l("Fonte", "Source")}</strong><small>Data Sheet Rev. C · SUP-118</small></span><span><strong>{l("Regra", "Rule")}</strong><small>{l("Mudança material exige aprovação do PM", "Material change requires PM approval")}</small></span><span><strong>{l("Efeito temporal", "Temporal effect")}</strong><small>{approved ? l("Rev. B preservada como histórica", "Rev. B preserved as historical") : l("Nenhuma verdade alterada", "No truth changed")}</small></span><span><strong>{l("Recibo", "Receipt")}</strong><small>{decisionTask?.receiptId ?? (approved ? l("Recibo indisponível", "Receipt unavailable") : l("Emitido na aprovação", "Issued on approval"))}</small></span></div>
       </details>
-    </section>
-  );
-}
-
-function taskStateLabel(task: MfWorkItem, l: (pt: string, en: string) => string) {
-  if (task.state === "complete") return l("Concluído", "Complete");
-  if (task.state === "in_progress") return l("Em execução", "In progress");
-  if (task.state === "ready") return l("Pronto", "Ready");
-  return l("Bloqueado", "Blocked");
-}
-
-export function ObjectiveWorkflowPanel({ snapshot }: { snapshot: MfHarnessSnapshot }) {
-  const { l, localize } = useLabels();
-  return (
-    <section className="mf-story-panel" data-guide-key="objective-workflow">
-      <header className="mf-story-panel-header">
-        <span><Target size={18} /></span>
-        <div><small>{l("Objetivo do Harness", "Harness objective")}</small><h2>{localize(mfScenarioManifest.objective.title)}</h2><p>{localize(mfScenarioManifest.objective.detail)}</p></div>
-        <strong>{snapshot.objective.completedTasks} / {snapshot.objective.totalTasks}</strong>
-      </header>
-      <div className="mf-objective-workflow">
-        {snapshot.workItems.map((task) => {
-          const owner = mfScenarioManifest.roles.find((role) => role.id === task.ownerRoleId);
-          return (
-            <article key={task.id} className={`is-${task.state}`}>
-              <header><CircleDot size={14} /><span><small>{owner ? localize(owner.name) : task.ownerRoleId}</small><strong>{localize(task.title)}</strong></span><em>{taskStateLabel(task, l)}</em></header>
-              <p>{localize(task.detail)}</p>
-              <footer><span><GitBranch size={12} /> {task.dependsOn.length ? task.dependsOn.join(" · ") : l("Sem dependência", "No dependency")}</span>{task.humanGate ? <span><LockKeyhole size={12} /> {l("Gate humano", "Human gate")}</span> : null}</footer>
-            </article>
-          );
-        })}
-      </div>
-    </section>
-  );
-}
-
-export function EmployeeObjectivePanel({
-  snapshot,
-  roleId,
-}: {
-  snapshot: MfHarnessSnapshot;
-  roleId: string;
-}) {
-  const { l, localize } = useLabels();
-  const workspace = getMfRoleWorkspace(snapshot, roleId);
-  const next = workspace.nextTask;
-  return (
-    <section className="mf-story-panel mf-employee-objective" data-guide-key="employee-objective">
-      <header className="mf-story-panel-header">
-        <span><UsersRound size={18} /></span>
-        <div><small>{l("Mesmo evento. Contexto e ações autorizados para este papel.", "Same event. Authorized context and actions for this role.")}</small><h2>{localize(workspace.role.objective)}</h2></div>
-        <strong>{localize(workspace.role.name)}</strong>
-      </header>
-      <div className="mf-employee-objective-grid">
-        <article><small>{l("Sua próxima ação", "Your next action")}</small><strong>{next ? localize(next.title) : l("Objetivo concluído", "Objective complete")}</strong><p>{next ? localize(next.detail) : localize(workspace.role.deliverable)}</p></article>
-        <article><small>{l("Por que você está envolvido", "Why you are involved")}</small><strong>{localize(workspace.role.assignment)}</strong><p>{workspace.downstreamTasks.length} {workspace.downstreamTasks.length === 1 ? l("handoff depende do seu trabalho", "handoff depends on your work") : l("handoffs dependem do seu trabalho", "handoffs depend on your work")}</p></article>
-        <article><small>{l("Contexto autorizado", "Authorized context")}</small><strong>{workspace.sources.length} {l("fontes entregues", "sources delivered")}</strong><p>{workspace.sources.map((source) => localize(source.name)).join(" · ")}</p></article>
-        <article><small>{l("Entregável", "Deliverable")}</small><strong>{localize(workspace.role.deliverable)}</strong><p>{l("Critério de conclusão", "Definition of done")}: {next ? taskStateLabel(next, l) : l("Aprovado e entregue", "Approved and handed off")}</p></article>
-      </div>
-      <footer className="mf-employee-gate"><ShieldCheck size={15} /><span><strong>{l("Gate humano", "Human gate")}</strong><small>{next?.humanGate ? l("Validação humana obrigatória antes do handoff", "Human validation required before handoff") : l("Handoff automático após critérios completos", "Automatic handoff after criteria are complete")}</small></span></footer>
     </section>
   );
 }
@@ -204,15 +132,15 @@ export function OutcomeComparisonPanel({ snapshot }: { snapshot: MfHarnessSnapsh
   const tower = deriveMfControlTower(snapshot);
   const rows = [
     [l("Mudança descoberta em comunicação fragmentada", "Change found through fragmented communication"), l("Mudança material identificada e evidenciada", "Material change identified and evidenced")],
-    [l("PM procura manualmente quem é afetado", "PM manually finds affected teams"), l("10 disciplinas afetadas mapeadas", "10 affected disciplines mapped")],
+    [l("PM procura manualmente quem é afetado", "PM manually finds affected teams"), l(`${tower.impactedDisciplines} disciplinas afetadas mapeadas`, `${tower.impactedDisciplines} affected disciplines mapped`)],
     [l("Engenheiros procuram os insumos atuais", "Engineers search for current inputs"), l("Contexto autorizado entregue por papel", "Authorized context delivered by role")],
     [l("Handoffs perseguidos em reuniões", "Handoffs chased in meetings"), l("Dependências coordenadas pelo Harness", "Dependencies coordinated by the Harness")],
-    [l("Atraso provável de 10 dias", "Likely 10-day delay"), l(`${tower.daysRecovered} dias recuperados`, `${tower.daysRecovered} days recovered`)],
+    [l(`Atraso provável de ${tower.exposureDays} dias`, `Likely ${tower.exposureDays}-day delay`), l(`${tower.daysRecovered} dias recuperados`, `${tower.daysRecovered} days recovered`)],
   ];
   return (
     <section className="mf-story-panel mf-outcome-comparison" data-guide-key="pilot-outcome">
       <header className="mf-story-panel-header"><span><FileCheck2 size={18} /></span><div><small>{l("Resultado operacional", "Operational outcome")}</small><h2>{l("O valor não é a resposta. É o projeto coordenado.", "The value is not the answer. It is the coordinated project.")}</h2></div><strong>{tower.releaseReadiness}%</strong></header>
-      <div><header><span>{l("Sem Urso", "Without Urso")}</span><span>{l("Com Urso", "With Urso")}</span></header>{rows.map(([without, withUrso]) => <p key={without}><span>{without}</span><ArrowRight size={14} /><strong>{withUrso}</strong></p>)}</div>
+      <div><header><span>{l("Sem Urso", "Without Urso")}</span><span>{l("Com Urso", "With Urso")}</span></header>{rows.map(([without, withUrso]) => <p key={without}><span data-label={l("Sem Urso", "Without Urso")}>{without}</span><ArrowRight size={14} /><strong data-label={l("Com Urso", "With Urso")}>{withUrso}</strong></p>)}</div>
     </section>
   );
 }
@@ -227,8 +155,11 @@ export function PilotProposalPanel() {
         <article><small>{l("Medição", "Measurement")}</small><ul><li>{l("Tempo até mapear o impacto", "Time to map impact")}</li><li>{l("Envelhecimento de ações e dependências", "Action and dependency aging")}</li><li>{l("Esforço de coordenação do PM", "PM coordination effort")}</li><li>{l("Risco e recuperação do marco", "Milestone risk and recovery")}</li></ul></article>
         <article><small>{l("MF participa com", "MF participates with")}</small><ul><li>{l("Sponsor e gerente do projeto", "Sponsor and project manager")}</li><li>{l("Representantes das disciplinas", "Discipline representatives")}</li><li>{l("Acesso às fontes do piloto", "Access to pilot sources")}</li><li>{l("Revisão semanal de resultados", "Weekly outcome review")}</li></ul></article>
       </div>
-      <button type="button"><Target size={16} /> {l("Aprovar o piloto, selecionar o projeto e nomear a equipe", "Approve the pilot, select the project, and nominate the team")} <ArrowRight size={15} /></button>
-      <footer><Clock3 size={13} /> {l("Integração focada em um workflow, não em uma transformação geral da empresa.", "Integration focused on one workflow, not a company-wide transformation.")} <Link2 size={13} /></footer>
+      <div className="mf-pilot-commitment" role="note" aria-label={l("Decisão solicitada", "Decision requested")}>
+        <Target size={17} />
+        <span><small>{l("Decisão solicitada", "Decision requested")}</small><strong>{l("Aprovar o piloto, selecionar o projeto e nomear a equipe", "Approve the pilot, select the project, and nominate the team")}</strong></span>
+      </div>
+      <footer><Clock3 size={13} /> {l("Integração focada em um workflow, não em uma transformação geral da empresa.", "Integration focused on one workflow, not a company-wide transformation.")}</footer>
     </section>
   );
 }
