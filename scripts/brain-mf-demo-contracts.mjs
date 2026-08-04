@@ -8,6 +8,7 @@ import {
   transitionMfHarness,
 } from "../lib/mf-demo/harness-runtime.mjs";
 import {
+  deriveMfManagerCockpitPresentation,
   deriveMfManagerQueue,
   deriveMfManagerWorkspace,
   deriveMfTeamCommand,
@@ -242,6 +243,43 @@ const workspaceAtStep8 = deriveMfManagerWorkspace(release);
 assert.equal(queueAtStep8.actionRequiredCount, 0);
 assert.equal(queueAtStep8.done.length, 4);
 assert(workspaceAtStep8.team.handoffStages.every((stage) => stage.state === "complete"));
+
+const managerCockpitPresentationTable = [
+  [0, "DEC-042", "upcoming", null, ["receive-revision", "advance", null], ["baseline", 0, false]],
+  [1, "DEC-042", "upcoming", null, ["inspect-revision", "advance", null], ["baseline", 0, false]],
+  [2, "DEC-042", "actionable", "DEC-042", null, ["exposed", 10, false]],
+  [3, "ACT-IMPACT", "actionable", "ACT-IMPACT", null, ["exposed", 10, false]],
+  [4, "ACT-IMPACT", "completed", null, ["distribute-work", "advance", null], ["exposed", 10, false]],
+  [5, "ACT-IMPACT", "completed", null, ["open-workflow", "navigate", "workflows"], ["exposed", 10, false]],
+  [6, "SCN-003", "actionable", "SCN-003", ["open-recovery-workflow", "navigate", "workflows"], ["recovery_proposed", 8, true]],
+  [7, "EXE-02", "actionable", "EXE-02", ["review-outputs", "navigate", "artifacts"], ["recovery_selected", 8, false]],
+  [8, "EXE-02", "completed", null, null, ["protected", 8, false]],
+];
+for (const [step, featuredActionId, actionPlacement, primaryActionId, scenarioControl, milestone] of managerCockpitPresentationTable) {
+  const cockpitSnapshot = createMfHarnessSnapshot(step);
+  const presentation = deriveMfManagerCockpitPresentation(cockpitSnapshot);
+  const actionableQueueIds = deriveMfManagerQueue(cockpitSnapshot).now.map((item) => item.actionId);
+  assert.equal(presentation.featuredManagerAction.actionId, featuredActionId, `featured action at step ${step}`);
+  assert.equal(presentation.managerActionPlacement, actionPlacement, `action placement at step ${step}`);
+  assert.equal(presentation.primaryManagerAction?.actionId ?? null, primaryActionId, `primary action at step ${step}`);
+  assert.deepEqual(actionableQueueIds, primaryActionId ? [primaryActionId] : [], `actionable queue at step ${step}`);
+  assert.deepEqual(
+    presentation.scenarioControl
+      ? [presentation.scenarioControl.id, presentation.scenarioControl.kind, presentation.scenarioControl.targetView]
+      : null,
+    scenarioControl,
+    `scenario control at step ${step}`,
+  );
+  assert.deepEqual(
+    [presentation.milestone.status, presentation.milestone.days, presentation.milestone.selectionRequired],
+    milestone,
+    `milestone at step ${step}`,
+  );
+  if (presentation.primaryManagerAction) {
+    assert.equal(presentation.primaryManagerAction.lane, "now");
+    assert(["ready", "in_progress"].includes(presentation.primaryManagerAction.state));
+  }
+}
 
 const coordinateWorkflow = mfScenarioManifest.workflow.catalog.find(
   (workflow) => workflow.id === "coordinate-project-change",
@@ -542,6 +580,10 @@ assert.match(
 );
 assert.equal(managerPulseCards[0][1].match(/\.length/g)?.length, 1);
 assert.match(managerPulseCards[0][1], /<span>\{managerDecisionStatus\}<\/span>/);
+assert(managerWorkspaceSource.includes("Pilot work packages are ready for the current execution roles"));
+assert.match(managerWorkspaceSource, /deriveMfManagerCockpitPresentation/);
+assert.match(managerWorkspaceSource, /data-manager-action-cta/);
+assert.match(managerWorkspaceSource, /data-scenario-control/);
 
 const demoViewsSource = readFileSync(new URL("../components/mf/demo-views.tsx", import.meta.url), "utf8");
 assert.match(demoViewsSource, /import \{ MfManagerWorkspace \} from ["']\.\/mf-manager-workspace["']/);

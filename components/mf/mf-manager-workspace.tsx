@@ -13,7 +13,10 @@ import {
   UsersRound,
   Workflow,
 } from "lucide-react";
-import { deriveMfManagerWorkspace } from "@/lib/mf-demo/manager-runtime.mjs";
+import {
+  deriveMfManagerCockpitPresentation,
+  deriveMfManagerWorkspace,
+} from "@/lib/mf-demo/manager-runtime.mjs";
 import type { MfManagerActionItem } from "@/lib/mf-demo/manager-runtime.mjs";
 import { mfText } from "@/lib/mf-demo/manifest.mjs";
 import type { DemoView, MfHarnessSnapshot } from "@/lib/mf-demo/types";
@@ -26,30 +29,6 @@ export type MfManagerWorkspaceProps = {
 };
 
 type ProgressState = "complete" | "active" | "pending";
-
-const primaryActionByStep = [
-  "DEC-042",
-  "DEC-042",
-  "DEC-042",
-  "ACT-IMPACT",
-  "ACT-IMPACT",
-  "ACT-IMPACT",
-  "SCN-003",
-  "EXE-02",
-  "EXE-02",
-] as const;
-
-const scenarioActions = [
-  { pt: "Receber Revisão C", en: "Receive Revision C" },
-  { pt: "Comparar revisões", en: "Compare revisions" },
-  { pt: "Aprovar DEC-042", en: "Approve DEC-042" },
-  { pt: "Ativar plano de impacto", en: "Activate impact plan" },
-  { pt: "Distribuir pacotes de trabalho", en: "Distribute work packages" },
-  { pt: "Iniciar execução coordenada", en: "Start coordinated execution" },
-  { pt: "Selecionar SCN-003", en: "Select SCN-003" },
-  { pt: "Liberar EXE-02", en: "Release EXE-02" },
-  { pt: "Resultado protegido", en: "Protected outcome" },
-] as const;
 
 function stateIcon(state: MfManagerActionItem["state"]) {
   if (state === "complete") return <CheckCircle2 size={15} aria-hidden="true" />;
@@ -68,6 +47,7 @@ export function MfManagerWorkspace(props: MfManagerWorkspaceProps): React.JSX.El
   const { snapshot, onAdvance, onNavigate } = props;
   const { language } = useMfLanguage();
   const workspace = deriveMfManagerWorkspace(snapshot);
+  const presentation = deriveMfManagerCockpitPresentation(snapshot);
   const localize = (value: { pt: string; en: string }) => mfText(value, language);
   const l = (pt: string, en: string) => (language === "pt" ? pt : en);
 
@@ -104,8 +84,8 @@ export function MfManagerWorkspace(props: MfManagerWorkspaceProps): React.JSX.El
     },
     {
       badge: l("Trabalho coordenado", "Coordinated work"),
-      title: l("Cada equipe recebeu objetivo, fonte e critério", "Every team has an objective, source, and criterion"),
-      detail: l("O Harness concluiu as atribuições; a execução e as revisões humanas são o próximo controle.", "The Harness completed assignments; execution and human reviews are the next control."),
+      title: l("Os pacotes-piloto estão prontos para os papéis atuais de execução", "Pilot work packages are ready for the current execution roles"),
+      detail: l("O Harness preparou trabalho para Gerência, Elétrica, BIM, Planejamento e Qualidade; isso não representa atribuição para todas as disciplinas afetadas.", "The Harness prepared work for Project Management, Electrical, BIM, Planning, and Quality; this does not represent assignment across every affected discipline."),
       tone: "warning",
     },
     {
@@ -128,13 +108,7 @@ export function MfManagerWorkspace(props: MfManagerWorkspaceProps): React.JSX.El
     },
   ][snapshot.step];
 
-  const allQueueItems = [
-    ...workspace.queue.now,
-    ...workspace.queue.next,
-    ...workspace.queue.waitingOnTeam,
-    ...workspace.queue.done,
-  ];
-  const primaryAction = allQueueItems.find((item) => item.actionId === primaryActionByStep[snapshot.step]);
+  const primaryAction = presentation.featuredManagerAction;
   if (!primaryAction) {
     return (
       <section className="mf-manager-workspace" data-manager-fallback aria-label={l("Cockpit do gerente indisponível", "Manager cockpit unavailable")}>
@@ -176,13 +150,15 @@ export function MfManagerWorkspace(props: MfManagerWorkspaceProps): React.JSX.El
   const affectedTeamValue = snapshot.step >= 4
     ? String(workspace.controlTower.impactedDisciplines)
     : l("Escopo em análise", "Scope under review");
-  const milestoneValue = snapshot.step < 3
-    ? l("No plano", "On plan")
-    : snapshot.step < 6
-      ? l(`${workspace.controlTower.exposureDays} dias expostos`, `${workspace.controlTower.exposureDays} days exposed`)
-      : snapshot.step < 8
-        ? l(`${workspace.controlTower.daysRecovered} dias recuperados`, `${workspace.controlTower.daysRecovered} days recovered`)
-        : l("Protegido", "Protected");
+  const milestoneValue = presentation.milestone.status === "baseline"
+    ? l("Baseline", "Baseline")
+    : presentation.milestone.status === "exposed"
+      ? l(`${presentation.milestone.days} dias expostos`, `${presentation.milestone.days} days exposed`)
+      : presentation.milestone.status === "recovery_proposed"
+        ? l(`${presentation.milestone.days} dias propostos`, `${presentation.milestone.days} days proposed`)
+        : presentation.milestone.status === "recovery_selected"
+          ? l(`${presentation.milestone.days} dias selecionados`, `${presentation.milestone.days} days selected`)
+          : l(`${presentation.milestone.days} dias protegidos`, `${presentation.milestone.days} days protected`);
   const managerDecisionStatus = workspace.queue.decisionsRequiringAction.length > 0
     ? l("Decisão humana aguardando revisão", "Human decision awaiting review")
     : workspace.queue.actionRequiredCount > 0
@@ -191,13 +167,15 @@ export function MfManagerWorkspace(props: MfManagerWorkspaceProps): React.JSX.El
   const affectedTeamStatus = snapshot.step >= 4
     ? l("Impacto confirmado", "Impact confirmed")
     : l("Impacto ainda não confirmado", "Impact not confirmed yet");
-  const milestoneStatus = snapshot.step < 3
-    ? l("Baseline preservada", "Baseline holding")
-    : snapshot.step < 6
-      ? l("Recuperação ainda não selecionada", "Recovery not selected yet")
-      : snapshot.step < 8
-        ? l("Recuperação selecionada", "Recovery selected")
-        : l("Liberação protegida", "Release protected");
+  const milestoneStatus = presentation.milestone.selectionRequired
+    ? l("Seleção do gerente necessária", "Manager selection required")
+    : presentation.milestone.status === "baseline"
+      ? l("Baseline preservada", "Baseline holding")
+      : presentation.milestone.status === "exposed"
+        ? l("Recuperação ainda não selecionada", "Recovery not selected yet")
+        : presentation.milestone.status === "recovery_selected"
+          ? l("Recuperação selecionada", "Recovery selected")
+          : l("Liberação protegida", "Release protected");
   const consequence = snapshot.step < 2
     ? l("A Revisão B permanece vigente até a comparação produzir evidência suficiente.", "Revision B remains current until the comparison produces sufficient evidence.")
     : snapshot.step === 2
@@ -226,6 +204,12 @@ export function MfManagerWorkspace(props: MfManagerWorkspaceProps): React.JSX.El
     ...item,
     state: snapshot.step >= item.completeAt ? "complete" : snapshot.step >= item.activeAt ? "active" : "pending" as ProgressState,
   }));
+  const scenarioControl = presentation.scenarioControl;
+  const runScenarioControl = () => {
+    if (!scenarioControl) return;
+    if (scenarioControl.kind === "advance") onAdvance();
+    else if (scenarioControl.targetView) onNavigate(scenarioControl.targetView);
+  };
 
   return (
     <section className="mf-manager-workspace" aria-label={l("Cockpit do gerente", "Manager cockpit")}>
@@ -235,7 +219,10 @@ export function MfManagerWorkspace(props: MfManagerWorkspaceProps): React.JSX.El
           <h1>{briefing.title}</h1>
           <p>{briefing.detail}</p>
         </div>
-        <span className={`mf-manager-state is-${briefing.tone}`}><ShieldCheck size={15} aria-hidden="true" />{briefing.badge}</span>
+        <div className="mf-manager-briefing-actions">
+          <span className={`mf-manager-state is-${briefing.tone}`}><ShieldCheck size={15} aria-hidden="true" />{briefing.badge}</span>
+          {scenarioControl ? <button type="button" className="mf-scenario-control" data-scenario-control onClick={runScenarioControl} aria-label={localize(scenarioControl.label)}>{scenarioControl.kind === "advance" ? <ArrowRight size={15} /> : <Workflow size={15} />}{localize(scenarioControl.label)}</button> : null}
+        </div>
       </header>
 
       <section className="mf-manager-pulse" aria-label={l("Pulso do projeto", "Project pulse")}>
@@ -262,13 +249,12 @@ export function MfManagerWorkspace(props: MfManagerWorkspaceProps): React.JSX.El
             <div><dt>{l("Equipes afetadas / bloqueando", "Affected / blocking teams")}</dt><dd><Workflow size={14} aria-hidden="true" />{affectedTeamValue} / {primaryAction.blockingTeamCount}</dd></div>
           </dl>
           <aside><strong>{l("Consequência", "Consequence")}</strong><p>{consequence}</p></aside>
-          <footer>
-            <button type="button" className="mf-decision-link" onClick={() => onNavigate("changes")} aria-label={l("Revisar evidências da mudança", "Review change evidence")}><FileSearch size={15} />{l("Revisar evidências", "Review evidence")}</button>
-            {snapshot.step >= 3 && snapshot.step <= 5 ? <button type="button" className="mf-decision-link" onClick={() => onNavigate("disciplines")} aria-label={l("Coordenar equipes afetadas", "Coordinate affected teams")}><UsersRound size={15} />{l("Coordenar equipes", "Coordinate teams")}</button> : null}
-            {snapshot.step === 6 ? <button type="button" className="mf-decision-link" onClick={() => onNavigate("workflows")} aria-label={l("Revisar workflow de recuperação", "Review recovery workflow")}><Workflow size={15} />{l("Revisar recuperação", "Review recovery")}</button> : null}
-            {snapshot.step >= 7 ? <button type="button" className="mf-decision-link" onClick={() => onNavigate("artifacts")} aria-label={l("Revisar resultados técnicos", "Review technical outputs")}><FileSearch size={15} />{l("Revisar resultados", "Review outputs")}</button> : null}
-            <button type="button" className="mf-primary-action" onClick={onAdvance} disabled={snapshot.step >= 8} aria-label={localize(scenarioActions[snapshot.step])}>{snapshot.step >= 8 ? <Check size={15} /> : <ArrowRight size={15} />}{localize(scenarioActions[snapshot.step])}</button>
-          </footer>
+          {primaryAction.actionId === "DEC-042" || presentation.primaryManagerAction ? (
+            <footer>
+              {primaryAction.actionId === "DEC-042" ? <button type="button" className="mf-decision-link" onClick={() => onNavigate("changes")} aria-label={l("Revisar evidências da mudança", "Review change evidence")}><FileSearch size={15} />{l("Revisar evidências", "Review evidence")}</button> : null}
+              {presentation.primaryManagerAction ? <button type="button" className="mf-primary-action" data-manager-action-cta onClick={onAdvance} disabled={!presentation.primaryManagerAction} aria-label={localize(presentation.primaryManagerAction.label)}><ArrowRight size={15} />{localize(presentation.primaryManagerAction.label)}</button> : null}
+            </footer>
+          ) : null}
         </article>
 
         <section className="mf-manager-queue" aria-labelledby="mf-manager-queue-title">

@@ -80,7 +80,9 @@ export type { MfHarnessSnapshot, MfWorkItem, MfWorkflowReceipt, MfWorkState } fr
 export type {
   MfHandoffStageStatus,
   MfManagerActionItem,
+  MfManagerCockpitPresentation,
   MfManagerQueue,
+  MfManagerScenarioControl,
   MfManagerWorkspace,
   MfTeamCommand,
   MfTeamStatus,

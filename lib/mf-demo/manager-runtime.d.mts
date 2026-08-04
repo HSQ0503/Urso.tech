@@ -74,6 +74,26 @@ export type MfManagerWorkspace = Readonly<{
   team: MfTeamCommand;
 }>;
 
+export type MfManagerScenarioControl = Readonly<{
+  id: "receive-revision" | "inspect-revision" | "distribute-work" | "open-workflow" | "open-recovery-workflow" | "review-outputs";
+  kind: "advance" | "navigate";
+  targetView: "workflows" | "artifacts" | null;
+  label: MfLocalizedText;
+}>;
+
+export type MfManagerCockpitPresentation = Readonly<{
+  featuredManagerAction: MfManagerActionItem | null;
+  managerActionPlacement: "upcoming" | "actionable" | "completed" | null;
+  primaryManagerAction: MfManagerActionItem | null;
+  scenarioControl: MfManagerScenarioControl | null;
+  milestone: Readonly<{
+    status: "baseline" | "exposed" | "recovery_proposed" | "recovery_selected" | "protected";
+    days: number;
+    selectionRequired: boolean;
+  }>;
+}>;
+
 export function deriveMfManagerQueue(snapshot: MfHarnessSnapshot): MfManagerQueue;
 export function deriveMfTeamCommand(snapshot: MfHarnessSnapshot): MfTeamCommand;
 export function deriveMfManagerWorkspace(snapshot: MfHarnessSnapshot): MfManagerWorkspace;
+export function deriveMfManagerCockpitPresentation(snapshot: MfHarnessSnapshot): MfManagerCockpitPresentation;
