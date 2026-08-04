@@ -43,7 +43,6 @@ import {
   roles,
 } from "@/lib/mf-demo/fixtures";
 import { mfScenarioManifest } from "@/lib/mf-demo/manifest.mjs";
-import { nextActionLabels } from "@/lib/mf-demo/scenario";
 import type {
   ArtifactReviewState,
   DemoView,
@@ -52,6 +51,7 @@ import type {
   MfHarnessSnapshot,
 } from "@/lib/mf-demo/types";
 import { useMfLanguage } from "./mf-language";
+import { MfManagerWorkspace } from "./mf-manager-workspace";
 import { ProjectBrainWorkspace } from "./project-brain-workspace";
 import {
   ConnectedSourcesPanel,
@@ -238,33 +238,6 @@ const workflowCatalog = [
   },
 ] as const;
 
-function currentProjectMessage(step: number, language: "pt" | "en") {
-  const messages = language === "pt"
-    ? [
-        "O projeto está dentro do plano. O Brain monitora as fontes autorizadas.",
-        "Uma revisão do fornecedor chegou e precisa ser entendida.",
-        "Urso encontrou quatro mudanças materiais. A Rev. B ainda é a verdade vigente.",
-        "A Rev. C foi aprovada. Agora dez equipes precisam atualizar seu trabalho.",
-        "O impacto está mapeado. O projeto precisa distribuir os pacotes certos.",
-        "Cada equipe recebeu fontes, ação, responsável e critério de conclusão.",
-        "Os agentes produziram rascunhos. Os engenheiros precisam validá-los.",
-        "As revisões técnicas terminaram. Falta confirmar o gate executivo.",
-        "O marco EXE-02 está pronto com evidência completa e rastreável.",
-      ]
-    : [
-        "The project is on plan. The Brain is monitoring authorized sources.",
-        "A supplier revision arrived and needs to be understood.",
-        "Urso found four material changes. Revision B is still the current truth.",
-        "Revision C was approved. Ten teams now need to update their work.",
-        "The impact is mapped. The project needs to distribute the right work packages.",
-        "Every team received sources, an action, an owner, and a completion criterion.",
-        "Agents produced drafts. Engineers now need to validate them.",
-        "Technical reviews are complete. The executive gate needs final confirmation.",
-        "Milestone EXE-02 is ready with complete, traceable evidence.",
-      ];
-  return messages[step];
-}
-
 function SlackSignalCapture({ approved, language }: { approved: boolean; language: "pt" | "en" }) {
   const [captureRun, setCaptureRun] = useState(0);
   const l = (pt: string, en: string) => (language === "pt" ? pt : en);
@@ -386,100 +359,12 @@ function SlackSignalCapture({ approved, language }: { approved: boolean; languag
   );
 }
 
-export function ControlTowerView({ step, roleId, onNavigate, onAdvance, snapshot }: ViewProps) {
-  const { language, t } = useMfLanguage();
-  const l = (pt: string, en: string) => (language === "pt" ? pt : en);
-  const selectedRole = roles.find((role) => role.id === roleId) ?? roles[0];
-  const stage = step === 0 ? "stable" : step < 3 ? "decision" : step < 8 ? "work" : "ready";
-  const statusTitle = stage === "stable"
-    ? l("Tudo sob controle", "Everything is under control")
-    : stage === "decision"
-      ? l("Uma mudança precisa de decisão", "One change needs a decision")
-      : stage === "work"
-        ? l("A mudança está sendo coordenada", "The change is being coordinated")
-        : l("Pronto para liberar", "Ready to release");
-
-  const truthSteps = [
-    { label: l("Sinal", "Signal"), detail: "Slack", at: 1 },
-    { label: l("Entendimento", "Understanding"), detail: l("4 diferenças", "4 differences"), at: 2 },
-    { label: l("Decisão", "Decision"), detail: "DEC-042", at: 3 },
-    { label: l("Trabalho", "Work"), detail: l("10 equipes", "10 teams"), at: 5 },
-    { label: l("Liberação", "Release"), detail: "EXE-02", at: 8 },
-  ];
-
+export function ControlTowerView({ step, onNavigate, onAdvance, snapshot }: ViewProps) {
+  if (!snapshot) return <div className="mf-clarity-view mf-manager-loading" aria-busy="true" />;
   return (
     <div className="mf-clarity-view">
-      <header className="mf-today-header">
-        <div>
-          <span className="mf-eyebrow">{l("Projeto hoje", "Project today")}</span>
-          <h1>{statusTitle}</h1>
-          <p>{currentProjectMessage(step, language)}</p>
-        </div>
-        <button type="button" className="mf-primary-action" onClick={onAdvance} disabled={step === 8}>
-          {step === 8 ? <Check size={16} /> : <ArrowRight size={16} />}
-          {t(nextActionLabels[step])}
-        </button>
-      </header>
-
-      <section className={`mf-truth-path is-${stage}`} data-guide-key="project-status" aria-label={l("Caminho da mudança à liberação", "Path from change to release")}>
-        <div className="mf-truth-path-intro">
-          <span>{l("Como Urso mantém o projeto alinhado", "How Urso keeps the project aligned")}</span>
-          <strong>{step === 0 ? l("Aguardando uma mudança", "Waiting for a change") : l("Revisão C · linha de envase", "Revision C · bottling line")}</strong>
-        </div>
-        <ol>
-          {truthSteps.map((item, index) => {
-            const complete = step >= item.at;
-            const current = step < item.at && (index === 0 || step >= truthSteps[index - 1].at);
-            return (
-              <li key={item.label} className={`${complete ? "is-complete" : ""} ${current ? "is-current" : ""}`}>
-                <i>{complete ? <Check size={14} /> : index + 1}</i>
-                <span><strong>{item.label}</strong><small>{complete ? item.detail : l("Aguardando", "Waiting")}</small></span>
-              </li>
-            );
-          })}
-        </ol>
-      </section>
-
-      <div className="mf-today-grid">
-        <section className="mf-focus-card">
-          <header>
-            <span className="mf-role-avatar">{t(selectedRole.name).slice(0, 2).toUpperCase()}</span>
-            <span><small>{l("Você está trabalhando como", "You are working as")}</small><strong>{t(selectedRole.name)}</strong></span>
-            <button type="button" onClick={() => onNavigate("disciplines")}>{l("Ver minha equipe", "View my team")} <ArrowRight size={13} /></button>
-          </header>
-          <div>
-            <span className="mf-eyebrow">{l("O que importa para você agora", "What matters to you now")}</span>
-            <h2>{step < 4 ? l("Acompanhar a decisão da Revisão C", "Track the Revision C decision") : t(selectedRole.focus)}</h2>
-            <p>{step < 4 ? l("Urso ainda não distribuiu trabalho porque a nova premissa precisa de aprovação.", "Urso has not distributed work yet because the new assumption needs approval.") : t(selectedRole.assignment)}</p>
-          </div>
-          <footer>
-            <span><FileText size={15} /> {step >= 5 ? t(selectedRole.deliverable) : l("Nenhum novo pacote atribuído", "No new package assigned")}</span>
-            <button type="button" onClick={() => onNavigate(step < 4 ? "changes" : "workflows")}>{step < 4 ? l("Revisar mudança", "Review change") : l("Abrir meu workflow", "Open my workflow")} <ArrowRight size={14} /></button>
-          </footer>
-        </section>
-
-        <section className="mf-release-card" data-guide-key="project-release">
-          <header>
-            <span><small>{l("Próximo marco", "Next milestone")}</small><strong>EXE-02 · {l("Liberação executiva", "Executive release")}</strong></span>
-            <span className={`mf-simple-status is-${step >= 8 ? "ready" : step >= 3 ? "risk" : "stable"}`}>{step >= 8 ? l("Pronto", "Ready") : step >= 3 ? l("Em risco", "At risk") : l("No prazo", "On plan")}</span>
-          </header>
-          <div className="mf-schedule-compare">
-            <div><span>{l("Plano original", "Original plan")}</span><strong>{l("16 AGO", "AUG 16")}</strong><small>{l("Baseline Rev. 12", "Baseline Rev. 12")}</small></div>
-            <ArrowRight size={17} />
-            <div><span>{l("Após Rev. C", "After Rev. C")}</span><strong>{l("26 AGO", "AUG 26")}</strong><small>{l("+10 dias", "+10 days")}</small></div>
-            <ArrowRight size={17} />
-            <div className={step >= 6 ? "is-recommended" : ""}><span>{l("Plano recomendado", "Recommended plan")}</span><strong>{step >= 6 ? l("18 AGO", "AUG 18") : "—"}</strong><small>{step >= 6 ? l("Recupera 8 dias", "Recovers 8 days") : l("Aguardando simulação", "Awaiting simulation")}</small></div>
-          </div>
-          <button type="button" onClick={() => onNavigate("changes")}>{l("Entender a mudança e o impacto", "Understand the change and impact")} <ArrowRight size={14} /></button>
-        </section>
-      </div>
-
-      <section className="mf-what-urso-does">
-        <div><Network size={18} /><span><strong>{l("Brain", "Brain")}</strong><small>{l("Mantém verdade, decisões e contexto conectados", "Keeps truth, decisions, and context connected")}</small></span></div>
-        <div><Workflow size={18} /><span><strong>Harness</strong><small>{l("Transforma decisões em trabalho executável", "Turns decisions into executable work")}</small></span></div>
-        <div><UserCheck size={18} /><span><strong>{l("Controle humano", "Human control")}</strong><small>{l("MF aprova toda mudança material", "MF approves every material change")}</small></span></div>
-      </section>
-      {step >= 8 && snapshot ? <><OutcomeComparisonPanel snapshot={snapshot} /><PilotProposalPanel /></> : null}
+      <MfManagerWorkspace snapshot={snapshot} onAdvance={onAdvance} onNavigate={onNavigate} />
+      {step >= 8 ? <><OutcomeComparisonPanel snapshot={snapshot} /><PilotProposalPanel /></> : null}
     </div>
   );
 }

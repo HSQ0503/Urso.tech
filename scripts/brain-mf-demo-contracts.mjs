@@ -496,4 +496,39 @@ for (const semanticLabel of [
   assert(storyPanelSource.includes(semanticLabel), `missing story semantics: ${semanticLabel}`);
 }
 
+const managerWorkspaceSource = readFileSync(
+  new URL("../components/mf/mf-manager-workspace.tsx", import.meta.url),
+  "utf8",
+);
+assert.match(managerWorkspaceSource, /export function MfManagerWorkspace/);
+assert.match(managerWorkspaceSource, /deriveMfManagerWorkspace/);
+for (const semanticLabel of [
+  "Manager briefing",
+  "Decisions requiring you",
+  "My queue",
+  "Waiting on team",
+  "What happens next",
+]) {
+  assert(managerWorkspaceSource.includes(semanticLabel), `missing manager workspace semantics: ${semanticLabel}`);
+}
+assert.match(managerWorkspaceSource, /data-guide-key=["']project-status["']/);
+assert.match(managerWorkspaceSource, /<button[^>]+onClick=\{\(\) => onNavigate\(["']changes["']\)\}/);
+assert.match(managerWorkspaceSource, /<button[^>]+onClick=\{onAdvance\}[^>]*disabled=/);
+assert.match(managerWorkspaceSource, /<button[^>]+onClick=\{\(\) => onNavigate\(/);
+
+const demoViewsSource = readFileSync(new URL("../components/mf/demo-views.tsx", import.meta.url), "utf8");
+assert.match(demoViewsSource, /import \{ MfManagerWorkspace \} from ["']\.\/mf-manager-workspace["']/);
+const controlTowerViewSource = demoViewsSource.match(
+  /export function ControlTowerView[\s\S]*?(?=\nexport function ChangesView)/,
+)?.[0] ?? "";
+assert.match(controlTowerViewSource, /<MfManagerWorkspace/);
+for (const duplicateClassName of [
+  "mf-truth-path",
+  "mf-role-focus-card",
+  "mf-release-card",
+  "mf-what-urso-does",
+]) {
+  assert(!controlTowerViewSource.includes(duplicateClassName), `legacy ControlTower class remains: ${duplicateClassName}`);
+}
+
 console.log("✓ MF manifest values, references, and impact contract are consistent.");
