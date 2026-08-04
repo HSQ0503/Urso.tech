@@ -174,6 +174,54 @@ for (const [actionId, taskId, step, expectedState] of [
   assert.equal(taskStateAt(step, taskId), expectedState, `${actionId} at step ${step}`);
 }
 
+for (const { step, expected } of [
+  {
+    step: 7,
+    expected: {
+      qualityEvidence: { complete: true, state: "complete", receiptId: "RCPT-VERIFY-GATE" },
+      managerConfirmation: { complete: false, state: "in_progress", receiptId: null },
+    },
+  },
+  {
+    step: 8,
+    expected: {
+      qualityEvidence: { complete: true, state: "complete", receiptId: "RCPT-VERIFY-GATE" },
+      managerConfirmation: { complete: true, state: "complete", receiptId: "RCPT-RELEASE-EXE-02" },
+    },
+  },
+]) {
+  const snapshot = createMfHarnessSnapshot(step);
+  const qualityEvidence = snapshot.workItems.find((task) => task.id === "verify-gate");
+  const managerConfirmation = snapshot.workItems.find((task) => task.id === "release-exe-02");
+  assert(qualityEvidence, `quality evidence missing at step ${step}`);
+  assert(managerConfirmation, `manager confirmation missing at step ${step}`);
+  assert.deepEqual({
+    qualityEvidence: {
+      complete: qualityEvidence.state === "complete" && Boolean(qualityEvidence.receiptId),
+      state: qualityEvidence.state,
+      receiptId: qualityEvidence.state === "complete" ? qualityEvidence.receiptId : null,
+    },
+    managerConfirmation: {
+      complete: managerConfirmation.state === "complete" && Boolean(managerConfirmation.receiptId),
+      state: managerConfirmation.state,
+      receiptId: managerConfirmation.state === "complete" ? managerConfirmation.receiptId : null,
+    },
+  }, expected, `checklist receipt semantics at step ${step}`);
+}
+
+const snapshotWithoutManagerConfirmation = {
+  ...createMfHarnessSnapshot(8),
+  workItems: createMfHarnessSnapshot(8).workItems.filter((task) => task.id !== "release-exe-02"),
+};
+const absentManagerConfirmation = snapshotWithoutManagerConfirmation.workItems
+  .find((task) => task.id === "release-exe-02") ?? null;
+assert.deepEqual({
+  state: absentManagerConfirmation?.state ?? null,
+  receiptId: absentManagerConfirmation?.state === "complete"
+    ? absentManagerConfirmation.receiptId ?? null
+    : null,
+}, { state: null, receiptId: null });
+
 const approved = transitionMfHarness(baseline, 3, "approve-3", "project-manager");
 assert.equal(approved.truth.currentRevision, "C");
 assert.equal(approved.truth.revisionB, "superseded");
@@ -939,25 +987,39 @@ for (const source of [checklistPreviewSource, teamsPreviewSource, artifactPrevie
   assert.match(source, /reviewState/);
   assert.match(source, /receiptId/);
 }
+for (const source of [checklistPreviewSource, artifactPreviewSource, artifactWorkspaceSource]) {
+  assert.match(source, /managerConfirmationState/);
+  assert.match(source, /managerConfirmationReceiptId/);
+}
 assert.match(checklistPreviewSource, /reviewState === "approved" && Boolean\(receiptId\)/);
+assert.match(checklistPreviewSource, /managerConfirmationState === "complete" && Boolean\(managerConfirmationReceiptId\)/);
+assert.match(checklistPreviewSource, /<span>\{managerConfirmed \? <Check size=\{14\} \/> : <CircleDashed size=\{14\} \/>\}<\/span>/);
+assert.match(checklistPreviewSource, /className=\{managerConfirmed \? undefined : "is-pending"\}>\{managerCompletionLabel\}/);
 assert.match(checklistPreviewSource, /Verified/);
 assert.match(checklistPreviewSource, /Complete/);
 assert.match(checklistPreviewSource, /Receipt pending/);
 assert.match(checklistPreviewSource, /Receipt unavailable/);
 assert.match(checklistPreviewSource, /\{receiptId\}/);
+const managerConfirmationPreviewSource = checklistPreviewSource.match(
+  /const managerConfirmed[\s\S]*?(?=\n\s*return \()/,
+)?.[0] ?? "";
+assert.match(managerConfirmationPreviewSource, /managerConfirmationReceiptId/);
+assert.doesNotMatch(managerConfirmationPreviewSource, /\breceiptId\b/);
 assert.match(teamsPreviewSource, /Approved · ready for controlled publication/);
 assert.match(teamsPreviewSource, /Validated · awaiting controlled approval/);
 assert.match(teamsPreviewSource, /Draft · not published/);
 assert.match(teamsPreviewSource, /Receipt unavailable/);
 assert.match(teamsPreviewSource, /\{receiptId\}/);
-assert.match(artifactPreviewSource, /<ChecklistPreview artifact=\{artifact\} reviewState=\{reviewState\} receiptId=\{receiptId\}/);
+assert.match(artifactPreviewSource, /<ChecklistPreview artifact=\{artifact\} reviewState=\{reviewState\} receiptId=\{receiptId\} managerConfirmationState=\{managerConfirmationState\} managerConfirmationReceiptId=\{managerConfirmationReceiptId\}/);
 assert.match(artifactPreviewSource, /<TeamsPreview reviewState=\{reviewState\} receiptId=\{receiptId\}/);
-assert.match(artifactWorkspaceSource, /<ArtifactPreview artifact=\{artifact\} reviewState=\{reviewState\} receiptId=\{receiptId\}/);
+assert.match(artifactWorkspaceSource, /<ArtifactPreview artifact=\{artifact\} reviewState=\{reviewState\} receiptId=\{receiptId\} managerConfirmationState=\{managerConfirmationState\} managerConfirmationReceiptId=\{managerConfirmationReceiptId\}/);
 const artifactWorkspaceInvocation = mfDemoSource.match(
   /\{selectedArtifact \? \([\s\S]*?<ArtifactWorkspace[\s\S]*?\) : null\}/,
 )?.[0] ?? "";
 assert.doesNotMatch(artifactWorkspaceInvocation, /synchronizeScenarioStep/);
 assert.match(artifactWorkspaceInvocation, /receiptId=/);
+assert.match(artifactWorkspaceInvocation, /managerConfirmationState=\{managerConfirmationState\}/);
+assert.match(artifactWorkspaceInvocation, /managerConfirmationReceiptId=\{managerConfirmationReceiptId\}/);
 assert.doesNotMatch(artifactWorkspaceSource, /onReviewStateChange|RCPT-ART-|52 \+ index/);
 assert.match(artifactWorkspaceSource, /Continue in connected system/);
 assert.match(artifactWorkspaceSource, /Receipt (?:pending|unavailable)/);
@@ -989,6 +1051,10 @@ const selectedArtifactReceiptSource = mfDemoSource.match(
 )?.[0] ?? "";
 assert.match(selectedArtifactReceiptSource, /right\.completeAt - left\.completeAt/);
 assert.match(selectedArtifactReceiptSource, /selectedArtifactWorkItems\.every/);
+assert.match(selectedArtifactReceiptSource, /managerConfirmationWorkItem[\s\S]*?task\.id === "release-exe-02"/);
+assert.match(selectedArtifactReceiptSource, /managerConfirmationWorkItem\?\.state \?\? null/);
+assert.match(selectedArtifactReceiptSource, /managerConfirmationState === "complete"[\s\S]*?managerConfirmationWorkItem\?\.receiptId \?\? null[\s\S]*?: null/);
+assert.doesNotMatch(selectedArtifactReceiptSource, /RCPT-/);
 assert.match(mfDemoSource, /useEffect\(\(\) => \{[\s\S]*?selectedArtifactId[\s\S]*?!selectedArtifact[\s\S]*?setSelectedArtifactId\(null\)[\s\S]*?\}, \[selectedArtifact, selectedArtifactId\]\)/);
 assert.doesNotMatch(mfDemoSource, /receipt registrado/);
 assert.match(mfDemoSource, /const approvedArtifacts[\s\S]*?receiptId[\s\S]*?Receipt unavailable/);

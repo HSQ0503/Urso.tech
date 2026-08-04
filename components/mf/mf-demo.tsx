@@ -252,6 +252,12 @@ function MfDemoShell() {
     && selectedArtifactWorkItems.every((task) => task.state === "complete")
     ? terminalArtifactWorkItem?.receiptId ?? null
     : null;
+  const managerConfirmationWorkItem = demoSession?.snapshot.workItems
+    .find((task) => task.id === "release-exe-02") ?? null;
+  const managerConfirmationState = managerConfirmationWorkItem?.state ?? null;
+  const managerConfirmationReceiptId = managerConfirmationState === "complete"
+    ? managerConfirmationWorkItem?.receiptId ?? null
+    : null;
   const approvedArtifacts = artifacts.flatMap((artifact) => {
     if (artifactReviewStates[artifact.id] !== "approved") return [];
     const workItems = demoSession?.snapshot.workItems.filter((task) => task.artifactId === artifact.id) ?? [];
@@ -898,6 +904,8 @@ function MfDemoShell() {
             "draft"
           }
           receiptId={selectedArtifactReceiptId}
+          managerConfirmationState={managerConfirmationState}
+          managerConfirmationReceiptId={managerConfirmationReceiptId}
           onClose={() => setSelectedArtifactId(null)}
         />
       ) : null}

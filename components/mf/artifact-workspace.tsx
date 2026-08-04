@@ -13,7 +13,7 @@ import {
   ShieldCheck,
   X,
 } from "lucide-react";
-import type { Artifact, ArtifactReviewState } from "@/lib/mf-demo/types";
+import type { Artifact, ArtifactReviewState, MfWorkState } from "@/lib/mf-demo/types";
 import { mfScenarioManifest } from "@/lib/mf-demo/manifest.mjs";
 import { useMfLanguage } from "./mf-language";
 
@@ -21,6 +21,8 @@ type ArtifactWorkspaceProps = {
   artifact: Artifact;
   reviewState: ArtifactReviewState;
   receiptId: string | null;
+  managerConfirmationState: MfWorkState | null;
+  managerConfirmationReceiptId: string | null;
   onClose: () => void;
 };
 
@@ -135,47 +137,62 @@ function RecoveryPreview() {
   );
 }
 
-function ChecklistPreview({ artifact, reviewState, receiptId }: {
+function ChecklistPreview({
+  artifact,
+  reviewState,
+  receiptId,
+  managerConfirmationState,
+  managerConfirmationReceiptId,
+}: {
   artifact: Artifact;
   reviewState: ArtifactReviewState;
   receiptId: string | null;
+  managerConfirmationState: MfWorkState | null;
+  managerConfirmationReceiptId: string | null;
 }) {
   const { language, t } = useMfLanguage();
   const l = (pt: string, en: string) => (language === "pt" ? pt : en);
-  const approved = reviewState === "approved" && Boolean(receiptId);
-  const receiptUnavailable = reviewState === "approved" && !receiptId;
-  const evidenceDetail = approved
+  const evidenceApproved = reviewState === "approved" && Boolean(receiptId);
+  const evidenceReceiptUnavailable = reviewState === "approved" && !receiptId;
+  const evidenceDetail = evidenceApproved
     ? l(`Verificado · ${receiptId}`, `Verified · ${receiptId}`)
-    : receiptUnavailable
+    : evidenceReceiptUnavailable
       ? l("Aprovação registrada · recibo indisponível", "Approval recorded · Receipt unavailable")
       : reviewState === "validated"
         ? l("Validado · aguardando aprovação controlada", "Validated · awaiting controlled approval")
         : l("Aguardando verificação · recibo pendente", "Awaiting verification · Receipt pending");
-  const completionLabel = approved
+  const evidenceCompletionLabel = evidenceApproved
     ? l("Concluído", "Complete")
-    : receiptUnavailable
+    : evidenceReceiptUnavailable
       ? l("Aguardando recibo", "Awaiting receipt")
       : reviewState === "validated"
         ? l("Aguardando aprovação", "Awaiting approval")
         : l("Pendente", "Pending");
-  const confirmationDetail = approved
-    ? l(`Verificada · ${receiptId}`, `Verified · ${receiptId}`)
-    : receiptUnavailable
-      ? l("Aprovação registrada · recibo indisponível", "Approval recorded · Receipt unavailable")
-      : l("Etapa final do gate · recibo pendente", "Final gate step · Receipt pending");
+  const managerConfirmed = managerConfirmationState === "complete" && Boolean(managerConfirmationReceiptId);
+  const managerReceiptUnavailable = managerConfirmationState === "complete" && !managerConfirmationReceiptId;
+  const confirmationDetail = managerConfirmed
+    ? l(`Verificada · ${managerConfirmationReceiptId}`, `Verified · ${managerConfirmationReceiptId}`)
+    : managerReceiptUnavailable
+      ? l("Confirmação não verificável · recibo indisponível", "Confirmation unverifiable · Receipt unavailable")
+      : l("Aguardando confirmação do Gerente do Projeto · recibo pendente", "Awaiting Project Manager confirmation · Receipt pending");
+  const managerCompletionLabel = managerConfirmed
+    ? l("Concluído", "Complete")
+    : managerReceiptUnavailable
+      ? l("Aguardando recibo", "Awaiting receipt")
+      : l("Pendente", "Pending");
   return (
     <div className="mf-checklist-preview">
       {artifact.findings.map((finding) => (
         <div key={finding}>
-          <span>{approved ? <Check size={14} /> : <CircleDashed size={14} />}</span>
+          <span>{evidenceApproved ? <Check size={14} /> : <CircleDashed size={14} />}</span>
           <p><strong>{t(finding)}</strong><small>{evidenceDetail}</small></p>
-          <em className={approved ? undefined : "is-pending"}>{completionLabel}</em>
+          <em className={evidenceApproved ? undefined : "is-pending"}>{evidenceCompletionLabel}</em>
         </div>
       ))}
       <div>
-        <span>{approved ? <Check size={14} /> : <CircleDashed size={14} />}</span>
+        <span>{managerConfirmed ? <Check size={14} /> : <CircleDashed size={14} />}</span>
         <p><strong>{t("Confirmação do Gerente do Projeto")}</strong><small>{confirmationDetail}</small></p>
-        <em className={approved ? undefined : "is-pending"}>{completionLabel}</em>
+        <em className={managerConfirmed ? undefined : "is-pending"}>{managerCompletionLabel}</em>
       </div>
     </div>
   );
@@ -236,21 +253,29 @@ function ImpactPreview({ artifact }: { artifact: Artifact }) {
   );
 }
 
-function ArtifactPreview({ artifact, reviewState, receiptId }: {
+function ArtifactPreview({
+  artifact,
+  reviewState,
+  receiptId,
+  managerConfirmationState,
+  managerConfirmationReceiptId,
+}: {
   artifact: Artifact;
   reviewState: ArtifactReviewState;
   receiptId: string | null;
+  managerConfirmationState: MfWorkState | null;
+  managerConfirmationReceiptId: string | null;
 }) {
   if (artifact.id === "revision-comparison") return <RevisionPreview />;
   if (artifact.id === "electrical-package" || artifact.id === "hvac-package") return <CalculationPreview artifact={artifact} />;
   if (artifact.id === "bim-scaffold") return <BimPreview />;
   if (artifact.id === "recovery-plan") return <RecoveryPreview />;
-  if (artifact.id === "gate-checklist") return <ChecklistPreview artifact={artifact} reviewState={reviewState} receiptId={receiptId} />;
+  if (artifact.id === "gate-checklist") return <ChecklistPreview artifact={artifact} reviewState={reviewState} receiptId={receiptId} managerConfirmationState={managerConfirmationState} managerConfirmationReceiptId={managerConfirmationReceiptId} />;
   if (artifact.id === "teams-update") return <TeamsPreview reviewState={reviewState} receiptId={receiptId} />;
   return <ImpactPreview artifact={artifact} />;
 }
 
-export function ArtifactWorkspace({ artifact, reviewState, receiptId, onClose }: ArtifactWorkspaceProps) {
+export function ArtifactWorkspace({ artifact, reviewState, receiptId, managerConfirmationState, managerConfirmationReceiptId, onClose }: ArtifactWorkspaceProps) {
   const { language, t } = useMfLanguage();
   const l = (pt: string, en: string) => (language === "pt" ? pt : en);
   const headingRef = useRef<HTMLHeadingElement>(null);
@@ -312,7 +337,7 @@ export function ArtifactWorkspace({ artifact, reviewState, receiptId, onClose }:
               <div><span className="mf-eyebrow">{t("Trabalho produzido")}</span><h3>{t("Prévia do resultado")}</h3></div>
               <span>Rev. {reviewState === "approved" ? "1" : "D1"}</span>
             </div>
-            <ArtifactPreview artifact={artifact} reviewState={reviewState} receiptId={receiptId} />
+            <ArtifactPreview artifact={artifact} reviewState={reviewState} receiptId={receiptId} managerConfirmationState={managerConfirmationState} managerConfirmationReceiptId={managerConfirmationReceiptId} />
           </main>
 
           <aside className="mf-workbench-review">
