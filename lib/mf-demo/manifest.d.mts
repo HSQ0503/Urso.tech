@@ -43,6 +43,7 @@ export type MfManifestWorkflowDefinition = Readonly<{
     id: string;
     label: MfLocalizedText;
     kind: "receipt" | "plan" | "brief" | "draft" | "checklist";
+    availableAtStep: number;
     recipientRoleIds: readonly string[];
   }>[];
   deliveryRoleIds: readonly string[];

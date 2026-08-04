@@ -88,8 +88,11 @@ export type {
   MfTeamStatus,
 } from "./manager-runtime.mjs";
 export type {
+  MfWorkflowAccess,
   MfWorkflowAgentPresentation,
   MfWorkflowGatePresentation,
+  MfWorkflowInteraction,
+  MfWorkflowInteractionActionId,
   MfWorkflowOutputPresentation,
   MfWorkflowPresentation,
   MfWorkflowPresentationStage,
@@ -97,6 +100,7 @@ export type {
   MfWorkflowRoleDelivery,
   MfWorkflowSourcePresentation,
   MfWorkflowStageId,
+  MfWorkflowStageState,
 } from "./workflow-runtime.mjs";
 import type { MfHarnessSnapshot } from "./harness-runtime.mjs";
 

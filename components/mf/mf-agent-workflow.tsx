@@ -17,28 +17,23 @@ import {
   Wrench,
   Workflow,
 } from "lucide-react";
-import { deriveMfWorkflowPresentation } from "@/lib/mf-demo/workflow-runtime.mjs";
+import {
+  deriveMfWorkflowAccess,
+  deriveMfWorkflowInteraction,
+  deriveMfWorkflowPresentation,
+} from "@/lib/mf-demo/workflow-runtime.mjs";
 import { mfScenarioManifest, mfText } from "@/lib/mf-demo/manifest.mjs";
 import type { MfHarnessSnapshot } from "@/lib/mf-demo/types";
 import { useMfLanguage } from "./mf-language";
 
 export type MfAgentWorkflowProps = {
   snapshot: MfHarnessSnapshot;
+  viewerRoleId: string;
   selectedWorkflowId: string;
   onSelectWorkflow: (workflowId: string) => void;
   onAdvance: () => void;
   onOpenOutputs: () => void;
 };
-
-type WorkflowStageState = "complete" | "current" | "pending";
-
-const stageIds = [
-  "connected_context",
-  "brain_boundary",
-  "agents_tools",
-  "human_gate",
-  "controlled_outputs",
-] as const;
 
 function TechnologyGlyph({ id }: { id: string }): React.JSX.Element {
   if (id === "slack") {
@@ -68,11 +63,25 @@ function TechnologyGlyph({ id }: { id: string }): React.JSX.Element {
 }
 
 export function MfAgentWorkflow(props: MfAgentWorkflowProps): React.JSX.Element {
-  const { snapshot, selectedWorkflowId, onSelectWorkflow, onAdvance, onOpenOutputs } = props;
+  const { snapshot, viewerRoleId, selectedWorkflowId, onSelectWorkflow, onAdvance, onOpenOutputs } = props;
   const { language } = useMfLanguage();
-  const presentation = deriveMfWorkflowPresentation(snapshot, selectedWorkflowId);
   const localize = (value: { pt: string; en: string }) => mfText(value, language);
   const l = (pt: string, en: string) => (language === "pt" ? pt : en);
+  const access = deriveMfWorkflowAccess(viewerRoleId);
+  const effectiveWorkflowId = access.workflowIds.includes(selectedWorkflowId)
+    ? selectedWorkflowId
+    : access.defaultWorkflowId;
+
+  if (!effectiveWorkflowId) {
+    return (
+      <section className="mf-agent-workflow is-unavailable" aria-labelledby="mf-agent-workflow-title">
+        <div className="mf-workflow-unavailable"><LockKeyhole size={20} aria-hidden="true" /><div><span className="mf-eyebrow">{l("Acesso ao workflow", "Workflow access")}</span><h2 id="mf-agent-workflow-title">{l("Nenhum workflow autorizado", "No authorized workflow")}</h2><p>{l("O Brain não encontrou um workflow canônico para este papel.", "The Brain found no canonical workflow for this role.")}</p></div></div>
+      </section>
+    );
+  }
+
+  const presentation = deriveMfWorkflowPresentation(snapshot, effectiveWorkflowId);
+  const interaction = deriveMfWorkflowInteraction(presentation, viewerRoleId);
 
   const modeLabels = {
     live: l("Ao vivo", "Live"),
@@ -81,9 +90,9 @@ export function MfAgentWorkflow(props: MfAgentWorkflowProps): React.JSX.Element 
   } as const;
   const workStateLabels = {
     blocked: l("Bloqueado", "Blocked"),
-    ready: l("Pronto para decisão", "Ready for decision"),
+    ready: l("Aguardando decisão", "Awaiting decision"),
     in_progress: l("Em decisão", "Decision in progress"),
-    complete: l("Decisão registrada", "Decision recorded"),
+    complete: l("Tarefa de decisão concluída", "Decision task complete"),
   } as const;
   const permissionLabels = {
     read: l("Leitura", "Read"),
@@ -92,45 +101,45 @@ export function MfAgentWorkflow(props: MfAgentWorkflowProps): React.JSX.Element 
     write: l("Escrita", "Write"),
   } as const;
 
-  const currentStageId = presentation.outputsReady
-    ? "controlled_outputs"
-    : presentation.gate.state === "ready" || presentation.gate.state === "in_progress"
-      ? "human_gate"
-      : snapshot.step >= 5
-        ? "agents_tools"
-        : snapshot.step >= 2
-          ? "brain_boundary"
-          : "connected_context";
-  const currentStageIndex = stageIds.indexOf(currentStageId);
-  const stageState = (index: number): WorkflowStageState => {
-    if (index < currentStageIndex) return "complete";
-    if (index === currentStageIndex) return "current";
-    return "pending";
-  };
-  const stageStateLabel = (state: WorkflowStageState) => {
+  const sourceStatusLabels = {
+    connected: l("Conectado", "Connected"),
+    available_in_pilot: l("Disponível no piloto", "Available in pilot"),
+  } as const;
+  const receiptStatusLabels = {
+    available: l("Registrado", "Recorded"),
+    pending: l("Pendente", "Pending"),
+    missing: l("Ausente", "Missing"),
+  } as const;
+  const stageState = (stageId: string) => interaction.stages.find((stage) => stage.id === stageId)?.state ?? "pending";
+  const stageStateLabel = (state: "complete" | "current" | "pending") => {
     if (state === "complete") return l("Concluído", "Complete");
     if (state === "current") return l("Etapa atual", "Current stage");
     return l("Aguardando", "Waiting");
   };
-  const advanceLabel = snapshot.step === 5
-    ? l("Executar ferramentas permitidas", "Run permitted tools")
-    : snapshot.step === 6
-      ? l("Registrar revisão humana", "Record human review")
-      : snapshot.step === 7
-        ? l("Registrar liberação controlada", "Record controlled release")
-        : snapshot.step >= 8
-          ? l("Workflow concluído", "Workflow complete")
-          : l("Aprovação necessária", "Approval required");
   const proposedTruth = presentation.truth.currentRevision === "B"
     ? l("Rev. C · evidência proposta", "Rev. C · proposed evidence")
-    : l("Rev. C · aceita com recibo humano", "Rev. C · accepted with human receipt");
+    : l("Rev. C · verdade atual aceita", "Rev. C · accepted current truth");
+  const visibleRoleDeliveries = viewerRoleId === "project-manager"
+    ? presentation.roleDeliveries
+    : presentation.roleDeliveries.filter((delivery) => delivery.role.id === viewerRoleId);
+  const outputSummary = presentation.gate.receipt.state === "missing"
+    ? l("As saídas permanecem controladas porque o recibo do gate está ausente.", "Outputs remain controlled because the gate receipt is missing.")
+    : presentation.outputsReady && presentation.gate.receipt.state === "available"
+      ? l("Todas as saídas estão disponíveis e o recibo do gate foi registrado.", "All outputs are available and the gate receipt is recorded.")
+      : presentation.outputsReady
+        ? l("Rascunhos disponíveis; o recibo do gate ainda está pendente.", "Drafts are available; the gate receipt is still pending.")
+        : l("Cada saída aparece somente na etapa canônica configurada.", "Each output appears only at its configured canonical step.");
+  const runAdvance = () => {
+    if (!interaction.canAdvance) return;
+    onAdvance();
+  };
 
   return (
     <section className="mf-agent-workflow" aria-labelledby="mf-agent-workflow-title">
       <nav className="mf-workflow-tabs" aria-label={l("Selecionar workflow", "Select workflow")}>
-        {mfScenarioManifest.workflow.catalog.map((workflow, index) => {
+        {access.workflows.map((workflow, index) => {
           const owner = mfScenarioManifest.roles.find((role) => role.id === workflow.ownerRoleId);
-          const selected = workflow.id === selectedWorkflowId;
+          const selected = workflow.id === effectiveWorkflowId;
           return (
             <button
               type="button"
@@ -153,15 +162,15 @@ export function MfAgentWorkflow(props: MfAgentWorkflowProps): React.JSX.Element 
             <h2 id="mf-agent-workflow-title">{localize(presentation.title)}</h2>
             <p><strong>{localize(presentation.trigger)}</strong> {localize(presentation.purpose)}.</p>
           </div>
-          <button type="button" className="mf-primary-action" onClick={onAdvance} disabled={snapshot.step < 5 || snapshot.step >= 8}>
-            {snapshot.step >= 8 ? <CheckCircle2 size={15} aria-hidden="true" /> : <Play size={15} aria-hidden="true" />}
-            {advanceLabel}
+          <button type="button" className="mf-primary-action" onClick={runAdvance} disabled={!interaction.canAdvance}>
+            {interaction.terminal ? <CheckCircle2 size={15} aria-hidden="true" /> : <Play size={15} aria-hidden="true" />}
+            {localize(interaction.action.label)}
           </button>
         </header>
 
         <div className="mf-workflow-pipeline" aria-label={l("Pipeline do workflow agentivo", "Agent workflow pipeline")}>
-          <article className={`mf-workflow-stage is-context is-${stageState(0)}`} aria-current={stageState(0) === "current" ? "step" : undefined}>
-            <header><span>01</span><div><small>{stageStateLabel(stageState(0))}</small><h3>{l("Contexto conectado", "Connected context")}</h3></div></header>
+          <article className={`mf-workflow-stage is-context is-${stageState("connected_context")}`} aria-current={stageState("connected_context") === "current" ? "step" : undefined}>
+            <header><span>01</span><div><small>{stageStateLabel(stageState("connected_context"))}</small><h3>{l("Contexto conectado", "Connected context")}</h3></div></header>
             <p>{localize(presentation.trigger)}</p>
             <aside className="mf-harness-context"><TechnologyGlyph id="urso-brain" /><span><strong>Urso Harness · Urso Brain</strong><small>{l("Os adaptadores observam somente as fontes autorizadas para este workflow.", "Harness adapters observe only the authorized sources for this workflow.")}</small></span></aside>
             <ul className="mf-technology-list">
@@ -169,7 +178,7 @@ export function MfAgentWorkflow(props: MfAgentWorkflowProps): React.JSX.Element 
                 <li key={source.id}>
                   <TechnologyGlyph id={source.technology.id} />
                   <span className="mf-technology-copy"><strong>{source.technology.name}</strong><small>{localize(source.name)} · {source.authorizedRoleIds.length} {l("papéis autorizados", "authorized roles")}</small></span>
-                  <em className={`is-${source.mode}`}>{modeLabels[source.mode]}</em>
+                  <span className="mf-source-statuses"><em className={`is-${source.mode}`}>{modeLabels[source.mode]}</em><em className={`mf-source-connection-status is-${source.status}`}>{sourceStatusLabels[source.status]}</em></span>
                 </li>
               ))}
             </ul>
@@ -177,8 +186,8 @@ export function MfAgentWorkflow(props: MfAgentWorkflowProps): React.JSX.Element 
 
           <span className="mf-workflow-connector" aria-hidden="true"><ArrowRight size={17} /></span>
 
-          <article className={`mf-workflow-stage is-brain is-${stageState(1)}`} aria-current={stageState(1) === "current" ? "step" : undefined}>
-            <header><span>02</span><div><small>{stageStateLabel(stageState(1))}</small><h3>{l("Limite do Brain", "Brain boundary")}</h3></div></header>
+          <article className={`mf-workflow-stage is-brain is-${stageState("brain_boundary")}`} aria-current={stageState("brain_boundary") === "current" ? "step" : undefined}>
+            <header><span>02</span><div><small>{stageStateLabel(stageState("brain_boundary"))}</small><h3>{l("Limite do Brain", "Brain boundary")}</h3></div></header>
             <div className="mf-brain-identity"><TechnologyGlyph id="urso-brain" /><span><strong>Urso Brain</strong><small>{l("Identidade, política e contexto", "Identity, policy, and context")}</small></span></div>
             <dl>
               <div><dt>{l("Verdade controlada", "Controlled truth")}</dt><dd>REV. {presentation.truth.currentRevision}</dd></div>
@@ -191,8 +200,8 @@ export function MfAgentWorkflow(props: MfAgentWorkflowProps): React.JSX.Element 
 
           <span className="mf-workflow-connector" aria-hidden="true"><ArrowRight size={17} /></span>
 
-          <article className={`mf-workflow-stage is-agents is-${stageState(2)}`} aria-current={stageState(2) === "current" ? "step" : undefined}>
-            <header><span>03</span><div><small>{stageStateLabel(stageState(2))}</small><h3>{l("Agentes + ferramentas", "Agents + tools")}</h3></div></header>
+          <article className={`mf-workflow-stage is-agents is-${stageState("agents_tools")}`} aria-current={stageState("agents_tools") === "current" ? "step" : undefined}>
+            <header><span>03</span><div><small>{stageStateLabel(stageState("agents_tools"))}</small><h3>{l("Agentes + ferramentas", "Agents + tools")}</h3></div></header>
             <p>{l("Cada agente recebe uma ferramenta e um nível de permissão explícitos.", "Each agent receives one tool and an explicit permission level.")}</p>
             <ul className="mf-agent-tool-list">
               {presentation.agents.map((agent) => (
@@ -206,29 +215,30 @@ export function MfAgentWorkflow(props: MfAgentWorkflowProps): React.JSX.Element 
 
           <span className="mf-workflow-connector" aria-hidden="true"><ArrowRight size={17} /></span>
 
-          <article className={`mf-workflow-stage is-gate is-${stageState(3)}`} aria-current={stageState(3) === "current" ? "step" : undefined} data-guide-key="human-review">
-            <header><span>04</span><div><small>{stageStateLabel(stageState(3))}</small><h3>{l("Gate humano", "Human gate")}</h3></div></header>
+          <article className={`mf-workflow-stage is-gate is-${stageState("human_gate")}`} aria-current={stageState("human_gate") === "current" ? "step" : undefined} data-guide-key="human-review">
+            <header><span>04</span><div><small>{stageStateLabel(stageState("human_gate"))}</small><h3>{l("Gate humano", "Human gate")}</h3></div></header>
             <div className="mf-human-gate-callout"><UserCheck size={21} aria-hidden="true" /><span><small>{workStateLabels[presentation.gate.state]}</small><strong>{localize(presentation.gate.decision)}</strong></span></div>
             <dl>
               <div><dt>{l("Responsável MF", "Accountable MF role")}</dt><dd>{localize(presentation.gate.role.name)}</dd></div>
               <div><dt>{l("Decisão", "Decision")}</dt><dd>{localize(presentation.gate.task.title)}</dd></div>
               <div><dt>{l("Evidências", "Evidence")}</dt><dd>{presentation.gate.evidenceCount}</dd></div>
               <div><dt>{l("Equipes afetadas", "Affected teams")}</dt><dd>{presentation.gate.affectedRoleCount}</dd></div>
+              <div><dt>{l("Recibo do gate", "Gate receipt")}</dt><dd><span className={`mf-receipt-status is-${presentation.gate.receipt.state}`}>{receiptStatusLabels[presentation.gate.receipt.state]}</span>{presentation.gate.receipt.id ? ` · ${presentation.gate.receipt.id}` : ""}</dd></div>
             </dl>
             <p className="mf-no-auto-issuance"><LockKeyhole size={14} aria-hidden="true" />{l("Obrigatório · nenhuma emissão oficial automática", "Required · no automatic official issuance")}</p>
           </article>
 
           <span className="mf-workflow-connector" aria-hidden="true"><ArrowRight size={17} /></span>
 
-          <article className={`mf-workflow-stage is-outputs is-${stageState(4)}`} aria-current={stageState(4) === "current" ? "step" : undefined}>
-            <header><span>05</span><div><small>{stageStateLabel(stageState(4))}</small><h3>{l("Saídas controladas", "Controlled outputs")}</h3></div></header>
-            <p>{presentation.outputsReady ? l("Disponíveis com recibo humano.", "Available with a human receipt.") : l("Preparadas como rascunho até o gate.", "Held as drafts until the gate.")}</p>
+          <article className={`mf-workflow-stage is-outputs is-${stageState("controlled_outputs")}`} aria-current={stageState("controlled_outputs") === "current" ? "step" : undefined}>
+            <header><span>05</span><div><small>{stageStateLabel(stageState("controlled_outputs"))}</small><h3>{l("Saídas controladas", "Controlled outputs")}</h3></div></header>
+            <p>{outputSummary}</p>
             <ul className="mf-controlled-output-list">
               {presentation.outputs.map((output) => (
                 <li key={output.id}>
-                  {output.ready ? <CheckCircle2 size={15} aria-hidden="true" /> : <FileCheck2 size={15} aria-hidden="true" />}
+                  {output.ready && output.receipt.state === "available" ? <CheckCircle2 size={15} aria-hidden="true" /> : <FileCheck2 size={15} aria-hidden="true" />}
                   <span><strong>{localize(output.label)}</strong><small>{output.kind} · {output.recipients.map((role) => localize(role.name)).join(" · ")}</small></span>
-                  <em>{output.ready ? l("Pronto", "Ready") : l("Controlado", "Controlled")}</em>
+                  <em><span className={`mf-receipt-status is-${output.receipt.state}`}>{receiptStatusLabels[output.receipt.state]}</span> · {output.ready ? l("Disponível", "Available") : l("Aguardando disponibilidade", "Awaiting availability")}</em>
                 </li>
               ))}
             </ul>
@@ -238,14 +248,14 @@ export function MfAgentWorkflow(props: MfAgentWorkflowProps): React.JSX.Element 
 
         <aside className="mf-workflow-receipt">
           <div><Network size={17} aria-hidden="true" /><span><strong>{l("Tudo retorna ao Brain", "Everything returns to the Brain")}</strong><small>{l("Leituras, contexto entregue, ações de agentes e ferramentas, decisão humana e saídas ficam no histórico auditável.", "Source reads, delivered context, agent and tool actions, the human decision, and outputs enter the auditable history.")}</small></span></div>
-          <code>{presentation.gate.receiptId ?? `${presentation.runCode} · PENDING`}</code>
+          <span className="mf-receipt-truth"><span className={`mf-receipt-status is-${presentation.gate.receipt.state}`}>{receiptStatusLabels[presentation.gate.receipt.state]}</span><code>{presentation.gate.receipt.id ?? presentation.runCode}</code></span>
         </aside>
       </div>
 
       <section className="mf-role-delivery" aria-labelledby="mf-role-delivery-title">
-        <header><div><span className="mf-eyebrow">{l("Entrega com privilégio", "Privilege-aware delivery")}</span><h2 id="mf-role-delivery-title">{l("O que cada funcionário recebe", "What each employee receives")}</h2></div><span><UsersRound size={15} aria-hidden="true" />{presentation.roleDeliveries.length} {l("papéis autorizados", "authorized roles")}</span></header>
+        <header><div><span className="mf-eyebrow">{l("Entrega com privilégio", "Privilege-aware delivery")}</span><h2 id="mf-role-delivery-title">{l("O que cada funcionário recebe", "What each employee receives")}</h2></div><span><UsersRound size={15} aria-hidden="true" />{visibleRoleDeliveries.length} {l("papéis autorizados", "authorized roles")}</span></header>
         <div>
-          {presentation.roleDeliveries.map((delivery) => (
+          {visibleRoleDeliveries.map((delivery) => (
             <article key={delivery.role.id}>
               <header><span>{localize(delivery.role.name).slice(0, 2).toUpperCase()}</span><div><small>{l("Objetivo", "Objective")}</small><h3>{localize(delivery.role.name)}</h3></div></header>
               <p>{localize(delivery.objective)}</p>

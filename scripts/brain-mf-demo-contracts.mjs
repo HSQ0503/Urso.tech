@@ -13,7 +13,11 @@ import {
   deriveMfManagerWorkspace,
   deriveMfTeamCommand,
 } from "../lib/mf-demo/manager-runtime.mjs";
-import { deriveMfWorkflowPresentation } from "../lib/mf-demo/workflow-runtime.mjs";
+import {
+  deriveMfWorkflowAccess,
+  deriveMfWorkflowInteraction,
+  deriveMfWorkflowPresentation,
+} from "../lib/mf-demo/workflow-runtime.mjs";
 import {
   consumeMfSessionUsage,
   createMfSessionRecord,
@@ -115,6 +119,21 @@ for (const workflow of mfScenarioManifest.workflow.catalog) {
   assert(workflow.agents.every((agent) => ["read", "query", "draft", "write"].includes(agent.tool.permission)));
   assert(workflow.agents.every((agent) => agent.tool.permission !== "write"), "pre-gate agents must not write");
 }
+assert.deepEqual(
+  mfScenarioManifest.workflow.catalog.flatMap((workflow) => workflow.outputs.map((output) => [
+    `${workflow.id}:${output.id}`,
+    output.availableAtStep,
+  ])),
+  [
+    ["coordinate-project-change:decision-receipt", 3],
+    ["coordinate-project-change:impact-plan", 4],
+    ["coordinate-project-change:role-briefs", 5],
+    ["update-electrical-package:electrical-package", 6],
+    ["prepare-bim-coordination:bim-scaffold", 6],
+    ["recover-project-schedule:recovery-scenarios", 6],
+    ["verify-gate-readiness:exe-02-checklist", 7],
+  ],
+);
 assert.deepEqual(
   mfScenarioManifest.workflow.catalog
     .find((workflow) => workflow.id === "coordinate-project-change")
@@ -370,6 +389,7 @@ assert(canonicalSourcePresentation.roleDeliveries
 const coordinateAtStep3 = deriveMfWorkflowPresentation(createMfHarnessSnapshot(3), coordinateWorkflow.id);
 assert.equal(coordinateAtStep3.gate.state, "complete");
 assert.equal(coordinateAtStep3.truth.currentRevision, "C");
+const coordinateAtStep4 = deriveMfWorkflowPresentation(createMfHarnessSnapshot(4), coordinateWorkflow.id);
 
 const coordinateAtStep5 = deriveMfWorkflowPresentation(createMfHarnessSnapshot(5), coordinateWorkflow.id);
 assert(coordinateAtStep5.roleDeliveries.every((delivery) =>
@@ -381,6 +401,26 @@ for (const delivery of coordinateAtStep5.roleDeliveries) {
   assert(delivery.role && delivery.objective && delivery.nextAction !== undefined && delivery.deliverable);
   assert.equal(typeof delivery.openActionCount, "number");
   assert.equal(typeof delivery.sourceCount, "number");
+}
+assert.deepEqual(
+  [coordinateAtStep2, coordinateAtStep3, coordinateAtStep4, coordinateAtStep5].map((presentation) => ({
+    step: [coordinateAtStep2, coordinateAtStep3, coordinateAtStep4, coordinateAtStep5].indexOf(presentation) + 2,
+    outputsReady: presentation.outputsReady,
+    outputs: presentation.outputs.map((output) => [output.id, output.ready, output.receipt.state]),
+  })),
+  [
+    { step: 2, outputsReady: false, outputs: [["decision-receipt", false, "pending"], ["impact-plan", false, "pending"], ["role-briefs", false, "pending"]] },
+    { step: 3, outputsReady: false, outputs: [["decision-receipt", true, "available"], ["impact-plan", false, "pending"], ["role-briefs", false, "pending"]] },
+    { step: 4, outputsReady: false, outputs: [["decision-receipt", true, "available"], ["impact-plan", true, "available"], ["role-briefs", false, "pending"]] },
+    { step: 5, outputsReady: true, outputs: [["decision-receipt", true, "available"], ["impact-plan", true, "available"], ["role-briefs", true, "available"]] },
+  ],
+);
+
+for (const workflowId of ["update-electrical-package", "recover-project-schedule"]) {
+  const draftAtStep6 = deriveMfWorkflowPresentation(createMfHarnessSnapshot(6), workflowId);
+  assert.equal(draftAtStep6.gate.state, "in_progress");
+  assert.equal(draftAtStep6.outputsReady, true);
+  assert(draftAtStep6.outputs.every((output) => output.ready && output.receipt.state === "pending"));
 }
 
 const coordinateAtStep8 = deriveMfWorkflowPresentation(release, coordinateWorkflow.id);
@@ -406,7 +446,10 @@ const completedWithoutTaskReceipt = {
 };
 const missingGateReceipt = deriveMfWorkflowPresentation(completedWithoutTaskReceipt, coordinateWorkflow.id);
 assert.equal(missingGateReceipt.gate.receiptId, null);
-assert(missingGateReceipt.outputs.every((output) => output.receipt.state === "missing" && output.receipt.id === null));
+assert.deepEqual(
+  missingGateReceipt.outputs.map((output) => [output.id, output.ready, output.receipt.state]),
+  [["decision-receipt", true, "missing"], ["impact-plan", false, "pending"], ["role-briefs", false, "pending"]],
+);
 
 const workflowPresentationSteps = {
   "coordinate-project-change": 2,
@@ -422,13 +465,99 @@ for (const workflow of mfScenarioManifest.workflow.catalog) {
   assert(presentation.roleDeliveries.every((delivery) =>
     delivery.sources.every((source) => source.authorizedRoleIds.includes(delivery.role.id)),
   ));
-  assert.equal(presentation.outputsReady, presentation.gate.state === "complete");
+  assert.equal(presentation.outputsReady, presentation.outputs.every((output) => output.ready));
   assert.deepEqual(presentation.outputs.map((output) => output.id), workflow.outputs.map((output) => output.id));
-  assert(presentation.outputs.every((output) => output.ready === presentation.outputsReady));
-  assert(presentation.outputs.every((output) => presentation.gate.state === "complete"
-    ? output.receipt.state === "available" && output.receipt.id === presentation.gate.task.receiptId
+  assert(presentation.outputs.every((output) => output.ready
+    ? presentation.gate.state === "complete"
+      ? output.receipt.state === "available" && output.receipt.id === presentation.gate.task.receiptId
+      : output.receipt.state === "pending" && output.receipt.id === null
     : output.receipt.state === "pending" && output.receipt.id === null));
 }
+
+const catalogWorkflowIds = mfScenarioManifest.workflow.catalog.map((workflow) => workflow.id);
+const projectManagerWorkflowAccess = deriveMfWorkflowAccess("project-manager");
+assert.deepEqual(projectManagerWorkflowAccess.workflowIds, catalogWorkflowIds);
+assert.equal(projectManagerWorkflowAccess.defaultWorkflowId, "coordinate-project-change");
+for (const [roleId, workflowId] of [
+  ["electrical", "update-electrical-package"],
+  ["bim", "prepare-bim-coordination"],
+  ["planning", "recover-project-schedule"],
+  ["quality", "verify-gate-readiness"],
+]) {
+  const access = deriveMfWorkflowAccess(roleId);
+  assert.deepEqual(access.workflowIds, [workflowId]);
+  assert.deepEqual(access.workflows.map((workflow) => workflow.id), [workflowId]);
+  assert.equal(access.defaultWorkflowId, workflowId);
+}
+assert.deepEqual(deriveMfWorkflowAccess("unknown-role"), {
+  viewerRoleId: "unknown-role",
+  workflows: [],
+  workflowIds: [],
+  defaultWorkflowId: null,
+});
+
+const interactionFor = (step, workflowId, viewerRoleId, snapshotOverride) => deriveMfWorkflowInteraction(
+  deriveMfWorkflowPresentation(snapshotOverride ?? createMfHarnessSnapshot(step), workflowId),
+  viewerRoleId,
+);
+for (const scenario of [
+  { step: 0, workflowId: "coordinate-project-change", roleId: "project-manager", current: "brain_boundary", canAdvance: false, action: "waiting", terminal: false },
+  { step: 2, workflowId: "coordinate-project-change", roleId: "project-manager", current: "human_gate", canAdvance: true, action: "advance", terminal: false },
+  { step: 2, workflowId: "coordinate-project-change", roleId: "electrical", current: "human_gate", canAdvance: false, action: "unauthorized", terminal: false },
+  { step: 3, workflowId: "coordinate-project-change", roleId: "project-manager", current: "controlled_outputs", canAdvance: false, action: "outputs_pending", terminal: false },
+  { step: 5, workflowId: "coordinate-project-change", roleId: "project-manager", current: null, canAdvance: false, action: "complete", terminal: true },
+  { step: 4, workflowId: "prepare-bim-coordination", roleId: "bim", current: "agents_tools", canAdvance: true, action: "advance", terminal: false },
+  { step: 5, workflowId: "prepare-bim-coordination", roleId: "bim", current: "agents_tools", canAdvance: true, action: "advance", terminal: false },
+  { step: 6, workflowId: "update-electrical-package", roleId: "electrical", current: "human_gate", canAdvance: true, action: "advance", terminal: false },
+  { step: 6, workflowId: "update-electrical-package", roleId: "project-manager", current: "human_gate", canAdvance: false, action: "unauthorized", terminal: false },
+  { step: 6, workflowId: "recover-project-schedule", roleId: "project-manager", current: "human_gate", canAdvance: true, action: "advance", terminal: false },
+  { step: 6, workflowId: "recover-project-schedule", roleId: "planning", current: "human_gate", canAdvance: false, action: "unauthorized", terminal: false },
+  { step: 6, workflowId: "verify-gate-readiness", roleId: "quality", current: "brain_boundary", canAdvance: false, action: "waiting", terminal: false },
+  { step: 7, workflowId: "verify-gate-readiness", roleId: "quality", current: null, canAdvance: false, action: "complete", terminal: true },
+]) {
+  const interaction = interactionFor(scenario.step, scenario.workflowId, scenario.roleId);
+  assert.equal(interaction.currentStageId, scenario.current, `${scenario.workflowId} current stage at ${scenario.step}`);
+  assert.equal(interaction.canAdvance, scenario.canAdvance, `${scenario.workflowId} advance at ${scenario.step}`);
+  assert.equal(interaction.action.id, scenario.action, `${scenario.workflowId} action at ${scenario.step}`);
+  assert.equal(interaction.terminal, scenario.terminal, `${scenario.workflowId} terminal at ${scenario.step}`);
+  assert.equal(interaction.stages.filter((stage) => stage.state === "current").length, scenario.current ? 1 : 0);
+  if (scenario.terminal) assert(interaction.stages.every((stage) => stage.state === "complete"));
+}
+
+const coordinateStep2ManagerInteraction = interactionFor(2, "coordinate-project-change", "project-manager");
+assert.deepEqual(
+  coordinateStep2ManagerInteraction.action.label,
+  coordinateAtStep2.gate.task.managerAction.label,
+);
+const bimStep4Presentation = deriveMfWorkflowPresentation(createMfHarnessSnapshot(4), "prepare-bim-coordination");
+assert.deepEqual(
+  deriveMfWorkflowInteraction(bimStep4Presentation, "bim").action.label,
+  bimStep4Presentation.gate.task.title,
+);
+
+const step5WithoutGateReceipt = {
+  ...createMfHarnessSnapshot(5),
+  workItems: createMfHarnessSnapshot(5).workItems.map((task) => task.id === "approve-controlled-truth"
+    ? { ...task, receiptId: null }
+    : task),
+};
+const missingReceiptInteraction = interactionFor(
+  5,
+  "coordinate-project-change",
+  "project-manager",
+  step5WithoutGateReceipt,
+);
+assert.equal(missingReceiptInteraction.terminal, false);
+assert.equal(missingReceiptInteraction.canAdvance, false);
+assert.equal(missingReceiptInteraction.currentStageId, "controlled_outputs");
+assert.equal(missingReceiptInteraction.action.id, "receipt_missing");
+assert.deepEqual(missingReceiptInteraction.stages.map((stage) => stage.state), [
+  "complete",
+  "complete",
+  "complete",
+  "complete",
+  "current",
+]);
 
 assert.throws(
   () => deriveMfWorkflowPresentation(createMfHarnessSnapshot(0), "unknown-workflow"),
@@ -660,6 +789,7 @@ const agentWorkflowSource = readFileSync(
 assert.match(agentWorkflowSource, /export type MfAgentWorkflowProps/);
 for (const propName of [
   "snapshot",
+  "viewerRoleId",
   "selectedWorkflowId",
   "onSelectWorkflow",
   "onAdvance",
@@ -671,7 +801,23 @@ assert.match(
   agentWorkflowSource,
   /export function MfAgentWorkflow\(props: MfAgentWorkflowProps\): React\.JSX\.Element/,
 );
-assert.match(agentWorkflowSource, /import \{ deriveMfWorkflowPresentation \} from/);
+for (const selectorName of [
+  "deriveMfWorkflowAccess",
+  "deriveMfWorkflowInteraction",
+  "deriveMfWorkflowPresentation",
+]) {
+  assert.match(agentWorkflowSource, new RegExp(`\\b${selectorName}\\b`), `missing workflow selector: ${selectorName}`);
+}
+assert.doesNotMatch(agentWorkflowSource, /snapshot\.step/);
+assert.doesNotMatch(agentWorkflowSource, /Ready for decision/);
+assert.match(agentWorkflowSource, /accepted current truth/);
+assert.doesNotMatch(agentWorkflowSource, /accepted with a recorded receipt/);
+assert.match(agentWorkflowSource, /if \(!interaction\.canAdvance\) return;/);
+assert.match(agentWorkflowSource, /source\.status/);
+assert.match(agentWorkflowSource, /output\.receipt\.state/);
+for (const truthLabel of ["Connected", "Available in pilot", "Recorded", "Pending", "Missing"]) {
+  assert(agentWorkflowSource.includes(truthLabel), `missing workflow truth label: ${truthLabel}`);
+}
 for (const semanticLabel of [
   "Connected context",
   "Brain boundary",
@@ -689,6 +835,8 @@ assert.doesNotMatch(mfCssSource, /\.mf-team-row-owner\s*\{\s*display:\s*none;\s*
 assert.doesNotMatch(mfCssSource, /Agentic workflow deployment studio/);
 assert.doesNotMatch(mfCssSource, /\.mf-agentic-map\s*>\s*:nth-child/);
 assert.match(mfCssSource, /\/\* Agent workflow canvas \*\//);
+assert.match(mfCssSource, /\.mf-source-connection-status/);
+assert.match(mfCssSource, /\.mf-receipt-status/);
 
 const demoViewsSource = readFileSync(new URL("../components/mf/demo-views.tsx", import.meta.url), "utf8");
 assert.match(demoViewsSource, /import \{ MfManagerWorkspace \} from ["']\.\/mf-manager-workspace["']/);
@@ -723,6 +871,7 @@ const workflowsViewSource = demoViewsSource.match(
 )?.[0] ?? "";
 assert.match(demoViewsSource, /import \{ MfAgentWorkflow \} from ["']\.\/mf-agent-workflow["']/);
 assert.match(workflowsViewSource, /<MfAgentWorkflow/);
+assert.match(workflowsViewSource, /viewerRoleId=\{roleId\}/);
 assert.doesNotMatch(workflowsViewSource, /ObjectiveWorkflowPanel/);
 assert.doesNotMatch(workflowsViewSource, /workflowCatalog|selectedAgents|selectedTools|stageClass|mf-agentic-map/);
 

@@ -290,6 +290,7 @@ export function WorkflowsView({ roleId, onNavigate, onAdvance, snapshot }: ViewP
       {snapshot ? (
         <MfAgentWorkflow
           snapshot={snapshot}
+          viewerRoleId={roleId}
           selectedWorkflowId={selectedWorkflowId}
           onSelectWorkflow={(workflowId) => setWorkflowSelection({ roleContextId: roleId, workflowId })}
           onAdvance={onAdvance}

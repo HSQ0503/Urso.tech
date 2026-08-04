@@ -31,6 +31,7 @@ export type MfWorkflowGatePresentation = Readonly<{
   evidenceCount: number;
   affectedRoleIds: readonly string[];
   affectedRoleCount: number;
+  receipt: MfWorkflowReceiptPresentation;
   receiptId: string | null;
 }>;
 
@@ -42,6 +43,7 @@ export type MfWorkflowOutputPresentation = Readonly<{
   id: string;
   label: MfLocalizedText;
   kind: "receipt" | "plan" | "brief" | "draft" | "checklist";
+  availableAtStep: number;
   ready: boolean;
   recipients: readonly MfManifestRole[];
   receipt: MfWorkflowReceiptPresentation;
@@ -89,6 +91,39 @@ export type MfWorkflowPresentation = Readonly<{
   roleDeliveries: readonly MfWorkflowRoleDelivery[];
   stages: readonly MfWorkflowPresentationStage[];
 }>;
+
+export type MfWorkflowStageState = "complete" | "current" | "pending";
+
+export type MfWorkflowAccess = Readonly<{
+  viewerRoleId: string;
+  workflows: readonly MfManifestWorkflowDefinition[];
+  workflowIds: readonly string[];
+  defaultWorkflowId: string | null;
+}>;
+
+export type MfWorkflowInteractionActionId =
+  | "advance"
+  | "waiting"
+  | "unauthorized"
+  | "outputs_pending"
+  | "receipt_missing"
+  | "complete";
+
+export type MfWorkflowInteraction = Readonly<{
+  viewerRoleId: string;
+  terminal: boolean;
+  canAdvance: boolean;
+  currentStageId: MfWorkflowStageId | null;
+  stages: readonly Readonly<{ id: MfWorkflowStageId; state: MfWorkflowStageState }>[];
+  action: Readonly<{ id: MfWorkflowInteractionActionId; label: MfLocalizedText }>;
+}>;
+
+export function deriveMfWorkflowAccess(viewerRoleId: string): MfWorkflowAccess;
+
+export function deriveMfWorkflowInteraction(
+  presentation: MfWorkflowPresentation,
+  viewerRoleId: string,
+): MfWorkflowInteraction;
 
 export function deriveMfWorkflowPresentation(
   snapshot: MfHarnessSnapshot,
