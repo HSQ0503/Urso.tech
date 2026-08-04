@@ -805,9 +805,21 @@ for (const obsoleteShellToken of [
   "projectRisk",
   "visibleActivity",
   "approvedArtifacts",
+  "answerForScenario",
+  "askUrsoAnswers",
+  "FormEvent",
+  "assistantOpen",
+  "selectedQuestion",
+  "draftQuestion",
+  "submitScriptedQuestion",
+  "mf-assistant-layer",
+  "mf-question-list",
+  "mf-answer-card",
+  "mf-assistant-composer",
 ]) {
   assert(!demoClientSource.includes(obsoleteShellToken), `obsolete shell token remains: ${obsoleteShellToken}`);
 }
+assert.match(demoClientSource, /className=["']mf-ask-button["'][\s\S]*?onClick=\{\(\) => navigate\(["']brain["']\)\}/);
 for (const preservedShellToken of [
   "mf-brand-block",
   "mf-project-selector",
@@ -864,6 +876,10 @@ assert.match(storyPanelSource, /source\.authorizedRoleIds\.includes\(roleId\)/);
 assert.match(storyPanelSource, /source\.technology\.name/);
 assert.match(storyPanelSource, /source\.status/);
 assert.match(storyPanelSource, /source\.evidencePaths\.map/);
+const sourceEvidenceSummary = storyPanelSource.match(
+  /<details className=["']mf-source-evidence["'][\s\S]*?<summary>[\s\S]*?<\/summary>/,
+)?.[0] ?? "";
+assert.match(sourceEvidenceSummary, /localize\(source\.name\)/);
 assert.match(storyPanelSource, /tower\.impactedDisciplines/);
 assert.match(storyPanelSource, /tower\.exposureDays/);
 assert.doesNotMatch(storyPanelSource, /10 affected disciplines|Likely 10-day delay/);
@@ -873,6 +889,10 @@ assert.match(storyPanelSource, /data-label=\{l\(["']Sem Urso["'],\s*["']Without 
 assert.match(storyPanelSource, /data-label=\{l\(["']Com Urso["'],\s*["']With Urso["']\)\}/);
 assert.match(storyPanelSource, /task\.id === ["']approve-controlled-truth["']/);
 assert.match(storyPanelSource, /decisionTask\?\.receiptId/);
+assert.match(storyPanelSource, /source\.id === ["']controlled-documents["']/);
+assert.match(storyPanelSource, /controlledDocumentsSource\?\.evidencePaths\.find/);
+assert.match(storyPanelSource, /revisionCEvidenceLabel/);
+assert.doesNotMatch(storyPanelSource, /Data Sheet Rev\. C|SUP-118/);
 assert.doesNotMatch(storyPanelSource, /snapshot\.receipts\.at\(-1\)/);
 assert.match(
   storyPanelSource,
@@ -1045,6 +1065,15 @@ for (const obsoleteClassName of [
   "mf-risk-badge",
   "mf-milestone-stat",
   "mf-system-health",
+  "mf-assistant-layer",
+  "mf-assistant-scrim",
+  "mf-assistant-drawer",
+  "mf-assistant-icon",
+  "mf-assistant-context",
+  "mf-question-list",
+  "mf-answer-card",
+  "mf-assistant-composer",
+  "mf-assistant-note",
 ]) {
   assert(!mfCssSource.includes(`.${obsoleteClassName}`), `obsolete MF class remains: ${obsoleteClassName}`);
 }
@@ -1167,7 +1196,7 @@ const artifactReviewStateSource = mfDemoSource.match(
 assert.doesNotMatch(artifactReviewStateSource, /step >= 8/);
 assert.match(artifactReviewStateSource, /workItems\.length > 0 && workItems\.every/);
 const selectedArtifactReceiptSource = mfDemoSource.match(
-  /const selectedArtifactWorkItems[\s\S]*?(?=\n\s*const activeAnswer)/,
+  /const selectedArtifactWorkItems[\s\S]*?(?=\n\s*const presenterCue)/,
 )?.[0] ?? "";
 assert.match(selectedArtifactReceiptSource, /right\.completeAt - left\.completeAt/);
 assert.match(selectedArtifactReceiptSource, /selectedArtifactWorkItems\.every/);

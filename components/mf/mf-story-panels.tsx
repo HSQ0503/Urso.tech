@@ -76,7 +76,7 @@ export function ConnectedSourcesPanel({
             <details className="mf-source-evidence">
               <summary>
                 <Database size={15} />
-                <span>{l("Detalhes da evidência", "Evidence details")}</span>
+                <span>{localize(source.name)} · {l("Detalhes da evidência", "Evidence details")}</span>
                 <strong>{source.evidencePaths.length} {source.evidencePaths.length === 1 ? l("registro", "record") : l("registros", "records")}</strong>
               </summary>
               <div>
@@ -102,11 +102,17 @@ export function ConnectedSourcesPanel({
 }
 
 export function ControlledChangePanel({ snapshot }: { snapshot: MfHarnessSnapshot }) {
-  const { l } = useLabels();
+  const { l, localize } = useLabels();
   const before = mfScenarioManifest.revisions.B;
   const after = mfScenarioManifest.revisions.C;
   const approved = snapshot.decision.status === "approved";
   const decisionTask = snapshot.workItems.find((task) => task.id === "approve-controlled-truth");
+  const controlledDocumentsSource = snapshot.sources.find((source) => source.id === "controlled-documents");
+  const revisionCEvidencePath = controlledDocumentsSource?.evidencePaths.find((path) => /revision c/i.test(path));
+  const revisionCEvidenceFileName = revisionCEvidencePath?.split("/").at(-1)?.replace(/\.md$/i, "");
+  const revisionCEvidenceLabel = controlledDocumentsSource && revisionCEvidenceFileName
+    ? `${localize(controlledDocumentsSource.name)} · ${revisionCEvidenceFileName}`
+    : l("Evidência controlada da Revisão C indisponível", "Controlled Revision C evidence unavailable");
   return (
     <section className="mf-story-panel" data-guide-key="controlled-change">
       <header className="mf-story-panel-header">
@@ -121,7 +127,7 @@ export function ControlledChangePanel({ snapshot }: { snapshot: MfHarnessSnapsho
       </div>
       <details className="mf-proof-drawer">
         <summary><ShieldCheck size={14} /> {l("Mostrar a prova", "Show the proof")}</summary>
-        <div><span><strong>{l("Fonte", "Source")}</strong><small>Data Sheet Rev. C · SUP-118</small></span><span><strong>{l("Regra", "Rule")}</strong><small>{l("Mudança material exige aprovação do PM", "Material change requires PM approval")}</small></span><span><strong>{l("Efeito temporal", "Temporal effect")}</strong><small>{approved ? l("Rev. B preservada como histórica", "Rev. B preserved as historical") : l("Nenhuma verdade alterada", "No truth changed")}</small></span><span><strong>{l("Recibo", "Receipt")}</strong><small>{decisionTask?.receiptId ?? (approved ? l("Recibo indisponível", "Receipt unavailable") : l("Emitido na aprovação", "Issued on approval"))}</small></span></div>
+        <div><span><strong>{l("Fonte", "Source")}</strong><small>{revisionCEvidenceLabel}</small></span><span><strong>{l("Regra", "Rule")}</strong><small>{l("Mudança material exige aprovação do PM", "Material change requires PM approval")}</small></span><span><strong>{l("Efeito temporal", "Temporal effect")}</strong><small>{approved ? l("Rev. B preservada como histórica", "Rev. B preserved as historical") : l("Nenhuma verdade alterada", "No truth changed")}</small></span><span><strong>{l("Recibo", "Receipt")}</strong><small>{decisionTask?.receiptId ?? (approved ? l("Recibo indisponível", "Receipt unavailable") : l("Emitido na aprovação", "Issued on approval"))}</small></span></div>
       </details>
     </section>
   );

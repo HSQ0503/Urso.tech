@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   ArrowRight,
@@ -9,14 +9,12 @@ import {
   Check,
   ChevronDown,
   CircleGauge,
-  FileStack,
   GitPullRequestArrow,
   History,
   Keyboard,
   Languages,
   LogOut,
   Menu,
-  PanelRightClose,
   Play,
   Presentation,
   RotateCcw,
@@ -29,7 +27,6 @@ import {
 } from "lucide-react";
 import {
   artifacts,
-  askUrsoAnswers,
   project,
   roles,
 } from "@/lib/mf-demo/fixtures";
@@ -114,56 +111,6 @@ const presenterCues = {
   ],
 } as const;
 
-function answerForScenario(step: number, questionIndex: number) {
-  const scriptedAnswer = askUrsoAnswers[questionIndex];
-
-  if (questionIndex === 2 && step < 3) {
-    return {
-      ...scriptedAnswer,
-      answer:
-        "A Revisão B continua vigente. A Revisão C foi preservada como evidência e comparada, mas permanece proposta até o Gerente do Projeto registrar a decisão.",
-      sources: "Histórico de versões · Mudança proposta CHG-024",
-    };
-  }
-
-  if (questionIndex === 1 && step < 5) {
-    return {
-      ...scriptedAnswer,
-      answer:
-        "O aumento de 15% da carga foi identificado, mas o pacote elétrico ainda não existe. Primeiro a mudança precisa ser aprovada e o impacto propagado para Elétrica.",
-      sources: "Data Sheet Rev. C §4.2 · Estado atual do WF-REV-C-001",
-    };
-  }
-
-  if (questionIndex === 3) {
-    if (step >= 8) {
-      return {
-        ...scriptedAnswer,
-        answer: "Nada crítico permanece aberto. O gate EXE-02 possui decisões, artefatos, aprovações e evidências completas e está pronto para liberação.",
-        sources: "Checklist EXE-02 · Histórico de receipts · WF-REV-C-001",
-      };
-    }
-    if (step < 5) {
-      return {
-        ...scriptedAnswer,
-        answer:
-          "Ainda faltam o plano de impacto, os pacotes por disciplina, a execução das ferramentas, as aprovações técnicas e a verificação final do gate.",
-        sources: "Gate EXE-02 · Estado atual do WF-REV-C-001",
-      };
-    }
-    if (step < 7) {
-      return {
-        ...scriptedAnswer,
-        answer:
-          "Os pacotes já foram distribuídos. Faltam executar ou validar os oito artefatos, fechar duas interferências BIM e confirmar o plano de recuperação.",
-        sources: "Pacotes disciplinares · Gate EXE-02 · WF-REV-C-001",
-      };
-    }
-  }
-
-  return scriptedAnswer;
-}
-
 function ViewContent({
   view,
   step,
@@ -207,10 +154,7 @@ function MfDemoShell() {
   const [activeView, setActiveView] = useState<DemoView>("control");
   const [roleId, setRoleId] = useState(roles[0].id);
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
-  const [assistantOpen, setAssistantOpen] = useState(false);
   const [selectedArtifactId, setSelectedArtifactId] = useState<string | null>(null);
-  const [selectedQuestion, setSelectedQuestion] = useState(0);
-  const [draftQuestion, setDraftQuestion] = useState("");
   const [presenterMode, setPresenterMode] = useState(false);
   const [presentationLobbyOpen, setPresentationLobbyOpen] = useState(true);
   const [presentationSessionActive, setPresentationSessionActive] = useState(false);
@@ -251,7 +195,6 @@ function MfDemoShell() {
   const authorizedEvidenceRecordCount = demoSession?.snapshot.sources
     .filter((source) => source.authorizedRoleIds.includes(roleId))
     .reduce((count, source) => count + source.evidencePaths.length, 0) ?? 0;
-  const activeAnswer = answerForScenario(step, selectedQuestion);
   const presenterCue = presenterCues[language][step];
   const selectedRole = roles.find((role) => role.id === roleId) ?? roles[0];
   const activeNavigationItem = navigation.find((item) => item.id === activeView) ?? navigation[0];
@@ -408,10 +351,7 @@ function MfDemoShell() {
     setActiveView("control");
     setRoleId(roles[0].id);
     setMobileNavigationOpen(false);
-    setAssistantOpen(false);
     setSelectedArtifactId(null);
-    setSelectedQuestion(0);
-    setDraftQuestion("");
     return true;
   }, [synchronizeScenarioStep]);
 
@@ -455,20 +395,18 @@ function MfDemoShell() {
       setSelectedArtifactId(null);
       return;
     }
-    setAssistantOpen(false);
     setSelectedArtifactId(artifactId);
   }
 
   useEffect(() => {
     function handlePresenterShortcut(event: KeyboardEvent) {
       if (event.key === "Escape") {
-        setAssistantOpen(false);
         setMobileNavigationOpen(false);
         if (!presentationSessionActive) setPresenterMode(false);
         return;
       }
 
-      if (presentationLobbyOpen || assistantOpen || selectedArtifactId || event.metaKey || event.ctrlKey || event.altKey) return;
+      if (presentationLobbyOpen || selectedArtifactId || event.metaKey || event.ctrlKey || event.altKey) return;
 
       const target = event.target;
       if (target instanceof HTMLElement && ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) return;
@@ -493,7 +431,7 @@ function MfDemoShell() {
 
     window.addEventListener("keydown", handlePresenterShortcut);
     return () => window.removeEventListener("keydown", handlePresenterShortcut);
-  }, [assistantOpen, presentationLobbyOpen, presentationSessionActive, reset, selectedArtifactId, step, synchronizeScenarioStep]);
+  }, [presentationLobbyOpen, presentationSessionActive, reset, selectedArtifactId, step, synchronizeScenarioStep]);
 
   useEffect(() => {
     if (presentationLobbyOpen) presentationStartRef.current?.focus();
@@ -525,19 +463,6 @@ function MfDemoShell() {
 
     return () => window.cancelAnimationFrame(frame);
   }, [activeView, presentationLobbyOpen, presenterMode, step]);
-
-  function submitScriptedQuestion(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const normalizedQuestion = draftQuestion.trim().toLocaleLowerCase("pt-BR");
-    if (!normalizedQuestion) return;
-
-    if (normalizedQuestion.includes("elétr") || normalizedQuestion.includes("electr")) setSelectedQuestion(1);
-    else if (normalizedQuestion.includes("document") || normalizedQuestion.includes("revis")) setSelectedQuestion(2);
-    else if (normalizedQuestion.includes("liber") || normalizedQuestion.includes("falta") || normalizedQuestion.includes("missing")) setSelectedQuestion(3);
-    else setSelectedQuestion(0);
-
-    setDraftQuestion("");
-  }
 
   return (
     <div
@@ -734,71 +659,6 @@ function MfDemoShell() {
           />
         </main>
       </div>
-
-      {assistantOpen ? (
-        <div className="mf-assistant-layer" role="dialog" aria-modal="true" aria-labelledby="mf-assistant-title">
-          <button
-            type="button"
-            className="mf-assistant-scrim"
-            aria-label={t("Fechar assistente")}
-            onClick={() => setAssistantOpen(false)}
-          />
-          <section className="mf-assistant-drawer">
-            <header>
-              <div>
-                <span className="mf-assistant-icon"><Bot size={18} /></span>
-                <div>
-                  <span className="mf-eyebrow">{t("Escopo atual")} · {project.name}</span>
-                  <h2 id="mf-assistant-title">{t("Perguntar ao Urso")}</h2>
-                </div>
-              </div>
-              <button type="button" aria-label={t("Fechar assistente")} onClick={() => setAssistantOpen(false)}>
-                <PanelRightClose size={19} />
-              </button>
-            </header>
-            <div className="mf-assistant-context">
-              <ShieldCheck size={15} /> {language === "pt"
-                ? "Respostas pré-configuradas sobre este projeto sintético."
-                : "Preconfigured answers about this synthetic project."}
-            </div>
-            <div className="mf-question-list">
-              {askUrsoAnswers.map((item, index) => (
-                <button
-                  type="button"
-                  key={item.question}
-                  className={selectedQuestion === index ? "is-active" : ""}
-                  onClick={() => setSelectedQuestion(index)}
-                >
-                  {t(item.question)}
-                </button>
-              ))}
-            </div>
-            <div className="mf-answer-card" aria-live="polite">
-              <span className="mf-eyebrow">{t("Resposta contextual")}</span>
-              <p>{t(activeAnswer.answer)}</p>
-              <div>
-                <FileStack size={14} />
-                <span>
-                  <strong>{t("Fontes")}</strong>
-                  <small>{t(activeAnswer.sources)}</small>
-                </span>
-              </div>
-            </div>
-            <form className="mf-assistant-composer" onSubmit={submitScriptedQuestion}>
-              <input
-                aria-label={t("Pergunta para o Urso")}
-                placeholder={t("Pergunte sobre este projeto…")}
-                value={draftQuestion}
-                onChange={(event) => setDraftQuestion(event.target.value)}
-              />
-              <button type="submit" aria-label={t("Enviar pergunta")} disabled={!draftQuestion.trim()}>
-                <ArrowRight size={17} />
-              </button>
-            </form>
-            <p className="mf-assistant-note">{t("Respostas pré-configuradas para esta demonstração.")}</p>
-          </section>
-        </div>
-      ) : null}
 
       {selectedArtifact ? (
         <ArtifactWorkspace
