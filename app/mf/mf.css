@@ -165,6 +165,7 @@
 
 .mf-logo-mark {
   position: relative;
+  display: block;
   overflow: hidden;
   width: 64px;
   aspect-ratio: 124 / 46;
