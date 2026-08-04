@@ -401,7 +401,7 @@ export default function JobScreen(): React.ReactElement {
 
   const onAddChecklistItem = async () => {
     const name = newChecklistStep.trim();
-    if (!name) return;
+    if (!name || addChecklistItem.isPending) return;
     setChecklistNotice(null);
     const result = await addChecklistItem.mutateAsync({ name, required: newChecklistRequired });
     if (!result.ok) {
@@ -487,7 +487,9 @@ export default function JobScreen(): React.ReactElement {
   // status past `scheduled`, and a confirmed job with no way to start would be
   // a dead end. The action still owns the actual rule.
   const canStart = job.status === "scheduled" || job.status === "confirmed";
-  const terminal = ["completed", "invoiced", "paid", "canceled"].includes(job.status);
+  // Invoices are often prepared before the appointment. Billing the customer
+  // must not hide the operational checklist from an upcoming job.
+  const checklistLocked = ["completed", "paid", "canceled"].includes(job.status);
 
   return (
     <View style={styles.screen}>
@@ -849,7 +851,7 @@ export default function JobScreen(): React.ReactElement {
                         {!item.checklist_only ? " · Service item" : ""}
                       </Text>
                     </View>
-                    {item.checklist_only && !terminal ? (
+                    {item.checklist_only && !checklistLocked ? (
                       <Pressable
                         accessibilityRole="button"
                         accessibilityLabel={`Remove ${item.name}`}
@@ -868,17 +870,21 @@ export default function JobScreen(): React.ReactElement {
                 ))}
               </View>
             ) : (
-              <Text style={styles.muted}>No checklist steps yet.</Text>
+              <Text style={styles.muted}>No checklist steps yet. Add the first step below.</Text>
             )}
 
-            {!terminal ? (
+            {!checklistLocked ? (
               <View style={styles.addStepCard}>
                 <Text style={styles.fieldLabel}>Add step</Text>
                 <TextInput
+                  accessibilityLabel="Checklist step"
                   value={newChecklistStep}
                   onChangeText={setNewChecklistStep}
+                  onSubmitEditing={() => void onAddChecklistItem()}
                   placeholder="Connect water supply"
                   placeholderTextColor={color.faint}
+                  returnKeyType="done"
+                  maxLength={160}
                   style={styles.input}
                 />
                 <View style={styles.addStepFoot}>

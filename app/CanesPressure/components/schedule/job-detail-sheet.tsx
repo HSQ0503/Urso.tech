@@ -156,6 +156,10 @@ export function JobDetailSheet({
     job.status === "invoiced" ||
     job.status === "paid" ||
     job.status === "canceled";
+  // An invoice can exist before the appointment. Keep the checklist editable
+  // until the work itself is finished, paid, or canceled.
+  const checklistLocked =
+    job.status === "completed" || job.status === "paid" || job.status === "canceled";
 
   const mapsHref = job.job_address
     ? `https://maps.google.com/?q=${encodeURIComponent(job.job_address)}`
@@ -489,7 +493,7 @@ export function JobDetailSheet({
                       {!item.checklist_only ? " · Service item" : ""}
                     </span>
                   </span>
-                  {item.checklist_only && !terminal && (
+                  {item.checklist_only && !checklistLocked && (
                     <button
                       type="button"
                       className="flex min-h-11 min-w-11 cursor-pointer items-center justify-center rounded-md text-[var(--cp-faint)] transition-colors hover:bg-[var(--cp-danger-bg)] hover:text-[var(--cp-danger)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--cp-brand)]"
@@ -505,10 +509,12 @@ export function JobDetailSheet({
             })}
           </ul>
         ) : (
-          <p className="mt-2 text-[12.5px] text-[var(--cp-faint)]">No checklist steps yet.</p>
+          <p className="mt-2 text-[12.5px] text-[var(--cp-faint)]">
+            No checklist steps yet. Add the first step below.
+          </p>
         )}
 
-        {!terminal && (
+        {!checklistLocked && (
           <form
             className="mt-3 space-y-2.5 rounded-md bg-[var(--cp-bg)] p-3"
             onSubmit={(event) => {

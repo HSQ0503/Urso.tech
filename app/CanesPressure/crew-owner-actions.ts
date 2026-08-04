@@ -24,7 +24,9 @@ import {
 
 export type CrewOwnerActionResult = { ok: boolean; notice?: string };
 
-const TERMINAL_JOB_STATUSES = ["completed", "invoiced", "paid", "canceled"];
+// An invoice can be prepared or sent before the crew performs the work. That
+// billing state must not freeze the field checklist for an upcoming job.
+const CHECKLIST_LOCKED_JOB_STATUSES = ["completed", "paid", "canceled"];
 
 async function requireOwner(): Promise<boolean> {
   return Boolean(await getAdminSession());
@@ -248,7 +250,7 @@ export async function addJobChecklistItem(input: {
     .eq("id", input.jobId)
     .maybeSingle();
   if (!job) return { ok: false, notice: "Job not found." };
-  if (TERMINAL_JOB_STATUSES.includes(job.status)) {
+  if (CHECKLIST_LOCKED_JOB_STATUSES.includes(job.status)) {
     return { ok: false, notice: "A finished job's checklist cannot be changed." };
   }
 
@@ -294,7 +296,7 @@ export async function removeJobChecklistItem(
     .select("status")
     .eq("id", item.job_id)
     .maybeSingle();
-  if (job && TERMINAL_JOB_STATUSES.includes(job.status)) {
+  if (job && CHECKLIST_LOCKED_JOB_STATUSES.includes(job.status)) {
     return { ok: false, notice: "A finished job's checklist cannot be changed." };
   }
 
