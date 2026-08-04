@@ -501,7 +501,13 @@ const managerWorkspaceSource = readFileSync(
   "utf8",
 );
 assert.match(managerWorkspaceSource, /export function MfManagerWorkspace/);
+assert.match(managerWorkspaceSource, /export type MfManagerWorkspaceProps/);
+assert.match(
+  managerWorkspaceSource,
+  /export function MfManagerWorkspace\(props: MfManagerWorkspaceProps\): React\.JSX\.Element/,
+);
 assert.match(managerWorkspaceSource, /deriveMfManagerWorkspace/);
+assert.doesNotMatch(managerWorkspaceSource, /\breturn null\b/);
 for (const semanticLabel of [
   "Manager briefing",
   "Decisions requiring you",
@@ -515,6 +521,27 @@ assert.match(managerWorkspaceSource, /data-guide-key=["']project-status["']/);
 assert.match(managerWorkspaceSource, /<button[^>]+onClick=\{\(\) => onNavigate\(["']changes["']\)\}/);
 assert.match(managerWorkspaceSource, /<button[^>]+onClick=\{onAdvance\}[^>]*disabled=/);
 assert.match(managerWorkspaceSource, /<button[^>]+onClick=\{\(\) => onNavigate\(/);
+const managerFallbackSource = managerWorkspaceSource.match(
+  /if \(!primaryAction\)[\s\S]*?(?=\n  const primaryTask)/,
+)?.[0] ?? "";
+assert.match(managerFallbackSource, /data-manager-fallback/);
+assert.match(managerFallbackSource, /data-guide-key=["']project-status["']/);
+assert.match(managerFallbackSource, /<button[^>]+disabled/);
+
+const managerPulseSource = managerWorkspaceSource.match(
+  /<section className=["']mf-manager-pulse["'][\s\S]*?<\/section>/,
+)?.[0] ?? "";
+const managerPulseCards = [...managerPulseSource.matchAll(/<article[^>]*>([\s\S]*?)<\/article>/g)];
+assert.equal(managerPulseCards.length, 3);
+for (const [, pulseCard] of managerPulseCards) {
+  assert.equal(pulseCard.match(/data-pulse-value/g)?.length, 1, "each manager pulse card must expose one value");
+}
+assert.match(
+  managerPulseCards[0][1],
+  /<strong data-pulse-value>\{workspace\.queue\.decisionsRequiringAction\.length\}<\/strong>/,
+);
+assert.equal(managerPulseCards[0][1].match(/\.length/g)?.length, 1);
+assert.match(managerPulseCards[0][1], /<span>\{managerDecisionStatus\}<\/span>/);
 
 const demoViewsSource = readFileSync(new URL("../components/mf/demo-views.tsx", import.meta.url), "utf8");
 assert.match(demoViewsSource, /import \{ MfManagerWorkspace \} from ["']\.\/mf-manager-workspace["']/);

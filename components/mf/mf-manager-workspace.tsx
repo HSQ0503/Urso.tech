@@ -1,5 +1,6 @@
 "use client";
 
+import type React from "react";
 import {
   ArrowRight,
   Check,
@@ -18,7 +19,7 @@ import { mfText } from "@/lib/mf-demo/manifest.mjs";
 import type { DemoView, MfHarnessSnapshot } from "@/lib/mf-demo/types";
 import { useMfLanguage } from "./mf-language";
 
-type MfManagerWorkspaceProps = {
+export type MfManagerWorkspaceProps = {
   snapshot: MfHarnessSnapshot;
   onAdvance: () => void;
   onNavigate: (view: DemoView) => void;
@@ -63,7 +64,8 @@ function progressIcon(state: ProgressState) {
   return <Clock3 size={14} aria-hidden="true" />;
 }
 
-export function MfManagerWorkspace({ snapshot, onAdvance, onNavigate }: MfManagerWorkspaceProps) {
+export function MfManagerWorkspace(props: MfManagerWorkspaceProps): React.JSX.Element {
+  const { snapshot, onAdvance, onNavigate } = props;
   const { language } = useMfLanguage();
   const workspace = deriveMfManagerWorkspace(snapshot);
   const localize = (value: { pt: string; en: string }) => mfText(value, language);
@@ -133,7 +135,25 @@ export function MfManagerWorkspace({ snapshot, onAdvance, onNavigate }: MfManage
     ...workspace.queue.done,
   ];
   const primaryAction = allQueueItems.find((item) => item.actionId === primaryActionByStep[snapshot.step]);
-  if (!primaryAction) return null;
+  if (!primaryAction) {
+    return (
+      <section className="mf-manager-workspace" data-manager-fallback aria-label={l("Cockpit do gerente indisponível", "Manager cockpit unavailable")}>
+        <header className="mf-manager-briefing" data-guide-key="project-status">
+          <div>
+            <span className="mf-eyebrow">{l("Briefing do gerente", "Manager briefing")}</span>
+            <h1>{l("A ação principal não está disponível", "The primary action is unavailable")}</h1>
+            <p>{l("A fila não corresponde ao estado esperado do cenário. O projeto permanece protegido sem executar uma decisão material.", "The queue does not match the expected scenario state. The project remains protected without executing a material decision.")}</p>
+          </div>
+          <span className="mf-manager-state"><ShieldCheck size={15} aria-hidden="true" />{l("Estado seguro", "Safe state")}</span>
+        </header>
+        <article className="mf-primary-decision">
+          <header><div><span>{l("Ação do gerente", "Manager action")}</span><strong>{l("Indisponível", "Unavailable")}</strong></div><span className="mf-decision-state"><LockKeyhole size={15} aria-hidden="true" />{l("Bloqueado", "Blocked")}</span></header>
+          <div className="mf-primary-decision-copy"><h2>{l("Nenhuma ação material pode avançar", "No material action can advance")}</h2><p>{l("Atualize o estado do cenário para reconstruir a fila canônica.", "Refresh the scenario state to rebuild the canonical queue.")}</p></div>
+          <footer><button type="button" className="mf-primary-action" disabled aria-label={l("Ação material indisponível", "Material action unavailable")}><LockKeyhole size={15} />{l("Ação indisponível", "Action unavailable")}</button></footer>
+        </article>
+      </section>
+    );
+  }
 
   const primaryTask = snapshot.workItems.find((task) => task.id === primaryAction.taskId);
   const primaryOwner = workspace.team.teams.find((team) => team.roleId === primaryTask?.ownerRoleId);
@@ -163,6 +183,21 @@ export function MfManagerWorkspace({ snapshot, onAdvance, onNavigate }: MfManage
       : snapshot.step < 8
         ? l(`${workspace.controlTower.daysRecovered} dias recuperados`, `${workspace.controlTower.daysRecovered} days recovered`)
         : l("Protegido", "Protected");
+  const managerDecisionStatus = workspace.queue.decisionsRequiringAction.length > 0
+    ? l("Decisão humana aguardando revisão", "Human decision awaiting review")
+    : workspace.queue.actionRequiredCount > 0
+      ? l("Ação gerencial em andamento", "Manager action in progress")
+      : l("Nenhuma decisão gerencial pendente", "No manager decision pending");
+  const affectedTeamStatus = snapshot.step >= 4
+    ? l("Impacto confirmado", "Impact confirmed")
+    : l("Impacto ainda não confirmado", "Impact not confirmed yet");
+  const milestoneStatus = snapshot.step < 3
+    ? l("Baseline preservada", "Baseline holding")
+    : snapshot.step < 6
+      ? l("Recuperação ainda não selecionada", "Recovery not selected yet")
+      : snapshot.step < 8
+        ? l("Recuperação selecionada", "Recovery selected")
+        : l("Liberação protegida", "Release protected");
   const consequence = snapshot.step < 2
     ? l("A Revisão B permanece vigente até a comparação produzir evidência suficiente.", "Revision B remains current until the comparison produces sufficient evidence.")
     : snapshot.step === 2
@@ -204,9 +239,9 @@ export function MfManagerWorkspace({ snapshot, onAdvance, onNavigate }: MfManage
       </header>
 
       <section className="mf-manager-pulse" aria-label={l("Pulso do projeto", "Project pulse")}>
-        <article><small>{l("Decisões / ações agora", "Decisions / actions now")}</small><strong>{workspace.queue.actionRequiredCount}</strong><span>{l("Decisões que exigem você", "Decisions requiring you")}: {workspace.queue.decisionsRequiringAction.length}</span></article>
-        <article><small>{l("Equipes afetadas", "Affected teams")}</small><strong>{affectedTeamValue}</strong><span>{snapshot.step >= 4 ? l("de 15 disciplinas", "of 15 disciplines") : l("impacto ainda não confirmado", "impact not confirmed yet")}</span></article>
-        <article><small>{l("Exposição do marco", "Milestone exposure")}</small><strong>{milestoneValue}</strong><span>EXE-02 · {workspace.controlTower.targetDate}</span></article>
+        <article><small>{l("Decisões que exigem você", "Decisions requiring you")}</small><strong data-pulse-value>{workspace.queue.decisionsRequiringAction.length}</strong><span>{managerDecisionStatus}</span></article>
+        <article><small>{l("Equipes afetadas", "Affected teams")}</small><strong data-pulse-value>{affectedTeamValue}</strong><span>{affectedTeamStatus}</span></article>
+        <article><small>{l("Exposição do marco", "Milestone exposure")}</small><strong data-pulse-value>{milestoneValue}</strong><span>{milestoneStatus}</span></article>
       </section>
 
       <div className="mf-manager-layout">
