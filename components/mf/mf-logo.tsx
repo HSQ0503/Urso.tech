@@ -17,6 +17,7 @@ export function MfLogo({ compact = false }: MfLogoProps) {
           alt=""
           width={1024}
           height={1024}
+          sizes="106px"
           className="mf-logo-image"
         />
       </span>

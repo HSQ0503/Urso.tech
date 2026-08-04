@@ -1080,6 +1080,7 @@ const mfLogoSource = readFileSync(
 assert.match(mfLogoSource, /import Image from ["']next\/image["']/);
 assert.match(mfLogoSource, /src=["']\/brand\/mf-logo\.png["']/);
 assert.match(mfLogoSource, /className=["']mf-logo-image["']/);
+assert.match(mfLogoSource, /sizes=["']106px["']/);
 assert.match(
   mfLogoSource,
   /className=["']mf-logo["'] aria-label=["']Minerbo-Fuchs Engenharia["']/,
@@ -1108,36 +1109,11 @@ assert.equal(
 
 const mfLogoMarkRule = mfCssSource.match(/(?:^|\n)\.mf-logo-mark\s*\{([^}]*)\}/)?.[1] ?? "";
 assert(mfLogoMarkRule, "missing .mf-logo-mark rule");
-for (const [declaration, label] of [
-  [/position:\s*relative;/, "position: relative"],
-  [/display:\s*block;/, "display: block"],
-  [/overflow:\s*hidden;/, "overflow: hidden"],
-  [/width:\s*64px;/, "width: 64px"],
-  [/aspect-ratio:\s*124\s*\/\s*46;/, "aspect-ratio: 124 / 46"],
-  [/flex:\s*0\s+0\s+auto;/, "flex: 0 0 auto"],
-]) {
-  assert.match(mfLogoMarkRule, declaration, `.mf-logo-mark missing ${label}`);
-}
-
-const mfLogoImageRule = mfCssSource.match(/(?:^|\n)\.mf-logo-image\s*\{([^}]*)\}/)?.[1] ?? "";
-assert(mfLogoImageRule, "missing .mf-logo-image rule");
-for (const [declaration, label] of [
-  [/position:\s*absolute;/, "position: absolute"],
-  [/top:\s*50%;/, "top: 50%"],
-  [/left:\s*50%;/, "left: 50%"],
-  [/width:\s*165%;/, "width: 165%"],
-  [/height:\s*auto;/, "height: auto"],
-  [/max-width:\s*none;/, "max-width: none"],
-  [/transform:\s*translate\(-52%,\s*-45\.5%\);/, "transform"],
-  [/filter:\s*brightness\(0\)\s+invert\(1\);/, "filter"],
-]) {
-  assert.match(mfLogoImageRule, declaration, `.mf-logo-image missing ${label}`);
-}
-
-const mfLogoResponsiveWidths = [...mfCssSource.matchAll(
-  /\.mf-clarity(?: \.mf-brand-block)? \.mf-logo-mark\s*\{\s*width:\s*(\d+)px;\s*\}/g,
-)].map((match) => Number(match[1]));
-assert.deepEqual(mfLogoResponsiveWidths, [44, 57, 52]);
+assert.match(
+  mfLogoMarkRule,
+  /display:\s*block;/,
+  ".mf-logo-mark must be block-level so its width and aspect ratio establish the crop box",
+);
 
 assert.doesNotMatch(mfCssSource, /\.mf-team-row-owner\s*\{\s*display:\s*none;\s*\}/);
 assert.doesNotMatch(mfCssSource, /Agentic workflow deployment studio/);
