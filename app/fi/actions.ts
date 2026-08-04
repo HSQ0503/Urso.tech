@@ -113,6 +113,7 @@ export async function createFinanceEntry(formData: FormData) {
     founder: (values.founder || null) as FinanceFounder | null,
     notes: values.notes,
     created_by: session.email,
+    updated_by: session.email,
   });
   if (error) {
     console.error("[finance] create entry failed:", error.message);
@@ -122,13 +123,67 @@ export async function createFinanceEntry(formData: FormData) {
   redirect("/fi?notice=entry-added#ledger");
 }
 
+export async function updateFinanceEntry(entryId: string, formData: FormData) {
+  const id = z.string().uuid().safeParse(entryId);
+  if (!id.success) redirect("/fi?error=entry-id#ledger");
+
+  const parsed = entrySchema.safeParse({
+    entryType: text(formData.get("entryType")),
+    amountCents: cents(formData.get("amount")),
+    occurredOn: text(formData.get("occurredOn")),
+    dealId: text(formData.get("dealId")),
+    category: text(formData.get("category")),
+    counterparty: text(formData.get("counterparty")),
+    founder: text(formData.get("founder")),
+    notes: text(formData.get("notes")),
+  });
+  if (!parsed.success) redirect("/fi?error=entry-fields#ledger");
+  const values = parsed.data;
+  const founderEntry = values.entryType === "founder_draw" || values.entryType === "founder_contribution";
+  const clientEntry = values.entryType === "income" || values.entryType === "refund";
+  if (founderEntry !== Boolean(values.founder)) redirect("/fi?error=entry-founder#ledger");
+  if (clientEntry && !values.dealId) redirect("/fi?error=entry-deal#ledger");
+  if (values.entryType === "expense" && !values.counterparty) redirect("/fi?error=entry-counterparty#ledger");
+
+  const { session, admin } = await financeContext();
+  const { data, error } = await admin
+    .from("urso_finance_entries")
+    .update({
+      deal_id: values.dealId || null,
+      entry_type: values.entryType satisfies FinanceEntryType,
+      amount_cents: values.amountCents,
+      occurred_on: values.occurredOn,
+      category: values.category,
+      counterparty: values.counterparty,
+      founder: (values.founder || null) as FinanceFounder | null,
+      notes: values.notes,
+      updated_at: new Date().toISOString(),
+      updated_by: session.email,
+    })
+    .eq("id", id.data)
+    .is("voided_at", null)
+    .select("id")
+    .maybeSingle();
+  if (error || !data) {
+    console.error("[finance] update entry failed:", error?.message ?? "entry not found");
+    redirect("/fi?error=save#ledger");
+  }
+  revalidatePath("/fi");
+  redirect("/fi?notice=entry-updated#ledger");
+}
+
 export async function voidFinanceEntry(entryId: string) {
   const id = z.string().uuid().safeParse(entryId);
   if (!id.success) redirect("/fi?error=entry-id#ledger");
   const { session, admin } = await financeContext();
   const { error } = await admin
     .from("urso_finance_entries")
-    .update({ voided_at: new Date().toISOString(), voided_by: session.email })
+    .update({
+      voided_at: new Date().toISOString(),
+      voided_by: session.email,
+      updated_at: new Date().toISOString(),
+      updated_by: session.email,
+    })
     .eq("id", id.data)
     .is("voided_at", null);
   if (error) {

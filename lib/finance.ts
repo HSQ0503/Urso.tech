@@ -37,6 +37,8 @@ type FinanceEntryRow = {
   notes: string;
   created_by: string;
   created_at: string;
+  updated_at: string;
+  updated_by: string | null;
 };
 
 export type FinanceDeal = {
@@ -69,6 +71,9 @@ export type FinanceEntry = {
   founder: FinanceFounder | null;
   notes: string;
   createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  updatedBy: string | null;
 };
 
 export type FinanceMonth = {
@@ -185,7 +190,7 @@ export async function getFinanceSnapshot(): Promise<FinanceSnapshot> {
       .order("created_at", { ascending: true }),
     admin
       .from("urso_finance_entries")
-      .select("id,deal_id,entry_type,amount_cents,occurred_on,category,counterparty,founder,notes,created_by,created_at")
+      .select("id,deal_id,entry_type,amount_cents,occurred_on,category,counterparty,founder,notes,created_by,created_at,updated_at,updated_by")
       .is("voided_at", null)
       .order("occurred_on", { ascending: false })
       .order("created_at", { ascending: false }),
@@ -253,6 +258,9 @@ export async function getFinanceSnapshot(): Promise<FinanceSnapshot> {
     founder: entry.founder,
     notes: entry.notes,
     createdBy: entry.created_by,
+    createdAt: entry.created_at,
+    updatedAt: entry.updated_at,
+    updatedBy: entry.updated_by,
   }));
 
   const sum = (type: FinanceEntryType) =>

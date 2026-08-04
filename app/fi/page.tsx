@@ -1,34 +1,23 @@
 import type { CSSProperties, ReactNode } from "react";
 import {
-  ArrowDownLeft,
-  ArrowUpRight,
   Banknote,
   BriefcaseBusiness,
   CircleDollarSign,
   HandCoins,
   Landmark,
   ReceiptText,
-  ShieldCheck,
   WalletCards,
 } from "lucide-react";
 import { Card, Micro, Tag } from "@/components/dashboard/ui";
 import { CashFlowChart, DealAllocationChart } from "@/components/finance/finance-charts";
 import { FinanceEntryForm } from "@/components/finance/finance-entry-form";
+import { FinanceLedger } from "@/components/finance/finance-ledger";
 import { FinanceSubmitButton } from "@/components/finance/submit-button";
-import { VoidEntryButton } from "@/components/finance/void-entry-button";
-import { createFinanceDeal, voidFinanceEntry } from "./actions";
-import {
-  getFinanceSnapshot,
-  type FinanceEntry,
-  type FinanceEntryType,
-} from "@/lib/finance";
+import { createFinanceDeal } from "./actions";
+import { getFinanceSnapshot } from "@/lib/finance";
 
 const money = (cents: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
-const date = (value: string) =>
-  new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }).format(
-    new Date(`${value}T00:00:00Z`),
-  );
 const todayEt = () =>
   new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 const rise = (index: number) => ({ "--i": index } as CSSProperties);
@@ -39,7 +28,8 @@ const inputClass =
 const notices: Record<string, string> = {
   "deal-added": "Deal added. Its value is contracted only until a payment is recorded.",
   "entry-added": "Cash entry recorded and every total has been recalculated.",
-  "entry-voided": "Entry voided. It no longer affects the ledger or cash balance.",
+  "entry-updated": "Transaction updated. Every finance total has been recalculated.",
+  "entry-voided": "Transaction removed from finance totals. Its audit record is preserved.",
 };
 const errors: Record<string, string> = {
   store: "The Urso finance store is not configured yet.",
@@ -86,39 +76,6 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
       {children}
       {hint && <span className="mt-1.5 block text-[10.5px] leading-[1.45] text-ink-dimmer">{hint}</span>}
     </label>
-  );
-}
-
-const entryMeta: Record<FinanceEntryType, { label: string; icon: typeof ArrowUpRight; tone: string }> = {
-  income: { label: "Client payment", icon: ArrowDownLeft, tone: "text-[var(--color-good)]" },
-  expense: { label: "Company expense", icon: ArrowUpRight, tone: "text-orange" },
-  founder_draw: { label: "Founder payout", icon: HandCoins, tone: "text-orange" },
-  founder_contribution: { label: "Capital added", icon: ArrowDownLeft, tone: "text-[var(--color-good)]" },
-  refund: { label: "Client refund", icon: ArrowUpRight, tone: "text-orange" },
-};
-
-function EntryRow({ entry }: { entry: FinanceEntry }) {
-  const meta = entryMeta[entry.entryType];
-  const Icon = meta.icon;
-  const action = voidFinanceEntry.bind(null, entry.id);
-  const detail = [entry.dealName, entry.counterparty, entry.founder ? entry.founder === "han" ? "Han" : "Guga" : null]
-    .filter(Boolean)
-    .join(" · ");
-  return (
-    <div className="grid grid-cols-[auto_1fr_auto] items-center gap-3 border-b border-edge px-4 py-3.5 last:border-b-0 sm:grid-cols-[auto_1fr_130px_120px_auto]">
-      <span className="grid size-9 place-items-center border border-edge bg-raise">
-        <Icon size={16} strokeWidth={1.7} className={meta.tone} aria-hidden />
-      </span>
-      <div className="min-w-0">
-        <p className="truncate text-[13px] font-medium text-ink">{meta.label}</p>
-        <p className="mt-0.5 truncate text-[11px] text-ink-dimmer">{detail || entry.category}</p>
-      </div>
-      <span className="hidden font-mono text-[10px] text-ink-dimmer sm:block">{date(entry.occurredOn)}</span>
-      <span className={`text-right font-mono text-[12.5px] tabular-nums ${entry.cashEffectCents >= 0 ? "text-[var(--color-good)]" : "text-ink"}`}>
-        {entry.cashEffectCents >= 0 ? "+" : "−"}{money(Math.abs(entry.cashEffectCents))}
-      </span>
-      <VoidEntryButton action={action} />
-    </div>
   );
 }
 
@@ -281,19 +238,7 @@ export default async function FinancePage({
         </div>
       </section>
 
-      <section id="ledger" className="dash-rise scroll-mt-20 border border-edge bg-panel" style={rise(6)}>
-        <div className="flex items-end justify-between gap-4 border-b border-edge px-5 py-4">
-          <div><Micro>Ledger</Micro><h2 className="mt-1 text-[17px] font-medium">Transaction history</h2></div>
-          <span className="font-mono text-[9.5px] uppercase tracking-[0.1em] text-ink-dimmer">{entries.length} active entries</span>
-        </div>
-        {entries.length > 0 ? entries.map((entry) => <EntryRow key={entry.id} entry={entry} />) : (
-          <div className="px-5 py-12 text-center">
-            <ShieldCheck size={24} strokeWidth={1.5} className="mx-auto text-ink-dimmer" aria-hidden />
-            <p className="mt-3 text-[13px] font-medium">No cash has been recorded yet.</p>
-            <p className="mx-auto mt-1 max-w-[48ch] text-[11.5px] leading-5 text-ink-dimmer">The deals above are contracts, not bank deposits. Record the first payment when it clears.</p>
-          </div>
-        )}
-      </section>
+      <FinanceLedger entries={entries} deals={deals.map(({ id, clientName }) => ({ id, clientName }))} />
 
       <section id="record" className="dash-rise grid scroll-mt-20 gap-3 xl:grid-cols-2" style={rise(7)}>
         <Card>
