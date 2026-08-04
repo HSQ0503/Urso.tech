@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { mfScenarioManifest } from "../lib/mf-demo/manifest.mjs";
 import {
@@ -1075,6 +1076,48 @@ assert.match(agentWorkflowSource, /className="mf-flowchart-grid"/);
 assert.match(agentWorkflowSource, /className="mf-workflow-stage-register"/);
 
 const mfCssSource = readFileSync(new URL("../app/mf/mf.css", import.meta.url), "utf8");
+const mfLogoSource = readFileSync(
+  new URL("../components/mf/mf-logo.tsx", import.meta.url),
+  "utf8",
+);
+assert.match(mfLogoSource, /import Image from ["']next\/image["']/);
+assert.match(mfLogoSource, /src=["']\/brand\/mf-logo\.png["']/);
+assert.match(mfLogoSource, /className=["']mf-logo-image["']/);
+assert.match(mfLogoSource, /sizes=["']106px["']/);
+assert.match(
+  mfLogoSource,
+  /className=["']mf-logo["'] aria-label=["']Minerbo-Fuchs Engenharia["']/,
+);
+const mfLogoExpandedCopy = mfLogoSource.match(
+  /\{!compact \? \(([\s\S]*?)\) : null\}/,
+)?.[1] ?? "";
+assert(mfLogoExpandedCopy, "missing !compact company copy");
+assert(mfLogoExpandedCopy.includes("<strong>minerbo–fuchs</strong>"));
+assert(mfLogoExpandedCopy.includes("<span>engenharia s.a.</span>"));
+assert.match(
+  mfLogoSource,
+  /language === ["']pt["'] \? ["']Logo oficial da Minerbo-Fuchs["'] : ["']Official Minerbo-Fuchs logo["']/,
+);
+assert.doesNotMatch(mfLogoSource, /<svg\b/);
+assert.doesNotMatch(mfLogoSource, /Logo provisório|Placeholder logo/);
+
+const mfLogoAssetHash = createHash("sha256")
+  .update(readFileSync(new URL("../public/brand/mf-logo.png", import.meta.url)))
+  .digest("hex")
+  .toUpperCase();
+assert.equal(
+  mfLogoAssetHash,
+  "01D88E7330C55C51EFDB0BE344029C150970CC70D3E1E16A87C434D5B4E2F27B",
+);
+
+const mfLogoMarkRule = mfCssSource.match(/(?:^|\n)\.mf-logo-mark\s*\{([^}]*)\}/)?.[1] ?? "";
+assert(mfLogoMarkRule, "missing .mf-logo-mark rule");
+assert.match(
+  mfLogoMarkRule,
+  /display:\s*block;/,
+  ".mf-logo-mark must be block-level so its width and aspect ratio establish the crop box",
+);
+
 assert.doesNotMatch(mfCssSource, /\.mf-team-row-owner\s*\{\s*display:\s*none;\s*\}/);
 assert.doesNotMatch(mfCssSource, /Agentic workflow deployment studio/);
 assert.doesNotMatch(mfCssSource, /\.mf-agentic-map\s*>\s*:nth-child/);
