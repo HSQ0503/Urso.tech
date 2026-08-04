@@ -30,6 +30,26 @@ import {
 } from "../lib/mf-demo/session-runtime.mjs";
 import { resolveReadableBrainProvider } from "../lib/mf-demo/provider-runtime.mjs";
 
+const packageJson = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+const mfSeedCommand = packageJson.scripts?.["brain:mf:seed"] ?? "";
+assert.doesNotMatch(
+  mfSeedCommand,
+  /--copy-provider-keys/,
+  "ordinary MF seeding must not copy encrypted provider credentials",
+);
+
+const mfSeedSource = readFileSync(new URL("./brain-mf-seed.mjs", import.meta.url), "utf8");
+assert.doesNotMatch(
+  mfSeedSource,
+  /brain_org_keys|key_ciphertext|key_last4/,
+  "the MF data seed must not read or write the provider credential registry",
+);
+assert.match(
+  mfSeedSource,
+  /npm run brain:mf:providers/,
+  "the MF data seed must direct operators to the dedicated provider refresh command",
+);
+
 const providerAttempts = [];
 const providerFallback = await resolveReadableBrainProvider({
   preferences: ["openai", "google", "anthropic"],
@@ -61,6 +81,17 @@ assert.deepEqual(noProvider, {
   configuredCount: 0,
   unreadableProviders: [],
 });
+
+const providerRefreshSource = readFileSync(
+  new URL("../scripts/brain-mf-refresh-provider-keys.mjs", import.meta.url),
+  "utf8",
+);
+assert.match(providerRefreshSource, /const sourceOrganizationId = ["']urso["']/);
+assert.match(providerRefreshSource, /const targetOrganizationId = ["']minerbo-fuchs-demo["']/);
+assert.match(providerRefreshSource, /key_ciphertext/);
+assert.doesNotMatch(providerRefreshSource, /BRAIN_KEYS_SECRET/);
+assert.doesNotMatch(providerRefreshSource, /createCipheriv|encrypt\(/);
+assert.doesNotMatch(providerRefreshSource, /OPENAI_API_KEY|GOOGLE_GENERATIVE_AI_API_KEY|ANTHROPIC_API_KEY|MOONSHOT_API_KEY/);
 
 assert.deepEqual(mfScenarioManifest.revisions.B, {
   footprintM: [18.4, 4.8],
@@ -820,6 +851,24 @@ for (const routePath of [
   const routeSource = readFileSync(new URL(routePath, import.meta.url), "utf8");
   assert.match(routeSource, /mfSessionCredentialsFromRequest/, `${routePath} does not require a demo session`);
 }
+
+const mfChatRouteSource = readFileSync(new URL("../app/api/mf/brain/chat/route.ts", import.meta.url), "utf8");
+assert.match(mfChatRouteSource, /MF_BRAIN_PROVIDER_ORGANIZATION_ID/);
+assert.match(
+  mfChatRouteSource,
+  /getOrgKeyStatus\(admin, MF_BRAIN_PROVIDER_ORGANIZATION_ID\)/,
+  "MF chat must use the canonical Urso provider registry",
+);
+assert.match(
+  mfChatRouteSource,
+  /getOrgKey\(admin, provider, MF_BRAIN_PROVIDER_ORGANIZATION_ID\)/,
+  "MF chat must read provider credentials from the canonical Urso organization",
+);
+assert.doesNotMatch(
+  mfChatRouteSource,
+  /getOrgKey(?:Status)?\(admin, (?:provider, )?principal\.organizationId\)/,
+  "MF project isolation must not require duplicated provider ciphertext",
+);
 
 const demoClientSource = readFileSync(new URL("../components/mf/mf-demo.tsx", import.meta.url), "utf8");
 assert.doesNotMatch(demoClientSource, /void fetch\(["']\/api\/mf\/brain\/scenario/);

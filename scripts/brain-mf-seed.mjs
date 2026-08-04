@@ -1,10 +1,11 @@
 // Seed the evidence-backed temporal truth for the isolated MF demo tenant.
 // Run after migration 0012 and the MF vault sync/index.
 //
-//   node scripts/brain-mf-seed.mjs --copy-provider-keys
+//   npm run brain:mf:seed
 //
-// The optional key copy reuses Urso's encrypted provider rows inside the demo
-// tenant. It never prints or decrypts a provider secret.
+// Provider credentials are intentionally managed separately so reseeding
+// project truth cannot overwrite working MF ciphertext. When credentials need
+// to be refreshed, run: npm run brain:mf:providers
 import { readFileSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
 
@@ -55,37 +56,6 @@ const { data: organization, error: organizationError } = await db
 if (organizationError || !organization) {
   console.error("✖ MF demo organization missing — apply 0012 first.");
   process.exit(1);
-}
-
-if (process.argv.includes("--copy-provider-keys")) {
-  const { data: sourceKeys, error: keyReadError } = await db
-    .from("brain_org_keys")
-    .select("provider, key_ciphertext, key_last4")
-    .eq("organization_id", "urso");
-  if (keyReadError) {
-    console.error(`✖ Provider-key read failed: ${keyReadError.message}`);
-    process.exit(1);
-  }
-  if (sourceKeys?.length) {
-    const { error: keyWriteError } = await db.from("brain_org_keys").upsert(
-      sourceKeys.map((row) => ({
-        organization_id: ORG,
-        provider: row.provider,
-        key_ciphertext: row.key_ciphertext,
-        key_last4: row.key_last4,
-        updated_by: "brain-mf-seed",
-        updated_at: new Date().toISOString(),
-      })),
-      { onConflict: "organization_id,provider" },
-    );
-    if (keyWriteError) {
-      console.error(`✖ Provider-key copy failed: ${keyWriteError.message}`);
-      process.exit(1);
-    }
-    console.log(`✓ Copied ${sourceKeys.length} encrypted provider-key row(s) into the isolated demo tenant.`);
-  } else {
-    console.log("○ No Urso provider keys were available to copy; MF chat will remain fail-closed.");
-  }
 }
 
 const { error: entityError } = await db.from("brain_entities").upsert(

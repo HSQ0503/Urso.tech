@@ -1,7 +1,11 @@
 import { BRAIN_PROVIDERS } from "@/lib/brain/catalog";
 import { getOrgKeyStatus } from "@/lib/brain/db";
 import { ursoDbSafe, URSO_DB_MISSING } from "@/lib/brain/supabase";
-import { isMfDemoRoleId, MF_BRAIN_PROJECT_ID } from "@/lib/mf-demo/brain-config";
+import {
+  isMfDemoRoleId,
+  MF_BRAIN_PROJECT_ID,
+  MF_BRAIN_PROVIDER_ORGANIZATION_ID,
+} from "@/lib/mf-demo/brain-config";
 import { resolveMfDemoPrincipal } from "@/lib/mf-demo/brain-server";
 import { MfSessionContractError } from "@/lib/mf-demo/session-runtime.mjs";
 import {
@@ -54,7 +58,7 @@ export async function POST(request: Request) {
   const principal = await resolveMfDemoPrincipal(admin, body.roleId);
   if (!principal) return Response.json({ error: "MF Brain unavailable" }, { status: 503 });
 
-  const statuses = await getOrgKeyStatus(admin, principal.organizationId).catch(() => []);
+  const statuses = await getOrgKeyStatus(admin, MF_BRAIN_PROVIDER_ORGANIZATION_ID).catch(() => []);
   const provider = statuses[0]?.provider;
   const model = provider ? `${provider}/${BRAIN_PROVIDERS[provider].defaultModel}` : "";
   const { data, error } = await admin

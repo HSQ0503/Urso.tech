@@ -4,7 +4,11 @@ import { BRAIN_PROVIDERS } from "@/lib/brain/models";
 import { getOrgKey, getOrgKeyStatus } from "@/lib/brain/db";
 import { ursoDbSafe, URSO_DB_MISSING } from "@/lib/brain/supabase";
 import type { BrainProvider, BrainUIData } from "@/lib/brain/types";
-import { isMfDemoRoleId, MF_BRAIN_PROJECT_ID } from "@/lib/mf-demo/brain-config";
+import {
+  isMfDemoRoleId,
+  MF_BRAIN_PROJECT_ID,
+  MF_BRAIN_PROVIDER_ORGANIZATION_ID,
+} from "@/lib/mf-demo/brain-config";
 import { resolveMfDemoPrincipal } from "@/lib/mf-demo/brain-server";
 import { resolveReadableBrainProvider } from "@/lib/mf-demo/provider-runtime.mjs";
 import { MfSessionContractError } from "@/lib/mf-demo/session-runtime.mjs";
@@ -49,16 +53,16 @@ export async function POST(request: Request) {
     );
   }
 
-  const keyStatus = await getOrgKeyStatus(admin, principal.organizationId).catch(() => []);
+  const keyStatus = await getOrgKeyStatus(admin, MF_BRAIN_PROVIDER_ORGANIZATION_ID).catch(() => []);
   const providerResolution = await resolveReadableBrainProvider({
     preferences: providerPreference,
     configuredProviders: keyStatus.map((key) => key.provider),
-    readKey: (provider) => getOrgKey(admin, provider, principal.organizationId),
+    readKey: (provider) => getOrgKey(admin, provider, MF_BRAIN_PROVIDER_ORGANIZATION_ID),
   });
   if (!providerResolution.provider || !providerResolution.apiKey) {
     const error = providerResolution.configuredCount > 0
-      ? "The MF Brain provider credentials cannot be read by this server. Refresh the MF provider keys and restart the app."
-      : "The MF Brain has no model provider configured yet.";
+      ? "The Urso Brain provider credentials cannot be read by this server."
+      : "The Urso Brain has no model provider configured yet.";
     return Response.json(
       { error },
       { status: 503 },

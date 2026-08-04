@@ -20,7 +20,7 @@
     "brain:eval:full": "node scripts/brain-eval.mjs --mode=full",
     "brain:mf:sync": "node scripts/brain-sync.mjs --config=scripts/brain-sync.mf-demo.config.json",
     "brain:mf:provision": "node scripts/brain-mf-provision.mjs",
-    "brain:mf:seed": "node scripts/brain-mf-seed.mjs --copy-provider-keys",
+    "brain:mf:seed": "node scripts/brain-mf-seed.mjs",
     "brain:mf:providers": "node scripts/brain-mf-refresh-provider-keys.mjs",
     "brain:mf:contracts": "node scripts/brain-mf-demo-contracts.mjs",
     "brain:mf:preflight": "node scripts/brain-mf-preflight.mjs",
