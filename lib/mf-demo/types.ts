@@ -7,7 +7,7 @@ export const scenarioStates = [
   "work_packets_ready",
   "execution_in_progress",
   "reviews_pending",
-  "release_ready",
+  "pilot_complete",
 ] as const;
 
 export type ScenarioState = (typeof scenarioStates)[number];

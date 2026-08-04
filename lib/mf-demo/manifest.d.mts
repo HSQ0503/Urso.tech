@@ -94,6 +94,7 @@ export const mfScenarioManifest: Readonly<{
     location: string;
     milestone: string;
     milestoneName: MfLocalizedText;
+    baselineDate: string;
     targetDate: string;
     publicFacts: MfLocalizedText;
   }>;

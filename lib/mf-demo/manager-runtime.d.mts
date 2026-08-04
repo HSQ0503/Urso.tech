@@ -88,7 +88,7 @@ export type MfManagerCockpitPresentation = Readonly<{
   primaryManagerAction: MfManagerActionItem | null;
   scenarioControl: MfManagerScenarioControl | null;
   milestone: Readonly<{
-    status: "baseline" | "exposed" | "recovery_proposed" | "recovery_selected" | "protected";
+    status: "baseline" | "exposed" | "recovery_proposed" | "recovery_selected" | "pilot_complete";
     days: number;
     selectionRequired: boolean;
   }>;

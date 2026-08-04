@@ -107,6 +107,14 @@ assert.deepEqual(mfScenarioManifest.revisions.C, {
 });
 assert.equal(mfScenarioManifest.outcome.exposureDays, 10);
 assert.equal(mfScenarioManifest.outcome.recoveredDays, 8);
+assert.equal(mfScenarioManifest.project.baselineDate, "2026-08-16");
+assert.equal(mfScenarioManifest.outcome.sequentialDate, "2026-08-26");
+assert.equal(mfScenarioManifest.outcome.coordinatedDate, "2026-08-18");
+assert.equal(mfScenarioManifest.story.at(-1).state, "pilot_complete");
+assert.equal(
+  mfScenarioManifest.workflow.tasks.find((task) => task.id === "release-exe-02").title.en,
+  "Record the pilot control",
+);
 assert.equal(mfScenarioManifest.disciplines.length, 15);
 assert.equal(mfScenarioManifest.disciplines.filter((discipline) => discipline.impacted).length, 10);
 
@@ -210,6 +218,9 @@ assert.deepEqual(
 const truthConsumers = [
   "../lib/mf-demo/fixtures.ts",
   "../components/mf/demo-views.tsx",
+  "../components/mf/views/changes-view.tsx",
+  "../components/mf/views/outputs-view.tsx",
+  "../components/mf/views/history-view.tsx",
   "../components/mf/artifact-workspace.tsx",
   "../components/mf/mf-language.tsx",
 ].map((path) => readFileSync(new URL(path, import.meta.url), "utf8")).join("\n");
@@ -220,8 +231,12 @@ for (const contradiction of ["640 kW", "736 kW", "496 kW", "recupera 7 dias", "r
 const baseline = createMfHarnessSnapshot(0);
 assert.equal(baseline.truth.currentRevision, "B");
 assert.equal(baseline.truth.revisionB, "current");
-assert.equal(baseline.truth.revisionC, "unresolved");
-assert.equal(baseline.decision.status, "pending");
+assert.equal(baseline.truth.revisionC, "not_received");
+assert.equal(baseline.decision.status, "not_open");
+assert.equal(baseline.sources.find((source) => source.id === "supplier-communication").evidencePaths.length, 0);
+assert.equal(baseline.sources.find((source) => source.id === "rfi-decisions").evidencePaths.length, 0);
+assert.equal(createMfHarnessSnapshot(1).sources.find((source) => source.id === "supplier-communication").evidencePaths.length, 1);
+assert.equal(createMfHarnessSnapshot(2).sources.find((source) => source.id === "rfi-decisions").evidencePaths.length, 2);
 const taskStateAt = (step, taskId) => createMfHarnessSnapshot(step).workItems
   .find((task) => task.id === taskId)
   .state;
@@ -251,7 +266,7 @@ for (const { step, expected } of [
     step: 8,
     expected: {
       qualityEvidence: { complete: true, state: "complete", receiptId: "RCPT-VERIFY-GATE" },
-      managerConfirmation: { complete: true, state: "complete", receiptId: "RCPT-RELEASE-EXE-02" },
+      managerConfirmation: { complete: true, state: "complete", receiptId: "RCPT-PILOT-CONTROL" },
     },
   },
 ]) {
@@ -386,7 +401,7 @@ const managerCockpitPresentationTable = [
   [5, "ACT-IMPACT", "completed", null, ["open-workflow", "navigate", "workflows"], ["exposed", 10, false]],
   [6, "SCN-003", "actionable", "SCN-003", ["open-recovery-workflow", "navigate", "workflows"], ["recovery_proposed", 8, true]],
   [7, "EXE-02", "actionable", "EXE-02", ["review-outputs", "navigate", "artifacts"], ["recovery_selected", 8, false]],
-  [8, "EXE-02", "completed", null, null, ["protected", 8, false]],
+  [8, "EXE-02", "completed", null, null, ["pilot_complete", 8, false]],
 ];
 for (const [step, featuredActionId, actionPlacement, primaryActionId, scenarioControl, milestone] of managerCockpitPresentationTable) {
   const cockpitSnapshot = createMfHarnessSnapshot(step);
@@ -837,6 +852,9 @@ const scenarioServerSource = readFileSync(new URL("../lib/mf-demo/scenario-serve
 assert.match(scenarioServerSource, /applyMfBrainScenarioState/);
 assert.match(scenarioServerSource, /idempotencyKey/);
 assert.match(scenarioServerSource, /demoSessionId/);
+assert.match(scenarioServerSource, /detected \? "pending" : "not_open"/);
+assert.match(scenarioServerSource, /detected \? "active" : "retired"/);
+assert.match(scenarioServerSource, /status: "dismissed"/);
 assert.doesNotMatch(scenarioServerSource, /normalizedStep\s*===\s*0/);
 assert.doesNotMatch(scenarioServerSource, /normalizedStep\s*>=\s*3/);
 
@@ -871,10 +889,13 @@ assert.doesNotMatch(
 );
 
 const demoClientSource = readFileSync(new URL("../components/mf/mf-demo.tsx", import.meta.url), "utf8");
+const demoSessionSource = readFileSync(new URL("../components/mf/mf-demo-session.tsx", import.meta.url), "utf8");
+const demoRuntimeSource = `${demoClientSource}\n${demoSessionSource}`;
 assert.doesNotMatch(demoClientSource, /void fetch\(["']\/api\/mf\/brain\/scenario/);
-assert.match(demoClientSource, /sessionStorage/);
-assert.match(demoClientSource, /expectedStep/);
-assert.match(demoClientSource, /transitionError/);
+assert.match(demoSessionSource, /sessionStorage/);
+assert.match(demoSessionSource, /expectedStep/);
+assert.match(demoRuntimeSource, /transitionError/);
+assert.doesNotMatch(demoSessionSource, /setActiveView|router\.push/, "scenario state must not own route navigation");
 for (const obsoleteShellToken of [
   "ExecutiveValueBar",
   "StoryRail",
@@ -917,11 +938,50 @@ for (const preservedShellToken of [
 ]) {
   assert(demoClientSource.includes(preservedShellToken), `preserved shell token is missing: ${preservedShellToken}`);
 }
-assert.match(demoClientSource, /const authorizedEvidenceRecordCount/);
-assert.match(demoClientSource, /source\.authorizedRoleIds\.includes\(roleId\)/);
-assert.match(demoClientSource, /source\.evidencePaths\.length/);
-assert.doesNotMatch(demoClientSource, /39 docs conectados/);
-assert.doesNotMatch(demoClientSource, /Respostas usam apenas fontes autorizadas deste projeto\./);
+assert.match(demoSessionSource, /const authorizedEvidenceRecordCount/);
+assert.match(demoSessionSource, /source\.authorizedRoleIds\.includes\(roleId\)/);
+assert.match(demoSessionSource, /source\.evidencePaths\.length/);
+assert.doesNotMatch(demoRuntimeSource, /39 docs conectados/);
+assert.doesNotMatch(demoRuntimeSource, /Respostas usam apenas fontes autorizadas deste projeto\./);
+
+const mfRoutesSource = readFileSync(new URL("../lib/mf-demo/routes.ts", import.meta.url), "utf8");
+const mfRouteBindings = [
+  ["overview", "control", "MfOverviewRoute", "overview-route", "ControlTowerView"],
+  ["changes", "changes", "MfChangesRoute", "changes-route", "ChangesView"],
+  ["brain", "brain", "MfBrainRoute", "brain-route", "BrainView"],
+  ["team", "disciplines", "MfTeamRoute", "team-route", "DisciplinesView"],
+  ["workflows", "workflows", "MfWorkflowsRoute", "workflows-route", "WorkflowsView"],
+  ["outputs", "artifacts", "MfOutputsRoute", "outputs-route", "ArtifactsView"],
+  ["history", "audit", "MfHistoryRoute", "history-route", "AuditView"],
+];
+for (const [route, view, entryPoint, moduleName, featureView] of mfRouteBindings) {
+  assert.match(mfRoutesSource, new RegExp(`${view}: ["']\\/mf\\/${route}["']`), `incorrect MF route mapping: ${view}`);
+  const pageSource = readFileSync(new URL(`../app/mf/${route}/page.tsx`, import.meta.url), "utf8");
+  assert.match(pageSource, new RegExp(`@/components/mf/routes/${moduleName}`), `MF route page imports the wrong module: ${route}`);
+  assert.match(pageSource, new RegExp(`<${entryPoint} \\/>`), `MF route page renders the wrong entry point: ${route}`);
+  const routeSource = readFileSync(new URL(`../components/mf/routes/${moduleName}.tsx`, import.meta.url), "utf8");
+  assert.match(routeSource, new RegExp(`export function ${entryPoint}`));
+  assert.match(routeSource, new RegExp(featureView), `${entryPoint} does not own its feature view`);
+}
+assert.equal(new Set([...mfRoutesSource.matchAll(/["'](\/mf\/[^"']+)["']/g)].map(([, route]) => route)).size, 7);
+const mfRootPageSource = readFileSync(new URL("../app/mf/page.tsx", import.meta.url), "utf8");
+assert.match(mfRootPageSource, /routes\/overview-route/);
+const mfBrainRouteSource = readFileSync(new URL("../components/mf/routes/brain-route.tsx", import.meta.url), "utf8");
+assert.match(mfBrainRouteSource, /if \(sessionHydrating\)/);
+assert.match(mfBrainRouteSource, /if \(!sessionCredentials\)/);
+assert.match(mfBrainRouteSource, /retrySession/);
+assert.match(demoSessionSource, /const retrySession = useCallback/);
+assert.match(demoClientSource, /onClick=\{retrySession\}/);
+assert.match(mfBrainRouteSource, /sessionId=\{sessionCredentials\.sessionId\}/);
+assert.match(mfBrainRouteSource, /sessionToken=\{sessionCredentials\.token\}/);
+const mfRouteCompatSource = readFileSync(new URL("../components/mf/mf-route-views.tsx", import.meta.url), "utf8");
+assert.doesNotMatch(mfRouteCompatSource, /demo-views/);
+assert.match(demoClientSource, /usePathname/);
+assert.match(demoClientSource, /<Link/);
+assert.match(demoClientSource, /id: ["']artifacts["']/);
+assert.match(demoClientSource, /presentationLobbyOpen = pathname === ["']\/mf["'] \|\| presentationLobbyRequested/);
+assert.match(demoClientSource, /MfDemoNavigationProvider/);
+assert.doesNotMatch(demoClientSource, /useState<DemoView>|ViewContent/);
 
 const storyPanelSource = readFileSync(new URL("../components/mf/mf-story-panels.tsx", import.meta.url), "utf8");
 assert.deepEqual(
@@ -992,59 +1052,56 @@ const managerWorkspaceSource = readFileSync(
   new URL("../components/mf/mf-manager-workspace.tsx", import.meta.url),
   "utf8",
 );
-assert.match(managerWorkspaceSource, /export function MfManagerWorkspace/);
-assert.match(managerWorkspaceSource, /export type MfManagerWorkspaceProps/);
-assert.match(
-  managerWorkspaceSource,
-  /export function MfManagerWorkspace\(props: MfManagerWorkspaceProps\): React\.JSX\.Element/,
+assert.match(managerWorkspaceSource, /ProjectTodayDashboard as MfManagerWorkspace/);
+assert.match(managerWorkspaceSource, /ProjectTodayDashboardProps as MfManagerWorkspaceProps/);
+const projectTodaySource = readFileSync(
+  new URL("../components/mf/project-today/project-today-dashboard.tsx", import.meta.url),
+  "utf8",
 );
-assert.match(managerWorkspaceSource, /deriveMfManagerWorkspace/);
-assert.doesNotMatch(managerWorkspaceSource, /\breturn null\b/);
+const projectTodayModelSource = readFileSync(
+  new URL("../components/mf/project-today/project-today-model.ts", import.meta.url),
+  "utf8",
+);
+assert.match(projectTodaySource, /export function ProjectTodayDashboard/);
+assert.match(projectTodaySource, /export type ProjectTodayDashboardProps/);
+assert.match(projectTodaySource, /deriveProjectTodayModel\(snapshot, roleId\)/);
+assert.match(projectTodayModelSource, /getMfRoleWorkspace\(snapshot, roleId\)/);
+assert.match(projectTodayModelSource, /deriveMfManagerWorkspace\(snapshot\)/);
+assert.match(projectTodayModelSource, /deriveMfManagerCockpitPresentation\(snapshot\)/);
+assert.doesNotMatch(projectTodaySource, /releaseReadiness|daysRecovered/);
+assert.match(projectTodaySource, /revisionDetected = snapshot\.step >= 1/);
+assert.match(projectTodaySource, /revisionCompared = snapshot\.step >= 2/);
+assert.match(projectTodaySource, /impactKnown = snapshot\.step >= 4/);
+assert.match(projectTodaySource, /model\.project\.baselineDate/);
+assert.match(projectTodaySource, /model\.outcome\.sequentialDate/);
+assert.match(projectTodaySource, /model\.outcome\.coordinatedDate/);
+assert.match(projectTodaySource, /Pilot control/);
+assert.match(projectTodaySource, /official gate still requires every discipline and interface to be closed or waived/);
+assert.doesNotMatch(projectTodaySource, /MILESTONE PROTECTED|EXE-02 is released/);
 for (const semanticLabel of [
-  "Manager briefing",
-  "Decisions requiring you",
-  "My queue",
-  "Waiting on team",
-  "What happens next",
+  "Project today dashboard",
+  "Current priority",
+  "Pilot evidence chain",
+  "Authorized context",
+  "Project coordination",
+  "Work by role",
 ]) {
-  assert(managerWorkspaceSource.includes(semanticLabel), `missing manager workspace semantics: ${semanticLabel}`);
+  assert(projectTodaySource.includes(semanticLabel), `missing Project Today semantics: ${semanticLabel}`);
 }
-assert.match(managerWorkspaceSource, /data-guide-key=["']project-status["']/);
-assert.match(managerWorkspaceSource, /<button[^>]+onClick=\{\(\) => onNavigate\(["']changes["']\)\}/);
-assert.match(managerWorkspaceSource, /<button[^>]+onClick=\{onAdvance\}[^>]*disabled=/);
-assert.match(managerWorkspaceSource, /<button[^>]+onClick=\{\(\) => onNavigate\(/);
-const managerFallbackSource = managerWorkspaceSource.match(
-  /if \(!primaryAction\)[\s\S]*?(?=\n  const primaryTask)/,
-)?.[0] ?? "";
-assert.match(managerFallbackSource, /data-manager-fallback/);
-assert.match(managerFallbackSource, /data-guide-key=["']project-status["']/);
-assert.match(managerFallbackSource, /<button[^>]+disabled/);
-
-const managerPulseSource = managerWorkspaceSource.match(
-  /<section className=["']mf-manager-pulse["'][\s\S]*?<\/section>/,
-)?.[0] ?? "";
-const managerPulseCards = [...managerPulseSource.matchAll(/<article[^>]*>([\s\S]*?)<\/article>/g)];
-assert.equal(managerPulseCards.length, 3);
-for (const [, pulseCard] of managerPulseCards) {
-  assert.equal(pulseCard.match(/data-pulse-value/g)?.length, 1, "each manager pulse card must expose one value");
+assert.match(projectTodaySource, /data-guide-key=["']project-status["']/);
+assert.match(projectTodaySource, /data-manager-action-cta/);
+assert.match(projectTodaySource, /data-scenario-control/);
+assert.match(projectTodaySource, /data-evidence-status=\{snapshot\.step > 0 \? ["']available["'] : ["']upcoming["']\}/);
+assert.match(projectTodaySource, /revisionB\.electricalKw/);
+assert.match(projectTodaySource, /revisionC\.electricalKw/);
+assert.match(projectTodaySource, /revisionB\.footprintM/);
+assert.match(projectTodaySource, /revisionC\.footprintM/);
+assert.match(projectTodaySource, /model\.outcome\.recoveredDays/);
+assert.match(projectTodaySource, /model\.controlTower\.completedActions/);
+assert.match(projectTodaySource, /model\.controlTower\.totalActions/);
+for (const roleId of ["electrical", "bim", "planning", "quality"]) {
+  assert.match(projectTodaySource, new RegExp(`${roleId}: \\[`), `missing role metrics: ${roleId}`);
 }
-assert.match(
-  managerPulseCards[0][1],
-  /<strong data-pulse-value>\{workspace\.queue\.decisionsRequiringAction\.length\}<\/strong>/,
-);
-assert.equal(managerPulseCards[0][1].match(/\.length/g)?.length, 1);
-assert.match(managerPulseCards[0][1], /<span>\{managerDecisionStatus\}<\/span>/);
-assert(managerWorkspaceSource.includes("Pilot work packages are ready for the current execution roles"));
-assert.match(managerWorkspaceSource, /deriveMfManagerCockpitPresentation/);
-assert.match(managerWorkspaceSource, /data-manager-action-cta/);
-assert.match(managerWorkspaceSource, /data-scenario-control/);
-assert.match(managerWorkspaceSource, /Monitorado · próximo/);
-assert.match(managerWorkspaceSource, /Monitored · upcoming/);
-assert.match(managerWorkspaceSource, /const evidenceReviewAvailable = snapshot\.step > 0;/);
-assert.match(managerWorkspaceSource, /disabled=\{!evidenceReviewAvailable\}/);
-assert.match(managerWorkspaceSource, /data-evidence-status=\{evidenceReviewAvailable \? ["']available["'] : ["']upcoming["']\}/);
-assert.match(managerWorkspaceSource, /Evidência em breve/);
-assert.match(managerWorkspaceSource, /Evidence upcoming/);
 
 const teamCommandSource = readFileSync(
   new URL("../components/mf/mf-team-command.tsx", import.meta.url),
@@ -1161,7 +1218,43 @@ for (const technologyId of ["urso-brain", "cde", "revit", "primavera-p6", "slack
 assert.match(agentWorkflowSource, /className="mf-technology-lettermark is-unknown"/);
 assert.match(agentWorkflowSource, />\?<\/span>/);
 
-const mfCssSource = readFileSync(new URL("../app/mf/mf.css", import.meta.url), "utf8");
+const mfCssPaths = [
+  "../app/mf/mf.css",
+  "../app/mf/styles/mf-story.css",
+  "../app/mf/styles/mf-fieldbook.css",
+  "../app/mf/styles/mf-clarity.css",
+  "../app/mf/styles/mf-presentation.css",
+  "../app/mf/styles/mf-brain-console.css",
+  "../app/mf/styles/mf-changes.css",
+  "../app/mf/styles/mf-workflows.css",
+  "../app/mf/styles/mf-shell.css",
+  "../app/mf/styles/mf-brain.css",
+  "../app/mf/styles/mf-industrial.css",
+  "../app/mf/styles/mf-overview.css",
+];
+const mfCssSource = mfCssPaths.map((path) => readFileSync(new URL(path, import.meta.url), "utf8")).join("\n");
+const mfLayoutCssImportsSource = readFileSync(new URL("../app/mf/layout.tsx", import.meta.url), "utf8");
+const expectedMfCssImports = [
+  "./mf.css",
+  "./styles/mf-story.css",
+  "./styles/mf-fieldbook.css",
+  "./styles/mf-clarity.css",
+  "./styles/mf-presentation.css",
+  "./styles/mf-brain-console.css",
+  "./styles/mf-changes.css",
+  "./styles/mf-workflows.css",
+  "./styles/mf-shell.css",
+  "./styles/mf-brain.css",
+  "./styles/mf-industrial.css",
+  "./styles/mf-overview.css",
+];
+let previousCssImportIndex = -1;
+for (const cssImport of expectedMfCssImports) {
+  const importIndex = mfLayoutCssImportsSource.indexOf(`import "${cssImport}"`);
+  assert(importIndex > previousCssImportIndex, `missing or reordered MF stylesheet import: ${cssImport}`);
+  previousCssImportIndex = importIndex;
+}
+assert.doesNotMatch(mfCssSource, /\u00e2[\u0080-\uFFFF]/, "MF CSS contains mojibake glyphs");
 const compactSchematicCss = mfCssSource.match(
   /\.mf-workflow-schematic\s*\{([\s\S]*?)(?=\.mf-workflow-stage-register\s*\{)/,
 )?.[0] ?? "";
@@ -1295,8 +1388,25 @@ for (const lightToken of [
 }
 assert.doesNotMatch(retainedStoryCss, /background:\s*#101010/);
 
-const demoViewsSource = readFileSync(new URL("../components/mf/demo-views.tsx", import.meta.url), "utf8");
-const mfDemoSource = readFileSync(new URL("../components/mf/mf-demo.tsx", import.meta.url), "utf8");
+const overviewViewSource = readFileSync(new URL("../components/mf/views/overview-view.tsx", import.meta.url), "utf8");
+const changesViewSource = readFileSync(new URL("../components/mf/views/changes-view.tsx", import.meta.url), "utf8");
+const teamViewSource = readFileSync(new URL("../components/mf/views/team-view.tsx", import.meta.url), "utf8");
+const workflowViewSource = readFileSync(new URL("../components/mf/views/workflows-view.tsx", import.meta.url), "utf8");
+const outputsViewSource = readFileSync(new URL("../components/mf/views/outputs-view.tsx", import.meta.url), "utf8");
+const brainViewSource = readFileSync(new URL("../components/mf/views/brain-view.tsx", import.meta.url), "utf8");
+const historyViewSource = readFileSync(new URL("../components/mf/views/history-view.tsx", import.meta.url), "utf8");
+for (const [name, source] of [
+  ["ControlTowerView", overviewViewSource],
+  ["ChangesView", changesViewSource],
+  ["DisciplinesView", teamViewSource],
+  ["WorkflowsView", workflowViewSource],
+  ["ArtifactsView", outputsViewSource],
+  ["BrainView", brainViewSource],
+  ["AuditView", historyViewSource],
+]) {
+  assert.match(source, new RegExp(`export function ${name}`), `missing feature-owned MF view: ${name}`);
+}
+const mfDemoSource = `${readFileSync(new URL("../components/mf/mf-demo.tsx", import.meta.url), "utf8")}\n${readFileSync(new URL("../components/mf/mf-demo-session.tsx", import.meta.url), "utf8")}`;
 const mfLayoutSource = readFileSync(new URL("../app/mf/layout.tsx", import.meta.url), "utf8");
 const projectBrainSource = readFileSync(
   new URL("../components/mf/project-brain-workspace.tsx", import.meta.url),
@@ -1312,6 +1422,9 @@ assert.match(projectBrainSource, /Query project records/);
 assert.match(mfLayoutSource, /Archivo/);
 assert.match(mfLayoutSource, /IBM_Plex_Sans/);
 assert.match(mfLayoutSource, /IBM_Plex_Mono/);
+assert.match(mfLayoutSource, /MfLanguageProvider/);
+assert.match(mfLayoutSource, /MfDemoSessionProvider/);
+assert.match(mfLayoutSource, /<MfDemoShell>\{children\}<\/MfDemoShell>/);
 assert.doesNotMatch(mfCssSource, /Gemini-inspired Project Brain chat/);
 for (const accessibilityContract of [
   "trapTabFocus",
@@ -1409,23 +1522,23 @@ assert.match(selectedArtifactSource, /step >= artifact\.availableAt/);
 assert.match(selectedArtifactSource, /artifactAccess\.canViewAll/);
 assert.match(selectedArtifactSource, /artifactAccess\.artifactIds\.includes\(artifact\.id\)/);
 const selectRoleSource = mfDemoSource.match(
-  /const selectRole = useCallback[\s\S]*?(?=\n\s*function navigate)/,
+  /const selectRole = useCallback[\s\S]*?(?=\n\s*const advance)/,
 )?.[0] ?? "";
 assert.match(selectRoleSource, /setSelectedArtifactId\(null\)/);
 const openArtifactSource = mfDemoSource.match(
-  /function openArtifact[\s\S]*?(?=\n\s*useEffect\()/,
+  /const openArtifact = useCallback[\s\S]*?(?=\n\s*const closeArtifact)/,
 )?.[0] ?? "";
 assert.match(openArtifactSource, /step >= artifact\.availableAt/);
-assert.match(openArtifactSource, /artifactAccess\.canViewAll/);
-assert.match(openArtifactSource, /if \(!allowed\)/);
-assert.match(openArtifactSource, /setSelectedArtifactId\(null\);[\s\S]*?return;/);
+assert.match(openArtifactSource, /access\.canViewAll/);
+assert.match(openArtifactSource, /const allowed/);
+assert.match(openArtifactSource, /setSelectedArtifactId\(allowed \? artifactId : null\)/);
 const artifactReviewStateSource = mfDemoSource.match(
   /const artifactReviewStates = useMemo[\s\S]*?(?=\n\s*const artifactAccess)/,
 )?.[0] ?? "";
 assert.doesNotMatch(artifactReviewStateSource, /step >= 8/);
 assert.match(artifactReviewStateSource, /workItems\.length > 0 && workItems\.every/);
 const selectedArtifactReceiptSource = mfDemoSource.match(
-  /const selectedArtifactWorkItems[\s\S]*?(?=\n\s*const presenterCue)/,
+  /const selectedArtifactWorkItems[\s\S]*?(?=\n\s*const authorizedEvidenceRecordCount)/,
 )?.[0] ?? "";
 assert.match(selectedArtifactReceiptSource, /right\.completeAt - left\.completeAt/);
 assert.match(selectedArtifactReceiptSource, /selectedArtifactWorkItems\.every/);
@@ -1441,12 +1554,11 @@ const impactPlanArtifactSource = fixturesSource.match(
   /\{\s*id:\s*["']impact-plan["'],[\s\S]*?\n\s*\},/,
 )?.[0] ?? "";
 assert.match(impactPlanArtifactSource, /availableAt:\s*4,/);
-assert.match(demoViewsSource, /import \{ MfManagerWorkspace \} from ["']\.\/mf-manager-workspace["']/);
-assert.match(demoViewsSource, /import \{ MfTeamCommand \} from ["']\.\/mf-team-command["']/);
-const controlTowerViewSource = demoViewsSource.match(
-  /export function ControlTowerView[\s\S]*?(?=\nexport function ChangesView)/,
-)?.[0] ?? "";
-assert.match(controlTowerViewSource, /<MfManagerWorkspace/);
+assert.match(overviewViewSource, /import \{ ProjectTodayDashboard \} from ["']\.\.\/project-today\/project-today-dashboard["']/);
+assert.match(teamViewSource, /import \{ MfTeamCommand \} from ["']\.\.\/mf-team-command["']/);
+const controlTowerViewSource = overviewViewSource;
+assert.match(controlTowerViewSource, /<ProjectTodayDashboard/);
+assert.match(controlTowerViewSource, /roleId=\{roleId\}/);
 for (const duplicateClassName of [
   "mf-truth-path",
   "mf-role-focus-card",
@@ -1456,9 +1568,7 @@ for (const duplicateClassName of [
   assert(!controlTowerViewSource.includes(duplicateClassName), `legacy ControlTower class remains: ${duplicateClassName}`);
 }
 
-const disciplinesViewSource = demoViewsSource.match(
-  /export function DisciplinesView[\s\S]*?(?=\nexport function WorkflowsView)/,
-)?.[0] ?? "";
+const disciplinesViewSource = teamViewSource;
 assert.match(disciplinesViewSource, /<MfTeamCommand/);
 for (const legacyTeamSurface of [
   "EmployeeObjectivePanel",
@@ -1468,26 +1578,20 @@ for (const legacyTeamSurface of [
   assert(!disciplinesViewSource.includes(legacyTeamSurface), `legacy DisciplinesView surface remains: ${legacyTeamSurface}`);
 }
 
-const workflowsViewSource = demoViewsSource.match(
-  /export function WorkflowsView[\s\S]*?(?=\nfunction BimScaffold)/,
-)?.[0] ?? "";
-assert.match(demoViewsSource, /import \{ MfAgentWorkflow \} from ["']\.\/mf-agent-workflow["']/);
+const workflowsViewSource = workflowViewSource;
+assert.match(workflowViewSource, /import \{ MfAgentWorkflow \} from ["']\.\.\/mf-agent-workflow["']/);
 assert.match(workflowsViewSource, /<MfAgentWorkflow/);
 assert.match(workflowsViewSource, /viewerRoleId=\{roleId\}/);
 assert.doesNotMatch(workflowsViewSource, /ObjectiveWorkflowPanel/);
 assert.doesNotMatch(workflowsViewSource, /workflowCatalog|selectedAgents|selectedTools|stageClass|mf-agentic-map/);
 
-const artifactsViewSource = demoViewsSource.match(
-  /export function ArtifactsView[\s\S]*?(?=\nexport function BrainView)/,
-)?.[0] ?? "";
+const artifactsViewSource = outputsViewSource;
 assert.match(artifactsViewSource, /deriveMfArtifactAccess\(roleId\)/);
 assert.match(artifactsViewSource, /visibleArtifacts\.map/);
 assert.match(artifactsViewSource, /artifactIds\.includes\("bim-scaffold"\)/);
 assert.doesNotMatch(artifactsViewSource, /\bonAdvance\b/);
 
-const auditViewSource = demoViewsSource.match(
-  /export function AuditView[\s\S]*?(?=\nexport function EmptyScenarioView)/,
-)?.[0] ?? "";
+const auditViewSource = historyViewSource;
 assert.match(auditViewSource, /deriveMfArtifactAccess\(roleId\)/);
 assert.match(auditViewSource, /visibleArtifacts/);
 assert.match(auditViewSource, /approvedArtifacts\.length} \/ \{visibleArtifacts\.length/);

@@ -1,6 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   ArrowLeft,
   ArrowRight,
@@ -9,6 +11,7 @@ import {
   Check,
   ChevronDown,
   CircleGauge,
+  Files,
   GitPullRequestArrow,
   History,
   Keyboard,
@@ -25,31 +28,19 @@ import {
   Workflow,
   X,
 } from "lucide-react";
+import { project, roles } from "@/lib/mf-demo/fixtures";
 import {
-  artifacts,
-  project,
-  roles,
-} from "@/lib/mf-demo/fixtures";
+  getMfRouteForStep,
+  getMfViewFromPathname,
+  mfRouteByView,
+} from "@/lib/mf-demo/routes";
 import { scenarioLabels } from "@/lib/mf-demo/scenario";
-import { deriveMfArtifactAccess } from "@/lib/mf-demo/workflow-runtime.mjs";
-import type {
-  ArtifactReviewState,
-  DemoView,
-  MfDemoSessionCredentials,
-  MfDemoSessionView,
-} from "@/lib/mf-demo/types";
-import {
-  ArtifactsView,
-  AuditView,
-  BrainView,
-  ChangesView,
-  ControlTowerView,
-  DisciplinesView,
-  WorkflowsView,
-} from "./demo-views";
+import type { DemoView } from "@/lib/mf-demo/types";
 import { ArtifactWorkspace } from "./artifact-workspace";
+import { MfDemoNavigationProvider } from "./mf-demo-navigation";
+import { useMfDemoSession } from "./mf-demo-session";
 import { MfLogo } from "./mf-logo";
-import { MfLanguageProvider, useMfLanguage } from "./mf-language";
+import { useMfLanguage } from "./mf-language";
 
 const navigation = [
   { id: "control", label: "Projeto hoje", icon: CircleGauge },
@@ -57,20 +48,9 @@ const navigation = [
   { id: "brain", label: "Cérebro do projeto", icon: BrainCircuit },
   { id: "disciplines", label: "Minha equipe", icon: UsersRound },
   { id: "workflows", label: "Trabalhar com Urso", icon: Workflow },
+  { id: "artifacts", label: "Artefatos", icon: Files },
   { id: "audit", label: "Decisões e histórico", icon: History },
 ] as const satisfies ReadonlyArray<{ id: DemoView; label: string; icon: typeof CircleGauge }>;
-
-const viewForStep: DemoView[] = [
-  "control",
-  "changes",
-  "changes",
-  "changes",
-  "changes",
-  "disciplines",
-  "artifacts",
-  "workflows",
-  "control",
-];
 
 const guideKeyForStep = [
   "project-status",
@@ -84,7 +64,6 @@ const guideKeyForStep = [
   "pilot-proposal",
 ] as const;
 
-const sessionStorageKey = "mf-demo-session-v2";
 const focusableElementSelector = [
   "a[href]",
   "button:not([disabled])",
@@ -140,53 +119,36 @@ const presenterCues = {
   ],
 } as const;
 
-function ViewContent({
-  view,
-  step,
-  roleId,
-  onNavigate,
-  onAdvance,
-  onOpenArtifact,
-  artifactReviewStates,
-  sessionId,
-  sessionToken,
-  snapshot,
-}: {
-  view: DemoView;
-  step: number;
-  roleId: string;
-  onNavigate: (view: DemoView) => void;
-  onAdvance: () => void;
-  onOpenArtifact: (artifactId: string) => void;
-  artifactReviewStates: Record<string, ArtifactReviewState>;
-  sessionId?: string;
-  sessionToken?: string;
-  snapshot?: MfDemoSessionView["snapshot"];
-}) {
-  const props = { step, roleId, onNavigate, onAdvance, onOpenArtifact, artifactReviewStates, sessionId, sessionToken, snapshot };
-  if (view === "control") return <ControlTowerView {...props} />;
-  if (view === "changes") return <ChangesView {...props} />;
-  if (view === "disciplines") return <DisciplinesView {...props} roleId={roleId} />;
-  if (view === "workflows") return <WorkflowsView {...props} />;
-  if (view === "artifacts") return <ArtifactsView {...props} />;
-  if (view === "brain") return <BrainView {...props} />;
-  return <AuditView {...props} />;
-}
-
-function MfDemoShell() {
+export function MfDemoShell({ children }: { children: ReactNode }) {
   const { language, setLanguage, t } = useMfLanguage();
-  const [sessionCredentials, setSessionCredentials] = useState<MfDemoSessionCredentials | null>(null);
-  const [demoSession, setDemoSession] = useState<MfDemoSessionView | null>(null);
-  const [sessionHydrating, setSessionHydrating] = useState(true);
-  const [transitioning, setTransitioning] = useState(false);
-  const [transitionError, setTransitionError] = useState<string | null>(null);
-  const [activeView, setActiveView] = useState<DemoView>("control");
-  const [roleId, setRoleId] = useState(roles[0].id);
+  const pathname = usePathname();
+  const router = useRouter();
+  const {
+    demoSession,
+    sessionHydrating,
+    transitioning,
+    transitionError,
+    step,
+    roleId,
+    selectedRole,
+    artifactReviewStates,
+    selectedArtifact,
+    selectedArtifactId,
+    selectedArtifactReceiptId,
+    managerConfirmationState,
+    managerConfirmationReceiptId,
+    authorizedEvidenceRecordCount,
+    synchronizeScenarioStep,
+    retrySession,
+    selectRole,
+    reset: resetSession,
+    closeArtifact,
+  } = useMfDemoSession();
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
   const [isMobileViewport, setIsMobileViewport] = useState(false);
-  const [selectedArtifactId, setSelectedArtifactId] = useState<string | null>(null);
   const [presenterMode, setPresenterMode] = useState(false);
-  const [presentationLobbyOpen, setPresentationLobbyOpen] = useState(true);
+  const [presentationLobbyRequested, setPresentationLobbyOpen] = useState(false);
+  const presentationLobbyOpen = pathname === "/mf" || presentationLobbyRequested;
   const [presentationSessionActive, setPresentationSessionActive] = useState(false);
   const presentationStartRef = useRef<HTMLButtonElement>(null);
   const presentationDialogRef = useRef<HTMLDivElement>(null);
@@ -197,43 +159,8 @@ function MfDemoShell() {
   const mobileNavigationCloseRef = useRef<HTMLButtonElement>(null);
   const mobileNavigationWasOpenRef = useRef(false);
   const mainRef = useRef<HTMLElement>(null);
-  const step = demoSession?.snapshot.step ?? 0;
-  const artifactReviewStates = useMemo<Record<string, ArtifactReviewState>>(() => Object.fromEntries(
-    artifacts.map((artifact) => {
-      const workItems = demoSession?.snapshot.workItems.filter((task) => task.artifactId === artifact.id) ?? [];
-      const reviewState: ArtifactReviewState = workItems.length > 0 && workItems.every((task) => task.state === "complete")
-        ? "approved"
-        : workItems.some((task) => task.state === "in_progress" || task.state === "complete")
-          ? "validated"
-          : "draft";
-      return [artifact.id, reviewState];
-    }),
-  ), [demoSession?.snapshot]);
-  const artifactAccess = deriveMfArtifactAccess(roleId);
-  const selectedArtifact = artifacts.find((artifact) =>
-    artifact.id === selectedArtifactId
-    && step >= artifact.availableAt
-    && (artifactAccess.canViewAll || artifactAccess.artifactIds.includes(artifact.id))) ?? null;
-  const selectedArtifactWorkItems = selectedArtifact
-    ? demoSession?.snapshot.workItems.filter((task) => task.artifactId === selectedArtifact.id) ?? []
-    : [];
-  const terminalArtifactWorkItem = [...selectedArtifactWorkItems]
-    .sort((left, right) => right.completeAt - left.completeAt)[0] ?? null;
-  const selectedArtifactReceiptId = selectedArtifactWorkItems.length > 0
-    && selectedArtifactWorkItems.every((task) => task.state === "complete")
-    ? terminalArtifactWorkItem?.receiptId ?? null
-    : null;
-  const managerConfirmationWorkItem = demoSession?.snapshot.workItems
-    .find((task) => task.id === "release-exe-02") ?? null;
-  const managerConfirmationState = managerConfirmationWorkItem?.state ?? null;
-  const managerConfirmationReceiptId = managerConfirmationState === "complete"
-    ? managerConfirmationWorkItem?.receiptId ?? null
-    : null;
-  const authorizedEvidenceRecordCount = demoSession?.snapshot.sources
-    .filter((source) => source.authorizedRoleIds.includes(roleId))
-    .reduce((count, source) => count + source.evidencePaths.length, 0) ?? 0;
   const presenterCue = presenterCues[language][step];
-  const selectedRole = roles.find((role) => role.id === roleId) ?? roles[0];
+  const activeView = getMfViewFromPathname(pathname);
   const activeNavigationItem = navigation.find((item) => item.id === activeView) ?? navigation[0];
 
   useEffect(() => {
@@ -284,139 +211,8 @@ function MfDemoShell() {
     return () => window.cancelAnimationFrame(frame);
   }, [presentationLobbyOpen]);
 
-  useEffect(() => {
-    if (selectedArtifactId && !selectedArtifact) {
-      const frameId = window.requestAnimationFrame(() => setSelectedArtifactId(null));
-      return () => window.cancelAnimationFrame(frameId);
-    }
-  }, [selectedArtifact, selectedArtifactId]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function hydrateSession() {
-      setSessionHydrating(true);
-      setTransitionError(null);
-      try {
-        let credentials: MfDemoSessionCredentials | null = null;
-        const stored = window.sessionStorage.getItem(sessionStorageKey);
-        if (stored) {
-          try {
-            const parsed = JSON.parse(stored) as MfDemoSessionCredentials;
-            if (parsed.sessionId && parsed.token) credentials = parsed;
-          } catch {
-            window.sessionStorage.removeItem(sessionStorageKey);
-          }
-        }
-
-        let response = credentials
-          ? await fetch("/api/mf/brain/scenario", {
-              method: "POST",
-              headers: { "content-type": "application/json" },
-              body: JSON.stringify({ action: "load", ...credentials }),
-            })
-          : null;
-
-        if (!response?.ok) {
-          response = await fetch("/api/mf/brain/scenario", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ action: "create" }),
-          });
-          const created = (await response.json()) as {
-            sessionId?: string;
-            token?: string;
-            session?: MfDemoSessionView;
-            error?: string;
-          };
-          if (!response.ok || !created.sessionId || !created.token || !created.session) {
-            throw new Error(created.error ?? "Unable to create the MF demo session.");
-          }
-          credentials = { sessionId: created.sessionId, token: created.token };
-          window.sessionStorage.setItem(sessionStorageKey, JSON.stringify(credentials));
-          if (!cancelled) {
-            setSessionCredentials(credentials);
-            setDemoSession(created.session);
-            setRoleId(created.session.selectedRoleId);
-            setActiveView(viewForStep[created.session.snapshot.step]);
-          }
-          return;
-        }
-
-        const loaded = (await response.json()) as { session?: MfDemoSessionView; error?: string };
-        if (!loaded.session || !credentials) throw new Error(loaded.error ?? "Unable to load the MF demo session.");
-        if (!cancelled) {
-          setSessionCredentials(credentials);
-          setDemoSession(loaded.session);
-          setRoleId(loaded.session.selectedRoleId);
-          setActiveView(viewForStep[loaded.session.snapshot.step]);
-        }
-      } catch (error) {
-        if (!cancelled) setTransitionError(error instanceof Error ? error.message : "MF demo session unavailable.");
-      } finally {
-        if (!cancelled) setSessionHydrating(false);
-      }
-    }
-
-    void hydrateSession();
-    return () => { cancelled = true; };
-  }, []);
-
-  const synchronizeScenarioStep = useCallback(async (nextStep: number, nextRoleId = roleId) => {
-    if (!sessionCredentials || !demoSession || transitioning) return false;
-    setTransitioning(true);
-    setTransitionError(null);
-    try {
-      const response = await fetch("/api/mf/brain/scenario", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          action: "transition",
-          ...sessionCredentials,
-          expectedStep: demoSession.snapshot.step,
-          targetStep: nextStep,
-          idempotencyKey: `${sessionCredentials.sessionId}-${demoSession.version}-${nextStep}-${crypto.randomUUID()}`,
-          roleId: nextRoleId,
-        }),
-      });
-      const payload = (await response.json()) as { session?: MfDemoSessionView; error?: string };
-      if (!response.ok || !payload.session) throw new Error(payload.error ?? "Scenario transition failed.");
-      setDemoSession(payload.session);
-      setRoleId(payload.session.selectedRoleId);
-      setActiveView(viewForStep[payload.session.snapshot.step]);
-      return true;
-    } catch (error) {
-      setTransitionError(error instanceof Error ? error.message : "Scenario transition failed.");
-      return false;
-    } finally {
-      setTransitioning(false);
-    }
-  }, [demoSession, roleId, sessionCredentials, transitioning]);
-
-  const selectRole = useCallback(async (nextRoleId: string) => {
-    if (!sessionCredentials || transitioning) return;
-    setSelectedArtifactId(null);
-    setTransitioning(true);
-    setTransitionError(null);
-    try {
-      const response = await fetch("/api/mf/brain/scenario", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: "select-role", ...sessionCredentials, roleId: nextRoleId }),
-      });
-      const payload = (await response.json()) as { session?: MfDemoSessionView; error?: string };
-      if (!response.ok || !payload.session) throw new Error(payload.error ?? "Role switch failed.");
-      setDemoSession(payload.session);
-      setRoleId(payload.session.selectedRoleId);
-    } catch (error) {
-      setTransitionError(error instanceof Error ? error.message : "Role switch failed.");
-    } finally {
-      setTransitioning(false);
-    }
-  }, [sessionCredentials, transitioning]);
-
   function navigate(view: DemoView) {
-    setActiveView(view);
+    router.push(mfRouteByView[view]);
     setMobileNavigationOpen(false);
   }
 
@@ -425,25 +221,29 @@ function MfDemoShell() {
     setPresentationLobbyOpen(true);
   }
 
-  function advance() {
+  async function advance() {
     if (step >= 8 || transitioning) return;
-    void synchronizeScenarioStep(step + 1);
+    const nextStep = step + 1;
+    if (await synchronizeScenarioStep(nextStep) && presenterMode) {
+      router.push(getMfRouteForStep(nextStep));
+    }
   }
 
-  function rewind() {
+  async function rewind() {
     if (step === 0 || transitioning) return;
-    void synchronizeScenarioStep(step - 1);
+    const nextStep = step - 1;
+    if (await synchronizeScenarioStep(nextStep) && presenterMode) {
+      router.push(getMfRouteForStep(nextStep));
+    }
   }
 
   const reset = useCallback(async () => {
-    const resetComplete = await synchronizeScenarioStep(0, roles[0].id);
+    const resetComplete = await resetSession();
     if (!resetComplete) return false;
-    setActiveView("control");
-    setRoleId(roles[0].id);
+    router.push(mfRouteByView.control);
     setMobileNavigationOpen(false);
-    setSelectedArtifactId(null);
     return true;
-  }, [synchronizeScenarioStep]);
+  }, [resetSession, router]);
 
   async function startPresentation() {
     if (!await reset()) return;
@@ -455,13 +255,14 @@ function MfDemoShell() {
   function startGuidedTour() {
     setPresenterMode(true);
     setPresentationLobbyOpen(false);
-    setActiveView(viewForStep[step]);
+    router.push(getMfRouteForStep(step));
   }
 
   function exploreDemo() {
     setPresenterMode(false);
     setPresentationSessionActive(false);
     setPresentationLobbyOpen(false);
+    if (pathname === "/mf") router.push(mfRouteByView.control);
   }
 
   function restartPresentation() {
@@ -474,18 +275,6 @@ function MfDemoShell() {
     setPresenterMode(false);
     setPresentationSessionActive(false);
     setPresentationLobbyOpen(true);
-  }
-
-  function openArtifact(artifactId: string) {
-    const artifact = artifacts.find((candidate) => candidate.id === artifactId);
-    const allowed = artifact
-      && step >= artifact.availableAt
-      && (artifactAccess.canViewAll || artifactAccess.artifactIds.includes(artifact.id));
-    if (!allowed) {
-      setSelectedArtifactId(null);
-      return;
-    }
-    setSelectedArtifactId(artifactId);
   }
 
   useEffect(() => {
@@ -503,7 +292,7 @@ function MfDemoShell() {
       if (selectedArtifactId) {
         if (event.key === "Escape") {
           event.preventDefault();
-          setSelectedArtifactId(null);
+          closeArtifact();
         }
         return;
       }
@@ -531,17 +320,23 @@ function MfDemoShell() {
 
       if (event.key === "ArrowRight" && step < 8) {
         event.preventDefault();
-        void synchronizeScenarioStep(step + 1);
+        const nextStep = step + 1;
+        void synchronizeScenarioStep(nextStep).then((complete) => {
+          if (complete && presenterMode) router.push(getMfRouteForStep(nextStep));
+        });
       } else if (event.key === "ArrowLeft" && step > 0) {
         event.preventDefault();
-        void synchronizeScenarioStep(step - 1);
+        const nextStep = step - 1;
+        void synchronizeScenarioStep(nextStep).then((complete) => {
+          if (complete && presenterMode) router.push(getMfRouteForStep(nextStep));
+        });
       } else if (event.key.toLocaleLowerCase("pt-BR") === "r") {
         event.preventDefault();
         void reset();
       } else if (event.key.toLocaleLowerCase("pt-BR") === "g") {
         event.preventDefault();
         setPresenterMode((current) => {
-          if (!current) setActiveView(viewForStep[step]);
+          if (!current) router.push(getMfRouteForStep(step));
           return !current;
         });
       }
@@ -549,11 +344,11 @@ function MfDemoShell() {
 
     window.addEventListener("keydown", handlePresenterShortcut);
     return () => window.removeEventListener("keydown", handlePresenterShortcut);
-  }, [mobileNavigationOpen, presentationLobbyOpen, presentationSessionActive, reset, selectedArtifactId, step, synchronizeScenarioStep]);
+  }, [closeArtifact, mobileNavigationOpen, presentationLobbyOpen, presentationSessionActive, presenterMode, reset, router, selectedArtifactId, step, synchronizeScenarioStep]);
 
   useEffect(() => {
     mainRef.current?.scrollTo({ top: 0, behavior: "auto" });
-  }, [activeView, step]);
+  }, [pathname, step]);
 
   useEffect(() => {
     if (!presenterMode || presentationLobbyOpen) return;
@@ -576,15 +371,16 @@ function MfDemoShell() {
     });
 
     return () => window.cancelAnimationFrame(frame);
-  }, [activeView, presentationLobbyOpen, presenterMode, step]);
+  }, [pathname, presentationLobbyOpen, presenterMode, step]);
 
   return (
-    <div
-      className={`mf-app mf-fieldbook mf-clarity ${presentationSessionActive ? "is-presentation-session" : ""}`}
-      data-scenario-step={step}
-      data-guide-active={presenterMode ? guideKeyForStep[step] : undefined}
-      lang={language === "pt" ? "pt-BR" : "en"}
-    >
+    <MfDemoNavigationProvider navigate={navigate} advance={advance}>
+      <div
+        className={`mf-app mf-fieldbook mf-clarity ${presentationSessionActive ? "is-presentation-session" : ""}`}
+        data-scenario-step={step}
+        data-guide-active={presenterMode ? guideKeyForStep[step] : undefined}
+        lang={language === "pt" ? "pt-BR" : "en"}
+      >
       <a className="mf-skip-link" href="#mf-main">
         {t("Ir para o conteúdo")}
       </a>
@@ -593,7 +389,7 @@ function MfDemoShell() {
         <div className="mf-session-error" role="alert">
           <WifiOff size={15} />
           <span>{transitionError}</span>
-          <button type="button" onClick={() => void synchronizeScenarioStep(step)} disabled={transitioning || sessionHydrating}>
+          <button type="button" onClick={retrySession} disabled={transitioning || sessionHydrating}>
             {language === "pt" ? "Tentar novamente" : "Retry"}
           </button>
         </div>
@@ -710,17 +506,17 @@ function MfDemoShell() {
                   ? "1"
                   : null;
               return (
-                <button
-                  type="button"
+                <Link
                   key={item.id}
-                  className={active ? "is-active" : ""}
+                  href={mfRouteByView[item.id]}
+                  className={`mf-nav-link ${active ? "is-active" : ""}`}
                   aria-current={active ? "page" : undefined}
-                  onClick={() => navigate(item.id)}
+                  onClick={() => setMobileNavigationOpen(false)}
                 >
                   <Icon size={17} strokeWidth={1.8} />
                   <span>{t(item.label)}</span>
                   {badge ? <small>{badge}</small> : null}
-                </button>
+                </Link>
               );
             })}
           </nav>
@@ -777,18 +573,7 @@ function MfDemoShell() {
           tabIndex={-1}
           inert={presentationLobbyOpen || (isMobileViewport && mobileNavigationOpen) ? true : undefined}
         >
-          <ViewContent
-            view={activeView}
-            step={step}
-            roleId={roleId}
-            onNavigate={navigate}
-            onAdvance={advance}
-            onOpenArtifact={openArtifact}
-            artifactReviewStates={artifactReviewStates}
-            sessionId={sessionCredentials?.sessionId}
-            sessionToken={sessionCredentials?.token}
-            snapshot={demoSession?.snapshot}
-          />
+          {children}
         </main>
       </div>
 
@@ -802,7 +587,7 @@ function MfDemoShell() {
           receiptId={selectedArtifactReceiptId}
           managerConfirmationState={managerConfirmationState}
           managerConfirmationReceiptId={managerConfirmationReceiptId}
-          onClose={() => setSelectedArtifactId(null)}
+          onClose={closeArtifact}
         />
       ) : null}
 
@@ -924,14 +709,7 @@ function MfDemoShell() {
           </section>
         </div>
       ) : null}
-    </div>
-  );
-}
-
-export function MfDemo() {
-  return (
-    <MfLanguageProvider>
-      <MfDemoShell />
-    </MfLanguageProvider>
+      </div>
+    </MfDemoNavigationProvider>
   );
 }

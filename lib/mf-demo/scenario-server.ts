@@ -28,7 +28,7 @@ const actionByStep = [
   "work_packages_issued",
   "draft_artifacts_created",
   "reviews_recorded",
-  "release_readiness_confirmed",
+  "pilot_control_recorded",
 ] as const;
 
 type ApplyScenarioInput = {
@@ -43,7 +43,9 @@ function normalizeScenarioStep(step: number) {
   return Math.max(0, Math.min(8, Math.trunc(step)));
 }
 
-async function applyClaims(admin: SupabaseClient, approved: boolean, now: string) {
+async function applyClaims(admin: SupabaseClient, step: number, now: string) {
+  const detected = step >= 1;
+  const approved = step >= 3;
   const [{ error: baselineError }, { error: revisionError }, { error: decisionError }] = await Promise.all([
     admin
       .from("brain_claims")
@@ -58,7 +60,7 @@ async function applyClaims(admin: SupabaseClient, approved: boolean, now: string
     admin
       .from("brain_claims")
       .update({
-        lifecycle: "active",
+        lifecycle: detected ? "active" : "retired",
         resolution: approved ? "accepted" : "unresolved",
         valid_until: null,
         updated_at: now,
@@ -68,8 +70,8 @@ async function applyClaims(admin: SupabaseClient, approved: boolean, now: string
     admin
       .from("brain_claims")
       .update({
-        object_value: approved ? "approved" : "pending",
-        lifecycle: "active",
+        object_value: approved ? "approved" : detected ? "pending" : "not_open",
+        lifecycle: detected ? "active" : "retired",
         resolution: "accepted",
         updated_at: now,
       })
@@ -80,7 +82,9 @@ async function applyClaims(admin: SupabaseClient, approved: boolean, now: string
   if (failure) throw new Error(`MF claim transition failed: ${failure.message}`);
 }
 
-async function applyRelationsAndConflicts(admin: SupabaseClient, approved: boolean, now: string) {
+async function applyRelationsAndConflicts(admin: SupabaseClient, step: number, now: string) {
+  const detected = step >= 1;
+  const approved = step >= 3;
   if (approved) {
     const { error: relationError } = await admin.from("brain_claim_relations").upsert(
       claimPairs.map(([current, previous, id]) => ({
@@ -111,11 +115,17 @@ async function applyRelationsAndConflicts(admin: SupabaseClient, approved: boole
       resolved_by: "mf-demo:project-manager",
       resolved_at: now,
       updated_at: now,
-    } : {
+    } : detected ? {
       status: "open",
       resolution_note: "",
       resolved_by: null,
       resolved_at: null,
+      updated_at: now,
+    } : {
+      status: "dismissed",
+      resolution_note: "No Revision C event exists in the controlled baseline.",
+      resolved_by: null,
+      resolved_at: now,
       updated_at: now,
     })
     .eq("organization_id", MF_BRAIN_ORGANIZATION_ID);
@@ -160,8 +170,8 @@ export async function applyMfBrainScenarioState(
   const step = normalizeScenarioStep(input.step);
   const approved = step > 2;
   const now = new Date().toISOString();
-  await applyClaims(admin, approved, now);
-  await applyRelationsAndConflicts(admin, approved, now);
+  await applyClaims(admin, step, now);
+  await applyRelationsAndConflicts(admin, step, now);
   if (input.recordAudit !== false) await recordAuditOnce(admin, step, input);
   return { step, truth: approved ? "revision-c" : "revision-b" } as const;
 }

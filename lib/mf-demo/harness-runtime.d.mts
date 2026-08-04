@@ -23,11 +23,11 @@ export type MfHarnessSnapshot = Readonly<{
   truth: Readonly<{
     currentRevision: "B" | "C";
     revisionB: "current" | "superseded";
-    revisionC: "unresolved" | "current";
+    revisionC: "not_received" | "unresolved" | "current";
   }>;
   decision: Readonly<{
     id: string;
-    status: "pending" | "approved";
+    status: "not_open" | "pending" | "approved";
     approvingRoleId: string;
     effectiveDate: string | null;
   }>;

@@ -1,0 +1,588 @@
+/* Slack-style signal source and Harness capture */
+.mf-signal-capture {
+  overflow: hidden;
+  border: 1px solid #d4d4d1;
+  border-radius: 14px;
+  background: #fff;
+}
+
+.mf-signal-capture > header {
+  display: flex;
+  min-height: 92px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  border-bottom: 1px solid #dededb;
+  padding: 18px 20px;
+}
+
+.mf-signal-capture > header > div { max-width: 720px; }
+
+.mf-signal-capture > header h2 {
+  margin: 6px 0 0;
+  font: 690 18px/1.2 var(--mf-display);
+  letter-spacing: -0.02em;
+}
+
+.mf-signal-capture > header p {
+  margin: 7px 0 0;
+  color: #626262;
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.mf-signal-capture > header button {
+  display: flex;
+  min-height: 38px;
+  cursor: pointer;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid #cfcfcb;
+  border-radius: 8px;
+  background: #fff;
+  padding: 0 13px;
+  color: #222;
+  font: 650 8px/1 var(--mf-display);
+}
+
+.mf-signal-capture > header button:hover {
+  border-color: #111;
+  background: #f4f4f2;
+}
+
+.mf-slack-clone {
+  display: grid;
+  height: 450px;
+  grid-template-columns: 56px 184px minmax(340px, 1fr) 292px;
+  grid-template-rows: 38px minmax(0, 1fr);
+  overflow: hidden;
+  background: #fff;
+  color: #1d1c1d;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.mf-slack-topbar {
+  z-index: 2;
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: 1fr minmax(260px, 520px) 1fr;
+  align-items: center;
+  gap: 12px;
+  background: #2e0b30;
+  padding: 0 16px;
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.mf-slack-topbar > label {
+  display: flex;
+  height: 26px;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.14);
+  padding: 0 10px;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 9px;
+}
+
+.mf-slack-topbar > span:last-child {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.mf-slack-window-controls {
+  display: flex;
+  gap: 5px;
+}
+
+.mf-slack-window-controls i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.mf-slack-rail {
+  display: flex;
+  min-height: 0;
+  align-items: center;
+  flex-direction: column;
+  gap: 10px;
+  background: #350d36;
+  padding: 12px 6px;
+  color: rgba(255, 255, 255, 0.76);
+}
+
+.mf-slack-rail > strong {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  margin-bottom: 4px;
+  border-radius: 8px;
+  background: #fff;
+  color: #350d36;
+  font: 800 11px/1 var(--mf-display);
+}
+
+.mf-slack-rail > span {
+  display: flex;
+  width: 44px;
+  min-height: 42px;
+  align-items: center;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  border-radius: 7px;
+}
+
+.mf-slack-rail > span.is-active { background: rgba(255, 255, 255, 0.14); color: #fff; }
+.mf-slack-rail > span:last-child { margin-top: auto; }
+.mf-slack-rail small { font-size: 6px; }
+
+.mf-slack-sidebar {
+  min-height: 0;
+  overflow: hidden;
+  background: #3f0e40;
+  padding: 13px 9px;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.mf-slack-sidebar > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1px 8px 14px;
+  color: #fff;
+}
+
+.mf-slack-sidebar > header strong { font-size: 11px; }
+
+.mf-slack-sidebar nav,
+.mf-slack-sidebar section {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 15px;
+}
+
+.mf-slack-sidebar nav > span,
+.mf-slack-sidebar section > span {
+  display: flex;
+  min-height: 27px;
+  align-items: center;
+  gap: 7px;
+  border-radius: 5px;
+  padding: 0 8px;
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.mf-slack-sidebar section > small {
+  padding: 0 8px 5px;
+  color: rgba(255, 255, 255, 0.54);
+  font-size: 7px;
+  text-transform: uppercase;
+}
+
+.mf-slack-sidebar span.is-active {
+  background: #f3e8f5;
+  color: #301033;
+}
+
+.mf-slack-harness-app i {
+  width: 6px;
+  height: 6px;
+  margin-left: auto;
+  border: 1px solid #3f0e40;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.18);
+}
+
+.mf-slack-channel {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  background: #fff;
+}
+
+.mf-slack-channel > header {
+  display: flex;
+  min-height: 58px;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #dedede;
+  padding: 0 15px;
+}
+
+.mf-slack-channel > header > span:first-child {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.mf-slack-channel > header strong {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+}
+
+.mf-slack-channel > header small {
+  overflow: hidden;
+  margin-top: 4px;
+  color: #777;
+  font-size: 7px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mf-slack-channel > header > span:last-child {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #686868;
+  font-size: 8px;
+}
+
+.mf-slack-thread {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0 6px;
+}
+
+.mf-slack-day {
+  display: flex;
+  align-items: center;
+  margin: 5px 0 10px;
+  color: #5b5b5b;
+  font-size: 7px;
+}
+
+.mf-slack-day::before,
+.mf-slack-day::after {
+  height: 1px;
+  flex: 1;
+  background: #dedede;
+  content: "";
+}
+
+.mf-slack-day span {
+  border: 1px solid #d4d4d4;
+  border-radius: 999px;
+  padding: 4px 9px;
+}
+
+.mf-slack-thread article {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 9px;
+  padding: 7px 14px;
+}
+
+.mf-slack-thread article:hover { background: #f8f8f8; }
+
+.mf-slack-avatar {
+  display: grid;
+  width: 33px;
+  height: 33px;
+  place-items: center;
+  border-radius: 6px;
+  color: #fff;
+  font: 750 9px/1 var(--mf-display);
+}
+
+.mf-slack-avatar.is-cm { background: #575757; }
+.mf-slack-avatar.is-lm { background: #111; }
+
+.mf-slack-thread article header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.mf-slack-thread article header strong { font-size: 10px; }
+.mf-slack-thread article time { color: #777; font-size: 7px; }
+.mf-slack-thread article header em { border-radius: 999px; background: #f0e4f1; padding: 3px 6px; color: #4a154b; font-size: 6px; font-style: normal; text-transform: uppercase; }
+
+.mf-slack-thread article p {
+  margin: 4px 0 0;
+  color: #2b2b2b;
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.mf-slack-new-message {
+  position: relative;
+  border-left: 3px solid #4a154b;
+  background: #fcf8fc;
+  animation: mf-slack-message-in 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.mf-slack-file {
+  display: grid;
+  max-width: 360px;
+  min-height: 56px;
+  grid-template-columns: 38px minmax(0, 1fr) 28px;
+  align-items: center;
+  gap: 8px;
+  margin-top: 9px;
+  border: 1px solid #d8d8d8;
+  border-radius: 8px;
+  background: #fff;
+  padding: 7px;
+}
+
+.mf-slack-file > span {
+  display: grid;
+  width: 34px;
+  height: 38px;
+  place-items: center;
+  border-radius: 5px;
+  background: #eee;
+  color: #333;
+}
+
+.mf-slack-file > div { display: flex; min-width: 0; flex-direction: column; }
+.mf-slack-file strong { overflow: hidden; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.mf-slack-file small { margin-top: 4px; color: #777; font-size: 7px; }
+.mf-slack-file button { display: grid; width: 28px; height: 28px; cursor: pointer; place-items: center; border: 0; border-radius: 5px; background: transparent; }
+.mf-slack-file button:hover { background: #eee; }
+
+.mf-slack-reactions { display: flex; gap: 5px; margin-top: 7px; }
+.mf-slack-reactions span { display: flex; align-items: center; gap: 4px; border: 1px solid #cfcfcf; border-radius: 999px; background: #fff; padding: 3px 6px; color: #555; font-size: 7px; }
+
+.mf-slack-composer {
+  display: grid;
+  min-height: 64px;
+  grid-template-columns: 1fr auto;
+  gap: 7px;
+  margin: 7px 12px 12px;
+  border: 1px solid #aaa;
+  border-radius: 7px;
+  padding: 7px 9px;
+  color: #777;
+}
+
+.mf-slack-composer > div { display: flex; grid-column: 1 / -1; gap: 12px; color: #555; font-size: 9px; }
+.mf-slack-composer > div em { font-family: Georgia, serif; }
+.mf-slack-composer > span { align-self: center; font-size: 8px; }
+.mf-slack-composer > button { display: grid; width: 28px; height: 28px; place-items: center; border: 0; border-radius: 5px; background: #007a5a; color: #fff; }
+
+.mf-harness-capture {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  border-left: 1px solid #d7d7d7;
+  background: #f7f7f5;
+  padding: 14px;
+  font-family: var(--mf-display);
+}
+
+.mf-harness-capture > header {
+  display: grid;
+  grid-template-columns: 34px 1fr 8px;
+  align-items: center;
+  gap: 9px;
+  border-bottom: 1px solid #d8d8d5;
+  padding-bottom: 12px;
+}
+
+.mf-harness-mark {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 8px;
+  background: #111;
+  color: #fff;
+}
+
+.mf-harness-capture > header > span:nth-child(2) { display: flex; flex-direction: column; }
+.mf-harness-capture > header strong { font-size: 10px; }
+.mf-harness-capture > header small { margin-top: 4px; color: #777; font-size: 7px; }
+.mf-harness-capture > header > i { width: 7px; height: 7px; border-radius: 50%; background: #111; animation: mf-harness-pulse 1.4s ease-in-out infinite; }
+
+.mf-harness-event { margin-top: 12px; border: 1px solid #111; border-radius: 9px; background: #111; padding: 11px; color: #fff; animation: mf-harness-step-in 260ms 250ms ease both; }
+.mf-harness-event span { color: #aaa; font-size: 7px; text-transform: uppercase; }
+.mf-harness-event strong { float: right; font-size: 7px; }
+.mf-harness-event p { margin: 7px 0 0; color: #ddd; font-size: 8px; line-height: 1.45; }
+
+.mf-harness-capture ol {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mf-harness-capture li {
+  display: grid;
+  grid-template-columns: 25px 1fr;
+  align-items: center;
+  gap: 8px;
+  opacity: 0;
+  animation: mf-harness-step-in 280ms ease forwards;
+}
+
+.mf-harness-capture li:nth-child(1) { animation-delay: 420ms; }
+.mf-harness-capture li:nth-child(2) { animation-delay: 610ms; }
+.mf-harness-capture li:nth-child(3) { animation-delay: 800ms; }
+.mf-harness-capture li:nth-child(4) { animation-delay: 990ms; }
+
+.mf-harness-capture li > span {
+  display: grid;
+  width: 23px;
+  height: 23px;
+  place-items: center;
+  border-radius: 50%;
+  background: #111;
+  color: #fff;
+}
+
+.mf-harness-capture li > div { display: flex; min-width: 0; flex-direction: column; }
+.mf-harness-capture li strong { font-size: 8px; }
+.mf-harness-capture li small { overflow: hidden; margin-top: 3px; color: #777; font-size: 6px; text-overflow: ellipsis; white-space: nowrap; }
+
+.mf-truth-guard {
+  display: grid;
+  grid-template-columns: 24px 1fr;
+  gap: 8px;
+  margin-top: auto;
+  border-top: 1px solid #d5d5d2;
+  padding-top: 12px;
+  opacity: 0;
+  animation: mf-harness-step-in 300ms 1.15s ease forwards;
+}
+
+.mf-truth-guard > div { display: grid; grid-template-columns: 1fr auto; align-items: center; }
+.mf-truth-guard small { color: #6d6d6d; font-size: 6px; text-transform: uppercase; }
+.mf-truth-guard strong { font-size: 13px; }
+.mf-truth-guard p { grid-column: 1 / -1; margin: 5px 0 0; color: #555; font-size: 7px; line-height: 1.35; }
+
+.mf-harness-review {
+  display: flex;
+  min-height: 34px;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 10px;
+  border: 0;
+  border-radius: 7px;
+  background: #111;
+  color: #fff;
+  font: 650 7px/1 var(--mf-display);
+  opacity: 0;
+  animation: mf-harness-step-in 300ms 1.28s ease forwards;
+}
+
+.mf-harness-review:disabled { cursor: default; background: #555; }
+
+.mf-signal-meaning {
+  display: flex;
+  min-height: 52px;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border-top: 1px solid #dededb;
+  background: #fafaf9;
+  padding: 8px 14px;
+}
+
+.mf-signal-meaning > span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #555;
+  font-size: 7px;
+  white-space: nowrap;
+}
+
+.mf-signal-meaning strong {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  border-radius: 50%;
+  background: #111;
+  color: #fff;
+  font-size: 7px;
+}
+
+@keyframes mf-slack-message-in {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes mf-harness-step-in {
+  from { opacity: 0; transform: translateY(7px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes mf-harness-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(17, 17, 17, 0.28); }
+  50% { box-shadow: 0 0 0 5px rgba(17, 17, 17, 0); }
+}
+
+.mf-app[data-guide-active] .mf-main {
+  margin-bottom: 146px;
+  padding-bottom: 190px;
+}
+
+@media (max-width: 1180px) {
+  .mf-slack-clone { grid-template-columns: 174px minmax(330px, 1fr) 270px; }
+  .mf-slack-rail { display: none; }
+}
+
+@media (max-width: 980px) {
+  .mf-slack-clone {
+    height: auto;
+    grid-template-columns: 170px minmax(0, 1fr);
+    grid-template-rows: 38px 500px auto;
+  }
+  .mf-harness-capture {
+    min-height: 430px;
+    grid-column: 1 / -1;
+    border-top: 1px solid #d7d7d7;
+    border-left: 0;
+  }
+}
+
+@media (max-width: 760px) {
+  .mf-app[data-guide-active] .mf-main { margin-bottom: 236px; }
+  .mf-signal-capture > header { align-items: flex-start; flex-direction: column; }
+  .mf-slack-clone { grid-template-columns: 1fr; grid-template-rows: 38px 500px auto; }
+  .mf-slack-sidebar { display: none; }
+  .mf-slack-topbar { grid-template-columns: 1fr; }
+  .mf-slack-topbar > span { display: none; }
+  .mf-slack-channel { grid-column: 1; }
+  .mf-signal-meaning { align-items: stretch; flex-direction: column; }
+  .mf-signal-meaning > svg { display: none; }
+  .mf-signal-meaning > span { white-space: normal; }
+}
+
+@media (max-width: 520px) {
+  .mf-slack-clone { grid-template-rows: 38px 540px auto; }
+  .mf-slack-channel > header > span:last-child { display: none; }
+  .mf-slack-thread article { padding-inline: 9px; }
+  .mf-slack-file { max-width: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mf-slack-new-message,
+  .mf-harness-event,
+  .mf-harness-capture li,
+  .mf-truth-guard,
+  .mf-harness-review {
+    opacity: 1;
+    animation: none;
+  }
+  .mf-harness-capture > header > i { animation: none; }
+}
+
