@@ -8,6 +8,11 @@ import {
   transitionMfHarness,
 } from "../lib/mf-demo/harness-runtime.mjs";
 import {
+  deriveMfManagerQueue,
+  deriveMfManagerWorkspace,
+  deriveMfTeamCommand,
+} from "../lib/mf-demo/manager-runtime.mjs";
+import {
   consumeMfSessionUsage,
   createMfSessionRecord,
   hashMfSessionToken,
@@ -166,6 +171,61 @@ assert.equal(tower.impactedDisciplines, 10);
 assert.equal(tower.openBlockers, 0);
 assert.equal(tower.daysRecovered, 8);
 assert.equal(tower.releaseReadiness, 100);
+
+const queueAtStep2 = deriveMfManagerQueue(createMfHarnessSnapshot(2));
+assert.deepEqual(queueAtStep2.now.map((item) => item.taskId), ["approve-controlled-truth"]);
+assert.deepEqual(queueAtStep2.next.map((item) => item.taskId), ["map-impact", "select-recovery-scenario"]);
+assert.deepEqual(queueAtStep2.waitingOnTeam.map((item) => item.actionId), ["EXE-02"]);
+assert.deepEqual(queueAtStep2.decisionsRequiringAction.map((item) => item.actionId), ["DEC-042"]);
+const releaseAtStep2 = queueAtStep2.waitingOnTeam[0];
+assert.deepEqual(releaseAtStep2.blockingRoleIds, ["quality", "electrical", "bim", "planning"]);
+assert.equal(releaseAtStep2.blockingTeamCount, 4);
+
+const teamAtStep5 = deriveMfTeamCommand(createMfHarnessSnapshot(5));
+assert.equal(teamAtStep5.teams.find((team) => team.roleId === "bim").state, "in_progress");
+assert.equal(teamAtStep5.teams.find((team) => team.roleId === "planning").state, "in_progress");
+assert.equal(teamAtStep5.teams.find((team) => team.roleId === "electrical").atRisk, true);
+assert.equal(teamAtStep5.teams.find((team) => team.roleId === "quality").atRisk, true);
+assert.deepEqual(teamAtStep5.handoffStages.map((stage) => stage.state), [
+  "complete",
+  "in_progress",
+  "in_progress",
+  "blocked",
+  "blocked",
+]);
+const electricalInProgressAtStep5 = {
+  ...createMfHarnessSnapshot(5),
+  workItems: createMfHarnessSnapshot(5).workItems.map((task) => task.id === "update-electrical"
+    ? { ...task, state: "in_progress" }
+    : task),
+};
+assert.equal(
+  deriveMfTeamCommand(electricalInProgressAtStep5).teams.find((team) => team.roleId === "electrical").atRisk,
+  false,
+);
+
+const queueAtStep6 = deriveMfManagerQueue(createMfHarnessSnapshot(6));
+assert.deepEqual(queueAtStep6.decisionsRequiringAction.map((item) => item.actionId), ["SCN-003"]);
+
+const queueAtStep3 = deriveMfManagerQueue(createMfHarnessSnapshot(3));
+assert.equal(queueAtStep3.actionRequiredCount, 1);
+
+const queueAtStep7 = deriveMfManagerQueue(createMfHarnessSnapshot(7));
+assert.equal(createMfHarnessSnapshot(7).workItems.find((task) => task.id === "verify-gate").state, "complete");
+assert.equal(createMfHarnessSnapshot(7).workItems.find((task) => task.id === "release-exe-02").state, "in_progress");
+assert.deepEqual(queueAtStep7.decisionsRequiringAction.map((item) => item.actionId), ["EXE-02"]);
+
+const queueAtStep8 = deriveMfManagerQueue(release);
+const workspaceAtStep8 = deriveMfManagerWorkspace(release);
+assert.equal(queueAtStep8.actionRequiredCount, 0);
+assert.equal(queueAtStep8.done.length, 4);
+assert(workspaceAtStep8.team.handoffStages.every((stage) => stage.state === "complete"));
+
+const rewoundManagerSnapshot = transitionMfHarness(createMfHarnessSnapshot(7), 2, "manager-rewind-2", "project-manager");
+const rewoundManagerQueue = deriveMfManagerQueue(rewoundManagerSnapshot);
+const rewoundManagerTeam = deriveMfTeamCommand(rewoundManagerSnapshot);
+assert.deepEqual(rewoundManagerQueue.decisionsRequiringAction.map((item) => item.actionId), ["DEC-042"]);
+assert.equal(rewoundManagerTeam.handoffStages.find((stage) => stage.id === "release").state, "blocked");
 
 const token = "presenter-secret-token";
 const session = createMfSessionRecord({
