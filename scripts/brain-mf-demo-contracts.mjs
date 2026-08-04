@@ -1072,6 +1072,15 @@ for (const semanticLabel of [
 }
 
 const mfCssSource = readFileSync(new URL("../app/mf/mf.css", import.meta.url), "utf8");
+const mfLogoSource = readFileSync(
+  new URL("../components/mf/mf-logo.tsx", import.meta.url),
+  "utf8",
+);
+assert.match(mfLogoSource, /import Image from ["']next\/image["']/);
+assert.match(mfLogoSource, /src=["']\/brand\/mf-logo\.png["']/);
+assert.match(mfLogoSource, /className=["']mf-logo-image["']/);
+assert.doesNotMatch(mfLogoSource, /<svg\b/);
+assert.doesNotMatch(mfLogoSource, /Logo provisório|Placeholder logo/);
 assert.doesNotMatch(mfCssSource, /\.mf-team-row-owner\s*\{\s*display:\s*none;\s*\}/);
 assert.doesNotMatch(mfCssSource, /Agentic workflow deployment studio/);
 assert.doesNotMatch(mfCssSource, /\.mf-agentic-map\s*>\s*:nth-child/);

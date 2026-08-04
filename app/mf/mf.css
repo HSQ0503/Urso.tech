@@ -164,8 +164,22 @@
 }
 
 .mf-logo-mark {
+  position: relative;
+  overflow: hidden;
   width: 64px;
+  aspect-ratio: 124 / 46;
+  flex: 0 0 auto;
+}
+
+.mf-logo-image {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 165%;
   height: auto;
+  max-width: none;
+  transform: translate(-52%, -45.5%);
+  filter: brightness(0) invert(1);
 }
 
 .mf-logo-copy {
