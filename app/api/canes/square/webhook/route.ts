@@ -5,9 +5,7 @@ import {
   squareWebhookUrl,
   verifySquareSignature,
 } from "@/lib/canes/square";
-import { getInvoice } from "@/lib/canes/invoices";
-import { getEstimate, getJob } from "@/lib/canes/estimates";
-import { notifyDepositPaid, notifyInvoicePaid, notifyInvoiceReceipt } from "@/lib/canes/notify";
+import { drainPaymentEmailTasks } from "@/lib/canes/payment-notifications";
 
 // Square webhook — the authoritative "an invoice got paid" signal. Verify-first,
 // idempotent, and non-2xx on transient processing failures so Square retries.
@@ -20,6 +18,7 @@ import { notifyDepositPaid, notifyInvoicePaid, notifyInvoiceReceipt } from "@/li
 // any JSON.parse — a re-serialized body breaks the HMAC. Fails closed: no key or
 // a bad signature → 401, nothing written.
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 export async function POST(req: Request): Promise<Response> {
   const rawBody = await req.text(); // exact signed bytes — never parse-then-restringify
@@ -46,22 +45,15 @@ export async function POST(req: Request): Promise<Response> {
       return NextResponse.json({ ok: false, retry: true }, { status: 503 });
     }
 
-    // On a first confirmed, amount-matched card payment, fire the notifications
-    // (best-effort). Duplicates/mismatches/ignored events don't notify.
-    if (outcome.handled === "recorded" && outcome.invoiceId) {
-      const invoice = await getInvoice(outcome.invoiceId);
-      if (invoice) {
-        await notifyInvoicePaid(invoice, "card");
-        await notifyInvoiceReceipt(invoice, "card");
-      }
-    }
-    // A reconciled booking deposit (0013) emails the owner — SMS via alertOwner
-    // already fired inside the reconciler, but email is the reliable channel
-    // until A2P clears. Square sends the customer's card receipt itself.
-    if (outcome.handled === "recorded" && outcome.depositJobId && outcome.amountCents) {
-      const job = await getJob(outcome.depositJobId);
-      const estimate = job?.estimate_id ? await getEstimate(job.estimate_id) : null;
-      if (estimate) await notifyDepositPaid(estimate, outcome.amountCents);
+    // The reconciler inserts email effects before acknowledging the event.
+    // Try them immediately for prompt receipts; cron owns provider retries.
+    try {
+      await drainPaymentEmailTasks({ limit: 10 });
+    } catch (error) {
+      // Reconciliation already committed the durable email tasks. A provider
+      // backlog must not make Square retry a completed money event; cron owns
+      // the independent delivery retry.
+      console.error("[canes] payment email outbox drain failed:", error);
     }
     console.log(`[canes] square webhook ${event.eventType}: ${outcome.handled}`);
   } catch (err) {

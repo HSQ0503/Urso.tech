@@ -830,7 +830,7 @@ export function JobDetailSheet({
           {job.deposit_paid_at ? (
             <p className="text-[13px] leading-snug">
               <span className="font-semibold text-[var(--cp-good)]">
-                {fmtMoney(job.deposit_cents)} on file
+                {fmtMoney(job.deposit_collected_cents ?? job.deposit_cents)} on file
               </span>{" "}
               <span className="text-[var(--cp-muted)]">
                 · {fmtEt(job.deposit_paid_at)} — nets off the invoice automatically.
@@ -906,7 +906,12 @@ export function JobDetailSheet({
                   }
                   onClick={() =>
                     run(
-                      () => recordJobDeposit(job.id, depositCents(depositAmt), depositMethod),
+                      () => recordJobDeposit(
+                        job.id,
+                        depositCents(depositAmt),
+                        depositMethod,
+                        crypto.randomUUID(),
+                      ),
                       () => {
                         setDepositOpen(false);
                         setDepositAmt("");

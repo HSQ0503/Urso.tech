@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Feather } from "@expo/vector-icons";
 import {
   fmtEt,
   fmtEtTimeRange,
@@ -19,7 +20,7 @@ import {
   type TechnicianWeek,
 } from "@urso/types";
 import { api, SessionExpiredError } from "@/api";
-import { signOut } from "@/auth";
+import { signOutWithPushCleanup } from "@/push-notifications";
 import { color, font, HIT, radius, space, type } from "@/theme";
 
 // The technician's week — the first screen of every workday.
@@ -179,7 +180,7 @@ export default function WeekScreen() {
   );
 
   const handleSignOut = useCallback(async () => {
-    await signOut();
+    await signOutWithPushCleanup("crew");
     router.replace("/login");
   }, [router]);
 
@@ -200,6 +201,18 @@ export default function WeekScreen() {
         <View style={styles.chromeBottom}>
           <Pressable
             accessibilityRole="button"
+            accessibilityLabel="Notification settings"
+            hitSlop={8}
+            onPress={() => router.push("/(crew)/settings")}
+            style={({ pressed }) => [styles.chromeButton, pressed && styles.signOutPressed]}
+          >
+            <Feather name="bell" size={15} color={color.chromeMuted} />
+            <Text style={styles.signOutText}>Notifications</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Sign out"
+            hitSlop={8}
             onPress={() => {
               void handleSignOut();
             }}
@@ -289,10 +302,20 @@ const styles = StyleSheet.create({
   hoursLabel: { ...type.micro, color: color.chromeMuted, marginTop: 2 },
 
   chromeBottom: {
-    alignItems: "flex-end",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: color.chromeLine,
     paddingHorizontal: space.sm,
+  },
+  chromeButton: {
+    minHeight: HIT,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+    paddingHorizontal: space.sm,
+    borderRadius: radius.sm,
   },
   signOut: {
     minHeight: HIT,

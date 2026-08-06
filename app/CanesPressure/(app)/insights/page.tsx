@@ -117,14 +117,14 @@ function CrewMarginRow({ crew, max }: { crew: Insights["revenueByCrew"][number];
 }
 
 function ShareBar({ segments }: { segments: { label: string; cents: number; color: string }[] }) {
-  const total = segments.reduce((s, x) => s + x.cents, 0);
-  if (total === 0) return <EmptyLine>No payments in this period.</EmptyLine>;
-  const shown = segments.filter((s) => s.cents > 0);
+  const shown = segments.filter((segment) => segment.cents !== 0);
+  const magnitudeTotal = shown.reduce((sum, segment) => sum + Math.abs(segment.cents), 0);
+  if (magnitudeTotal === 0) return <EmptyLine>No payments in this period.</EmptyLine>;
   return (
     <div>
       <div className="flex h-2.5 w-full overflow-hidden rounded-[2px]">
         {shown.map((s) => (
-          <div key={s.label} style={{ width: `${(s.cents / total) * 100}%`, background: s.color }} />
+          <div key={s.label} style={{ width: `${(Math.abs(s.cents) / magnitudeTotal) * 100}%`, background: s.color }} />
         ))}
       </div>
       <div className="mt-2.5 space-y-1.5">
@@ -136,7 +136,7 @@ function ShareBar({ segments }: { segments: { label: string; cents: number; colo
             </span>
             <span className="tabular-nums font-medium">
               {fmtMoney(s.cents)}
-              <span className="ml-1.5 text-[var(--cp-faint)]">{Math.round((s.cents / total) * 100)}%</span>
+              <span className="ml-1.5 text-[var(--cp-faint)]">{Math.round((Math.abs(s.cents) / magnitudeTotal) * 100)}%</span>
             </span>
           </div>
         ))}

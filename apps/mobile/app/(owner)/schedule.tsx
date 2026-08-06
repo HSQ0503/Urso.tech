@@ -58,15 +58,11 @@ import {
   type LeadStatus,
 } from "@urso/types";
 import {
-  API_BASE,
+  calendarEventActions,
   callActions,
   estimateActions,
   jobActions,
-  SessionExpiredError,
-  type ApiResult,
 } from "@/api";
-import { getAccessToken, signOut } from "@/auth";
-import { getAdminToken } from "@/session";
 import { NavigateButton } from "@/components/navigate";
 import { Notice } from "@/components/notice";
 import { isCompleteWhen, SlotPicker } from "@/components/slot-picker";
@@ -254,60 +250,6 @@ function Notices({ items }: { items: string[] }) {
   );
 }
 
-// ── The one client call src/api.ts does not carry yet ────────────────────────
-//
-// POST /canes/calendar-events/actions has NO namespace in src/api.ts, and src/
-// was not mine to edit in this pass — so this file carries a local twin of that
-// module's private `request`: same envelope, same token order (admin first — an
-// owner is not a Supabase user at all), same 401 → signOut → SessionExpiredError,
-// same two transport sentences, character for character. It deviates in nothing.
-//
-// This is a PLACEHOLDER, not a home. The moment `calendarEventActions.create`
-// lands in src/api.ts this whole block deletes and the sheet below calls that
-// instead; the signature it should take is the signature this function takes.
-// Until then every other mutation on the phone routes through one file and this
-// one does not, which is exactly the second copy the codebase spends its
-// comments warning about.
-async function calendarEventCreate(input: {
-  title: string;
-  startIso: string;
-  endIso: string;
-  allDay: boolean;
-  crewId: string | null;
-  kind: CalendarEventKind;
-  notes?: string;
-}): Promise<ApiResult<Record<string, unknown>>> {
-  const token = (await getAdminToken()) ?? (await getAccessToken());
-  if (!token) throw new SessionExpiredError();
-
-  let res: Response;
-  try {
-    res = await fetch(`${API_BASE}/api/v1/canes/calendar-events/actions`, {
-      method: "POST",
-      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-      body: JSON.stringify({ action: "create", ...input }),
-    });
-  } catch {
-    return { ok: false, notice: "No connection. Showing the last update.", transient: true };
-  }
-
-  if (res.status === 401) {
-    await signOut();
-    throw new SessionExpiredError();
-  }
-
-  let payload: unknown = null;
-  try {
-    payload = await res.json();
-  } catch {
-    return { ok: false, notice: "The server sent something unexpected.", transient: true };
-  }
-
-  const body = payload as { ok?: boolean; data?: Record<string, unknown>; notice?: string } | null;
-  if (body && body.ok === true) return { ok: true, data: body.data ?? {} };
-  return { ok: false, notice: body?.notice ?? "That didn't go through — try again." };
-}
-
 // @urso/types has no label map for CalendarEventKind — STATUS_LABEL and its
 // siblings cover leads, jobs, estimates, invoices and rewards, not this. The web
 // sheet declares the same four locally; this is that list, not a second
@@ -423,7 +365,7 @@ function CreateEventSheet({
   // ["owner","schedule"] is the board prefix covering every fetched window — the
   // same literal job/[id] invalidates with, for the same reason: the window is
   // part of the key, so no single factory call names them all.
-  const create = useAction(calendarEventCreate, {
+  const create = useAction(calendarEventActions.create, {
     invalidates: [["owner", "schedule"]],
   });
 

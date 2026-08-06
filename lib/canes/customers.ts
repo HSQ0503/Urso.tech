@@ -9,7 +9,7 @@ import {
   DEMO_LEADS,
   DEMO_PAYMENTS,
 } from "@/lib/canes/fixtures";
-import { toE164 } from "@/lib/canes/types";
+import { paymentNetCents, toE164 } from "@/lib/canes/types";
 import type {
   Address,
   Contact,
@@ -140,9 +140,10 @@ export async function listCustomers(query?: string): Promise<CustomerSummary[]> 
   }
   const lifetimeByContact = new Map<string, number>();
   for (const p of payments) {
-    if (p.status !== "completed") continue;
     const cid = paymentContactId(p, invoiceById, jobById);
-    if (cid) lifetimeByContact.set(cid, (lifetimeByContact.get(cid) ?? 0) + p.amount_cents);
+    if (cid) {
+      lifetimeByContact.set(cid, (lifetimeByContact.get(cid) ?? 0) + paymentNetCents(p));
+    }
   }
   const balanceByContact = new Map<string, number>();
   for (const inv of invoices) {
@@ -236,9 +237,10 @@ export async function getCustomer(id: string): Promise<CustomerDetail | null> {
     }
   }
 
-  const paymentsTotal = payments
-    .filter((p) => p.status === "completed")
-    .reduce((sum, p) => sum + p.amount_cents, 0);
+  const paymentsTotal = payments.reduce(
+    (sum, payment) => sum + paymentNetCents(payment),
+    0,
+  );
   const openBalance = invoices
     .filter((i) => i.status === "sent" || i.status === "viewed")
     .reduce((sum, i) => sum + Math.max(0, i.total_cents - i.amount_paid_cents), 0);

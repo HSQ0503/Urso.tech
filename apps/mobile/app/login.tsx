@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -15,6 +16,10 @@ import {
   signInWorkspaceWithPassword,
   verifyWorkspaceCode,
 } from "@/platform/auth";
+import {
+  consumeRecentNoSessionDetection,
+  detectWorkspaceSession,
+} from "@/platform/session";
 import { workspaceHref } from "@/platform/types";
 import { queryClient } from "@/query";
 import { ChromeLockup } from "@/components/ledger";
@@ -42,6 +47,7 @@ const CODE_CELLS = 8;
 export default function Login(): React.ReactElement {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const [sessionCheckAlreadyCompleted] = useState(consumeRecentNoSessionDetection);
 
   const [step, setStep] = useState<Step>("choice");
   const [email, setEmail] = useState<string>("");
@@ -49,6 +55,26 @@ export default function Login(): React.ReactElement {
   const [password, setPassword] = useState<string>("");
   const [busy, setBusy] = useState<boolean>(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [checkingExistingSession, setCheckingExistingSession] = useState(
+    !sessionCheckAlreadyCompleted,
+  );
+
+  useEffect(() => {
+    if (sessionCheckAlreadyCompleted) return;
+    let live = true;
+    void detectWorkspaceSession()
+      .then((session) => {
+        if (!live) return;
+        if (session) router.replace(workspaceHref(session.workspace));
+        else setCheckingExistingSession(false);
+      })
+      .catch(() => {
+        if (live) setCheckingExistingSession(false);
+      });
+    return () => {
+      live = false;
+    };
+  }, [router, sessionCheckAlreadyCompleted]);
 
   // Moving between steps clears the last step's sentence. Without this a
   // refusal from the email step ("Enter a valid email.") could still be on
@@ -167,6 +193,14 @@ export default function Login(): React.ReactElement {
       : step === "code"
         ? `Code sent · ${address}`
         : address;
+
+  if (checkingExistingSession) {
+    return (
+      <View style={styles.screen}>
+        <ActivityIndicator color={color.brand} />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.screen}>

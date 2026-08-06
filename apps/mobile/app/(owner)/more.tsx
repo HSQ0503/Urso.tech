@@ -7,7 +7,6 @@
 import { useCallback, useEffect, useState, type ComponentProps } from "react";
 import {
   ActivityIndicator,
-  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -17,7 +16,7 @@ import {
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
-import { signOut } from "@/auth";
+import { signOutWithPushCleanup } from "@/push-notifications";
 import { getAdminProfile, type AdminProfile } from "@/session";
 import { color, radius, space, type } from "@/theme";
 import {
@@ -89,7 +88,7 @@ export default function MoreScreen(): React.ReactElement {
   }, [load]);
 
   const handleSignOut = useCallback(async () => {
-    await signOut();
+    await signOutWithPushCleanup("owner");
     router.replace("/login");
   }, [router]);
 

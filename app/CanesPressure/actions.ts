@@ -1,6 +1,6 @@
 "use server";
 
-import { randomBytes } from "crypto";
+import { createHash, randomBytes, randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { canesConfigured, canesDb, squareConfigured } from "@/lib/canes/supabase";
@@ -14,7 +14,6 @@ import {
   getJob,
   getScheduleBoard,
   listCrews,
-  listJobItems,
   nextEstimateNumber,
   enqueueEstimateSend,
   enqueueEstimateReminders,
@@ -24,10 +23,7 @@ import {
   getInvoiceByJob,
   getInvoiceByToken,
   getInvoiceItems,
-  getInvoicePayments,
-  nextInvoiceNumber,
   invoicePublicUrl,
-  enqueueInvoiceSend,
   enqueueInvoiceReminders,
 } from "@/lib/canes/invoices";
 import {
@@ -47,12 +43,27 @@ import {
   notifyEstimateApproved,
   notifyEstimateDeclined,
   notifyInvoiceSent,
-  notifyInvoicePaid,
-  notifyInvoiceReceipt,
   notifyRewardClaimed,
 } from "@/lib/canes/notify";
-import { cancelSquareInvoice, createDepositLink, createSquareInvoice, deleteDepositLink, recomputeInvoicePaid } from "@/lib/canes/square";
+import { drainPaymentEmailTasks, enqueueInvoicePaymentEmails } from "@/lib/canes/payment-notifications";
+import { drainCanesPushOutbox } from "@/lib/canes/push";
+import {
+  cancelSquareInvoice,
+  createDepositLink,
+  createSquareInvoice,
+  deleteDepositLink,
+  handleSquarePaymentEvent,
+  recomputeInvoicePaid,
+} from "@/lib/canes/square";
 import { PRACTICE_PHONE } from "@/lib/canes/tour";
+import {
+  pushCrewRemovedFromJob,
+  pushDepositReceived,
+  pushEstimateApproved,
+  pushInvoicePaid,
+  pushJobChanged,
+  pushPaymentIssue,
+} from "@/lib/canes/push-events";
 import {
   fmtEt,
   fmtMoney,
@@ -333,72 +344,307 @@ export async function logCallOutcome(
 // folds it into amount_paid_cents, so the invoice opens at balance due and
 // the Square hosted invoice shows "Deposit received −$X". When a draft
 // invoice already exists the row attaches to it directly.
+type JobDepositSnapshot = {
+  deposit_collected_cents: number;
+  deposit_square_payment_id: string | null;
+  deposit_link_id: string | null;
+  deposit_link_url: string | null;
+  deposit_order_id: string | null;
+  deposit_link_retired_at: string | null;
+};
+
+type SquareOrderTender = {
+  paymentId: string;
+  amountCents: number;
+  currency: string;
+};
+
+async function retrieveSquareOrderTenders(orderId: string): Promise<{
+  tenders: SquareOrderTender[];
+  error?: string;
+}> {
+  if (!squareConfigured()) return { tenders: [], error: "Square is not configured." };
+  const squareApiBase = (process.env.CANES_SQUARE_ENV ?? "production") === "sandbox"
+    ? "https://connect.squareupsandbox.com"
+    : "https://connect.squareup.com";
+  try {
+    const response = await fetch(`${squareApiBase}/v2/orders/${encodeURIComponent(orderId)}`, {
+      headers: {
+        Authorization: `Bearer ${process.env.CANES_SQUARE_ACCESS_TOKEN as string}`,
+        "Square-Version": "2026-07-15",
+      },
+      signal: AbortSignal.timeout(8_000),
+    });
+    const json = (await response.json()) as Record<string, unknown>;
+    if (!response.ok) {
+      const errors = json.errors as Array<{ detail?: string }> | undefined;
+      return { tenders: [], error: errors?.[0]?.detail ?? `Square responded ${response.status}` };
+    }
+    const order = (json.order ?? {}) as Record<string, unknown>;
+    const rawTenders = Array.isArray(order.tenders)
+      ? order.tenders as Array<Record<string, unknown>>
+      : [];
+    const tenders = new Map<string, SquareOrderTender>();
+    for (const tender of rawTenders) {
+      const paymentId = typeof tender.payment_id === "string"
+        ? tender.payment_id
+        : typeof tender.id === "string" ? tender.id : null;
+      const money = (tender.amount_money ?? {}) as Record<string, unknown>;
+      const amountCents = typeof money.amount === "number" ? money.amount : null;
+      const currency = typeof money.currency === "string" ? money.currency : null;
+      if (
+        !paymentId ||
+        amountCents === null ||
+        !Number.isSafeInteger(amountCents) ||
+        amountCents <= 0 ||
+        amountCents > 2_147_483_647 ||
+        !currency
+      ) {
+        return {
+          tenders: [],
+          error: "Square returned an incomplete tender. Review the order before recording off-platform money.",
+        };
+      }
+      tenders.set(paymentId, { paymentId, amountCents, currency });
+    }
+    return { tenders: [...tenders.values()] };
+  } catch (error) {
+    return { tenders: [], error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+async function reconcileSquareDepositOrderBeforeManualEntry(
+  jobId: string,
+  orderId: string,
+): Promise<{ ok: boolean; notice?: string }> {
+  const result = await retrieveSquareOrderTenders(orderId);
+  if (result.error) {
+    return {
+      ok: false,
+      notice: `The Square link was disabled, but its order could not be verified (${result.error}). No manual deposit was recorded.`,
+    };
+  }
+  for (const tender of result.tenders) {
+    const eventId = `manual-preflight:${jobId}:${tender.paymentId}`;
+    const outcome = await handleSquarePaymentEvent(
+      {
+        eventId,
+        eventType: "payment.updated",
+        squareInvoiceId: null,
+        squarePaymentId: tender.paymentId,
+        squareOrderId: orderId,
+        amountCents: tender.amountCents,
+        currency: tender.currency,
+        status: "COMPLETED",
+        paid: true,
+        refund: null,
+      },
+      {
+        event_id: eventId,
+        type: "manual.deposit_preflight",
+        order_id: orderId,
+        payment_id: tender.paymentId,
+        amount_cents: tender.amountCents,
+        currency: tender.currency,
+      },
+    );
+    if (outcome.handled !== "recorded" && outcome.handled !== "duplicate") {
+      return {
+        ok: false,
+        notice: "Square reported a deposit that needs reconciliation. No manual deposit was recorded — refresh and verify the payment ledger.",
+      };
+    }
+  }
+  return { ok: true };
+}
+
 async function insertJobDepositRow(
   job: Job,
   amountCents: number,
   method: PaymentMethod,
   invoiceId?: string | null,
+  idempotencyKey: string = randomUUID(),
 ): Promise<ActionResult> {
   const db = canesDb();
-  const { error } = await db.from("payments").insert({
-    invoice_id: invoiceId ?? null,
-    job_id: job.id,
-    amount_cents: amountCents,
-    currency: "USD",
-    method,
-    source: "manual",
-    status: "completed",
-    kind: "deposit",
-    recorded_by: "owner",
+  const original = {
+    deposit_collected_cents: job.deposit_collected_cents ?? 0,
+    deposit_square_payment_id:
+      (job as Job & { deposit_square_payment_id?: string | null }).deposit_square_payment_id ?? null,
+    deposit_link_id: job.deposit_link_id ?? null,
+    deposit_link_url: job.deposit_link_url ?? null,
+    deposit_order_id: job.deposit_order_id ?? null,
+    deposit_link_retired_at: job.deposit_link_retired_at ?? null,
+  } satisfies JobDepositSnapshot;
+  let expected = original;
+  let retiredOrderToReconcile: string | null = null;
+
+  // Older rows can have an order or customer-facing URL but no Payment Link id.
+  // Without the id we cannot prove the charging surface was disabled. Never
+  // guess and risk recording cash beside an in-flight card payment.
+  if (!original.deposit_link_id && original.deposit_link_url) {
+    return {
+      ok: false,
+      notice: "This job has a legacy Square deposit link that cannot be safely disabled. No manual deposit was recorded; reconcile the Square order first.",
+    };
+  }
+  if (!original.deposit_link_id && original.deposit_order_id) {
+    if (!original.deposit_link_retired_at) {
+      return {
+        ok: false,
+        notice: "This job has a legacy Square deposit order whose link state is unknown. No manual deposit was recorded; reconcile the Square order first.",
+      };
+    }
+    retiredOrderToReconcile = original.deposit_order_id;
+  }
+  if (original.deposit_link_id && !original.deposit_order_id) {
+    return {
+      ok: false,
+      notice: "This Square deposit link is missing its reconciliation order ID. No manual deposit was recorded; verify the link in Square first.",
+    };
+  }
+  // Never record off-platform money while a live Square link can still charge
+  // the requested amount. Delete first, then inspect and reconcile the order:
+  // a card may have completed immediately before Square accepted the delete.
+  if (original.deposit_link_id && original.deposit_order_id) {
+    const deleted = await deleteDepositLink(original.deposit_link_id);
+    if (!deleted) {
+      return { ok: false, notice: "Couldn't disable the existing Square deposit link. No payment was recorded; try again." };
+    }
+    let clearQuery = db
+      .from("jobs")
+      .update({
+        deposit_link_id: null,
+        deposit_link_url: null,
+        deposit_link_retired_at: new Date().toISOString(),
+      })
+      .eq("id", job.id)
+      .eq("deposit_link_id", original.deposit_link_id)
+      .eq("deposit_order_id", original.deposit_order_id)
+      .eq("deposit_collected_cents", original.deposit_collected_cents);
+    clearQuery = original.deposit_link_url
+      ? clearQuery.eq("deposit_link_url", original.deposit_link_url)
+      : clearQuery.is("deposit_link_url", null);
+    clearQuery = original.deposit_square_payment_id
+      ? clearQuery.eq("deposit_square_payment_id", original.deposit_square_payment_id)
+      : clearQuery.is("deposit_square_payment_id", null);
+    const { data: cleared, error: clearError } = await clearQuery.select("id");
+    if (clearError || !cleared?.length) {
+      return { ok: false, notice: "The Square link was disabled, but its local state could not be updated. Refresh before recording the deposit." };
+    }
+
+    retiredOrderToReconcile = original.deposit_order_id;
+  }
+
+  if (retiredOrderToReconcile) {
+    let reconciliation: { ok: boolean; notice?: string };
+    try {
+      reconciliation = await reconcileSquareDepositOrderBeforeManualEntry(job.id, retiredOrderToReconcile);
+    } catch (error) {
+      reconciliation = {
+        ok: false,
+        notice: `The Square link was disabled, but its order could not be reconciled (${error instanceof Error ? error.message : String(error)}). No manual deposit was recorded.`,
+      };
+    }
+
+    const { data: freshRow, error: freshError } = await db
+      .from("jobs")
+      .select("deposit_collected_cents, deposit_square_payment_id, deposit_link_id, deposit_link_url, deposit_order_id, deposit_link_retired_at")
+      .eq("id", job.id)
+      .maybeSingle();
+    if (freshError || !freshRow) {
+      return { ok: false, notice: "The Square link was disabled, but the payment state could not be rechecked. No manual deposit was recorded." };
+    }
+    const fresh = freshRow as JobDepositSnapshot;
+    const squarePaymentLanded =
+      fresh.deposit_collected_cents !== original.deposit_collected_cents ||
+      fresh.deposit_square_payment_id !== original.deposit_square_payment_id;
+    if (squarePaymentLanded) {
+      return {
+        ok: false,
+        notice: "A card deposit completed while the Square link was being disabled. It was reconciled; no manual deposit was recorded.",
+      };
+    }
+    if (
+      fresh.deposit_link_id !== null ||
+      fresh.deposit_link_url !== null ||
+      fresh.deposit_order_id !== retiredOrderToReconcile
+    ) {
+      return { ok: false, notice: "The deposit payment state changed. No manual deposit was recorded — refresh and try again." };
+    }
+    if (!reconciliation.ok) return { ok: false, notice: reconciliation.notice };
+    expected = fresh;
+  }
+
+  const { data: rows, error } = await db.rpc("record_manual_job_deposit_locked", {
+    p_job_id: job.id,
+    p_amount_cents: amountCents,
+    p_method: method,
+    p_expected_collected_cents: expected.deposit_collected_cents,
+    p_expected_square_payment_id: expected.deposit_square_payment_id,
+    p_expected_link_id: expected.deposit_link_id,
+    p_expected_link_url: expected.deposit_link_url,
+    p_expected_order_id: expected.deposit_order_id,
+    p_idempotency_key: `manual-deposit:${idempotencyKey}`,
   });
   if (error) return { ok: false, notice: error.message };
-
-  let attachedTo = invoiceId ?? null;
-  if (!attachedTo) {
-    // A completeJob racing this insert may have just minted the invoice and
-    // already run its deposit re-point — catch stragglers by claiming this
-    // job's null-invoice deposit rows onto the live invoice now (same
-    // predicate as createInvoiceFromJob's claim, so both sides converge).
-    const inv = await getInvoiceByJob(job.id);
-    if (inv) {
-      await db
-        .from("payments")
-        .update({ invoice_id: inv.id })
-        .eq("job_id", job.id)
-        .eq("kind", "deposit")
-        .is("invoice_id", null);
-      attachedTo = inv.id;
-    }
+  const result = (rows?.[0] ?? null) as {
+    outcome: "recorded" | "duplicate" | "not_found" | "job_closed" | "invalid" | "deposit_busy" | "financial_busy" | "invoice_busy" | "invoice_sent" | "square_pending" | "over_cap" | "payment_conflict";
+    payment_id: string | null;
+    invoice_id: string | null;
+    collected_cents: number;
+    job_total_cents: number;
+  } | null;
+  if (!result) return { ok: false, notice: "Couldn't record the deposit. Please try again." };
+  const duplicate = result.outcome === "duplicate";
+  if (result.outcome === "not_found") return { ok: false, notice: "Job not found." };
+  if (result.outcome === "job_closed") return { ok: false, notice: "This job is closed — no deposit was recorded." };
+  if (result.outcome === "payment_conflict") {
+    return { ok: false, notice: "A card deposit may have landed while the Square link was being disabled. No manual deposit was recorded — refresh and verify the payment ledger." };
+  }
+  if (result.outcome === "deposit_busy") return { ok: false, notice: "A Square deposit link is being prepared right now. Refresh and try again before recording off-platform money." };
+  if (result.outcome === "financial_busy") return { ok: false, notice: "Square is reconciling a payment or refund right now. Refresh the ledger before recording off-platform money." };
+  if (result.outcome === "invoice_busy") return { ok: false, notice: "This invoice is being sent or updated right now — refresh and record the money on the invoice." };
+  if (result.outcome === "invoice_sent") return { ok: false, notice: "The invoice has already gone out — record the money on the invoice instead." };
+  if (result.outcome === "square_pending") return { ok: false, notice: "A prior Square invoice publish may still be live. Reconcile or void it before recording off-platform money." };
+  if (result.outcome === "over_cap") {
+    return { ok: false, notice: `That would put deposits above the ${fmtMoney(result.job_total_cents)} job total.` };
+  }
+  if ((!duplicate && result.outcome !== "recorded") || !result.payment_id) {
+    return { ok: false, notice: "Couldn't record the deposit. Check the amount and try again." };
   }
 
-  // deposit_cents becomes the CUMULATIVE collected figure (the job sheet and
-  // public estimate page read it), so partials and "record another" always
-  // display what the ledger actually holds.
-  const { data: depRows } = await db
-    .from("payments")
-    .select("amount_cents")
-    .eq("job_id", job.id)
-    .eq("kind", "deposit")
-    .eq("status", "completed");
-  const collected = ((depRows ?? []) as { amount_cents: number }[]).reduce(
-    (s, r) => s + r.amount_cents,
-    0,
-  );
-  await db
-    .from("jobs")
-    .update({ deposit_paid_at: new Date().toISOString(), deposit_cents: collected || amountCents })
-    .eq("id", job.id);
-
-  // An outstanding online deposit link is now double-payment risk — kill it.
-  // (Any remainder simply rides the final invoice, which bills the balance.)
-  if (job.deposit_link_id) {
-    await deleteDepositLink(job.deposit_link_id);
-    await db.from("jobs").update({ deposit_link_id: null, deposit_link_url: null }).eq("id", job.id);
+  if (!duplicate) {
+    const attachedTo = result.invoice_id ?? invoiceId ?? null;
+    if (attachedTo) await recomputeInvoicePaid(attachedTo);
+    await logJobEvent(job.lead_id, `Deposit recorded — ${fmtMoney(amountCents)} (${PAYMENT_METHOD_LABEL[method]})`);
   }
-
-  if (attachedTo) await recomputeInvoicePaid(attachedTo);
-  await logJobEvent(job.lead_id, `Deposit recorded — ${fmtMoney(amountCents)} (${PAYMENT_METHOD_LABEL[method]})`);
-  return { ok: true };
+  const paymentEventId = `manual:${result.payment_id}`;
+  try {
+    await pushDepositReceived({
+      eventId: paymentEventId,
+      estimateId: job.estimate_id,
+      jobId: job.id,
+      customerName: job.customer_name,
+      amountCents,
+    });
+  } catch (error) {
+    // The transaction already stored the push outbox event. A delivery-path
+    // failure must not turn committed money into a false action failure.
+    console.error(`[canes] manual deposit push ensure failed for ${result.payment_id}:`, error);
+  }
+  // The ledger RPC already committed both outbox rows atomically. These drains
+  // only reduce delivery latency; a provider failure or request interruption
+  // leaves cron-safe pending rows behind.
+  void drainCanesPushOutbox({ deadlineAt: Date.now() + 20_000 }).catch((error) => {
+    console.error("[canes] manual deposit push drain failed:", error);
+  });
+  void drainPaymentEmailTasks({ eventId: paymentEventId, limit: 1 }).catch((error) => {
+    console.error("[canes] manual deposit email drain failed:", error);
+  });
+  return {
+    ok: true,
+    notice: duplicate ? `Deposit of ${fmtMoney(amountCents)} already recorded.` : undefined,
+  };
 }
 
 // Owner action: record a deposit the customer already paid outside the
@@ -409,6 +655,7 @@ export async function recordJobDeposit(
   jobId: string,
   amountCents: number,
   method: PaymentMethod,
+  idempotencyKey?: string,
 ): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
   const denied = await denyUnlessPermitted("invoices");
@@ -419,30 +666,6 @@ export async function recordJobDeposit(
   if (!job) return { ok: false, notice: "Job not found." };
   if (job.status === "canceled" || job.status === "paid") {
     return { ok: false, notice: `This job is ${job.status} — no deposit to record.` };
-  }
-
-  const db = canesDb();
-  // Existing deposits: the cumulative cap, and the double-submit guard (a
-  // second identical tap within the window is the same deposit, not a new
-  // one — two devices or a double-tap must never double the ledger).
-  const { data: priorRows, error: priorErr } = await db
-    .from("payments")
-    .select("amount_cents, created_at")
-    .eq("job_id", jobId)
-    .eq("kind", "deposit")
-    .eq("status", "completed");
-  if (priorErr) return { ok: false, notice: priorErr.message };
-  const prior = (priorRows ?? []) as { amount_cents: number; created_at: string }[];
-  const dupe = prior.find(
-    (r) => r.amount_cents === amount && Date.now() - new Date(r.created_at).getTime() < 20_000,
-  );
-  if (dupe) return { ok: true, notice: `Deposit of ${fmtMoney(amount)} already recorded.` };
-  const priorSum = prior.reduce((s, r) => s + r.amount_cents, 0);
-  if (priorSum + amount > job.total_cents) {
-    return {
-      ok: false,
-      notice: `That would put deposits at ${fmtMoney(priorSum + amount)} on a ${fmtMoney(job.total_cents)} job — check the amount.`,
-    };
   }
 
   const invoice = await getInvoiceByJob(jobId); // void steps aside
@@ -458,24 +681,13 @@ export async function recordJobDeposit(
     if (invoice.square_invoice_id) {
       return { ok: false, notice: `Invoice ${invoice.number} is being sent right now — record the money on the invoice instead.` };
     }
-    // Claim the draft (same optimistic discipline as recordCashPayment): a
-    // send that grabs it first wins and this deposit is refused, never lost.
-    const { data: claimed, error: claimErr } = await db
-      .from("invoices")
-      .update({ updated_at: new Date().toISOString() })
-      .eq("id", invoice.id)
-      .eq("status", "draft")
-      .is("square_invoice_id", null)
-      .select("id");
-    if (claimErr) return { ok: false, notice: claimErr.message };
-    if (!claimed || claimed.length === 0) {
-      return { ok: false, notice: `Invoice ${invoice.number} just changed — refresh and record the money there.` };
-    }
   }
-  const res = await insertJobDepositRow(job, amount, method, invoice?.id ?? null);
+  const requestKey = idempotencyKey?.trim() || randomUUID();
+  if (requestKey.length > 160) return { ok: false, notice: "The payment request key is invalid. Try again." };
+  const res = await insertJobDepositRow(job, amount, method, invoice?.id ?? null, requestKey);
   if (!res.ok) return res;
   refresh();
-  return { ok: true, notice: `Deposit of ${fmtMoney(amount)} recorded.` };
+  return { ok: true, notice: res.notice ?? `Deposit of ${fmtMoney(amount)} recorded.` };
 }
 
 // Permanently remove a junk or duplicate lead. Two refusals protect the
@@ -1589,7 +1801,13 @@ async function finalizeEstimateApproval(
   // before firing the owner alert or creating a second job.
   const { data: claimed, error } = await db
     .from("estimates")
-    .update({ status: "approved", approved_at: now, signature_name: signature, updated_at: now })
+    .update({
+      status: "approved",
+      approved_at: now,
+      approval_source: opts.inPerson ? "in_person" : "customer",
+      signature_name: signature,
+      updated_at: now,
+    })
     .eq("id", estimate.id)
     .eq("status", estimate.status)
     .select("id");
@@ -1656,6 +1874,20 @@ async function finalizeEstimateApproval(
 
   const withItems = await getEstimateWithItems(estimate.id);
   const jobId = withItems ? await createJobFromEstimate(withItems) : null;
+  if (!opts.inPerson) {
+    try {
+      await pushEstimateApproved({
+        estimateId: approved.id,
+        estimateNumber: approved.number,
+        customerName: approved.customer_name,
+        jobId,
+      });
+    } catch (error) {
+      // Approval and job creation have committed. Notification recovery owns
+      // delivery; never skip the deposit flow or report approval as failed.
+      console.error(`[canes] estimate approval push persistence failed for ${approved.id}:`, error);
+    }
+  }
 
   // Deposit already in hand (in-person approval): ledger it now and never
   // mint an online link — the customer must not be able to pay twice. The
@@ -1927,6 +2159,65 @@ async function logJobEvent(leadId: string | null, detail: string): Promise<void>
   await logEvent(leadId, "job", detail);
 }
 
+type JobNotificationMutation = {
+  operation: "schedule" | "unschedule" | "assign" | "status";
+  eventType: "schedule_changed" | "schedule_removed" | "crew_assignment_changed" | "status_changed";
+  detail: Record<string, unknown>;
+  newStatus?: JobStatus | null;
+  newScheduledAt?: string | null;
+  newEndsAt?: string | null;
+  newDurationMinutes?: number | null;
+  newCrewId?: string | null;
+  newAssignedTo?: string | null;
+  newConfirmedAt?: string | null;
+  newCanceledReason?: string | null;
+};
+
+// The job CAS and immutable recovery audit commit in one transaction. A lost
+// HTTP response can no longer make us delete the only evidence of a mutation
+// that PostgreSQL already committed.
+async function mutateJobWithNotification(
+  job: Job,
+  mutation: JobNotificationMutation,
+): Promise<{ ok: true; eventId: string } | { ok: false; notice: string }> {
+  const { data, error } = await canesDb().rpc("mutate_job_with_notification_locked", {
+    p_job_id: job.id,
+    p_operation: mutation.operation,
+    p_expected_status: job.status,
+    p_expected_scheduled_at: job.scheduled_at,
+    p_expected_crew_id: job.crew_id,
+    p_event_type: mutation.eventType,
+    p_detail: mutation.detail,
+    p_new_status: mutation.newStatus ?? null,
+    p_new_scheduled_at: mutation.newScheduledAt ?? null,
+    p_new_ends_at: mutation.newEndsAt ?? null,
+    p_new_duration_minutes: mutation.newDurationMinutes ?? null,
+    p_new_crew_id: mutation.newCrewId ?? null,
+    p_new_assigned_to: mutation.newAssignedTo ?? null,
+    p_new_confirmed_at: mutation.newConfirmedAt ?? null,
+    p_new_canceled_reason: mutation.newCanceledReason ?? null,
+  });
+  if (error) return { ok: false, notice: error.message };
+  const result = (data?.[0] ?? null) as {
+    outcome: "updated" | "not_found" | "conflict" | "terminal" | "invalid";
+    event_id: string | null;
+  } | null;
+  if (result?.outcome === "updated" && result.event_id) {
+    return { ok: true, eventId: result.event_id };
+  }
+  if (result?.outcome === "not_found") return { ok: false, notice: "Job not found." };
+  if (result?.outcome === "terminal") return { ok: false, notice: "This job is already closed." };
+  if (result?.outcome === "conflict") {
+    return { ok: false, notice: "This job changed while you were updating it — refresh and try again." };
+  }
+  return { ok: false, notice: "The job update was rejected. Refresh and try again." };
+}
+
+function sameInstant(left: string | null, right: string | null): boolean {
+  if (left === null || right === null) return left === right;
+  return new Date(left).getTime() === new Date(right).getTime();
+}
+
 function crewLabel(crew: { name: string } | null): string {
   return crew?.name ?? "no crew";
 }
@@ -2027,24 +2318,37 @@ export async function scheduleJob(
 
   const startIso = when.toISOString();
   const endIso = new Date(when.getTime() + duration * 60_000).toISOString();
-  const db = canesDb();
   const crews = crewId ? await listCrews() : [];
   const crew = crewId ? crews.find((c) => c.id === crewId) ?? null : null;
-  const { error } = await db
-    .from("jobs")
-    .update({
-      scheduled_at: startIso,
-      ends_at: endIso,
-      duration_minutes: duration,
-      crew_id: crewId,
-      assigned_to: crew?.name ?? job.assigned_to,
-      // Rescheduling moves a job to a new, not-yet-agreed slot, so a confirmed
-      // job must drop back to scheduled and clear confirmed_at — the customer
-      // hasn't said YES to the new time. Terminal states are rejected above.
-      ...((job.status === "unscheduled" || job.status === "scheduled" || job.status === "confirmed") ? { status: "scheduled", confirmed_at: null } : {}),
-    })
-    .eq("id", jobId);
-  if (error) return { ok: false, notice: error.message };
+  if (crewId && !crew) return { ok: false, notice: "Crew not found." };
+  const scheduleChanged =
+    !sameInstant(job.scheduled_at, startIso) ||
+    !sameInstant(job.ends_at, endIso) ||
+    job.crew_id !== crewId ||
+    job.duration_minutes !== duration;
+  if (!scheduleChanged) return { ok: true, notice: "This job is already in that slot." };
+  const resultingStatus: JobStatus = ["unscheduled", "scheduled", "confirmed"].includes(job.status)
+    ? "scheduled"
+    : job.status;
+  const mutation = await mutateJobWithNotification(job, {
+    operation: "schedule",
+    eventType: "schedule_changed",
+    detail: {
+      previousScheduledAt: job.scheduled_at,
+      scheduledAt: startIso,
+      previousCrewId: job.crew_id,
+      crewId,
+    },
+    newStatus: resultingStatus,
+    newScheduledAt: startIso,
+    newEndsAt: endIso,
+    newDurationMinutes: duration,
+    newCrewId: crewId,
+    newAssignedTo: crew?.name ?? job.assigned_to,
+    newConfirmedAt: resultingStatus === "scheduled" ? null : job.confirmed_at,
+  });
+  if (!mutation.ok) return mutation;
+  const notificationEventId = mutation.eventId;
 
   const conflict = await findConflictNotice(jobId, crewId, startIso, endIso);
   // Back-dating (logging a job Sebastian forgot to schedule): never text the
@@ -2056,7 +2360,45 @@ export async function scheduleJob(
   } else {
     await armJobConfirmation(job, startIso);
   }
-  if (crew && !pastSlot) await notifyCrewAssignment(job, crew.name, startIso);
+  if (!pastSlot && job.crew_id && job.crew_id !== crewId) {
+    try {
+      await pushCrewRemovedFromJob({
+        eventId: notificationEventId,
+        jobId: job.id,
+        crewId: job.crew_id,
+        customerName: job.customer_name,
+        jobName: job.job_name,
+      });
+    } catch (error) {
+      console.error(`[canes] crew removal push persistence failed for ${job.id}:`, error);
+    }
+  }
+  if (!pastSlot && scheduleChanged) {
+    try {
+      await pushJobChanged({
+        id: job.id,
+        customerName: job.customer_name,
+        jobName: job.job_name,
+        crewId,
+        eventId: notificationEventId,
+        change: job.scheduled_at ? "rescheduled" : "updated",
+        detail: job.scheduled_at
+          ? `${job.customer_name ?? "A customer"}'s job moved to ${fmtEt(startIso)}.`
+          : `${job.customer_name ?? "A customer"}'s job is scheduled for ${fmtEt(startIso)}.`,
+        notifyOwner: false,
+        expectedJobState: { crewId, status: resultingStatus, scheduledAt: startIso, endsAt: endIso },
+      });
+    } catch (error) {
+      console.error(`[canes] schedule push persistence failed for ${job.id}:`, error);
+    }
+  }
+  if (crew && !pastSlot) {
+    try {
+      await notifyCrewAssignment(job, crew.name, startIso);
+    } catch (error) {
+      console.error(`[canes] legacy crew assignment notice failed for ${job.id}:`, error);
+    }
+  }
   await logJobEvent(job.lead_id, `Scheduled ${fmtEt(startIso)} · ${crewLabel(crew)}`);
   refresh();
   const notices = [conflict, lateNightNotice(startIso)].filter(Boolean);
@@ -2109,13 +2451,38 @@ export async function unscheduleJob(jobId: string): Promise<ActionResult> {
   if (TERMINAL_JOB_STATUSES.includes(job.status)) {
     return { ok: false, notice: `Can't unschedule a ${job.status} job.` };
   }
-  const { error } = await canesDb()
-    .from("jobs")
-    .update({ scheduled_at: null, ends_at: null, status: "unscheduled" })
-    .eq("id", jobId);
-  if (error) return { ok: false, notice: error.message };
+  if (job.scheduled_at === null && job.ends_at === null && job.status === "unscheduled") {
+    return { ok: true, notice: "This job is already unscheduled." };
+  }
+  const mutation = await mutateJobWithNotification(job, {
+    operation: "unschedule",
+    eventType: "schedule_removed",
+    detail: {
+      previousScheduledAt: job.scheduled_at,
+      previousCrewId: job.crew_id,
+    },
+  });
+  if (!mutation.ok) return mutation;
+  const notificationEventId = mutation.eventId;
   await cancelJobConfirmation(jobId);
   await logJobEvent(job.lead_id, "Returned to the unscheduled tray");
+  if (job.crew_id && job.scheduled_at && new Date(job.scheduled_at).getTime() >= Date.now()) {
+    try {
+      await pushJobChanged({
+        id: job.id,
+        customerName: job.customer_name,
+        jobName: job.job_name,
+        crewId: job.crew_id,
+        eventId: notificationEventId,
+        change: "rescheduled",
+        detail: `${job.customer_name ?? "A customer"}'s job was removed from the schedule.`,
+        notifyOwner: false,
+        expectedJobState: { crewId: job.crew_id, status: "unscheduled", scheduledAt: null, endsAt: null },
+      });
+    } catch (error) {
+      console.error(`[canes] unschedule push persistence failed for ${job.id}:`, error);
+    }
+  }
   refresh();
   return { ok: true };
 }
@@ -2127,14 +2494,26 @@ export async function assignJob(jobId: string, crewId: string | null): Promise<A
   if (denied) return denied;
   const job = await getJob(jobId);
   if (!job) return { ok: false, notice: "Job not found." };
+  if (TERMINAL_JOB_STATUSES.includes(job.status)) {
+    return { ok: false, notice: `Can't assign a crew to a ${job.status} job.` };
+  }
+  if (job.crew_id === crewId) return { ok: true, notice: "This crew is already assigned." };
   const crews = crewId ? await listCrews() : [];
   const crew = crewId ? crews.find((c) => c.id === crewId) ?? null : null;
   if (crewId && !crew) return { ok: false, notice: "Crew not found." };
-  const { error } = await canesDb()
-    .from("jobs")
-    .update({ crew_id: crewId, assigned_to: crew?.name ?? null })
-    .eq("id", jobId);
-  if (error) return { ok: false, notice: error.message };
+  const mutation = await mutateJobWithNotification(job, {
+    operation: "assign",
+    eventType: "crew_assignment_changed",
+    detail: {
+      previousCrewId: job.crew_id,
+      crewId,
+      scheduledAt: job.scheduled_at,
+    },
+    newCrewId: crewId,
+    newAssignedTo: crew?.name ?? null,
+  });
+  if (!mutation.ok) return mutation;
+  const notificationEventId = mutation.eventId;
 
   let notice: string | undefined;
   if (job.scheduled_at && job.ends_at) {
@@ -2142,7 +2521,43 @@ export async function assignJob(jobId: string, crewId: string | null): Promise<A
   }
   // A back-dated (already-done) job doesn't need an assignment alert.
   const pastSlot = !!job.scheduled_at && new Date(job.scheduled_at).getTime() < Date.now();
-  if (crew && !pastSlot) await notifyCrewAssignment(job, crew.name, job.scheduled_at);
+  if (!pastSlot && job.crew_id && job.crew_id !== crewId) {
+    try {
+      await pushCrewRemovedFromJob({
+        eventId: notificationEventId,
+        jobId: job.id,
+        crewId: job.crew_id,
+        customerName: job.customer_name,
+        jobName: job.job_name,
+      });
+    } catch (error) {
+      console.error(`[canes] assignment removal push persistence failed for ${job.id}:`, error);
+    }
+  }
+  if (crew && !pastSlot) {
+    try {
+      await pushJobChanged({
+        id: job.id,
+        customerName: job.customer_name,
+        jobName: job.job_name,
+        crewId: crew.id,
+        eventId: notificationEventId,
+        change: "updated",
+        detail: `${job.customer_name ?? "A customer"}'s job was assigned to ${crew.name}.`,
+        notifyOwner: false,
+        expectedJobState: { crewId: crew.id, status: job.status, scheduledAt: job.scheduled_at, endsAt: job.ends_at },
+      });
+    } catch (error) {
+      console.error(`[canes] assignment push persistence failed for ${job.id}:`, error);
+    }
+  }
+  if (crew && !pastSlot) {
+    try {
+      await notifyCrewAssignment(job, crew.name, job.scheduled_at);
+    } catch (error) {
+      console.error(`[canes] legacy crew assignment notice failed for ${job.id}:`, error);
+    }
+  }
   await logJobEvent(job.lead_id, crew ? `Assigned to ${crew.name}` : "Crew unassigned");
   refresh();
   return { ok: true, notice };
@@ -2151,6 +2566,100 @@ export async function assignJob(jobId: string, crewId: string | null): Promise<A
 // Drive the manual status transitions this build owns, plus cancel/no-show with
 // a reason. Cancel stores canceled_reason (no-show is a reason string) and
 // cancels the pending confirmation.
+async function retireJobPaymentSurfacesBeforeCancellation(job: Job): Promise<ActionResult> {
+  const db = canesDb();
+  if (job.deposit_link_url && !job.deposit_link_id) {
+    return {
+      ok: false,
+      notice: "This job has a Square deposit URL that cannot be safely disabled. Reconcile it before canceling the job.",
+    };
+  }
+  if (job.deposit_link_id) {
+    if (!await deleteDepositLink(job.deposit_link_id)) {
+      return { ok: false, notice: "Couldn't disable the live Square deposit link. The job was not canceled; try again." };
+    }
+    const retiredAt = new Date().toISOString();
+    const { data: retired, error } = await db
+      .from("jobs")
+      .update({
+        deposit_link_id: null,
+        deposit_link_url: null,
+        deposit_link_retired_at: retiredAt,
+      })
+      .eq("id", job.id)
+      .eq("status", job.status)
+      .eq("deposit_link_id", job.deposit_link_id)
+      .select("id");
+    if (error || !retired?.length) {
+      return {
+        ok: false,
+        notice: "The Square deposit link was disabled, but the job changed locally. Refresh before retrying the cancellation.",
+      };
+    }
+    job.deposit_link_id = null;
+    job.deposit_link_url = null;
+    job.deposit_link_retired_at = retiredAt;
+  }
+
+  const invoice = await getInvoiceByJob(job.id);
+  if (!invoice || invoice.status === "paid") return { ok: true };
+  const billingOperationId = await claimInvoiceBillingOperation(invoice.id);
+  if (!billingOperationId) {
+    return {
+      ok: false,
+      notice: `Invoice ${invoice.number} is being sent, paid, or updated. Refresh before canceling the job.`,
+    };
+  }
+  try {
+    const currentInvoice = await getInvoice(invoice.id);
+    if (!currentInvoice || currentInvoice.status === "paid") {
+      return currentInvoice?.status === "paid"
+        ? { ok: true }
+        : { ok: false, notice: "The invoice changed while the cancellation was starting. Refresh and try again." };
+    }
+    if (currentInvoice.hosted_payment_url && !currentInvoice.square_invoice_id) {
+    return {
+      ok: false,
+        notice: `Invoice ${currentInvoice.number} has an unverified payment URL. Reconcile it before canceling the job.`,
+    };
+  }
+    if (currentInvoice.square_invoice_id && !await cancelSquareInvoice(currentInvoice.square_invoice_id)) {
+    return {
+      ok: false,
+        notice: `Square could not confirm ${currentInvoice.number} was canceled. It may have just been paid or refunded; refresh the ledger before canceling this job.`,
+    };
+  }
+  const now = new Date().toISOString();
+  let retireInvoice = db
+    .from("invoices")
+    .update({
+      status: "void",
+      hosted_payment_url: null,
+      paid_at: null,
+      voided_at: now,
+      updated_at: now,
+    })
+      .eq("id", currentInvoice.id)
+      .eq("billing_operation_id", billingOperationId)
+      .eq("status", currentInvoice.status)
+      .eq("amount_paid_cents", currentInvoice.amount_paid_cents);
+    retireInvoice = currentInvoice.square_invoice_id
+      ? retireInvoice.eq("square_invoice_id", currentInvoice.square_invoice_id)
+    : retireInvoice.is("square_invoice_id", null);
+  const { data: retiredInvoice, error: retireError } = await retireInvoice.select("id");
+  if (retireError || !retiredInvoice?.length) {
+    return {
+      ok: false,
+        notice: `The Square page for ${currentInvoice.number} is disabled, but its local record changed. Refresh before retrying the cancellation.`,
+    };
+  }
+    await cancelInvoiceTasks(currentInvoice.id);
+    return { ok: true };
+  } finally {
+    await releaseInvoiceBillingOperation(invoice.id, billingOperationId);
+  }
+}
+
 export async function setJobStatus(
   jobId: string,
   status: JobStatus,
@@ -2164,12 +2673,81 @@ export async function setJobStatus(
   }
   const job = await getJob(jobId);
   if (!job) return { ok: false, notice: "Job not found." };
+  if (job.status === status) return { ok: true, notice: `This job is already ${status}.` };
+  let cancellationOperationId: string | null = null;
+  if (status === "canceled") {
+    cancellationOperationId = randomUUID();
+    const { data: claimRows, error: claimError } = await canesDb().rpc(
+      "claim_job_cancellation_billing_locked",
+      {
+        p_job_id: job.id,
+        p_expected_status: job.status,
+        p_operation_id: cancellationOperationId,
+      },
+    );
+    if (claimError) return { ok: false, notice: claimError.message };
+    const claim = (claimRows?.[0] ?? null) as {
+      outcome: "claimed" | "not_found" | "conflict" | "deposit_busy" | "financial_busy";
+      deposit_link_id: string | null;
+      deposit_link_url: string | null;
+      deposit_order_id: string | null;
+      deposit_collected_cents: number;
+      deposit_link_retired_at: string | null;
+    } | null;
+    if (claim?.outcome !== "claimed") {
+      return {
+        ok: false,
+        notice: claim?.outcome === "deposit_busy"
+          ? "A Square deposit link is still being created or reconciled. Refresh before canceling this job."
+          : claim?.outcome === "financial_busy"
+            ? "Square is reconciling a payment or refund. Refresh the ledger before canceling this job."
+            : "This job changed while you were canceling it — refresh and try again.",
+      };
+    }
+    job.deposit_link_id = claim.deposit_link_id;
+    job.deposit_link_url = claim.deposit_link_url;
+    job.deposit_order_id = claim.deposit_order_id;
+    job.deposit_collected_cents = claim.deposit_collected_cents;
+    job.deposit_link_retired_at = claim.deposit_link_retired_at;
+    const billingRetired = await retireJobPaymentSurfacesBeforeCancellation(job);
+    if (!billingRetired.ok) {
+      await canesDb().rpc("release_job_deposit_link_operation", {
+        p_job_id: job.id,
+        p_operation_id: cancellationOperationId,
+      });
+      return billingRetired;
+    }
+  }
 
-  const patch: Record<string, unknown> = { status };
-  if (status === "canceled") patch.canceled_reason = reason?.trim() ?? null;
-  if (status === "confirmed") patch.confirmed_at = new Date().toISOString();
-  const { error } = await canesDb().from("jobs").update(patch).eq("id", jobId);
-  if (error) return { ok: false, notice: error.message };
+  const confirmedAt = status === "confirmed" ? new Date().toISOString() : null;
+  const mutation = await mutateJobWithNotification(job, {
+    operation: "status",
+    eventType: "status_changed",
+    detail: {
+      previousStatus: job.status,
+      status,
+      reason: reason?.trim() || null,
+    },
+    newStatus: status,
+    newConfirmedAt: confirmedAt,
+    newCanceledReason: status === "canceled" ? reason?.trim() ?? null : null,
+  });
+  if (!mutation.ok) {
+    if (cancellationOperationId) {
+      await canesDb().rpc("release_job_deposit_link_operation", {
+        p_job_id: job.id,
+        p_operation_id: cancellationOperationId,
+      });
+    }
+    return mutation;
+  }
+  const notificationEventId = mutation.eventId;
+  if (cancellationOperationId) {
+    await canesDb().rpc("release_job_deposit_link_operation", {
+      p_job_id: job.id,
+      p_operation_id: cancellationOperationId,
+    });
+  }
 
   // Leaving the live window (canceled) means the day-before text is now noise.
   if (status === "canceled") await cancelJobConfirmation(jobId);
@@ -2177,6 +2755,43 @@ export async function setJobStatus(
     job.lead_id,
     `Status set to ${status}${status === "canceled" && reason ? ` — ${reason.trim()}` : ""}`,
   );
+  if (status === "canceled" && job.scheduled_at && new Date(job.scheduled_at).getTime() >= Date.now()) {
+    try {
+      await pushJobChanged({
+        id: job.id,
+        customerName: job.customer_name,
+        jobName: job.job_name,
+        crewId: job.crew_id,
+        eventId: notificationEventId,
+        change: "canceled",
+        detail: `${job.customer_name ?? "A customer"}'s job was canceled${reason?.trim() ? `: ${reason.trim()}` : "."}`,
+        notifyOwner: false,
+        expectedJobState: { crewId: job.crew_id, status, scheduledAt: job.scheduled_at, endsAt: job.ends_at },
+      });
+    } catch (error) {
+      console.error(`[canes] status push persistence failed for ${job.id}:`, error);
+    }
+  }
+  if (status === "canceled") {
+    const { data: canceledJob } = await canesDb()
+      .from("jobs")
+      .select("deposit_collected_cents")
+      .eq("id", job.id)
+      .maybeSingle();
+    if ((canceledJob?.deposit_collected_cents ?? 0) > 0) {
+      const detail = `${job.customer_name ?? "This customer"}'s canceled job has ${fmtMoney(canceledJob?.deposit_collected_cents ?? 0)} in collected deposits. Review the cancellation policy and refund ledger.`;
+      try {
+        await pushPaymentIssue({
+          eventId: `job-canceled-with-deposit:${notificationEventId}`,
+          jobId: job.id,
+          title: "Canceled job has a deposit",
+          detail,
+        });
+      } catch (error) {
+        console.error(`[canes] canceled-job deposit push persistence failed for ${job.id}:`, error);
+      }
+    }
+  }
   refresh();
   return { ok: true };
 }
@@ -2493,124 +3108,53 @@ export async function createInvoiceFromJob(
   if (!canesConfigured()) return DEMO;
   const denied = await denyUnlessPermitted("invoices");
   if (denied) return denied;
-  const existing = await getInvoiceByJob(jobId); // ignores void — re-bill path
-  if (existing) return { ok: true, invoiceId: existing.id };
   const job = await getJob(jobId);
   if (!job) return { ok: false, notice: "Job not found." };
 
   const settings = await getSettings();
-  const number = await nextInvoiceNumber();
   const db = canesDb();
-  const { data, error } = await db
-    .from("invoices")
-    .insert({
-      job_id: jobId,
-      estimate_id: job.estimate_id,
-      lead_id: job.lead_id,
-      contact_id: job.contact_id,
-      number,
-      status: "draft",
-      customer_name: job.customer_name,
-      customer_phone: job.customer_phone,
-      customer_email: job.customer_email,
-      job_address: job.job_address,
-      job_name: job.job_name,
-      message_to_customer: settings.invoice_message,
-      terms: settings.invoice_terms,
-      tax_rate_bps: 0, // FL residential non-taxable by default
-      public_token: genInvoiceToken(),
-    })
-    .select("id")
-    .single();
-  if (error) {
-    // A racing complete may have inserted first (job_id UNIQUE) — reuse it.
-    const raced = await getInvoiceByJob(jobId);
-    if (raced) return { ok: true, invoiceId: raced.id };
-    return { ok: false, notice: error.message };
-  }
-  const invoiceId = data.id as string;
-
-  // Procedural crew steps live beside the sold work snapshot but must never be
-  // copied onto the customer's invoice.
-  const jobItems = (await listJobItems(jobId)).filter((item) => !item.checklist_only);
-  if (jobItems.length > 0) {
-    const rows = jobItems.map((it, i) => ({
-      invoice_id: invoiceId,
-      job_item_id: it.id,
-      position: i,
-      name: it.name,
-      description: it.description,
-      quantity: it.quantity,
-      unit_price_cents: it.quantity > 0 ? Math.round(it.line_total_cents / it.quantity) : it.line_total_cents,
-      line_total_cents: it.line_total_cents,
-    }));
-    const { error: itemsErr } = await db.from("invoice_items").insert(rows);
-    if (itemsErr) console.error(`[canes] invoice_items snapshot failed for ${invoiceId}: ${itemsErr.message}`);
-  } else {
-    // No line items on the job (e.g. a manual job) — bill the job total as one line.
-    await db.from("invoice_items").insert({
-      invoice_id: invoiceId,
-      position: 0,
-      name: job.job_name ?? "Pressure washing service",
-      quantity: 1,
-      unit_price_cents: job.total_cents,
-      line_total_cents: job.total_cents,
-    });
-  }
-
-  // Seed review-reward offers for every configured kind (0012). Seeding at
-  // creation means the quick "text invoice" path in the job sheet carries the
-  // offers automatically; Sebastian unchecks per invoice for a shaky client.
-  // The tour's practice sandbox never seeds — its invoice is fictional.
+  let rewardOffers: Array<{ kind: InvoiceRewardKind; label: string; amount_cents: number }> = [];
   if (job.customer_phone !== PRACTICE_PHONE) {
     const config = rewardConfigFrom(settings);
-    const offerRows = (Object.keys(config) as InvoiceRewardKind[])
+    rewardOffers = (Object.keys(config) as InvoiceRewardKind[])
       .filter((kind) => config[kind].configured)
       .map((kind) => ({
-        invoice_id: invoiceId,
         kind,
         label: config[kind].label,
         amount_cents: config[kind].cents,
-        status: "offered",
       }));
-    if (offerRows.length > 0) {
-      const { error: rewardErr } = await db.from("invoice_rewards").insert(offerRows);
-      if (rewardErr) console.error(`[canes] reward seed failed for ${invoiceId}: ${rewardErr.message}`);
-    }
   }
-
-  // Pull the job's booking deposit onto this bill (0013): ledger rows minted
-  // by the deposit webhook before the invoice existed (or stranded on a voided
-  // bill) re-point here, so the invoice opens already credited and the
-  // customer is only ever asked for the balance.
-  const { data: voidRows } = await db
-    .from("invoices")
-    .select("id")
-    .eq("job_id", jobId)
-    .eq("status", "void");
-  const voidIds = ((voidRows ?? []) as { id: string }[]).map((r) => r.id);
-  let claimDeposits = db
-    .from("payments")
-    .update({ invoice_id: invoiceId })
-    .eq("job_id", jobId)
-    .eq("kind", "deposit");
-  claimDeposits =
-    voidIds.length > 0
-      ? claimDeposits.or(`invoice_id.is.null,invoice_id.in.(${voidIds.join(",")})`)
-      : claimDeposits.is("invoice_id", null);
-  const { error: claimErr } = await claimDeposits;
-  if (claimErr) console.error(`[canes] deposit re-point failed for ${invoiceId}: ${claimErr.message}`);
-  // The void bills just lost their deposit rows — refresh their paid caches so
-  // a set-aside invoice never shows money it no longer holds.
-  if (!claimErr) {
-    for (const vid of voidIds) await recomputeInvoicePaid(vid);
+  const { data: rows, error } = await db.rpc("initialize_invoice_from_job_locked", {
+    p_job_id: jobId,
+    p_public_token: genInvoiceToken(),
+    p_message_to_customer: settings.invoice_message,
+    p_terms: settings.invoice_terms,
+    p_reward_offers: rewardOffers,
+  });
+  if (error) return { ok: false, notice: error.message };
+  const result = (rows?.[0] ?? null) as {
+    outcome: "ready" | "existing" | "not_found" | "incomplete_closed" | "financial_busy";
+    invoice_id: string | null;
+    invoice_number: string | null;
+  } | null;
+  if (!result || !result.invoice_id) {
+    return {
+      ok: false,
+      notice: result?.outcome === "not_found"
+        ? "Job not found."
+        : result?.outcome === "financial_busy"
+          ? "Square is reconciling a payment or refund right now. Refresh before creating the invoice."
+          : "The invoice could not be initialized. Please retry.",
+    };
   }
-
-  await recomputeInvoiceTotals(invoiceId);
-  await recomputeInvoicePaid(invoiceId); // fold the deposit into the paid cache
-  await logInvoiceEvent(job.lead_id, `Invoice ${number} created`);
+  if (result.outcome === "incomplete_closed") {
+    return { ok: false, notice: "This invoice was sent before initialization completed. Void it and re-create the invoice." };
+  }
+  if (result.outcome === "ready") {
+    await logInvoiceEvent(job.lead_id, `Invoice ${result.invoice_number ?? "created"} created`);
+  }
   refresh();
-  return { ok: true, invoiceId };
+  return { ok: true, invoiceId: result.invoice_id };
 }
 
 // Replace a DRAFT invoice's line items, then recompute. Mirrors
@@ -2645,54 +3189,56 @@ export async function saveInvoiceItems(
   if (!canesConfigured()) return DEMO;
   const denied = await denyUnlessPermitted("invoices");
   if (denied) return denied;
-  const invoice = await getInvoice(invoiceId);
-  if (!invoice) return { ok: false, notice: "Invoice not found." };
-  if (invoice.status !== "draft") {
-    return { ok: false, notice: "Only draft invoices can have their lines edited." };
-  }
-  if (invoice.square_invoice_id) {
-    return {
-      ok: false,
-      notice: "This bill is already on Square — void it and re-bill to change the lines.",
-    };
-  }
-  const payments = await getInvoicePayments(invoiceId);
-  if (payments.length > 0) {
-    return {
-      ok: false,
-      notice: "Money has already been recorded against this bill — its lines are frozen.",
-    };
-  }
   if (items.length === 0) {
     return { ok: false, notice: "A bill needs at least one line." };
   }
-
-  const db = canesDb();
-  const { error: delErr } = await db.from("invoice_items").delete().eq("invoice_id", invoiceId);
-  if (delErr) return { ok: false, notice: delErr.message };
-
-  const rows = items.map((it, i) => {
-    // Integer cents in, integer cents out. quantity is the only non-integer
-    // here (half-hours are real), so the line total rounds ONCE, exactly as
-    // lineTotalCents does for estimates and jobs.
+  const normalized = items.map((it) => {
     const quantity = Number(it.quantity) || 0;
     const unit = Math.round(it.unitPriceCents);
+    if (!Number.isFinite(quantity) || quantity <= 0 || !Number.isSafeInteger(unit) || unit < 0) return null;
     return {
-      invoice_id: invoiceId,
-      position: i,
       name: it.name.trim() || "Service",
       description: it.description?.trim() || null,
       quantity,
       unit_price_cents: unit,
-      line_total_cents: Math.round(quantity * unit),
     };
   });
-  const { error: insErr } = await db.from("invoice_items").insert(rows);
-  if (insErr) return { ok: false, notice: insErr.message };
+  if (normalized.some((item) => item === null)) return { ok: false, notice: "Every invoice line needs a positive quantity and valid price." };
 
-  await recomputeInvoiceTotals(invoiceId);
-  refresh();
-  return { ok: true };
+  const billingOperationId = await claimInvoiceBillingOperation(invoiceId);
+  if (!billingOperationId) return { ok: false, notice: "This invoice is being paid or updated right now — refresh and try again." };
+  try {
+    const db = canesDb();
+    const { data, error: readError } = await db.from("invoices").select("*").eq("id", invoiceId).maybeSingle();
+    if (readError) return { ok: false, notice: `Couldn't verify the invoice: ${readError.message}` };
+    const invoice = data as Invoice | null;
+    if (!invoice) return { ok: false, notice: "Invoice not found." };
+    const { data: rows, error } = await db.rpc("replace_invoice_items_locked", {
+      p_invoice_id: invoiceId,
+      p_items: normalized,
+      p_expected_status: invoice.status,
+      p_expected_total_cents: invoice.total_cents,
+      p_expected_paid_cents: invoice.amount_paid_cents,
+      p_expected_square_invoice_id: invoice.square_invoice_id,
+      p_operation_id: billingOperationId,
+    });
+    if (error) return { ok: false, notice: error.message };
+    const outcome = (rows?.[0] as { outcome?: string } | undefined)?.outcome;
+    if (outcome !== "saved") {
+      const notices: Record<string, string> = {
+        frozen: "Only draft invoices can have their lines edited.",
+        square_live: "This bill is already on Square — void it and re-bill to change the lines.",
+        has_payments: "Money has already been recorded against this bill — its lines are frozen.",
+        initializing: "This invoice is still being initialized. Refresh and try again.",
+        square_pending: "A prior Square publish may still be live. Reconcile or void it before changing the bill.",
+      };
+      return { ok: false, notice: notices[outcome ?? ""] ?? "This invoice changed while you were editing it — refresh and try again." };
+    }
+    refresh();
+    return { ok: true };
+  } finally {
+    await releaseInvoiceBillingOperation(invoiceId, billingOperationId);
+  }
 }
 
 // Edit a draft invoice — the "actual amount" lever is adjustment_cents, plus
@@ -2715,52 +3261,86 @@ export async function updateInvoice(
   if (!canesConfigured()) return DEMO;
   const denied = await denyUnlessPermitted("invoices");
   if (denied) return denied;
-  const invoice = await getInvoice(invoiceId);
-  if (!invoice) return { ok: false, notice: "Invoice not found." };
-  // Same contact-fields exception as updateEstimate: amounts freeze at send,
-  // but a wrong phone/email must stay fixable or the bill is undeliverable.
   const patchKeys = Object.entries(patch)
     .filter(([, v]) => v !== undefined)
     .map(([k]) => k);
   const contactOnly = patchKeys.every((k) => CONTACT_PATCH_KEYS.includes(k));
-  if (invoice.status !== "draft" && !contactOnly) {
-    return { ok: false, notice: "Only draft invoices can be edited (contact details excepted)." };
-  }
-
-  const row: Record<string, unknown> = { updated_at: new Date().toISOString() };
-  if (patch.customerName !== undefined) row.customer_name = patch.customerName || null;
-  if (patch.customerPhone !== undefined) {
-    const phone = patch.customerPhone ? toE164(patch.customerPhone) : null;
-    if (patch.customerPhone && !phone) return { ok: false, notice: "That phone number doesn't look valid." };
-    row.customer_phone = phone;
-  }
-  if (patch.customerEmail !== undefined) row.customer_email = patch.customerEmail || null;
-  if (patch.contactId !== undefined) {
-    row.contact_id =
-      patch.contactId ??
-      (await resolveEstimateContact({
+  const billingOperationId = await claimInvoiceBillingOperation(invoiceId);
+  if (!billingOperationId) return { ok: false, notice: "This invoice is being paid or updated right now — refresh and try again." };
+  try {
+    const db = canesDb();
+    const { data, error: readError } = await db.from("invoices").select("*").eq("id", invoiceId).maybeSingle();
+    if (readError) return { ok: false, notice: `Couldn't verify the invoice: ${readError.message}` };
+    const invoice = data as Invoice | null;
+    if (!invoice) return { ok: false, notice: "Invoice not found." };
+    if (invoice.status !== "draft" && !contactOnly) {
+      return { ok: false, notice: "Only draft invoices can be edited (contact details excepted)." };
+    }
+    const row: Record<string, unknown> = {};
+    if (patch.customerName !== undefined) row.customer_name = patch.customerName || null;
+    if (patch.customerPhone !== undefined) {
+      const phone = patch.customerPhone ? toE164(patch.customerPhone) : null;
+      if (patch.customerPhone && !phone) return { ok: false, notice: "That phone number doesn't look valid." };
+      row.customer_phone = phone;
+    }
+    if (patch.customerEmail !== undefined) row.customer_email = patch.customerEmail || null;
+    if (patch.contactId !== undefined) {
+      row.contact_id = patch.contactId ?? (await resolveEstimateContact({
         name: patch.customerName ?? invoice.customer_name,
-        phone: patch.customerPhone !== undefined
-          ? ((row.customer_phone as string | null) ?? null)
-          : invoice.customer_phone,
+        phone: patch.customerPhone !== undefined ? ((row.customer_phone as string | null) ?? null) : invoice.customer_phone,
         email: patch.customerEmail ?? invoice.customer_email,
         address: patch.jobAddress ?? invoice.job_address,
         leadId: invoice.lead_id,
       }));
+    }
+    if (patch.jobName !== undefined) row.job_name = patch.jobName || null;
+    if (patch.jobAddress !== undefined) row.job_address = patch.jobAddress || null;
+    if (patch.adjustmentCents !== undefined) {
+      const adjustment = Math.round(patch.adjustmentCents);
+      if (!Number.isSafeInteger(adjustment)) return { ok: false, notice: "Enter a valid adjustment amount." };
+      row.adjustment_cents = adjustment;
+    }
+    if (patch.messageToCustomer !== undefined) row.message_to_customer = patch.messageToCustomer || null;
+    if (patch.terms !== undefined) row.terms = patch.terms || null;
+    if (patch.internalNotes !== undefined) row.internal_notes = patch.internalNotes || null;
+    const { data: rows, error } = await db.rpc("patch_invoice_locked", {
+      p_invoice_id: invoiceId,
+      p_patch: row,
+      p_contact_only: contactOnly,
+      p_expected_status: invoice.status,
+      p_expected_total_cents: invoice.total_cents,
+      p_expected_paid_cents: invoice.amount_paid_cents,
+      p_expected_square_invoice_id: invoice.square_invoice_id,
+      p_operation_id: billingOperationId,
+    });
+    if (error) return { ok: false, notice: error.message };
+    const outcome = (rows?.[0] as { outcome?: string } | undefined)?.outcome;
+    if (outcome !== "saved" && outcome !== "settled") {
+      const outcomeNotices: Record<string, string> = {
+        zero_total: "That adjustment would make the invoice total zero. Void the invoice instead.",
+        over_paid: `That adjustment would put the total below the ${fmtMoney(invoice.amount_paid_cents)} already paid. Handle the difference as a refund instead.`,
+        square_live: "This bill is already on Square — void it and re-bill to change the amount.",
+        square_pending: "A prior Square publish may still be live. Reconcile or void it before editing this invoice.",
+      };
+      return {
+        ok: false,
+        notice: outcomeNotices[outcome ?? ""]
+          ?? "This invoice changed while you were editing it — refresh and try again.",
+      };
+    }
+    if (outcome === "settled") {
+      await cancelInvoiceTasks(invoiceId);
+      await logInvoiceEvent(invoice.lead_id, `Invoice ${invoice.number} settled by adjustment at ${fmtMoney(invoice.amount_paid_cents)}`);
+    }
+    if (invoice.lead_id) await touch(invoice.lead_id);
+    refresh();
+    return {
+      ok: true,
+      notice: outcome === "settled" ? "Adjustment saved — the existing payment now covers this invoice in full." : undefined,
+    };
+  } finally {
+    await releaseInvoiceBillingOperation(invoiceId, billingOperationId);
   }
-  if (patch.jobName !== undefined) row.job_name = patch.jobName || null;
-  if (patch.jobAddress !== undefined) row.job_address = patch.jobAddress || null;
-  if (patch.adjustmentCents !== undefined) row.adjustment_cents = Math.round(patch.adjustmentCents);
-  if (patch.messageToCustomer !== undefined) row.message_to_customer = patch.messageToCustomer || null;
-  if (patch.terms !== undefined) row.terms = patch.terms || null;
-  if (patch.internalNotes !== undefined) row.internal_notes = patch.internalNotes || null;
-
-  const { error } = await canesDb().from("invoices").update(row).eq("id", invoiceId);
-  if (error) return { ok: false, notice: error.message };
-  await recomputeInvoiceTotals(invoiceId);
-  if (invoice.lead_id) await touch(invoice.lead_id);
-  refresh();
-  return { ok: true };
 }
 
 // Send (or resend) an invoice for card payment. Publishes a Square invoice when
@@ -2768,6 +3348,27 @@ export async function updateInvoice(
 // with the same outbox fallback as sendEstimate, queues day-3/7 reminders, and
 // advances the job to `invoiced`. The customer pays on Square's hosted page;
 // the webhook settles us. Never sends a card link for an already-paid invoice.
+async function claimInvoiceBillingOperation(invoiceId: string): Promise<string | null> {
+  const operationId = randomUUID();
+  const { data, error } = await canesDb().rpc("claim_invoice_billing_operation", {
+    p_invoice_id: invoiceId,
+    p_operation_id: operationId,
+  });
+  if (error) {
+    console.error(`[canes] invoice billing claim failed for ${invoiceId}: ${error.message}`);
+    return null;
+  }
+  return data === true ? operationId : null;
+}
+
+async function releaseInvoiceBillingOperation(invoiceId: string, operationId: string): Promise<void> {
+  const { error } = await canesDb().rpc("release_invoice_billing_operation", {
+    p_invoice_id: invoiceId,
+    p_operation_id: operationId,
+  });
+  if (error) console.error(`[canes] invoice billing release failed for ${invoiceId}: ${error.message}`);
+}
+
 export async function sendInvoice(
   invoiceId: string,
   opts?: { channels?: { email?: boolean; text?: boolean }; toEmail?: string; toPhone?: string },
@@ -2775,15 +3376,7 @@ export async function sendInvoice(
   if (!canesConfigured()) return DEMO;
   const denied = await denyUnlessPermitted("invoices");
   if (denied) return denied;
-  const invoice = await getInvoice(invoiceId);
-  if (!invoice) return { ok: false, notice: "Invoice not found." };
-  if (invoice.status === "paid") return { ok: false, notice: "This invoice is already paid." };
-  if (invoice.status === "void") return { ok: false, notice: "This invoice was voided." };
-
   const db = canesDb();
-
-  // Send-target overrides: validate, then PERSIST — the snapshot is the
-  // send-of-record, so reminders and resends follow the corrected destination.
   const overrides: Record<string, unknown> = {};
   if (opts?.toPhone !== undefined && opts.toPhone.trim()) {
     const phone = toE164(opts.toPhone);
@@ -2795,224 +3388,575 @@ export async function sendInvoice(
     if (!EMAIL_RE.test(email)) return { ok: false, notice: "That email address doesn't look valid." };
     overrides.customer_email = email;
   }
-  if (Object.keys(overrides).length > 0) {
-    const { error } = await db
-      .from("invoices")
-      .update({ ...overrides, updated_at: new Date().toISOString() })
-      .eq("id", invoiceId);
-    if (error) return { ok: false, notice: error.message };
-  }
-
-  // No-destination guard BEFORE any status flip or Square publish: an invoice
-  // must never go "sent" with nowhere to deliver it.
-  const effectivePhone = (overrides.customer_phone as string | undefined) ?? invoice.customer_phone;
-  const effectiveEmail = (overrides.customer_email as string | undefined) ?? invoice.customer_email;
-  const guardLead = invoice.lead_id ? await getLead(invoice.lead_id) : null;
-  const optedOut = Boolean(guardLead?.opted_out);
   const wantsText = opts?.channels?.text ?? true;
   const wantsEmail = opts?.channels?.email ?? true;
-  const canText = Boolean(effectivePhone) && !optedOut && wantsText;
-  const canEmail = Boolean(effectiveEmail) && wantsEmail;
-  if (!canText && !canEmail) {
-    return {
-      ok: false,
-      notice: optedOut && Boolean(effectivePhone)
-        ? "This customer opted out of texts — add an email to send the invoice."
-        : "No destination: add a phone or email (or pick a channel) before sending.",
-    };
+
+  const billingOperationId = await claimInvoiceBillingOperation(invoiceId);
+  if (!billingOperationId) {
+    return { ok: false, notice: "This invoice is being paid or updated right now — refresh and try again." };
   }
 
-  await recomputeInvoiceTotals(invoiceId);
-  const fresh = (await getInvoice(invoiceId)) ?? invoice;
-
-  // Create + publish the Square invoice if Square is connected. Best-effort:
-  // a Square failure never blocks sending our own branded link. The tour's
-  // practice sandbox never reaches Square — a published Square invoice for a
-  // fictional customer would outlive the sandbox cleanup.
-  let hostedUrl = fresh.hosted_payment_url;
-  if (!hostedUrl && fresh.customer_phone !== PRACTICE_PHONE) {
-    const sq = await createSquareInvoice(fresh);
-    if (sq.error) {
-      await alertOwner(`Couldn't create the Square invoice for ${fresh.number}: ${sq.error}. Sent our link instead.`);
+  try {
+    type SendInvoiceRow = Invoice & {
+      initialization_completed_at?: string | null;
+      square_publish_attempt_key?: string | null;
+      square_publish_fingerprint?: string | null;
+      square_publish_started_at?: string | null;
+    };
+    const readCurrent = async (): Promise<SendInvoiceRow | null> => {
+      const { data, error } = await db.from("invoices").select("*").eq("id", invoiceId).maybeSingle();
+      if (error) throw new Error(error.message);
+      return data as SendInvoiceRow | null;
+    };
+    let fresh: SendInvoiceRow | null;
+    try {
+      fresh = await readCurrent();
+    } catch (error) {
+      return { ok: false, notice: `Couldn't verify the invoice: ${error instanceof Error ? error.message : "unknown error"}` };
     }
-    if (sq.squareInvoiceId || sq.hostedUrl) {
-      hostedUrl = sq.hostedUrl;
-      await db
+    if (!fresh) return { ok: false, notice: "Invoice not found." };
+    if (fresh.status === "paid") return { ok: false, notice: "This invoice is already paid." };
+    if (fresh.status === "void") return { ok: false, notice: "This invoice was voided." };
+    if (fresh.hosted_payment_url && !fresh.square_invoice_id) {
+      return {
+        ok: false,
+        notice: "This invoice has an unverified Square payment URL. Reconcile or void it before sending again.",
+      };
+    }
+
+    // Destination overrides belong to this billing lease and use the money +
+    // provider snapshot as their CAS. A send racing payment/void/edit cannot
+    // silently persist a stale destination.
+    if (Object.keys(overrides).length > 0) {
+      const changesPendingFingerprint = Boolean(
+        fresh.square_publish_attempt_key
+        && (
+          (overrides.customer_phone !== undefined && overrides.customer_phone !== fresh.customer_phone)
+          || (overrides.customer_email !== undefined && overrides.customer_email !== fresh.customer_email)
+        ),
+      );
+      if (changesPendingFingerprint) {
+        return {
+          ok: false,
+          notice: "A prior Square publish may still be live. Reconcile or void it before changing the delivery address.",
+        };
+      }
+      let overrideQuery = db
         .from("invoices")
-        .update({
-          square_invoice_id: sq.squareInvoiceId,
-          square_order_id: sq.squareOrderId,
-          hosted_payment_url: sq.hostedUrl,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", invoiceId);
+        .update({ ...overrides, updated_at: new Date().toISOString() })
+        .eq("id", invoiceId)
+        .eq("billing_operation_id", billingOperationId)
+        .eq("status", fresh.status)
+        .eq("total_cents", fresh.total_cents)
+        .eq("amount_paid_cents", fresh.amount_paid_cents);
+      overrideQuery = fresh.square_invoice_id
+        ? overrideQuery.eq("square_invoice_id", fresh.square_invoice_id)
+        : overrideQuery.is("square_invoice_id", null);
+      const { data: updated, error } = await overrideQuery.select("id");
+      if (error || !updated?.length) {
+        return {
+          ok: false,
+          notice: error?.message ?? "The invoice changed while saving its delivery address — refresh and try again.",
+        };
+      }
+      try {
+        fresh = await readCurrent();
+      } catch (error) {
+        return { ok: false, notice: `Couldn't reload the invoice: ${error instanceof Error ? error.message : "unknown error"}` };
+      }
+      if (!fresh) return { ok: false, notice: "Invoice not found." };
     }
-  }
 
-  const now = new Date().toISOString();
-  // House claim discipline: only a live draft/sent/viewed row flips to sent —
-  // a reopen that voided this invoice mid-send (or a webhook that settled it)
-  // wins, and we abort BEFORE any customer contact, killing the just-published
-  // Square pay page so nothing chargeable outlives the abort.
-  const { data: flipped, error } = await db
-    .from("invoices")
-    .update({ status: "sent", sent_at: fresh.sent_at ?? now, updated_at: now })
-    .eq("id", invoiceId)
-    .in("status", ["draft", "sent", "viewed"])
-    .select("id");
-  if (error) return { ok: false, notice: error.message };
-  if (!flipped || flipped.length === 0) {
-    const current = await getInvoice(invoiceId);
-    if (current?.status === "void" && current.square_invoice_id) {
-      await cancelSquareInvoice(current.square_invoice_id);
+    // Derive delivery channels only from the post-lease, post-override row.
+    const guardLead = fresh.lead_id ? await getLead(fresh.lead_id) : null;
+    const optedOut = Boolean(guardLead?.opted_out);
+    const canText = Boolean(fresh.customer_phone) && !optedOut && wantsText;
+    const canEmail = Boolean(fresh.customer_email) && wantsEmail;
+    if (!canText && !canEmail) {
+      return {
+        ok: false,
+        notice: optedOut && Boolean(fresh.customer_phone)
+          ? "This customer opted out of texts — add an email to send the invoice."
+          : "No destination: add a phone or email (or pick a channel) before sending.",
+      };
     }
-    return {
-      ok: false,
-      notice: `Invoice ${invoice.number} changed while sending (now ${current?.status ?? "gone"}) — refresh and check it.`,
-    };
-  }
-  const sent: Invoice = { ...fresh, status: "sent", sent_at: fresh.sent_at ?? now, hosted_payment_url: hostedUrl ?? null };
 
-  const emailResult = canEmail ? await notifyInvoiceSent(sent, now) : null;
+    let recomputed = false;
+    try {
+      recomputed = await recomputeInvoiceTotals(invoiceId);
+    } catch (error) {
+      console.error(`[canes] invoice recompute failed before send for ${invoiceId}:`, error);
+    }
+    if (!recomputed) {
+      return { ok: false, notice: "Couldn't verify the invoice total. Nothing was sent — refresh and try again." };
+    }
+    try {
+      fresh = await readCurrent();
+    } catch (error) {
+      return { ok: false, notice: `Couldn't verify the invoice before sending: ${error instanceof Error ? error.message : "unknown error"}` };
+    }
+    if (!fresh) return { ok: false, notice: "Invoice not found." };
+    if (!fresh.initialization_completed_at) {
+      return { ok: false, notice: "This invoice is still being initialized. Nothing was sent — refresh and try again." };
+    }
+    if (!(["draft", "sent", "viewed"] as string[]).includes(fresh.status)) {
+      return { ok: false, notice: `Invoice ${fresh.number} changed before sending (now ${fresh.status}).` };
+    }
 
-  const link = invoicePublicUrl(sent);
-  let textSent = false;
-  let textQueued = false;
-  if (canText) {
-    const res = await sendCanesSms({
-      to: sent.customer_phone as string,
-      body: `Here is your invoice from Canes Pressure Washing: ${link}`,
-      leadId: invoice.lead_id,
-      automated: true,
+    // Square publish is fail-closed. Its idempotency attempt is a stable hash
+    // of bill content/payment state, not the rotating local lease UUID, so an
+    // ambiguous provider timeout can be retried without creating new objects.
+    let hostedUrl = fresh.hosted_payment_url;
+    let expectedSquareInvoiceId = fresh.square_invoice_id;
+    let createdSquareInvoiceId: string | null = null;
+    if (!hostedUrl && fresh.square_invoice_id) {
+      return {
+        ok: false,
+        notice: "This invoice's previous Square page was retired. Void and reissue the invoice before sending another payment link.",
+      };
+    }
+    if (!hostedUrl && fresh.customer_phone !== PRACTICE_PHONE && squareConfigured()) {
+      const squareItems = await getInvoiceItems(fresh.id);
+      const squareFingerprint = createHash("sha256")
+        .update(JSON.stringify({
+          invoice: {
+            id: fresh.id,
+            contactId: fresh.contact_id,
+            customerName: fresh.customer_name,
+            customerPhone: fresh.customer_phone,
+            customerEmail: fresh.customer_email,
+            jobName: fresh.job_name,
+            totalCents: fresh.total_cents,
+            paidCents: fresh.amount_paid_cents,
+            adjustmentCents: fresh.adjustment_cents,
+            taxCents: fresh.tax_cents,
+          },
+          items: squareItems.map((item) => ({
+            position: item.position,
+            name: item.name,
+            description: item.description,
+            quantity: item.quantity,
+            unitPriceCents: item.unit_price_cents,
+            lineTotalCents: item.line_total_cents,
+          })),
+        }))
+        .digest("hex")
+        .slice(0, 32);
+      let squareAttemptId = fresh.square_publish_attempt_key;
+      if (squareAttemptId && fresh.square_publish_fingerprint !== squareFingerprint) {
+        return {
+          ok: false,
+          notice: "A prior Square publish has an unknown outcome and the bill has changed since. Check Square, then void and reissue before sending.",
+        };
+      }
+      if (!squareAttemptId) {
+        const { data: claimedAttempt, error: attemptError } = await db
+          .from("invoices")
+          .update({
+            square_publish_attempt_key: squareFingerprint,
+            square_publish_fingerprint: squareFingerprint,
+            square_publish_started_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", invoiceId)
+          .eq("billing_operation_id", billingOperationId)
+          .eq("status", fresh.status)
+          .eq("total_cents", fresh.total_cents)
+          .eq("amount_paid_cents", fresh.amount_paid_cents)
+          .is("square_invoice_id", null)
+          .is("square_publish_attempt_key", null)
+          .select("id");
+        if (attemptError || !claimedAttempt?.length) {
+          return {
+            ok: false,
+            notice: attemptError?.message ?? "The invoice changed before Square publish could begin — refresh and try again.",
+          };
+        }
+        squareAttemptId = squareFingerprint;
+      }
+      const clearSquareAttempt = async (): Promise<void> => {
+        const { error } = await db.from("invoices")
+          .update({
+            square_publish_attempt_key: null,
+            square_publish_fingerprint: null,
+            square_publish_started_at: null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", invoiceId)
+          .eq("billing_operation_id", billingOperationId)
+          .eq("square_publish_attempt_key", squareAttemptId);
+        if (error) console.error(`[canes] Square attempt cleanup failed for ${invoiceId}: ${error.message}`);
+      };
+      const sq = await createSquareInvoice(fresh, squareItems, squareAttemptId);
+      if (sq.error) {
+        const canceled = sq.squareInvoiceId ? await cancelSquareInvoice(sq.squareInvoiceId) : false;
+        if (canceled) await clearSquareAttempt();
+        await alertOwner(`Couldn't create the Square invoice for ${fresh.number}: ${sq.error}. Nothing was sent.`);
+        return {
+          ok: false,
+          notice: sq.squareInvoiceId && canceled
+            ? `Square couldn't publish a complete payment page: ${sq.error}. Nothing was sent; retry.`
+            : `Square publish failed or timed out: ${sq.error}. Nothing was sent. Retry this unchanged invoice; if it still fails, check Square before editing.`,
+        };
+      }
+      const squareComplete = Boolean(sq.squareInvoiceId && sq.squareOrderId && sq.hostedUrl);
+      if (sq.squareInvoiceId || sq.squareOrderId || sq.hostedUrl) {
+        if (!squareComplete) {
+          const canceled = sq.squareInvoiceId ? await cancelSquareInvoice(sq.squareInvoiceId) : false;
+          if (canceled) await clearSquareAttempt();
+          return {
+            ok: false,
+            notice: canceled
+              ? "Square returned an incomplete payment page. It was canceled; retry."
+              : "Square returned an incomplete payment page with an unknown live state. Check Square before editing or retrying.",
+          };
+        }
+        const { data: savedSquare, error: saveSquareError } = await db
+          .from("invoices")
+          .update({
+            square_invoice_id: sq.squareInvoiceId,
+            square_order_id: sq.squareOrderId,
+            hosted_payment_url: sq.hostedUrl,
+            square_publish_attempt_key: null,
+            square_publish_fingerprint: null,
+            square_publish_started_at: null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", invoiceId)
+          .eq("billing_operation_id", billingOperationId)
+          .eq("status", fresh.status)
+          .eq("total_cents", fresh.total_cents)
+          .eq("amount_paid_cents", fresh.amount_paid_cents)
+          .is("square_invoice_id", null)
+          .eq("square_publish_attempt_key", squareAttemptId)
+          .select("id");
+        if (saveSquareError || !savedSquare?.length) {
+          const canceled = sq.squareInvoiceId
+            ? await cancelSquareInvoice(sq.squareInvoiceId)
+            : true;
+          if (canceled) await clearSquareAttempt();
+          console.error(
+            `[canes] Square invoice identity save failed for ${invoiceId}: ${saveSquareError?.message ?? "billing lease lost"}`,
+          );
+          return {
+            ok: false,
+            notice: canceled
+              ? "Square created the payment page, but its reconciliation IDs could not be saved. The page was canceled; refresh and retry."
+              : "Square created a payment page that could not be reconciled or canceled. Do not resend—check Square and the payment ledger first.",
+          };
+        }
+        hostedUrl = sq.hostedUrl;
+        expectedSquareInvoiceId = sq.squareInvoiceId;
+        createdSquareInvoiceId = sq.squareInvoiceId;
+      }
+    }
+
+    const { data: publishRows, error: publishError } = await db.rpc("publish_invoice_locked", {
+      p_invoice_id: invoiceId,
+      p_expected_status: fresh.status,
+      p_expected_total_cents: fresh.total_cents,
+      p_expected_paid_cents: fresh.amount_paid_cents,
+      p_expected_square_invoice_id: expectedSquareInvoiceId,
+      p_operation_id: billingOperationId,
+      p_queue_text: canText,
+      p_queue_email: canEmail,
     });
-    if (res.ok) textSent = true;
-    else textQueued = await enqueueInvoiceSend(sent);
-  }
-  await enqueueInvoiceReminders(sent);
+    const published = (publishRows?.[0] ?? null) as {
+      outcome: "published" | "not_found" | "lease_lost" | "conflict" | "initializing" | "closed" | "no_destination" | "square_pending";
+      delivery_generation: number;
+      sent_at: string | null;
+      text_dedupe_key: string | null;
+      email_dedupe_key: string | null;
+    } | null;
+    if (publishError || published?.outcome !== "published") {
+      const current = await getInvoice(invoiceId);
+      const squareIdToCancel = createdSquareInvoiceId ?? (current?.status === "void" ? current.square_invoice_id : null);
+      if (squareIdToCancel) {
+        const canceled = await cancelSquareInvoice(squareIdToCancel);
+        if (canceled && createdSquareInvoiceId) {
+          await db.from("invoices")
+            .update({ hosted_payment_url: null, updated_at: new Date().toISOString() })
+            .eq("id", invoiceId)
+            .eq("square_invoice_id", createdSquareInvoiceId);
+        }
+      }
+      return {
+        ok: false,
+        notice: publishError?.message
+          ?? (published?.outcome === "square_pending"
+            ? "A prior Square publish may still be live but has no verified provider ID. Nothing was sent—reconcile or void it first."
+            : `Invoice ${fresh.number} changed while sending (now ${current?.status ?? "gone"}) — refresh and check it.`),
+      };
+    }
+    const deliveryId = `send-g${published.delivery_generation}`;
+    const sent: Invoice = {
+      ...fresh,
+      status: "sent",
+      sent_at: published.sent_at ?? fresh.sent_at,
+      square_invoice_id: expectedSquareInvoiceId,
+      hosted_payment_url: hostedUrl ?? null,
+    };
 
-  // Advance the job to invoiced (never regress a paid job).
-  if (invoice.job_id) {
-    await db.from("jobs").update({ status: "invoiced" }).eq("id", invoice.job_id).eq("status", "completed");
+    let emailResult: Awaited<ReturnType<typeof notifyInvoiceSent>> | null = null;
+    let emailQueued = false;
+    if (canEmail && published.email_dedupe_key) {
+      const { data: claimed } = await db
+        .from("tasks")
+        .update({ status: "sending", scheduled_for: new Date().toISOString() })
+        .eq("dedupe_key", published.email_dedupe_key)
+        .eq("status", "pending")
+        .select("id");
+      if (claimed?.length) {
+        emailResult = await notifyInvoiceSent(sent, deliveryId);
+        if (emailResult.ok) {
+          await db.from("tasks")
+            .update({ status: "sent", sent_at: new Date().toISOString() })
+            .eq("dedupe_key", published.email_dedupe_key)
+            .eq("status", "sending");
+        } else {
+          await db.from("tasks")
+            .update({ status: "pending", scheduled_for: new Date().toISOString() })
+            .eq("dedupe_key", published.email_dedupe_key)
+            .eq("status", "sending");
+          emailQueued = true;
+        }
+      } else {
+        emailQueued = true;
+      }
+    }
+
+    const link = invoicePublicUrl(sent);
+    let textSent = false;
+    let textQueued = false;
+    if (canText && published.text_dedupe_key) {
+      const { data: claimed } = await db
+        .from("tasks")
+        .update({ status: "sending", scheduled_for: new Date().toISOString() })
+        .eq("dedupe_key", published.text_dedupe_key)
+        .eq("status", "pending")
+        .select("id");
+      if (claimed?.length) {
+        const res = await sendCanesSms({
+          to: sent.customer_phone as string,
+          body: `Here is your invoice from Canes Pressure Washing: ${link}`,
+          leadId: fresh.lead_id,
+          automated: true,
+        });
+        if (res.ok) {
+          textSent = true;
+          await db.from("tasks")
+            .update({ status: "sent", sent_at: new Date().toISOString() })
+            .eq("dedupe_key", published.text_dedupe_key)
+            .eq("status", "sending");
+        } else {
+          textQueued = true;
+          await db.from("tasks")
+            .update({ status: "pending", scheduled_for: new Date().toISOString() })
+            .eq("dedupe_key", published.text_dedupe_key)
+            .eq("status", "sending");
+        }
+      } else {
+        textQueued = true;
+      }
+    }
+    await enqueueInvoiceReminders(sent);
+
+    // Advance the job to invoiced (never regress a paid job).
+    if (fresh.job_id) {
+      await db.from("jobs").update({ status: "invoiced" }).eq("id", fresh.job_id).eq("status", "completed");
+    }
+    await logInvoiceEvent(fresh.lead_id, `Invoice ${fresh.number} sent (${fmtMoney(sent.total_cents)})`);
+    if (fresh.lead_id) await touch(fresh.lead_id);
+    refresh();
+    const emailSent = emailResult?.ok === true;
+    const emailFailure = emailResult && !emailResult.ok
+      ? emailResult.skipped ?? emailResult.error ?? "Email delivery failed."
+      : null;
+    return {
+      ok: true,
+      notice: sendInvoiceNotice({ emailSent, emailQueued, emailFailure, optedOut, textSent, textQueued }),
+    };
+  } finally {
+    await releaseInvoiceBillingOperation(invoiceId, billingOperationId);
   }
-  await logInvoiceEvent(invoice.lead_id, `Invoice ${invoice.number} sent (${fmtMoney(sent.total_cents)})`);
-  if (invoice.lead_id) await touch(invoice.lead_id);
-  refresh();
-  const emailSent = emailResult?.ok === true;
-  const emailFailure = emailResult && !emailResult.ok
-    ? emailResult.skipped ?? emailResult.error ?? "Email delivery failed."
-    : null;
-  const delivered = emailSent || textSent || textQueued;
-  return {
-    ok: delivered,
-    notice: sendInvoiceNotice({ emailSent, emailFailure, optedOut, textSent, textQueued }),
-  };
 }
 
-function sendInvoiceNotice(s: { emailSent: boolean; emailFailure: string | null; optedOut: boolean; textSent: boolean; textQueued: boolean }): string {
-  if (s.emailFailure && s.textSent) return `Texted the invoice. Email failed: ${s.emailFailure}`;
-  if (s.emailFailure && s.textQueued) return `Text queued. Email failed: ${s.emailFailure}`;
-  if (s.emailFailure) return `The invoice was prepared, but email failed: ${s.emailFailure}`;
+function sendInvoiceNotice(s: { emailSent: boolean; emailQueued: boolean; emailFailure: string | null; optedOut: boolean; textSent: boolean; textQueued: boolean }): string {
   if (s.textSent && s.emailSent) return "Texted and emailed the invoice.";
+  if (s.textSent && s.emailQueued) return "Texted the invoice; email queued for retry.";
   if (s.textSent) return "Texted the invoice.";
   if (s.textQueued && s.emailSent) return "Text queued for after quiet hours; emailed now.";
+  if (s.textQueued && s.emailQueued) return "Text and email queued for delivery.";
   if (s.textQueued) return "Text queued for after quiet hours.";
   if (s.optedOut && s.emailSent) return "Sent by email — customer opted out of texts.";
+  if (s.optedOut && s.emailQueued) return "Email queued — customer opted out of texts.";
   if (s.emailSent) return "Emailed the invoice.";
-  return "The invoice could not be delivered. Try again.";
+  if (s.emailQueued) return s.emailFailure
+    ? `Email queued for retry: ${s.emailFailure}`
+    : "Email queued for delivery.";
+  return "Invoice delivery queued.";
 }
 
-// Record a cash payment against an invoice — the Verify step. TOCTOU-safe: the
-// status claim (draft|sent|viewed → paid) is the double-record lock, so two
-// taps insert exactly one ledger row. Settles the job too.
+// Record a cash payment against an invoice — the Verify step. The database RPC
+// shares Square's invoice lock and checks the cache values this screen read, so
+// a stale/double tap records nothing and cash cannot race a card settlement.
 export async function recordCashPayment(invoiceId: string, amountCents: number): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
   const denied = await denyUnlessPermitted("invoices");
   if (denied) return denied;
   const amount = Math.round(amountCents);
   if (!Number.isFinite(amount) || amount <= 0) return { ok: false, notice: "Enter the cash amount collected." };
-  const invoice = await getInvoice(invoiceId);
-  if (!invoice) return { ok: false, notice: "Invoice not found." };
-  if (invoice.status === "paid") return { ok: true, notice: "This invoice is already marked paid." };
-  if (invoice.status === "void") return { ok: false, notice: "This invoice was voided." };
-
   const db = canesDb();
-  const now = new Date().toISOString();
-  const prior = invoice.status;
-  const priorPaid = invoice.amount_paid_cents;
-  const newPaid = priorPaid + amount;
-  // Only settle when the cumulative cash actually covers the total — an
-  // underpayment is recorded but leaves the balance open (never closes it).
-  const fullyPaid = newPaid >= invoice.total_cents;
-
-  // Optimistic lock on amount_paid_cents (its own version) AND total_cents:
-  // the claim only wins if both figures are still what we read, so two
-  // concurrent taps can't double-insert a ledger row, and a review-reward
-  // approval landing in the read→claim window can't make this settle (or stay
-  // open) against a stale total. Settle in the SAME update only when covered.
-  const { data: claimed, error: claimErr } = await db
-    .from("invoices")
-    .update({
-      amount_paid_cents: newPaid,
-      updated_at: now,
-      ...(fullyPaid ? { status: "paid", paid_at: now } : {}),
-    })
-    .eq("id", invoiceId)
-    .in("status", ["draft", "sent", "viewed"])
-    .eq("amount_paid_cents", priorPaid)
-    .eq("total_cents", invoice.total_cents)
-    .select("id");
-  if (claimErr) return { ok: false, notice: claimErr.message };
-  if (!claimed || claimed.length === 0) {
-    return { ok: true, notice: "This invoice was already updated — refresh to see the latest." };
+  const billingOperationId = await claimInvoiceBillingOperation(invoiceId);
+  if (!billingOperationId) {
+    return { ok: false, notice: "This invoice is being sent or paid right now — refresh and verify the balance." };
   }
-
-  // Won the claim → append the immutable ledger row. If the insert fails, revert
-  // the claim so we never leave a settled invoice with no backing payment.
-  const { error: payErr } = await db.from("payments").insert({
-    invoice_id: invoiceId,
-    job_id: invoice.job_id,
-    amount_cents: amount,
-    currency: "USD",
-    method: "cash",
-    source: "manual",
-    status: "completed",
-    recorded_by: "owner",
-  });
-  if (payErr) {
-    console.error(`[canes] cash payment insert failed for ${invoiceId}: ${payErr.message}`);
-    await db
-      .from("invoices")
-      .update({ amount_paid_cents: priorPaid, status: prior, paid_at: invoice.paid_at, updated_at: now })
-      .eq("id", invoiceId);
-    return { ok: false, notice: "Couldn't record the payment. Please try again." };
-  }
-
-  if (fullyPaid) {
-    if (invoice.job_id) {
-      await db.from("jobs").update({ status: "paid" }).eq("id", invoice.job_id).neq("status", "canceled");
+  try {
+    const invoice = await getInvoice(invoiceId);
+    if (!invoice) return { ok: false, notice: "Invoice not found." };
+    if (invoice.status === "paid") return { ok: true, notice: "This invoice is already marked paid." };
+    if (invoice.status === "void") return { ok: false, notice: "This invoice was voided." };
+    const balance = Math.max(0, invoice.total_cents - invoice.amount_paid_cents);
+    if (amount > balance) {
+      return { ok: false, notice: `Amount exceeds the ${fmtMoney(balance)} balance due.` };
     }
-    await cancelInvoiceTasks(invoiceId);
-    // Kill the Square hosted link so the customer can't also pay it by card.
-    if (invoice.square_invoice_id) await cancelSquareInvoice(invoice.square_invoice_id);
-  }
-  await logInvoiceEvent(
-    invoice.lead_id,
-    `${fullyPaid ? "Cash payment" : "Partial cash payment"} recorded — ${fmtMoney(amount)} for ${invoice.number}`,
-  );
-  if (invoice.lead_id) await touch(invoice.lead_id);
+    if (invoice.square_invoice_id && amount !== balance) {
+      return {
+        ok: false,
+        notice: "A partial cash payment would leave the existing Square invoice chargeable for the old balance. Cancel/void that bill or collect the full remaining balance instead.",
+      };
+    }
+    let squareCanceled = false;
+    // Disable a published Square invoice before committing off-platform money.
+    // If cancellation fails, record nothing: leaving both paths chargeable is
+    // worse than asking Sebastian to retry.
+    if (invoice.square_invoice_id) {
+      const canceled = await cancelSquareInvoice(invoice.square_invoice_id);
+      if (!canceled) {
+        return { ok: false, notice: "Couldn't cancel the Square payment page, so no cash payment was recorded. Try again." };
+      }
+      squareCanceled = true;
+      const { data: retired, error: retireError } = await db
+        .from("invoices")
+        .update({ hosted_payment_url: null, updated_at: new Date().toISOString() })
+        .eq("id", invoiceId)
+        .eq("billing_operation_id", billingOperationId)
+        .select("id");
+      if (retireError || !retired?.length) {
+        return {
+          ok: false,
+          notice: "The Square page was canceled, but the invoice changed before cash could be recorded. Refresh and verify; reissue if a balance remains.",
+        };
+      }
+    }
 
-  if (fullyPaid) {
-    const paid: Invoice = { ...invoice, status: "paid", paid_at: now, amount_paid_cents: newPaid };
-    await notifyInvoicePaid(paid, "cash");
-    await notifyInvoiceReceipt(paid, "cash"); // customer receipt (no-ops without an email)
+    const { data: paymentRows, error: paymentError } = await db.rpc(
+      "record_manual_invoice_payment_locked",
+      {
+        p_invoice_id: invoiceId,
+        p_amount_cents: amount,
+        p_method: "cash",
+        p_expected_paid_cents: invoice.amount_paid_cents,
+        p_expected_total_cents: invoice.total_cents,
+        p_expected_square_invoice_id: invoice.square_invoice_id,
+        p_square_canceled: squareCanceled,
+        p_operation_id: billingOperationId,
+      },
+    );
+    if (paymentError) {
+      console.error(`[canes] cash payment transaction failed for ${invoiceId}: ${paymentError.message}`);
+      return { ok: false, notice: "Couldn't record the payment. Please try again." };
+    }
+    const payment = (paymentRows?.[0] ?? null) as {
+      outcome: "recorded" | "not_found" | "already_paid" | "void" | "conflict" | "invalid" | "square_pending" | "square_live";
+      payment_id: string | null;
+      paid_cents: number;
+      total_cents: number;
+      fully_paid: boolean;
+      newly_settled: boolean;
+    } | null;
+    if (!payment) return { ok: false, notice: "Couldn't record the payment. Please try again." };
+    if (payment.outcome === "not_found") return { ok: false, notice: "Invoice not found." };
+    if (payment.outcome === "already_paid") {
+      return { ok: true, notice: "This invoice is already marked paid." };
+    }
+    if (payment.outcome === "void") return { ok: false, notice: "This invoice was voided." };
+    if (payment.outcome === "invalid") {
+      return { ok: false, notice: "Enter a valid cash payment amount." };
+    }
+    if (payment.outcome === "square_pending") {
+      return { ok: false, notice: "A prior Square publish may still be chargeable. Reconcile or void it before recording cash." };
+    }
+    if (payment.outcome === "square_live") {
+      return { ok: false, notice: "The Square payment page is still live, so no cash payment was recorded." };
+    }
+    if (payment.outcome === "conflict") {
+      return {
+        ok: false,
+        notice: invoice.square_invoice_id
+          ? "This invoice changed while recording payment. Its Square page is retired; refresh and reissue if a balance remains."
+          : "This invoice changed while recording payment — refresh and verify the balance.",
+      };
+    }
+    if (!payment.payment_id) {
+      return { ok: false, notice: "Couldn't record the payment. Please try again." };
+    }
+
+    const newPaid = Number(payment.paid_cents);
+    const fullyPaid = Boolean(payment.fully_paid);
+    if (payment.newly_settled) await cancelInvoiceTasks(invoiceId);
+    await logInvoiceEvent(
+      invoice.lead_id,
+      `${fullyPaid ? "Cash payment" : "Partial cash payment"} recorded — ${fmtMoney(amount)} for ${invoice.number}`,
+    );
+    if (invoice.lead_id) await touch(invoice.lead_id);
+
+    if (payment.newly_settled) {
+      // The payment RPC inserted the push and email outbox rows in the same
+      // transaction as the ledger entry. These idempotent calls provide a
+      // low-latency send/ensure pass without being the durability boundary.
+      const paymentEventId = `manual:${payment.payment_id}`;
+      try {
+        await pushInvoicePaid({
+          eventId: paymentEventId,
+          invoiceId: invoice.id,
+          invoiceNumber: invoice.number,
+          customerName: invoice.customer_name,
+          amountCents: amount,
+        });
+      } catch (error) {
+        // The payment RPC committed the outbox event with the ledger entry.
+        // Cron can recover delivery; the recorded payment remains successful.
+        console.error(`[canes] cash payment push ensure failed for ${payment.payment_id}:`, error);
+      }
+      try {
+        await enqueueInvoicePaymentEmails({
+          eventId: paymentEventId,
+          invoiceId: invoice.id,
+          method: "cash",
+        });
+        // Best-effort low-latency drain. The durable rows remain pending and
+        // cron retries them if the provider or this request fails afterward.
+        void drainPaymentEmailTasks({ eventId: paymentEventId, limit: 2 }).catch((error) => {
+          console.error("[canes] cash payment email drain failed:", error);
+        });
+      } catch (error) {
+        console.error("[canes] cash payment email enqueue failed:", error);
+      }
+      void drainCanesPushOutbox({ deadlineAt: Date.now() + 20_000 }).catch((error) => {
+        console.error("[canes] cash payment push drain failed:", error);
+      });
+    }
+    refresh();
+    return {
+      ok: true,
+      notice: fullyPaid
+        ? `Recorded ${fmtMoney(amount)} in cash. Job marked paid.`
+        : `Recorded ${fmtMoney(amount)} — ${fmtMoney(invoice.total_cents - newPaid)} still due.`,
+    };
+  } finally {
+    await releaseInvoiceBillingOperation(invoiceId, billingOperationId);
   }
-  refresh();
-  return {
-    ok: true,
-    notice: fullyPaid
-      ? `Recorded ${fmtMoney(amount)} in cash. Job marked paid.`
-      : `Recorded ${fmtMoney(amount)} — ${fmtMoney(invoice.total_cents - newPaid)} still due.`,
-  };
 }
 
 // Void an unpaid invoice — cancels pending send/reminder texts, kills the link.
@@ -3020,51 +3964,64 @@ export async function voidInvoice(invoiceId: string): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
   const denied = await denyUnlessPermitted();
   if (denied) return denied;
-  const invoice = await getInvoice(invoiceId);
-  if (!invoice) return { ok: false, notice: "Invoice not found." };
-  if (invoice.status === "paid") return { ok: false, notice: "A paid invoice can't be voided." };
-  const now = new Date().toISOString();
-  // Claimed write, and the highest-value one on this path. The read above already
-  // refuses a paid invoice, so `.neq("status","paid")` looks redundant — it is not:
-  // it re-checks the condition ATOMICALLY, and the window it covers is genuinely
-  // live. recomputeInvoicePaid (lib/canes/square.ts), driven by the Square payment
-  // webhook, flips draft|sent|viewed to paid at any moment, including between that
-  // read and this write.
-  //
-  // Zero rows therefore means the customer's card payment landed a moment ago. On
-  // ok:true everything below then ran anyway: the job was released for re-billing,
-  // the hosted Square link the customer had just paid was CANCELED, every pending
-  // reminder was killed, and "Invoice N voided" went onto the lead timeline — while
-  // Sebastian was told a bill was dead that had in fact just been settled.
-  const { data: voided, error } = await canesDb()
-    .from("invoices")
-    .update({ status: "void", voided_at: now, updated_at: now })
-    .eq("id", invoiceId)
-    .neq("status", "paid")
-    .select("id");
-  if (error) return { ok: false, notice: error.message };
-  if (!voided || voided.length === 0) {
-    return {
-      ok: false,
-      notice: "This invoice just changed — it may have just been paid. Refresh and check it.",
-    };
+  const billingOperationId = await claimInvoiceBillingOperation(invoiceId);
+  if (!billingOperationId) return { ok: false, notice: "This invoice is being sent or paid right now — refresh and try again." };
+  try {
+    const db = canesDb();
+    const { data, error: readError } = await db.from("invoices").select("*").eq("id", invoiceId).maybeSingle();
+    if (readError) return { ok: false, notice: `Couldn't verify the invoice: ${readError.message}` };
+    const invoice = data as Invoice | null;
+    if (!invoice) return { ok: false, notice: "Invoice not found." };
+    if (invoice.status === "paid") return { ok: false, notice: "A paid invoice can't be voided." };
+    if (invoice.status === "void") return { ok: true, notice: "This invoice is already void." };
+
+    let squareCanceled = false;
+    if (invoice.square_invoice_id) {
+      squareCanceled = await cancelSquareInvoice(invoice.square_invoice_id);
+      if (!squareCanceled) {
+        return { ok: false, notice: "Square could not cancel the payment page, so the invoice was not voided. Refresh and verify whether it was paid." };
+      }
+    }
+    const { data: rows, error } = await db.rpc("void_invoice_locked", {
+      p_invoice_id: invoiceId,
+      p_expected_status: invoice.status,
+      p_expected_total_cents: invoice.total_cents,
+      p_expected_paid_cents: invoice.amount_paid_cents,
+      p_expected_square_invoice_id: invoice.square_invoice_id,
+      p_square_canceled: squareCanceled,
+      p_operation_id: billingOperationId,
+    });
+    if (error) return { ok: false, notice: error.message };
+    const outcome = (rows?.[0] as { outcome?: string } | undefined)?.outcome;
+    if (outcome !== "voided" && outcome !== "already_void") {
+      if (squareCanceled && invoice.square_invoice_id) {
+        await db.from("invoices")
+          .update({ hosted_payment_url: null, updated_at: new Date().toISOString() })
+          .eq("id", invoiceId)
+          .eq("billing_operation_id", billingOperationId)
+          .eq("square_invoice_id", invoice.square_invoice_id)
+          .in("status", ["draft", "sent", "viewed"]);
+      }
+      return {
+        ok: false,
+        notice: outcome === "square_pending"
+          ? "A prior Square publish may still be live but has no reconciled ID. Check Square before voiding locally."
+          : outcome === "paid"
+          ? "The customer paid while this invoice was being voided. Refresh and verify the payment."
+          : "The invoice changed before the void committed. Its Square page is retired; refresh and retry or reissue it.",
+      };
+    }
+    if (invoice.job_id) {
+      await db.from("jobs").update({ status: "completed" }).eq("id", invoice.job_id).eq("status", "invoiced");
+    }
+    await cancelInvoiceTasks(invoiceId);
+    await logInvoiceEvent(invoice.lead_id, `Invoice ${invoice.number} voided`);
+    if (invoice.lead_id) await touch(invoice.lead_id);
+    refresh();
+    return { ok: true };
+  } finally {
+    await releaseInvoiceBillingOperation(invoiceId, billingOperationId);
   }
-  // A voided invoice must release its job for re-billing (the partial unique
-  // index only allows a fresh invoice once the old one is void) and kill the
-  // hosted Square link so the customer can't pay a dead document.
-  if (invoice.job_id) {
-    await canesDb()
-      .from("jobs")
-      .update({ status: "completed" })
-      .eq("id", invoice.job_id)
-      .eq("status", "invoiced");
-  }
-  if (invoice.square_invoice_id) await cancelSquareInvoice(invoice.square_invoice_id);
-  await cancelInvoiceTasks(invoiceId);
-  await logInvoiceEvent(invoice.lead_id, `Invoice ${invoice.number} voided`);
-  if (invoice.lead_id) await touch(invoice.lead_id);
-  refresh();
-  return { ok: true };
 }
 
 // Match on the payload's invoice_id (not hardcoded dedupe keys) so every
@@ -3073,7 +4030,7 @@ async function cancelInvoiceTasks(invoiceId: string): Promise<void> {
   await canesDb()
     .from("tasks")
     .update({ status: "canceled" })
-    .in("kind", ["invoice_send", "invoice_reminder"])
+    .in("kind", ["invoice_send", "invoice_customer_email", "invoice_reminder"])
     .eq("status", "pending")
     .contains("payload", { invoice_id: invoiceId });
 }
@@ -3240,25 +4197,14 @@ export async function claimInvoiceReward(
   return { ok: true, notice: "Claim received — we'll verify and apply your discount." };
 }
 
-// Owner: verify + resolve a claim. Approving is THE money mutation: the reward
-// enters recomputeInvoiceTotals and the bill drops. Hardened against the races
-// the adversarial review surfaced:
-//  - the reward CAS wins first, then the invoice is RE-READ and every money
-//    guard re-checked; any violation (settled meanwhile, overshoot from a
-//    concurrent approval) REVERTS the reward and re-derives totals — the
-//    reward row can never stay "approved" without its discount applied;
-//  - a paid/void invoice's totals are frozen inside recomputeInvoiceTotals;
-//  - when the discount exactly covers what's already paid, the invoice SETTLES
-//    (job → paid, reminders canceled) instead of stranding a $0 balance;
-//  - Square ids are cleared ONLY when Square confirmed the cancel — otherwise
-//    they're kept so a late payment on the old link still matches the invoice
-//    and raises the double-payment/overpaid alert instead of vanishing.
+// Owner: verify + resolve a claim. Approval is one database transaction that
+// CASes the reward, recalculates the invoice, and settles it when appropriate.
+// If Square already hosts the bill, that higher bill must be canceled before
+// the local total is allowed to move.
 export async function setRewardApproval(
   rewardId: string,
   approve: boolean,
-  // 0015: team member credited with earning the review. Written as a separate
-  // metadata update after the approval CAS wins, and never fails the money
-  // path — a missing column (deploy ahead of migration) just logs.
+  // 0015: optional team member credited with earning the review.
   attributedMemberId?: string | null,
 ): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
@@ -3272,174 +4218,142 @@ export async function setRewardApproval(
     .maybeSingle();
   const reward = rewardRow as InvoiceReward | null;
   if (!reward) return { ok: false, notice: "Reward not found." };
-  const invoice = await getInvoice(reward.invoice_id);
+  let invoice = await getInvoice(reward.invoice_id);
   if (!invoice) return { ok: false, notice: "Invoice not found." };
-  if (invoice.status === "void") return { ok: false, notice: "This invoice was voided." };
-  if (invoice.status === "paid") {
-    return { ok: false, notice: "This invoice is already paid — settle any reward offline." };
+  const billingOperationId = await claimInvoiceBillingOperation(invoice.id);
+  if (!billingOperationId) {
+    return { ok: false, notice: "This invoice is being sent, paid, or updated right now — refresh and try again." };
   }
-
-  // Money guards (re-checked on fresh data after the CAS below; this early
-  // pass just gives a clean notice without touching the reward row).
-  // total_cents already reflects previously approved rewards, so the projected
-  // new total is a simple subtraction.
-  const guardNotice = (inv: Invoice): string | null => {
-    if (!approve) return null;
-    const projected = Math.max(0, inv.total_cents - reward.amount_cents);
-    if (projected === 0 && inv.amount_paid_cents === 0) {
-      return "This discount would zero out the bill. Use the invoice's adjustment amount instead.";
+  try {
+    const { data: freshRow, error: freshError } = await db
+      .from("invoices")
+      .select("*")
+      .eq("id", invoice.id)
+      .maybeSingle();
+    if (freshError || !freshRow) {
+      return { ok: false, notice: `Couldn't verify the invoice${freshError ? `: ${freshError.message}` : "."}` };
     }
-    if (projected < inv.amount_paid_cents) {
-      return `${fmtMoney(inv.amount_paid_cents)} is already paid — this discount would overshoot the balance. Handle it offline.`;
+    invoice = freshRow as Invoice;
+    if (invoice.status === "void") return { ok: false, notice: "This invoice was voided." };
+    if (invoice.status === "paid") {
+      return { ok: false, notice: "This invoice is already paid — settle any reward offline." };
     }
-    return null;
-  };
-  const early = guardNotice(invoice);
-  if (early) return { ok: false, notice: early };
 
-  const now = new Date().toISOString();
-  const next = approve ? "approved" : "declined";
-  const prevStatus = reward.status; // offered | claimed (only these can win)
-  // CAS from offered|claimed only — approving twice, or resolving a row the
-  // other device just resolved, is a no-op with a clear notice.
-  const { data: won, error } = await db
-    .from("invoice_rewards")
-    .update({ status: next, resolved_at: now, resolved_by: "owner", updated_at: now })
-    .eq("id", rewardId)
-    .in("status", ["offered", "claimed"])
-    .select("id");
-  if (error) return { ok: false, notice: error.message };
-  if (!won || won.length === 0) {
+    // total_cents already reflects previously approved rewards, so the early
+    // projection is a simple subtraction. The RPC repeats both guards while
+    // holding the invoice lock.
+    if (approve) {
+      const projected = Math.max(0, invoice.total_cents - reward.amount_cents);
+      if (projected === 0 && invoice.amount_paid_cents === 0) {
+        return { ok: false, notice: "This discount would zero out the bill. Use the invoice's adjustment amount instead." };
+      }
+      if (projected < invoice.amount_paid_cents) {
+        return {
+          ok: false,
+          notice: `${fmtMoney(invoice.amount_paid_cents)} is already paid — this discount would overshoot the balance. Handle it offline.`,
+        };
+      }
+    }
+    if (
+      attributedMemberId
+      && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(attributedMemberId)
+    ) {
+      return { ok: false, notice: "That team member id is invalid." };
+    }
+
+    // A reward changes Square's published amount. Kill the old hosted bill
+    // before the local transaction can lower its total. Failed cancellation
+    // leaves both the reward and local total untouched.
+    let squareCanceled = false;
+    const invoiceSnapshot = invoice;
+    const retireCanceledHostedUrl = async (): Promise<void> => {
+      if (!invoiceSnapshot.square_invoice_id) return;
+      const { error } = await db
+        .from("invoices")
+        .update({ hosted_payment_url: null, updated_at: new Date().toISOString() })
+        .eq("id", invoiceSnapshot.id)
+        .eq("square_invoice_id", invoiceSnapshot.square_invoice_id);
+      if (error) console.error(`[canes] canceled reward link cleanup failed for ${invoiceSnapshot.id}: ${error.message}`);
+    };
+    if (approve && invoice.square_invoice_id) {
+      squareCanceled = await cancelSquareInvoice(invoice.square_invoice_id);
+      if (!squareCanceled) {
+        return {
+          ok: false,
+          notice: "Square could not cancel the existing payment page, so the reward was not applied and the invoice total was not changed.",
+        };
+      }
+    }
+
+    const { data: resolutionRows, error: resolutionError } = await db.rpc("resolve_invoice_reward_locked", {
+      p_reward_id: rewardId,
+      p_approve: approve,
+      p_attributed_member_id: attributedMemberId ?? null,
+      p_expected_status: invoice.status,
+      p_expected_total_cents: invoice.total_cents,
+      p_expected_paid_cents: invoice.amount_paid_cents,
+      p_expected_square_invoice_id: invoice.square_invoice_id,
+      p_square_canceled: squareCanceled,
+      p_operation_id: billingOperationId,
+    });
+  if (resolutionError) {
+    if (squareCanceled) await retireCanceledHostedUrl();
+    return { ok: false, notice: resolutionError.message };
+  }
+  const resolution = (resolutionRows?.[0] ?? null) as {
+    outcome: "approved" | "declined" | "resolved" | "reward_not_found" | "invoice_not_found" | "lease_lost" | "conflict" | "closed" | "square_live" | "square_pending" | "zero_total" | "over_paid";
+    invoice_id: string | null;
+    total_cents: number;
+    settled: boolean;
+  } | null;
+  if (!resolution) {
+    if (squareCanceled) await retireCanceledHostedUrl();
+    return { ok: false, notice: "The reward could not be resolved. Refresh and try again." };
+  }
+  if (resolution.outcome === "resolved") {
+    if (squareCanceled) await retireCanceledHostedUrl();
     return { ok: true, notice: "This reward was already resolved — refresh to see the latest." };
   }
+  if (resolution.outcome !== "approved" && resolution.outcome !== "declined") {
+    if (squareCanceled) await retireCanceledHostedUrl();
+    const resolutionNotices: Record<string, string> = {
+      zero_total: "This discount would zero out the bill. Use the invoice's adjustment amount instead.",
+      over_paid: `${fmtMoney(invoice.amount_paid_cents)} is already paid — this discount would overshoot the balance. Handle it offline.`,
+      closed: "This invoice was just settled — handle the reward offline.",
+      square_live: "The Square payment page is still active, so the reward was not applied.",
+      square_pending: "A prior Square publish may still be live, so the reward was not applied. Reconcile or void it first.",
+      reward_not_found: "Reward not found.",
+      invoice_not_found: "Invoice not found.",
+    };
+    return {
+      ok: false,
+      notice: resolutionNotices[resolution.outcome] ?? "This invoice changed while the reward was being resolved — refresh and try again.",
+    };
+  }
 
-  if (!approve) {
+  if (resolution.outcome === "declined") {
     await logInvoiceEvent(invoice.lead_id, `Reward declined on ${invoice.number} — ${reward.label}`);
     if (invoice.lead_id) await touch(invoice.lead_id);
     refresh();
     return { ok: true, notice: "Declined — no discount applied." };
   }
 
-  // Credit the team member who earned the review. Metadata only — a failure
-  // (e.g. the 0015 column isn't migrated yet) never blocks the discount.
-  if (attributedMemberId !== undefined) {
-    const { error: attrErr } = await db
-      .from("invoice_rewards")
-      .update({ attributed_member_id: attributedMemberId })
-      .eq("id", rewardId);
-    if (attrErr) console.error(`[canes] reward attribution failed for ${rewardId}: ${attrErr.message}`);
+  // The database RPC above is the only approval mutation: reward status,
+  // invoice total, optional settlement, Square identity cleanup, and job status
+  // commit together under the invoice advisory lock. Never follow it with a
+  // client-side recompute/revert sequence; that would reopen the race the RPC
+  // exists to close.
+  const settledByReward = resolution.settled;
+  if (settledByReward) {
+    await cancelInvoiceTasks(invoice.id);
+    await logInvoiceEvent(
+      invoice.lead_id,
+      `Invoice ${invoice.number} settled — reward covered the remaining balance`,
+    );
   }
-
-  // ── Approve path ────────────────────────────────────────────────────────────
-  // Undo the CAS and re-derive totals from rows, so a failed/blocked approval
-  // never leaves an "approved" reward whose discount isn't in the bill.
-  const revert = async (): Promise<void> => {
-    await db
-      .from("invoice_rewards")
-      .update({
-        status: prevStatus,
-        claimed_at: reward.claimed_at,
-        resolved_at: null,
-        resolved_by: null,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", rewardId)
-      .eq("status", "approved");
-    await recomputeInvoiceTotals(reward.invoice_id);
-  };
-
-  // Re-read AFTER winning the CAS — a cash settle or webhook may have landed
-  // between the guard read and here.
-  const freshPre = await getInvoice(reward.invoice_id);
-  const freshGuard = freshPre
-    ? freshPre.status === "paid" || freshPre.status === "void"
-      ? "This invoice was just settled — handle the reward offline."
-      : guardNotice(freshPre)
-    : "Invoice not found.";
-  if (freshGuard) {
-    await revert();
-    refresh();
-    return { ok: false, notice: freshGuard };
-  }
-
-  const applied = await recomputeInvoiceTotals(reward.invoice_id);
-  if (!applied) {
-    // Frozen (settled in the window) or the write failed — never report
-    // success for a discount that isn't in the total.
-    await revert();
-    refresh();
-    return { ok: false, notice: "Couldn't apply the discount — the invoice may have just been paid. Refresh and try again." };
-  }
-
-  // Post-write verification: recompute derives from rows, so a concurrent
-  // approval of ANOTHER reward can only push the combined discount past the
-  // paid amount here. Repair deterministically by reverting this one.
-  const after = await getInvoice(reward.invoice_id);
-  if (after && after.amount_paid_cents > 0 && after.total_cents < after.amount_paid_cents) {
-    await revert();
-    refresh();
-    return { ok: false, notice: "Another update landed at the same moment — refresh and try again." };
-  }
-
-  // Settle-on-cover: the discount brought the total down to exactly what's
-  // already been paid — the bill is done. Flip it (CAS on paid figure), close
-  // the job, stop reminders. No payment happened, so no receipt email — the
-  // ledger stays truthful and the public page shows Paid in full.
-  let settledByReward = false;
-  if (
-    after &&
-    after.amount_paid_cents > 0 &&
-    after.total_cents === after.amount_paid_cents &&
-    ["draft", "sent", "viewed"].includes(after.status)
-  ) {
-    const settleNow = new Date().toISOString();
-    const { data: settled } = await db
-      .from("invoices")
-      .update({ status: "paid", paid_at: settleNow, updated_at: settleNow })
-      .eq("id", after.id)
-      .in("status", ["draft", "sent", "viewed"])
-      .eq("amount_paid_cents", after.amount_paid_cents)
-      .select("id");
-    if (settled && settled.length > 0) {
-      settledByReward = true;
-      if (after.job_id) {
-        await db.from("jobs").update({ status: "paid" }).eq("id", after.job_id).neq("status", "canceled");
-      }
-      await cancelInvoiceTasks(after.id);
-      // Kill the hosted link (nothing left to pay) but KEEP the Square ids so
-      // a late card payment still matches and raises the double-payment alert.
-      if (after.square_invoice_id) await cancelSquareInvoice(after.square_invoice_id);
-      await logInvoiceEvent(
-        invoice.lead_id,
-        `Invoice ${invoice.number} settled — reward covered the remaining balance`,
-      );
-    }
-  }
-
-  // Square link refresh. Sever our ids ONLY on a CONFIRMED cancel — clearing
-  // them while the hosted link might still take money would orphan that
-  // payment's webhook (no match → never recorded). On failure the ids stay, so
-  // the webhook matches and the amount-mismatch/overpaid alerts do their job.
-  let squareNote = "";
-  if (!settledByReward && invoice.square_invoice_id) {
-    const canceled = await cancelSquareInvoice(invoice.square_invoice_id);
-    if (canceled) {
-      await db
-        .from("invoices")
-        .update({
-          square_invoice_id: null,
-          square_order_id: null,
-          hosted_payment_url: null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", invoice.id)
-        .eq("square_invoice_id", invoice.square_invoice_id);
-      squareNote = " The old card link was canceled — resend the invoice for an updated card link.";
-    } else if (squareConfigured()) {
-      squareNote =
-        " Heads-up: the existing card link could not be canceled and still shows the OLD amount — check Square before the customer pays it.";
-    }
-  }
+  const squareNote = squareCanceled
+    ? " The old card link was canceled — resend the invoice for an updated card link."
+    : "";
 
   await logInvoiceEvent(
     invoice.lead_id,
@@ -3453,6 +4367,9 @@ export async function setRewardApproval(
       ? `Applied −${fmtMoney(reward.amount_cents)} — the balance is covered and the invoice is now paid.`
       : `Applied −${fmtMoney(reward.amount_cents)}.${squareNote}`,
   };
+  } finally {
+    await releaseInvoiceBillingOperation(invoice.id, billingOperationId);
+  }
 }
 
 // ── Job expenses (Feature B) ──────────────────────────────────────────────────
@@ -3920,6 +4837,7 @@ export async function createManualJob(input: {
   const db = canesDb();
   const crews = input.crewId ? await listCrews() : [];
   const crew = input.crewId ? crews.find((c) => c.id === input.crewId) ?? null : null;
+  if (input.crewId && !crew) return { ok: false, notice: "Crew not found." };
   const lead = phone ? await findLeadIdByPhone(phone) : null;
   const startIso = when?.toISOString() ?? null;
   const { data, error } = await db
@@ -3941,6 +4859,8 @@ export async function createManualJob(input: {
       duration_minutes: duration,
       crew_id: crew?.id ?? null,
       assigned_to: crew?.name ?? null,
+      creation_notification_crew_id: crew?.id ?? null,
+      creation_notification_scheduled_at: startIso,
       notes: input.notes?.trim() || null,
     })
     .select("id")
@@ -3957,18 +4877,45 @@ export async function createManualJob(input: {
     line_total_cents: total,
   });
 
+  const createdJob = await getJob(jobId);
+  const futureSlot = Boolean(startIso && new Date(startIso).getTime() >= Date.now());
   // A back-dated manual job (forgot-to-log) must never trigger the customer
   // confirmation text — the visit already happened.
-  if (startIso && new Date(startIso).getTime() >= Date.now()) {
-    const job = await getJob(jobId);
-    if (job) await armJobConfirmation(job, startIso);
+  if (startIso && futureSlot && createdJob) await armJobConfirmation(createdJob, startIso);
+  if (crew && createdJob && (!startIso || futureSlot)) {
+    try {
+      await pushJobChanged({
+        id: createdJob.id,
+        customerName: createdJob.customer_name,
+        jobName: createdJob.job_name,
+        crewId: crew.id,
+        eventId: `manual-created:${createdJob.id}:${startIso ?? "unscheduled"}:${crew.id}`,
+        change: "updated",
+        detail: startIso
+          ? `${createdJob.customer_name ?? "A customer"}'s job is scheduled for ${fmtEt(startIso)}.`
+          : `${createdJob.customer_name ?? "A customer"}'s job was assigned to ${crew.name}.`,
+        notifyOwner: false,
+        expectedJobState: {
+          crewId: crew.id,
+          status: startIso ? "scheduled" : "unscheduled",
+          scheduledAt: startIso,
+          endsAt: startIso ? new Date((when as Date).getTime() + duration * 60_000).toISOString() : null,
+        },
+      });
+    } catch (error) {
+      console.error(`[canes] manual job push persistence failed for ${createdJob.id}:`, error);
+    }
+    try {
+      await notifyCrewAssignment(createdJob, crew.name, startIso);
+    } catch (error) {
+      console.error(`[canes] legacy crew assignment notice failed for ${createdJob.id}:`, error);
+    }
   }
   const depositCollected = Math.round(input.depositCollectedCents ?? 0);
   let depositNotice: string | undefined;
   if (depositCollected > 0) {
-    const job = await getJob(jobId);
-    const dep = job
-      ? await insertJobDepositRow(job, depositCollected, input.depositMethod ?? "cash")
+    const dep = createdJob
+      ? await insertJobDepositRow(createdJob, depositCollected, input.depositMethod ?? "cash")
       : { ok: false as const };
     if (!dep.ok) depositNotice = "Job created, but the deposit could NOT be recorded — open the job and record it there.";
   }
@@ -4015,61 +4962,41 @@ export async function createManualInvoice(input: {
   });
 
   const settings = await getSettings();
-  const number = await nextInvoiceNumber();
   const db = canesDb();
-  const { data, error } = await db
-    .from("invoices")
-    .insert({
-      job_id: null,
-      estimate_id: null,
-      lead_id: null,
-      contact_id: contactId,
-      number,
-      status: "draft",
-      customer_name: customerName,
-      customer_phone: phone,
-      customer_email: email,
-      job_address: input.jobAddress?.trim() || null,
-      job_name: jobName,
-      message_to_customer: settings.invoice_message,
-      terms: settings.invoice_terms,
-      tax_rate_bps: 0, // FL residential non-taxable by default
-      public_token: genInvoiceToken(),
-    })
-    .select("id")
-    .single();
-  if (error) return { ok: false, notice: error.message };
-  const invoiceId = data.id as string;
-
-  await db.from("invoice_items").insert({
-    invoice_id: invoiceId,
-    position: 0,
-    name: jobName,
-    quantity: 1,
-    unit_price_cents: total,
-    line_total_cents: total,
+  const config = rewardConfigFrom(settings);
+  const rewardOffers = phone === PRACTICE_PHONE
+    ? []
+    : (Object.keys(config) as InvoiceRewardKind[])
+        .filter((kind) => config[kind].configured)
+        .map((kind) => ({
+          kind,
+          label: config[kind].label,
+          amount_cents: config[kind].cents,
+        }));
+  const { data: rows, error } = await db.rpc("initialize_manual_invoice_locked", {
+    p_contact_id: contactId,
+    p_customer_name: customerName,
+    p_customer_phone: phone,
+    p_customer_email: email,
+    p_job_address: input.jobAddress?.trim() || null,
+    p_job_name: jobName,
+    p_total_cents: total,
+    p_message_to_customer: settings.invoice_message,
+    p_terms: settings.invoice_terms,
+    p_public_token: genInvoiceToken(),
+    p_reward_offers: rewardOffers,
   });
-
-  // Same review-reward seeding as a job-born invoice (0012) — Sebastian
-  // unchecks per invoice before sending. The tour's practice number never seeds.
-  if (phone !== PRACTICE_PHONE) {
-    const config = rewardConfigFrom(settings);
-    const offerRows = (Object.keys(config) as InvoiceRewardKind[])
-      .filter((kind) => config[kind].configured)
-      .map((kind) => ({
-        invoice_id: invoiceId,
-        kind,
-        label: config[kind].label,
-        amount_cents: config[kind].cents,
-        status: "offered",
-      }));
-    if (offerRows.length > 0) {
-      const { error: rewardErr } = await db.from("invoice_rewards").insert(offerRows);
-      if (rewardErr) console.error(`[canes] reward seed failed for ${invoiceId}: ${rewardErr.message}`);
-    }
+  if (error) return { ok: false, notice: error.message };
+  const initialized = (rows?.[0] ?? null) as {
+    outcome: "ready" | "invalid";
+    invoice_id: string | null;
+    invoice_number: string | null;
+  } | null;
+  if (!initialized?.invoice_id || initialized.outcome !== "ready") {
+    return { ok: false, notice: "The invoice could not be initialized. Please retry." };
   }
-
-  await recomputeInvoiceTotals(invoiceId);
+  const invoiceId = initialized.invoice_id;
+  const number = initialized.invoice_number ?? "Invoice";
   await logInvoiceEvent(null, `Invoice ${number} created manually`);
   refresh();
   return { ok: true, invoiceId };

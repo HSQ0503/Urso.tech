@@ -12,6 +12,7 @@ import {
 } from "@/lib/canes/fixtures";
 import {
   ET,
+  paymentNetCents,
   RECURRENCE_DAYS,
   RECURRENCE_PER_MONTH,
   type InvoiceReward,
@@ -34,17 +35,35 @@ const EPOCH_ISO = "2020-01-01T00:00:00.000Z";
 
 async function listAllPayments(): Promise<{ payments: Payment[]; truncated: boolean }> {
   if (isDemo()) {
-    return { payments: DEMO_PAYMENTS.filter((p) => p.status === "completed"), truncated: false };
+    return { payments: DEMO_PAYMENTS, truncated: false };
   }
   const { data, error } = await canesDb()
     .from("payments")
     .select("*")
-    .eq("status", "completed")
     .order("created_at", { ascending: false })
     .limit(FETCH_CAP);
   if (error) throw new Error(`listAllPayments: ${error.message}`);
   const payments = (data ?? []) as Payment[];
   return { payments, truncated: payments.length >= FETCH_CAP };
+}
+
+type GrowthRefundMovement = {
+  amount_cents: number;
+  created_at: string;
+  payment: Pick<Payment, "invoice_id" | "job_id"> | null;
+};
+
+async function listAllRefundMovements(): Promise<GrowthRefundMovement[]> {
+  if (isDemo()) return [];
+  const { data, error } = await canesDb()
+    .from("payment_refunds")
+    .select(
+      "amount_cents, created_at, payment:payments!payment_refunds_payment_id_fkey(invoice_id, job_id)",
+    )
+    .order("created_at", { ascending: false })
+    .limit(FETCH_CAP);
+  if (error) throw new Error(`listAllRefundMovements: ${error.message}`);
+  return (data ?? []) as unknown as GrowthRefundMovement[];
 }
 
 async function listAllJobExpenses(): Promise<JobExpense[]> {
@@ -98,7 +117,10 @@ export async function getAllTimeProfit(): Promise<AllTimeProfit> {
     listTeamMembers(),
   ]);
 
-  const collectedCents = payments.reduce((s, p) => s + p.amount_cents, 0);
+  const collectedCents = payments.reduce(
+    (sum, payment) => sum + paymentNetCents(payment),
+    0,
+  );
   const jobExpensesCents = jobExpenses.reduce((s, e) => s + e.amount_cents, 0);
 
   const crewMinutes = new Map<string, number>();
@@ -145,10 +167,11 @@ const ET_MONTH = new Intl.DateTimeFormat("en-CA", { timeZone: ET, year: "numeric
 const MONTH_LABEL = new Intl.DateTimeFormat("en-US", { timeZone: ET, month: "short", year: "2-digit" });
 
 export async function getRecurringInsights(): Promise<RecurringInsights> {
-  const [jobs, invoiceLinks, { payments }] = await Promise.all([
+  const [jobs, invoiceLinks, { payments }, refunds] = await Promise.all([
     listAllJobs(),
     listAllInvoiceJobLinks(),
     listAllPayments(),
+    listAllRefundMovements(),
   ]);
 
   const flagged = jobs.filter(
@@ -219,7 +242,18 @@ export async function getRecurringInsights(): Promise<RecurringInsights> {
     const jobId = p.job_id ?? (p.invoice_id ? invoiceJob.get(p.invoice_id) ?? null : null);
     if (!jobId || !recurringJobIds.has(jobId)) continue;
     const key = ET_MONTH.format(new Date(p.created_at));
-    if (byMonth.has(key)) byMonth.set(key, (byMonth.get(key) ?? 0) + p.amount_cents);
+    if (byMonth.has(key)) {
+      byMonth.set(key, (byMonth.get(key) ?? 0) + p.amount_cents);
+    }
+  }
+  for (const refund of refunds) {
+    const payment = refund.payment;
+    const jobId = payment?.job_id ?? (payment?.invoice_id ? invoiceJob.get(payment.invoice_id) ?? null : null);
+    if (!jobId || !recurringJobIds.has(jobId)) continue;
+    const key = ET_MONTH.format(new Date(refund.created_at));
+    if (byMonth.has(key)) {
+      byMonth.set(key, (byMonth.get(key) ?? 0) - refund.amount_cents);
+    }
   }
 
   return {

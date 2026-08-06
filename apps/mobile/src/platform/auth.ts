@@ -1,5 +1,6 @@
 import { API_BASE } from "@/api";
-import { clearCanesCrewSession, clearCanesSessions, sendLoginCode, verifyLoginCode } from "@/auth";
+import { sendLoginCode, verifyLoginCode } from "@/auth";
+import { clearCanesSessionsWithPushCleanup } from "@/push-notifications";
 import { getAdminProfile, saveAdminSession } from "@/session";
 import {
   clearWgSession,
@@ -36,8 +37,8 @@ async function exchangeWgAdminSession(): Promise<WorkspaceLoginResult> {
       return { ok: false, notice: body.notice ?? "Urso Control could not be unlocked." };
     }
     const { token, ...profile } = body.data;
+    await clearCanesSessionsWithPushCleanup();
     await saveAdminSession(token, profile);
-    await clearCanesCrewSession();
     await rememberWorkspace("admin");
     return { ok: true, workspace: "admin" };
   } catch {
@@ -80,7 +81,7 @@ export async function verifyWorkspaceCode(
 
   if (session.workspace === "admin") return exchangeWgAdminSession();
 
-  await clearCanesSessions();
+  await clearCanesSessionsWithPushCleanup();
   await rememberWorkspace(session.workspace);
   return { ok: true, workspace: session.workspace };
 }
@@ -95,7 +96,7 @@ export async function signInWorkspaceWithPassword(
 
   if (session.workspace === "admin") return exchangeWgAdminSession();
 
-  await clearCanesSessions();
+  await clearCanesSessionsWithPushCleanup();
   await rememberWorkspace(session.workspace);
   return { ok: true, workspace: session.workspace };
 }

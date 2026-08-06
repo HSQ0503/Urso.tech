@@ -7,10 +7,12 @@ import {
 } from "@/auth";
 import { clearAdminSession, getAdminProfile, getAdminToken } from "@/session";
 import { clearWgSession, wgAuthConfigured, wgSupabase } from "@/wg-auth";
+import { invalidateCanesPushAfterSessionSelection } from "@/push-notifications";
 import { lockSupportMode } from "@/platform/support-lock";
 import type { Workspace, WorkspaceSession } from "@/platform/types";
 
 const ACTIVE_WORKSPACE_KEY = "urso_active_workspace";
+let recentNoSessionDetectionAt = 0;
 
 type WgMembership = {
   name: string;
@@ -25,6 +27,12 @@ export function platformConfigured(): boolean {
 
 export async function rememberWorkspace(workspace: Workspace): Promise<void> {
   await SecureStore.setItemAsync(ACTIVE_WORKSPACE_KEY, workspace);
+}
+
+export function consumeRecentNoSessionDetection(): boolean {
+  const detectedRecently = Date.now() - recentNoSessionDetectionAt < 5_000;
+  recentNoSessionDetectionAt = 0;
+  return detectedRecently;
 }
 
 export async function signOutPlatform(): Promise<void> {
@@ -157,5 +165,12 @@ export async function detectWorkspaceSession(): Promise<WorkspaceSession | null>
 
   if (selected) await rememberWorkspace(selected.workspace);
   else await SecureStore.deleteItemAsync(ACTIVE_WORKSPACE_KEY);
+  if (
+    selected?.workspace !== "canes-owner" &&
+    selected?.workspace !== "canes-crew"
+  ) {
+    await invalidateCanesPushAfterSessionSelection();
+  }
+  recentNoSessionDetectionAt = selected ? 0 : Date.now();
   return selected;
 }

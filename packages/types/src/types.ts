@@ -42,6 +42,7 @@ export type Lead = {
   opted_out: boolean;
   snoozed_until: string | null;
   last_activity_at: string;
+  opportunity_started_at?: string;
 };
 
 export type Message = {
@@ -81,8 +82,12 @@ export type TaskKind =
   | "estimate_reminder"
   | "job_confirmation"
   | "invoice_send"
+  | "invoice_customer_email"
   | "invoice_reminder"
-  | "confirmation_final";
+  | "confirmation_final"
+  | "payment_owner_receipt"
+  | "payment_customer_receipt"
+  | "deposit_owner_receipt";
 
 export type AutomationTask = {
   id: string;
@@ -422,7 +427,9 @@ export type Job = {
   deposit_order_id?: string | null;
   deposit_link_id?: string | null;
   deposit_link_url?: string | null;
+  deposit_link_retired_at?: string | null;
   deposit_paid_at?: string | null;
+  deposit_collected_cents?: number;
   // ── recurrence (0015); optional so fixtures compile ──
   recurrence?: JobRecurrence;
 };
@@ -605,7 +612,7 @@ export type Invoice = {
   customer_name: string | null; customer_phone: string | null; customer_email: string | null;
   job_address: string | null; job_name: string | null;
   subtotal_cents: number; adjustment_cents: number; tax_cents: number; tax_rate_bps: number;
-  total_cents: number; amount_paid_cents: number;
+  total_cents: number; amount_paid_cents: number; settlement_generation: number;
   message_to_customer: string | null; terms: string | null; internal_notes: string | null;
   public_token: string;
   square_invoice_id: string | null; square_order_id: string | null; hosted_payment_url: string | null;
@@ -624,9 +631,22 @@ export type Payment = {
   amount_cents: number; currency: string; method: PaymentMethod; source: PaymentSource;
   status: "completed" | "refunded"; square_payment_id: string | null;
   external_event_id: string | null; recorded_by: string | null; note: string | null;
+  // Optional so pre-0018 fixtures and API payloads remain source-compatible.
+  // A partially refunded payment stays completed; a fully refunded one is
+  // stamped refunded. Consumers must use paymentNetCents for collected money.
+  refunded_cents?: number;
   // ── 0013 deposits; optional so fixtures compile ──
   kind?: PaymentKind; square_order_id?: string | null;
 };
+
+// Money from a payment that the business still owns. The status fallback keeps
+// legacy fully-refunded rows (created before refunded_cents existed) at zero.
+export function paymentNetCents(
+  payment: Pick<Payment, "amount_cents" | "refunded_cents" | "status">,
+): number {
+  if (payment.status === "refunded") return 0;
+  return Math.max(0, payment.amount_cents - (payment.refunded_cents ?? 0));
+}
 
 export type InvoiceWithItems = Invoice & { items: InvoiceItem[]; payments: Payment[] };
 

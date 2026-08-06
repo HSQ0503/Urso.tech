@@ -1,4 +1,4 @@
-import { useState, type ComponentProps } from "react";
+import { useEffect, useState, type ComponentProps } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -21,6 +21,7 @@ import {
   fmtMoney,
   invoiceBalanceCents,
   PAYMENT_METHOD_LABEL,
+  paymentNetCents,
   type InvoiceStatus,
 } from "@urso/types";
 import { API_BASE, invoiceActions } from "@/api";
@@ -106,7 +107,7 @@ function ActionTile({
 }
 
 export default function InvoicePreviewScreen(): React.ReactElement {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, payments } = useLocalSearchParams<{ id: string; payments?: string }>();
   const insets = useSafeAreaInsets();
   const invoiceQuery = useInvoice(id);
   const { refreshing, onRefresh } = usePullToRefresh(invoiceQuery.refetch);
@@ -115,7 +116,7 @@ export default function InvoicePreviewScreen(): React.ReactElement {
   const [tab, setTab] = useState<PreviewTab>("job");
   const [menuOpen, setMenuOpen] = useState(false);
   const [deliveryOpen, setDeliveryOpen] = useState(false);
-  const [paymentsOpen, setPaymentsOpen] = useState(false);
+  const [paymentsOpen, setPaymentsOpen] = useState(payments === "1");
   const [paymentMethodsOpen, setPaymentMethodsOpen] = useState(false);
   const [messageOpen, setMessageOpen] = useState(false);
   const [termsOpen, setTermsOpen] = useState(false);
@@ -123,6 +124,12 @@ export default function InvoicePreviewScreen(): React.ReactElement {
   const [cashText, setCashText] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const [good, setGood] = useState<string | null>(null);
+
+  // Payment-problem pushes add `payments=1`, so the tap lands on the ledger
+  // that needs attention rather than making Sebastian hunt for VIEW PAYMENTS.
+  useEffect(() => {
+    if (payments === "1") setPaymentsOpen(true);
+  }, [payments]);
 
   const invoiceKeys: QueryKey[] = [keys.invoiceOne(id), keys.invoices(), keys.overview()];
   const send = useAction<DeliveryChannels, Record<string, unknown>>(
@@ -314,12 +321,15 @@ export default function InvoicePreviewScreen(): React.ReactElement {
           <View style={styles.grandTotal}><Text style={styles.grandTotalLabel}>Grand Total</Text><Text style={styles.grandTotalValue}>{fmtMoney(invoice.total_cents)}</Text></View>
 
           <View style={styles.paymentSummary}>
-            {invoice.payments.map((payment) => (
-              <View key={payment.id} style={styles.paymentRow}>
-                <View style={styles.paymentCopy}><Text style={styles.paymentLabel}>Payment via {PAYMENT_METHOD_LABEL[payment.method]}</Text><Text style={styles.paymentDate}>on {fmtEt(payment.created_at, { month: "short", day: "2-digit", year: "numeric" })}</Text></View>
-                <Text style={styles.paymentAmount}>(-) {fmtMoney(payment.amount_cents)}</Text>
-              </View>
-            ))}
+            {invoice.payments.map((payment) => {
+              const refunded = payment.refunded_cents ?? (payment.status === "refunded" ? payment.amount_cents : 0);
+              return (
+                <View key={payment.id} style={styles.paymentRow}>
+                  <View style={styles.paymentCopy}><Text style={styles.paymentLabel}>Payment via {PAYMENT_METHOD_LABEL[payment.method]}</Text><Text style={styles.paymentDate}>on {fmtEt(payment.created_at, { month: "short", day: "2-digit", year: "numeric" })}</Text></View>
+                  <View><Text style={styles.paymentAmount}>(-) {fmtMoney(paymentNetCents(payment))} net</Text>{refunded > 0 ? <Text style={styles.refundAmount}>{fmtMoney(refunded)} refunded</Text> : null}</View>
+                </View>
+              );
+            })}
             <View style={styles.paymentRow}><Text style={styles.balanceLabel}>Balance Due</Text><Text style={styles.balanceValue}>{fmtMoney(balance)}</Text></View>
           </View>
         </View>
@@ -373,7 +383,10 @@ export default function InvoicePreviewScreen(): React.ReactElement {
           <Pressable style={StyleSheet.absoluteFill} accessibilityLabel="Close payments" onPress={() => setPaymentsOpen(false)} />
           <View style={[styles.paymentsSheet, { paddingBottom: insets.bottom + 18 }]}>
             <View style={styles.modalHeader}><Text style={styles.modalTitle}>PAYMENTS</Text><Pressable accessibilityRole="button" accessibilityLabel="Close payments" onPress={() => setPaymentsOpen(false)}><Feather name="x" size={28} color={color.muted} /></Pressable></View>
-            {invoice.payments.length === 0 ? <Text style={styles.noPayments}>No payments have been recorded.</Text> : invoice.payments.map((payment) => <View key={payment.id} style={styles.modalPaymentRow}><View><Text style={styles.modalPaymentMethod}>{PAYMENT_METHOD_LABEL[payment.method]}</Text><Text style={styles.paymentDate}>{fmtEt(payment.created_at, { month: "short", day: "numeric", year: "numeric" })}</Text></View><Text style={styles.modalPaymentAmount}>{fmtMoney(payment.amount_cents)}</Text></View>)}
+            {invoice.payments.length === 0 ? <Text style={styles.noPayments}>No payments have been recorded.</Text> : invoice.payments.map((payment) => {
+              const refunded = payment.refunded_cents ?? (payment.status === "refunded" ? payment.amount_cents : 0);
+              return <View key={payment.id} style={styles.modalPaymentRow}><View><Text style={styles.modalPaymentMethod}>{PAYMENT_METHOD_LABEL[payment.method]}</Text><Text style={styles.paymentDate}>{fmtEt(payment.created_at, { month: "short", day: "numeric", year: "numeric" })}</Text></View><View><Text style={styles.modalPaymentAmount}>{fmtMoney(paymentNetCents(payment))} net</Text>{refunded > 0 ? <Text style={styles.refundAmount}>{fmtMoney(refunded)} refunded</Text> : null}</View></View>;
+            })}
             <View style={styles.modalBalance}><Text style={styles.balanceLabel}>Balance Due</Text><Text style={styles.balanceValue}>{fmtMoney(balance)}</Text></View>
             {invoice.status !== "paid" && invoice.status !== "void" ? <Pressable accessibilityRole="button" accessibilityLabel="Record payment" onPress={() => { setPaymentsOpen(false); setCashText((balance / 100).toFixed(2)); setRecordOpen(true); }} style={styles.primaryButton}><Text style={styles.primaryButtonText}>RECORD PAYMENT</Text></Pressable> : null}
           </View>
@@ -459,6 +472,7 @@ const styles = StyleSheet.create({
   paymentLabel: { fontFamily: font.bodyMedium, fontSize: 17, color: color.ink },
   paymentDate: { marginTop: 4, fontFamily: font.body, fontSize: 14, color: color.muted },
   paymentAmount: { fontFamily: font.bodyMedium, fontSize: 17, color: color.danger },
+  refundAmount: { marginTop: 3, textAlign: "right", fontFamily: font.body, fontSize: 13, color: color.muted },
   balanceLabel: { fontFamily: font.bodySemi, fontSize: 19, color: color.ink },
   balanceValue: { fontFamily: font.bodySemi, fontSize: 19, color: color.ink },
   accordion: { borderBottomWidth: 12, borderBottomColor: color.hover },

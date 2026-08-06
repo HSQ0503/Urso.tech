@@ -51,6 +51,7 @@ type Body = {
   recurrence?: unknown;
   amountCents?: unknown;
   method?: unknown;
+  idempotencyKey?: unknown;
 };
 
 // The shape every crew slot takes across these actions: an id, or null for
@@ -228,11 +229,16 @@ export const POST = apiRoute<{ id: string }>(async ({ req, params }) => {
         return apiFail("`amountCents` must be an integer number of cents.", 422);
       }
       if (typeof body.method !== "string") return apiFail("`method` must be a string.", 422);
-      // The action owns the rest: a non-positive amount, the cumulative cap
-      // against the job total, the 20-second double-submit guard, and the
-      // already-sent-invoice refusal.
+      if (
+        body.idempotencyKey !== undefined &&
+        (typeof body.idempotencyKey !== "string" || body.idempotencyKey.trim().length === 0 || body.idempotencyKey.length > 160)
+      ) {
+        return apiFail("`idempotencyKey` must be a non-empty string of at most 160 characters.", 422);
+      }
+      // The action owns the rest: a non-positive amount, the cumulative cap,
+      // provider reconciliation, idempotency, and sent-invoice refusal.
       return apiResult(
-        await recordJobDeposit(id, body.amountCents, body.method),
+        await recordJobDeposit(id, body.amountCents, body.method, body.idempotencyKey as string | undefined),
       );
     }
 

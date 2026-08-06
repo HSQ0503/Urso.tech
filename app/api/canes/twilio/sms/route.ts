@@ -3,8 +3,9 @@ import { processInboundSms, verifyTwilioRequest } from "@/lib/canes/inbound";
 import { xmlResponse } from "@/lib/twilio";
 
 // Twilio SMS webhook for the Canes business number. All routing logic lives in
-// processInboundSms; this route just parses, verifies, and always answers 200
-// with empty TwiML so Twilio never retries or reads an error to the sender.
+// processInboundSms. Retryable failures intentionally return 503; the Twilio
+// webhook URL includes a 5xx retry override so a transient database outage
+// cannot silently lose a customer text.
 export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
@@ -31,8 +32,18 @@ export async function POST(req: NextRequest) {
       mediaUrls,
     });
     console.log(`[canes] inbound sms from ${params.From}: ${outcome.handled}`);
+    if (outcome.handled === "in_progress") {
+      return xmlResponse("<Response/>", 503);
+    }
+    if (outcome.handled === "conflict") {
+      console.error(`[canes] MessageSid payload conflict for ${params.MessageSid ?? "unknown"}`);
+      // A conflict is terminal: retrying the same provider id with a different
+      // payload can never be made safe. Ack without running either payload.
+      return xmlResponse("<Response/>");
+    }
   } catch (err) {
     console.error("[canes] inbound sms pipeline failed:", err);
+    return xmlResponse("<Response/>", 503);
   }
 
   return xmlResponse("<Response/>");

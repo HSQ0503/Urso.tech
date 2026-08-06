@@ -45,20 +45,28 @@ export async function sendSms(opts: {
   body: string;
   statusCallback?: string; // Twilio POSTs delivery-status updates here
 }): Promise<{ ok: boolean; sid?: string; error?: string }> {
-  const basic = Buffer.from(`${opts.accountSid}:${opts.authToken}`).toString("base64");
-  const params = new URLSearchParams({ To: opts.to, From: opts.from, Body: opts.body });
-  if (opts.statusCallback) params.set("StatusCallback", opts.statusCallback);
-  const res = await fetch(messagesUrl(opts.accountSid), {
-    method: "POST",
-    headers: {
-      Authorization: `Basic ${basic}`,
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: params,
-  });
-  if (!res.ok) return { ok: false, error: `Twilio responded ${res.status}` };
-  const json = (await res.json()) as { sid?: string };
-  return { ok: true, sid: json.sid };
+  try {
+    const basic = Buffer.from(`${opts.accountSid}:${opts.authToken}`).toString("base64");
+    const params = new URLSearchParams({ To: opts.to, From: opts.from, Body: opts.body });
+    if (opts.statusCallback) params.set("StatusCallback", opts.statusCallback);
+    const res = await fetch(messagesUrl(opts.accountSid), {
+      method: "POST",
+      headers: {
+        Authorization: `Basic ${basic}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: params,
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!res.ok) return { ok: false, error: `Twilio responded ${res.status}` };
+    const json = (await res.json()) as { sid?: string };
+    return { ok: true, sid: json.sid };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "Twilio request failed",
+    };
+  }
 }
 
 // Reconstruct the externally visible URL Twilio signed. Vercel terminates TLS
@@ -69,8 +77,9 @@ export function publicUrl(req: NextRequest): string {
   return `${proto}://${host}${req.nextUrl.pathname}${req.nextUrl.search}`;
 }
 
-export function xmlResponse(body: string): Response {
+export function xmlResponse(body: string, status = 200): Response {
   return new Response(`<?xml version="1.0" encoding="UTF-8"?>${body}`, {
+    status,
     headers: { "Content-Type": "text/xml" },
   });
 }

@@ -105,6 +105,36 @@ async function sendCustomerEmail(input: {
   return { ok: false, error: message };
 }
 
+async function sendOwnerNotificationEmail(input: {
+  subject: string;
+  html: string;
+  idempotencyKey: string;
+}): Promise<CustomerEmailResult> {
+  const key = process.env.RESEND_API;
+  if (!key) return { ok: false, skipped: "Email delivery is not configured." };
+
+  const resend = new Resend(key);
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const { data, error } = await resend.emails.send(
+        { from: FROM, to: TO, subject: input.subject, html: input.html },
+        { idempotencyKey: input.idempotencyKey },
+      );
+      if (!error && data?.id) return { ok: true, id: data.id };
+      lastError = error;
+      if (!shouldRetryResend(error) || attempt === 2) break;
+    } catch (error) {
+      lastError = error;
+      if (attempt === 2) break;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250 * (2 ** attempt)));
+  }
+  const message = resendErrorMessage(lastError);
+  console.error("[canes/notify] owner notification email failed:", message);
+  return { ok: false, error: message };
+}
+
 // Owner-facing send: subject + pre-rendered HTML to the notify list. Best-effort
 // — skips without a key, swallows every error, never throws into the caller.
 async function send(subject: string, html: string): Promise<void> {
@@ -127,7 +157,7 @@ const estimateUrl = (e: Estimate) => `${APP_URL}/CanesPressure/estimates/${e.id}
 const invoiceUrl = (i: Invoice) => `${APP_URL}/CanesPressure/invoices/${i.id}`;
 const invoicePayUrl = (i: Invoice) => `${APP_URL}/CanesPressure/i/${i.public_token}`;
 
-export async function notifyColdLead(lead: Lead): Promise<void> {
+export async function notifyColdLead(lead: Lead, eventKey?: string): Promise<void> {
   const html = await render(
     <ColdLeadEmail
       name={lead.name}
@@ -138,7 +168,12 @@ export async function notifyColdLead(lead: Lead): Promise<void> {
       openUrl={leadUrl(lead)}
     />,
   );
-  await send(`📞 Call now — new virtual quote: ${lead.name ?? fmtPhone(lead.phone)}`, html);
+  const result = await sendOwnerNotificationEmail({
+    subject: `📞 Call now — new virtual quote: ${lead.name ?? fmtPhone(lead.phone)}`,
+    html,
+    idempotencyKey: `canes-new-lead-${eventKey ?? lead.id}`,
+  });
+  if (!result.ok && result.error) throw new Error(result.error);
 }
 
 export async function notifyColdEscalation(lead: Lead, minutes: number): Promise<void> {
@@ -266,20 +301,34 @@ export async function notifyEstimateApproved(estimate: Estimate): Promise<void> 
 // Owner-facing: the booking deposit landed (0013). Fired by the Square webhook
 // when a deposit Payment Link payment reconciles; `amountCents` is the amount
 // actually paid, which the email shows as the deposit figure.
-export async function notifyDepositPaid(estimate: Estimate, amountCents: number): Promise<void> {
-  const html = await render(
-    <DepositPaidOwnerEmail
-      number={estimate.number}
-      customerName={estimate.customer_name}
-      customerPhone={estimate.customer_phone ? fmtPhone(estimate.customer_phone) : null}
-      jobAddress={estimate.job_address}
-      jobName={estimate.job_name}
-      total={fmtMoney(estimate.total_cents)}
-      deposit={fmtMoney(amountCents)}
-      openUrl={estimateUrl(estimate)}
-    />,
-  );
-  await send(`💰 Deposit paid — ${estimate.customer_name ?? estimate.number} (${fmtMoney(amountCents)})`, html);
+export async function notifyDepositPaid(
+  estimate: Estimate,
+  amountCents: number,
+  deliveryId = estimate.id,
+): Promise<CustomerEmailResult> {
+  try {
+    const html = await render(
+      <DepositPaidOwnerEmail
+        number={estimate.number}
+        customerName={estimate.customer_name}
+        customerPhone={estimate.customer_phone ? fmtPhone(estimate.customer_phone) : null}
+        jobAddress={estimate.job_address}
+        jobName={estimate.job_name}
+        total={fmtMoney(estimate.total_cents)}
+        deposit={fmtMoney(amountCents)}
+        openUrl={estimateUrl(estimate)}
+      />,
+    );
+    return sendOwnerNotificationEmail({
+      subject: `💰 Deposit paid — ${estimate.customer_name ?? estimate.number} (${fmtMoney(amountCents)})`,
+      html,
+      idempotencyKey: `deposit-paid/${estimate.id}/${deliveryId}`,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("[canes/notify] deposit paid email render failed:", message);
+    return { ok: false, error: message };
+  }
 }
 
 // Owner-facing: a customer declined; no job is created.
@@ -346,51 +395,66 @@ export async function notifyInvoiceSent(invoice: Invoice, deliveryId = invoice.i
 
 // Customer-facing receipt when an invoice is paid (card or cash). No-ops without
 // an email on file.
-export async function notifyInvoiceReceipt(invoice: Invoice, method: PaymentMethod): Promise<void> {
-  if (!invoice.customer_email) return;
-  const html = await render(
-    <InvoiceReceiptEmail
-      number={invoice.number}
-      customerName={invoice.customer_name}
-      jobName={invoice.job_name}
-      jobAddress={invoice.job_address}
-      total={fmtMoney(invoice.total_cents)}
-      method={method}
-      paidOn={invoice.paid_at ? fmtEt(invoice.paid_at, { month: "short", day: "numeric", year: "numeric" }) : null}
-    />,
-  );
-  const key = process.env.RESEND_API;
-  if (!key) return;
+export async function notifyInvoiceReceipt(
+  invoice: Invoice,
+  method: PaymentMethod,
+  deliveryId = invoice.id,
+): Promise<CustomerEmailResult> {
+  if (!invoice.customer_email) return { ok: false, skipped: "No email address is on file." };
   try {
-    const resend = new Resend(key);
-    const { error } = await resend.emails.send({
-      from: FROM,
-      to: [invoice.customer_email],
+    const html = await render(
+      <InvoiceReceiptEmail
+        number={invoice.number}
+        customerName={invoice.customer_name}
+        jobName={invoice.job_name}
+        jobAddress={invoice.job_address}
+        total={fmtMoney(invoice.total_cents)}
+        method={method}
+        paidOn={invoice.paid_at ? fmtEt(invoice.paid_at, { month: "short", day: "numeric", year: "numeric" }) : null}
+      />,
+    );
+    return sendCustomerEmail({
+      to: invoice.customer_email,
       subject: `Payment received — ${invoice.number}`,
       html,
+      idempotencyKey: `invoice-receipt/${invoice.id}/${deliveryId}`,
+      documentType: "invoice",
+      documentId: invoice.id,
     });
-    if (error) console.error("[canes/notify] resend error:", error);
-  } catch (err) {
-    console.error("[canes/notify] invoice receipt failed:", err);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("[canes/notify] invoice receipt render failed:", message);
+    return { ok: false, error: message };
   }
 }
 
 // Owner-facing: money in.
-export async function notifyInvoicePaid(invoice: Invoice, method: PaymentMethod): Promise<void> {
-  const html = await render(
-    <InvoicePaidOwnerEmail
-      number={invoice.number}
-      customerName={invoice.customer_name}
-      jobName={invoice.job_name}
-      total={fmtMoney(invoice.total_cents)}
-      method={method}
-      openUrl={invoiceUrl(invoice)}
-    />,
-  );
-  await send(
-    `💵 Paid (${method}) — ${invoice.customer_name ?? invoice.number} (${fmtMoney(invoice.total_cents)})`,
-    html,
-  );
+export async function notifyInvoicePaid(
+  invoice: Invoice,
+  method: PaymentMethod,
+  deliveryId = invoice.id,
+): Promise<CustomerEmailResult> {
+  try {
+    const html = await render(
+      <InvoicePaidOwnerEmail
+        number={invoice.number}
+        customerName={invoice.customer_name}
+        jobName={invoice.job_name}
+        total={fmtMoney(invoice.total_cents)}
+        method={method}
+        openUrl={invoiceUrl(invoice)}
+      />,
+    );
+    return sendOwnerNotificationEmail({
+      subject: `💵 Paid (${method}) — ${invoice.customer_name ?? invoice.number} (${fmtMoney(invoice.total_cents)})`,
+      html,
+      idempotencyKey: `invoice-paid/${invoice.id}/${deliveryId}`,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("[canes/notify] invoice paid email render failed:", message);
+    return { ok: false, error: message };
+  }
 }
 
 // Owner alert when a customer claims a review reward (0012) — the "go verify

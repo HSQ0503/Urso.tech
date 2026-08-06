@@ -14,6 +14,7 @@ import {
   INVOICE_STATUS_CLASS,
   INVOICE_STATUS_LABEL,
   PAYMENT_METHOD_LABEL,
+  paymentNetCents,
 } from "@/lib/canes/types";
 import { InvoiceActions } from "@/app/CanesPressure/components/invoices/invoice-actions";
 import { RewardManager } from "@/app/CanesPressure/components/invoices/reward-controls";
@@ -227,15 +228,23 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
             <div className="cp-card p-4">
               <p className="cp-label">Payments</p>
               <ul className="mt-2 space-y-2">
-                {invoice.payments.map((p) => (
+                {invoice.payments.map((p) => {
+                  const refunded = p.refunded_cents ?? (p.status === "refunded" ? p.amount_cents : 0);
+                  return (
                   <li key={p.id} className="flex items-center justify-between gap-3 text-[13px]">
                     <span>
                       <span className="font-medium">{PAYMENT_METHOD_LABEL[p.method]}</span>
                       <span className="text-[var(--cp-faint)]"> · {fmtEt(p.created_at)}</span>
                     </span>
-                    <span className="tabular-nums font-semibold">{fmtMoney(p.amount_cents)}</span>
+                    <span className="text-right tabular-nums">
+                      <span className="block font-semibold">{fmtMoney(paymentNetCents(p))} net</span>
+                      {refunded > 0 && (
+                        <span className="block text-[11px] text-[var(--cp-warn)]">{fmtMoney(refunded)} refunded</span>
+                      )}
+                    </span>
                   </li>
-                ))}
+                  );
+                })}
               </ul>
             </div>
           )}

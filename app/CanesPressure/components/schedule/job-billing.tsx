@@ -88,7 +88,7 @@ export function JobBilling({
   const creditCents = summary
     ? Math.min(summary.amount_paid_cents, billedCents)
     : job.deposit_paid_at
-      ? Math.min(job.deposit_cents, billedCents)
+      ? Math.min(job.deposit_collected_cents ?? job.deposit_cents, billedCents)
       : 0;
   const dueCents = Math.max(0, billedCents - creditCents);
   const [cashAmount, setCashAmount] = useState<string>((dueCents / 100).toFixed(2));

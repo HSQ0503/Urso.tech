@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { settingsActions } from "@/api";
 import { ChromeBar } from "@/components/ledger";
 import { Notice } from "@/components/notice";
+import { PushNotificationSettings } from "@/components/push-settings";
 import { keys, useSettings } from "@/queries";
 import { noticeFrom, useAction, usePullToRefresh } from "@/query";
 import { color, font, HIT, radius, space, type } from "@/theme";
@@ -21,6 +22,7 @@ export default function SettingsScreen(): React.ReactElement {
   return <View style={styles.screen}><ChromeBar title="Settings" sub="Business defaults and automations" onBack={() => router.back()} />
     {settingsQuery.isPending ? <View style={styles.centre}><ActivityIndicator color={color.brand} /></View> : <ScrollView contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + space.xxl }]} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={color.brand} />} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
       <Notice text={noticeFrom(settingsQuery.error)} /><Notice text={actionNotice} />{saved ? <View style={styles.goodNotice}><Text style={styles.goodText}>{saved}</Text></View> : null}
+      <PushNotificationSettings workspace="owner" />
       <View style={styles.section}><Text style={styles.rule}>Estimate defaults</Text><View style={styles.card}>
         <Field label="Message to customer"><TextInput value={draft.estimateMessage} onChangeText={(estimateMessage) => setDraft({ ...draft, estimateMessage })} multiline style={[styles.input, styles.textarea]} /></Field>
         <Field label="Terms"><TextInput value={draft.estimateTerms} onChangeText={(estimateTerms) => setDraft({ ...draft, estimateTerms })} multiline style={[styles.input, styles.textareaTall]} /></Field>

@@ -47,17 +47,41 @@ export async function listTeamMembers(): Promise<TeamMember[]> {
   return (data ?? []) as TeamMember[];
 }
 
-async function completedPaymentsSince(sinceIso: string): Promise<Payment[]> {
+async function paymentsSince(sinceIso: string): Promise<Payment[]> {
   if (isDemo()) {
-    return DEMO_PAYMENTS.filter((p) => p.status === "completed" && p.created_at >= sinceIso);
+    return DEMO_PAYMENTS.filter((p) => p.created_at >= sinceIso);
   }
   const { data, error } = await canesDb()
     .from("payments")
     .select("*")
-    .eq("status", "completed")
     .gte("created_at", sinceIso);
-  if (error) throw new Error(`completedPaymentsSince: ${error.message}`);
+  if (error) throw new Error(`paymentsSince: ${error.message}`);
   return (data ?? []) as Payment[];
+}
+
+type PayoutRefundMovement = {
+  amount_cents: number;
+  created_at: string;
+  payment: {
+    job_id: string | null;
+    invoice: { job_id: string | null } | null;
+  } | null;
+};
+
+async function refundMovementsInRange(
+  startIso: string,
+  endIso: string,
+): Promise<PayoutRefundMovement[]> {
+  if (isDemo()) return [];
+  const { data, error } = await canesDb()
+    .from("payment_refunds")
+    .select(
+      "amount_cents, created_at, payment:payments!payment_refunds_payment_id_fkey(job_id, invoice:invoices(job_id))",
+    )
+    .gte("created_at", startIso)
+    .lt("created_at", endIso);
+  if (error) throw new Error(`refundMovementsInRange: ${error.message}`);
+  return (data ?? []) as unknown as PayoutRefundMovement[];
 }
 
 // ── ET calendar boundaries for the period containing "now" ──────────────────
@@ -120,16 +144,20 @@ export async function computePayouts(key: PayoutRangeKey): Promise<PayoutSummary
     return t >= startMs && t < endMs;
   };
 
-  const [team, payments, jobExpenses, overheadCents, jobs, settings] = await Promise.all([
+  const [team, payments, refunds, jobExpenses, overheadCents, jobs, settings] = await Promise.all([
     listTeamMembers(),
-    completedPaymentsSince(startIso),
+    paymentsSince(startIso),
+    refundMovementsInRange(startIso, endIso),
     listJobExpensesInRange(startIso, endIso),
     overheadCentsForRange(startIso, endIso),
     listJobs(),
     getSettings(),
   ]);
 
-  const collectedCents = payments.filter((p) => inRange(p.created_at)).reduce((s, p) => s + p.amount_cents, 0);
+  const collectedCents = payments
+    .filter((p) => inRange(p.created_at))
+    .reduce((sum, payment) => sum + payment.amount_cents, 0)
+    - refunds.reduce((sum, refund) => sum + refund.amount_cents, 0);
   const jobExpensesCents = jobExpenses.reduce((s, e) => s + e.amount_cents, 0);
 
   // Worker labor: a crew's job-minutes in the period, charged to every worker on
@@ -164,6 +192,11 @@ export async function computePayouts(key: PayoutRangeKey): Promise<PayoutSummary
   for (const p of payments) {
     if (!p.job_id || !inRange(p.created_at)) continue;
     revenueByJob.set(p.job_id, (revenueByJob.get(p.job_id) ?? 0) + p.amount_cents);
+  }
+  for (const refund of refunds) {
+    const jobId = refund.payment?.job_id ?? refund.payment?.invoice?.job_id;
+    if (!jobId) continue;
+    revenueByJob.set(jobId, (revenueByJob.get(jobId) ?? 0) - refund.amount_cents);
   }
   const materialsByJob = new Map<string, number>();
   for (const e of jobExpenses) {

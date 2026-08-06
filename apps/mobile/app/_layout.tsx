@@ -26,6 +26,7 @@ import {
 } from "@expo-google-fonts/ibm-plex-mono";
 import { QueryProvider } from "@/query";
 import { ToastProvider } from "@/components/toast";
+import { PushNotificationsProvider } from "@/push-notifications";
 import { color } from "@/theme";
 
 // Root layout. Every screen draws its own true-black chrome header, so the
@@ -57,18 +58,20 @@ export default function RootLayout(): React.ReactElement | null {
 
   return (
     <SafeAreaProvider>
-      <QueryProvider>
-        <ToastProvider>
-          <StatusBar style="light" />
-          <Stack
-            screenOptions={{
-              headerShown: false,
-              // Bone, not white, so a push never flashes a bright card-shaped gap.
-              contentStyle: { backgroundColor: color.bg },
-            }}
-          />
-        </ToastProvider>
-      </QueryProvider>
+      <PushNotificationsProvider>
+        <QueryProvider>
+          <ToastProvider>
+            <StatusBar style="light" />
+            <Stack
+              screenOptions={{
+                headerShown: false,
+                // Bone, not white, so a push never flashes a bright card-shaped gap.
+                contentStyle: { backgroundColor: color.bg },
+              }}
+            />
+          </ToastProvider>
+        </QueryProvider>
+      </PushNotificationsProvider>
     </SafeAreaProvider>
   );
 }

@@ -29,11 +29,12 @@ export default async function SettingsPage() {
   const demo = isDemo();
   const twilio = twilioConfigured();
   const base = process.env.NEXT_PUBLIC_APP_URL ?? "https://urso.ws";
+  const retryPolicy = "#rc=5&rp=ct,rt,5xx";
 
   const webhooks = [
-    { label: "SMS", url: `${base}/api/canes/twilio/sms` },
-    { label: "Voice", url: `${base}/api/canes/twilio/voice` },
-    { label: "Status callback", url: `${base}/api/canes/twilio/status` },
+    { label: "SMS", url: `${base}/api/canes/twilio/sms${retryPolicy}` },
+    { label: "Voice", url: `${base}/api/canes/twilio/voice${retryPolicy}` },
+    { label: "Status callback", url: `${base}/api/canes/twilio/status${retryPolicy}` },
   ];
 
   return (

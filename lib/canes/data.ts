@@ -407,16 +407,28 @@ async function readOverviewInvoices(): Promise<OverviewInvoice[]> {
   return (data ?? []) as OverviewInvoice[];
 }
 
-type OverviewPayment = Pick<Payment, "amount_cents" | "status" | "created_at">;
+type OverviewPayment = Pick<Payment, "amount_cents" | "created_at">;
 
 async function readPaymentsSince(sinceIso: string): Promise<OverviewPayment[]> {
   if (isDemo()) return DEMO_PAYMENTS.filter((p) => p.created_at >= sinceIso);
   const { data } = await canesDb()
     .from("payments")
-    .select("amount_cents, status, created_at")
+    .select("amount_cents, created_at")
     .gte("created_at", sinceIso)
     .limit(1000);
   return (data ?? []) as OverviewPayment[];
+}
+
+type OverviewRefundMovement = { amount_cents: number; created_at: string };
+
+async function readRefundsSince(sinceIso: string): Promise<OverviewRefundMovement[]> {
+  if (isDemo()) return [];
+  const { data } = await canesDb()
+    .from("payment_refunds")
+    .select("amount_cents, created_at")
+    .gte("created_at", sinceIso)
+    .limit(1000);
+  return (data ?? []) as OverviewRefundMovement[];
 }
 
 async function readRecentEvents(limit: number): Promise<LeadEvent[]> {
@@ -434,12 +446,13 @@ async function readRecentEvents(limit: number): Promise<LeadEvent[]> {
 export async function getOverview(): Promise<Overview> {
   const now = Date.now();
   const weekAgoIso = new Date(now - 7 * 86_400_000).toISOString();
-  const [all, estimates, jobs, invoices, weekPayments, recentEvents] = await Promise.all([
+  const [all, estimates, jobs, invoices, weekPayments, weekRefunds, recentEvents] = await Promise.all([
     listLeads(),
     readOverviewEstimates(),
     readOverviewJobs(),
     readOverviewInvoices(),
     readPaymentsSince(weekAgoIso),
+    readRefundsSince(weekAgoIso),
     readRecentEvents(8),
   ]);
   const in24h = now + 24 * 3_600_000;
@@ -521,9 +534,9 @@ export async function getOverview(): Promise<Overview> {
       },
     },
     money: {
-      collectedThisWeekCents: weekPayments
-        .filter((p) => p.status === "completed")
-        .reduce((sum, p) => sum + p.amount_cents, 0),
+      collectedThisWeekCents:
+        weekPayments.reduce((sum, payment) => sum + payment.amount_cents, 0) -
+        weekRefunds.reduce((sum, refund) => sum + refund.amount_cents, 0),
       wonThisWeekCents: estimates
         .filter((e) => e.status === "approved" && e.approved_at && new Date(e.approved_at).getTime() > startOfWeek)
         .reduce((sum, e) => sum + e.total_cents, 0),
@@ -599,10 +612,11 @@ export async function getTodayReport(): Promise<TodayReport> {
   // 48 hours back covers today under any offset without pulling the whole
   // ledger; the ET day key below is what actually decides membership.
   const paymentsSince = new Date(Date.now() - 2 * 86_400_000).toISOString();
-  const [jobs, estimates, payments, leads] = await Promise.all([
+  const [jobs, estimates, payments, refunds, leads] = await Promise.all([
     readReportJobs(),
     readReportEstimates(),
     readPaymentsSince(paymentsSince),
+    readRefundsSince(paymentsSince),
     listLeads(),
   ]);
 
@@ -615,9 +629,13 @@ export async function getTodayReport(): Promise<TodayReport> {
     jobsToday: sumFigure(
       live.filter((job) => job.scheduled_at !== null && etDayOf(job.scheduled_at) === today),
     ),
-    earnedTodayCents: payments
-      .filter((p) => p.status === "completed" && etDayOf(p.created_at) === today)
-      .reduce((total, p) => total + p.amount_cents, 0),
+    earnedTodayCents:
+      payments
+        .filter((payment) => etDayOf(payment.created_at) === today)
+        .reduce((total, payment) => total + payment.amount_cents, 0) -
+      refunds
+        .filter((refund) => etDayOf(refund.created_at) === today)
+        .reduce((total, refund) => total + refund.amount_cents, 0),
     // Jobs SOLD today, whenever they are scheduled — the counterpart to
     // jobsToday, which is jobs WORKED today. Sebastian reads these as two
     // different questions and they are rarely the same number.

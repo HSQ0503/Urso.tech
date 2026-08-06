@@ -2,6 +2,7 @@ import type {
   Agenda,
   BusinessExpense,
   Call,
+  CalendarEventKind,
   CanesSettings,
   Crew,
   CrewAccountRole,
@@ -60,9 +61,11 @@ export class SessionExpiredError extends Error {
 }
 
 type RequestOptions = {
-  method?: "GET" | "POST" | "PATCH";
+  method?: "GET" | "POST" | "PATCH" | "DELETE";
   body?: unknown;
   signal?: AbortSignal;
+  auth?: "owner" | "crew";
+  clearOnUnauthorized?: boolean;
 };
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<ApiResult<T>> {
@@ -70,7 +73,12 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<A
   // to getAccessToken() for them would find nothing; a technician has no admin
   // token, so the reverse holds. Whichever exists is the caller's identity, and
   // the server resolves the same actor either way.
-  const token = (await getAdminToken()) ?? (await getAccessToken());
+  const token =
+    options.auth === "owner"
+      ? await getAdminToken()
+      : options.auth === "crew"
+        ? await getAccessToken()
+        : (await getAdminToken()) ?? (await getAccessToken());
   if (!token) throw new SessionExpiredError();
 
   const headers: Record<string, string> = { authorization: `Bearer ${token}` };
@@ -94,7 +102,13 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<A
   // deactivated). Clear it so the app routes back to login instead of looping
   // on a token the server will never accept again.
   if (res.status === 401) {
-    await signOut();
+    if (options.clearOnUnauthorized !== false) {
+      const nativeCleanup = import("./push-native").then(async (pushNative) => {
+        pushNative.rotatePushLifecycle();
+        await pushNative.cleanupNativePushRegistration({ invalidateToken: true });
+      });
+      await Promise.allSettled([nativeCleanup, signOut()]);
+    }
     throw new SessionExpiredError();
   }
 
@@ -259,6 +273,68 @@ export const owner = {
   settings: () => request<CanesSettings>("/canes/settings"),
 };
 
+// ── Push notifications ─────────────────────────────────────────────────────────────
+
+export type PushWorkspace = "owner" | "crew";
+
+export type PushDeviceRegistration = {
+  installationId: string;
+  expoPushToken: string;
+  platform: "ios" | "android";
+  workspace: PushWorkspace;
+  deviceName?: string;
+  appVersion?: string;
+  buildNumber?: string;
+  timezone?: string;
+};
+
+export type PushPreferences = {
+  enabled: boolean;
+  eventTypes: Record<string, boolean>;
+  quietHours?: {
+    enabled: boolean;
+    startHour: number;
+    endHour: number;
+    timezone: string;
+  } | null;
+};
+
+export type PushPreferencesPatch = {
+  enabled?: boolean;
+  eventTypes?: Partial<Record<string, boolean>>;
+  quietHours?: Partial<NonNullable<PushPreferences["quietHours"]>>;
+};
+
+export const pushApi = {
+  registerDevice: (registration: PushDeviceRegistration, signal?: AbortSignal) =>
+    request<Record<string, never>>("/canes/push/devices", {
+      method: "POST",
+      body: registration,
+      auth: registration.workspace,
+      signal,
+    }),
+  unregisterDevice: (
+    installationId: string,
+    workspace: PushWorkspace,
+    options: { signal?: AbortSignal; clearOnUnauthorized?: boolean } = {},
+  ) =>
+    request<Record<string, never>>("/canes/push/devices", {
+      method: "DELETE",
+      body: { installationId, workspace },
+      auth: workspace,
+      signal: options.signal,
+      clearOnUnauthorized: options.clearOnUnauthorized,
+    }),
+  preferences: (workspace: PushWorkspace) =>
+    request<PushPreferences>("/canes/push/preferences", { auth: workspace }),
+  savePreferences: (workspace: PushWorkspace, preferences: PushPreferencesPatch) =>
+    request<PushPreferences>("/canes/push/preferences", {
+      method: "PATCH",
+      body: preferences,
+      auth: workspace,
+    }),
+};
+
 // ── Owner mutations (O1) ─────────────────────────────────────────────────────
 //
 // One function per dispatchable action, posting { action, ...params } to the
@@ -290,6 +366,21 @@ export type CallOutcome = "closed" | "follow_up" | "no_answer" | "lost";
 export const callActions = {
   bridge: (phone: string, leadId?: string) =>
     act("/canes/calls/bridge", { phone, leadId }),
+};
+
+export const calendarEventActions = {
+  create: (input: {
+    title: string;
+    startIso: string;
+    endIso: string;
+    allDay: boolean;
+    crewId: string | null;
+    kind: CalendarEventKind;
+    notes?: string;
+  }) => act<Record<string, unknown>>("/canes/calendar-events/actions", {
+    action: "create",
+    ...input,
+  }),
 };
 
 export const expenseActions = {

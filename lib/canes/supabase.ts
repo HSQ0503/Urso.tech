@@ -37,3 +37,16 @@ export function twilioConfigured(): boolean {
 export function squareConfigured(): boolean {
   return Boolean(process.env.CANES_SQUARE_ACCESS_TOKEN && process.env.CANES_SQUARE_LOCATION_ID);
 }
+
+export function squarePaymentsReady(): boolean {
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+  if (!squareConfigured() || !process.env.CANES_SQUARE_WEBHOOK_SIGNATURE_KEY || !appUrl) {
+    return false;
+  }
+  try {
+    const url = new URL(appUrl);
+    return url.protocol === "https:" && Boolean(url.host);
+  } catch {
+    return false;
+  }
+}

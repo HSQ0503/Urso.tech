@@ -17,6 +17,7 @@ import {
 } from "@/lib/canes/media";
 import type { JobMediaCategory, JobMediaItem } from "@/lib/canes/types";
 import { completeJob } from "@/app/CanesPressure/actions";
+import { pushChecklistBlocked } from "@/lib/canes/push-events";
 
 export type CrewActionResult = { ok: boolean; notice?: string };
 
@@ -32,52 +33,38 @@ async function logActivity(
   accountId: string,
   eventType: string,
   detail: Record<string, unknown> = {},
-): Promise<void> {
-  const { error } = await canesDb().from("job_activity_events").insert({
+): Promise<string | null> {
+  const { data, error } = await canesDb().from("job_activity_events").insert({
     job_id: jobId,
     account_id: accountId,
     event_type: eventType,
     detail,
-  });
-  if (error) console.error(`[canes crew] activity ${eventType} failed: ${error.message}`);
+  }).select("id").single();
+  if (error) {
+    console.error(`[canes crew] activity ${eventType} failed: ${error.message}`);
+    return null;
+  }
+  return typeof data?.id === "string" ? data.id : null;
 }
 
 export async function checkInToJob(jobId: string): Promise<CrewActionResult> {
   const actor = await requireTechnicianActor();
   await requireTechnicianJob(actor, jobId);
   const db = canesDb();
-  const { data: job } = await db.from("jobs").select("status").eq("id", jobId).single();
-  if (!job || TERMINAL.includes(job.status)) {
-    return { ok: false, notice: "This job can no longer be started." };
-  }
-
-  const { data: open } = await db
-    .from("job_time_entries")
-    .select("job_id")
-    .eq("account_id", actor.accountId)
-    .is("checked_out_at", null)
-    .maybeSingle();
-  if (open) {
-    return open.job_id === jobId
-      ? { ok: true, notice: "You are already checked in." }
-      : { ok: false, notice: "Check out of your other job first." };
-  }
-
   const checkedInAt = new Date().toISOString();
-  const { error } = await db.from("job_time_entries").insert({
-    job_id: jobId,
-    account_id: actor.accountId,
-    checked_in_at: checkedInAt,
+  const { data, error } = await db.rpc("check_in_job_locked", {
+    p_job_id: jobId,
+    p_account_id: actor.accountId,
+    p_checked_in_at: checkedInAt,
   });
-  if (error) {
-    return {
-      ok: false,
-      notice: error.code === "23505" ? "You are already checked in." : error.message,
-    };
-  }
-  if (["unscheduled", "scheduled", "confirmed"].includes(job.status)) {
-    await db.from("jobs").update({ status: "in_progress" }).eq("id", jobId);
-  }
+  if (error) return { ok: false, notice: error.message };
+  const result = (data?.[0] ?? null) as {
+    outcome: "checked_in" | "already_here" | "open_elsewhere" | "closed" | "not_found";
+    open_job_id: string | null;
+  } | null;
+  if (result?.outcome === "already_here") return { ok: true, notice: "You are already checked in." };
+  if (result?.outcome === "open_elsewhere") return { ok: false, notice: "Check out of your other job first." };
+  if (result?.outcome !== "checked_in") return { ok: false, notice: "This job can no longer be started." };
   await logActivity(jobId, actor.accountId, "checked_in", { checkedInAt });
   refresh(jobId);
   return { ok: true, notice: "Checked in." };
@@ -110,6 +97,36 @@ async function checklistItemJob(itemId: string): Promise<string | null> {
     .eq("id", itemId)
     .maybeSingle();
   return (data?.job_id as string | undefined) ?? null;
+}
+
+async function alertRequiredChecklistBlock(input: {
+  itemId: string;
+  blockedAt: string;
+  jobId: string;
+  stepName: string;
+  technicianName: string;
+}): Promise<void> {
+  try {
+    const { data: job } = await canesDb()
+      .from("jobs")
+      .select("customer_name")
+      .eq("id", input.jobId)
+      .maybeSingle();
+    await pushChecklistBlocked({
+      eventId: `${input.itemId}:${input.blockedAt}`,
+      jobId: input.jobId,
+      customerName: typeof job?.customer_name === "string" ? job.customer_name : null,
+      stepName: input.stepName,
+      technicianName: input.technicianName,
+      itemId: input.itemId,
+      blockedAt: input.blockedAt,
+    });
+  } catch (error) {
+    // The block itself has committed. Cron rebuilds this exact alert from the
+    // persisted blocked_at snapshot, so the technician must not be told the
+    // action failed and retry a successful mutation.
+    console.error(`[canes crew] checklist block push persistence failed for ${input.itemId}:`, error);
+  }
 }
 
 export async function setChecklistItemDone(
@@ -166,11 +183,30 @@ export async function setChecklistItemBlocked(
   blocked: boolean,
 ): Promise<CrewActionResult> {
   const actor = await requireTechnicianActor();
-  const jobId = await checklistItemJob(itemId);
-  if (!jobId) return { ok: false, notice: "Checklist item not found." };
+  const { data: item } = await canesDb()
+    .from("job_items")
+    .select("job_id, name, required, blocked, blocked_at")
+    .eq("id", itemId)
+    .maybeSingle();
+  if (!item || typeof item.job_id !== "string") {
+    return { ok: false, notice: "Checklist item not found." };
+  }
+  const jobId = item.job_id;
   await requireTechnicianJob(actor, jobId);
+  if (Boolean(item.blocked) === blocked) {
+    if (blocked && item.required && typeof item.blocked_at === "string") {
+      await alertRequiredChecklistBlock({
+        itemId,
+        blockedAt: item.blocked_at,
+        jobId,
+        stepName: typeof item.name === "string" ? item.name : "Required step",
+        technicianName: actor.name,
+      });
+    }
+    return { ok: true, notice: blocked ? "This step is already blocked." : undefined };
+  }
   const now = new Date().toISOString();
-  const { error } = await canesDb()
+  const { data: changed, error } = await canesDb()
     .from("job_items")
     .update({
       blocked,
@@ -181,8 +217,41 @@ export async function setChecklistItemBlocked(
       completed_by: blocked ? null : undefined,
     })
     .eq("id", itemId)
-    .eq("job_id", jobId);
+    .eq("job_id", jobId)
+    .eq("blocked", !blocked)
+    .select("id");
   if (error) return { ok: false, notice: error.message };
+  if (!changed || changed.length === 0) {
+    if (blocked) {
+      const { data: current } = await canesDb()
+        .from("job_items")
+        .select("name, required, blocked, blocked_at")
+        .eq("id", itemId)
+        .eq("job_id", jobId)
+        .maybeSingle();
+      if (current?.required && current.blocked && typeof current.blocked_at === "string") {
+        await alertRequiredChecklistBlock({
+          itemId,
+          blockedAt: current.blocked_at,
+          jobId,
+          stepName: typeof current.name === "string" ? current.name : "Required step",
+          technicianName: actor.name,
+        });
+      }
+    }
+    return { ok: true, notice: blocked ? "This step is already blocked." : undefined };
+  }
+  if (blocked && item.required) {
+    // The persisted CAS timestamp owns notification dedupe. Audit insertion is
+    // best effort and must never suppress an urgent blocked-step alert.
+    await alertRequiredChecklistBlock({
+      itemId,
+      blockedAt: now,
+      jobId,
+      stepName: typeof item.name === "string" ? item.name : "Required step",
+      technicianName: actor.name,
+    });
+  }
   await logActivity(jobId, actor.accountId, blocked ? "checklist_blocked" : "checklist_unblocked", {
     itemId,
   });

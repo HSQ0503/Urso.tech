@@ -113,19 +113,61 @@ export type Insights = {
 
 // ── Analytics-only readers (payments / outbound touches / paid line items) ────
 
-async function listCompletedPayments(sinceIso: string): Promise<Payment[]> {
+async function listPaymentsSince(sinceIso: string): Promise<Payment[]> {
   if (isDemo()) {
-    return DEMO_PAYMENTS.filter((p) => p.status === "completed" && p.created_at >= sinceIso);
+    return DEMO_PAYMENTS.filter((p) => p.created_at >= sinceIso);
   }
   const { data, error } = await canesDb()
     .from("payments")
     .select("*")
-    .eq("status", "completed")
     .gte("created_at", sinceIso)
     .limit(2000);
-  if (error) throw new Error(`listCompletedPayments: ${error.message}`);
+  if (error) throw new Error(`listPaymentsSince: ${error.message}`);
   return (data ?? []) as Payment[];
 }
+
+type AnalyticsRefundMovement = {
+  amount_cents: number;
+  created_at: string;
+  payment: Pick<Payment, "invoice_id" | "job_id" | "method"> | null;
+};
+
+async function listRefundMovementsSince(sinceIso: string): Promise<AnalyticsRefundMovement[]> {
+  if (isDemo()) return [];
+  const { data, error } = await canesDb()
+    .from("payment_refunds")
+    .select(
+      "amount_cents, created_at, payment:payments!payment_refunds_payment_id_fkey(invoice_id, job_id, method)",
+    )
+    .gte("created_at", sinceIso)
+    .limit(2000);
+  if (error) throw new Error(`listRefundMovementsSince: ${error.message}`);
+  return (data ?? []) as unknown as AnalyticsRefundMovement[];
+}
+
+type MoneyMovement = {
+  cents: number;
+  createdAt: string;
+  invoiceId: string | null;
+  jobId: string | null;
+  method: Payment["method"];
+};
+
+const paymentMovement = (payment: Payment): MoneyMovement => ({
+  cents: payment.amount_cents,
+  createdAt: payment.created_at,
+  invoiceId: payment.invoice_id,
+  jobId: payment.job_id,
+  method: payment.method,
+});
+
+const refundMovement = (refund: AnalyticsRefundMovement): MoneyMovement => ({
+  cents: -refund.amount_cents,
+  createdAt: refund.created_at,
+  invoiceId: refund.payment?.invoice_id ?? null,
+  jobId: refund.payment?.job_id ?? null,
+  method: refund.payment?.method ?? "other",
+});
 
 async function listOutboundCalls(sinceIso: string): Promise<Call[]> {
   if (isDemo()) {
@@ -274,25 +316,40 @@ export async function getInsights(key: RangeKey): Promise<Insights> {
   const startIso = new Date(startMs).toISOString();
   const prevStartIso = new Date(startMs - days * 86_400_000).toISOString();
 
-  const [leads, estimates, jobs, invoices, crews, payments, calls, manualMsgs] = await Promise.all([
-    listLeads(),
-    listEstimates(),
-    listJobs(),
-    listInvoices(),
-    listCrews(),
-    listCompletedPayments(prevStartIso), // one fetch covers range + prior window
-    listOutboundCalls(startIso),
-    listManualOutboundMessages(startIso),
-  ]);
+  const [leads, estimates, jobs, invoices, crews, payments, refunds, calls, manualMsgs] =
+    await Promise.all([
+      listLeads(),
+      listEstimates(),
+      listJobs(),
+      listInvoices(),
+      listCrews(),
+      listPaymentsSince(prevStartIso), // one fetch covers range + prior window
+      listRefundMovementsSince(prevStartIso),
+      listOutboundCalls(startIso),
+      listManualOutboundMessages(startIso),
+    ]);
 
   const ts = (iso: string) => new Date(iso).getTime();
   const inRange = (iso: string | null) => iso !== null && ts(iso) >= startMs;
 
   // ── Money ──
   const rangePayments = payments.filter((p) => inRange(p.created_at));
+  const rangeRefunds = refunds.filter((r) => inRange(r.created_at));
   const prevPayments = payments.filter((p) => !inRange(p.created_at)); // fetched ≥ prevStart
-  const collectedCents = rangePayments.reduce((s, p) => s + p.amount_cents, 0);
-  const collectedPrevCents = prevPayments.reduce((s, p) => s + p.amount_cents, 0);
+  const prevRefunds = refunds.filter((r) => !inRange(r.created_at));
+  const rangeMovements = [
+    ...rangePayments.map(paymentMovement),
+    ...rangeRefunds.map(refundMovement),
+  ];
+  const prevMovements = [
+    ...prevPayments.map(paymentMovement),
+    ...prevRefunds.map(refundMovement),
+  ];
+  const collectedCents = rangeMovements.reduce((sum, movement) => sum + movement.cents, 0);
+  const collectedPrevCents = prevMovements.reduce(
+    (sum, movement) => sum + movement.cents,
+    0,
+  );
 
   const openInvoices = invoices.filter(
     (i) => i.status === "draft" || i.status === "sent" || i.status === "viewed",
@@ -311,17 +368,19 @@ export async function getInsights(key: RangeKey): Promise<Insights> {
   // Trend + method share off the ledger.
   const { points, indexOf } = makeBuckets(key, nowMs);
   const methodShare = { cash: 0, card: 0, other: 0 };
-  for (const p of rangePayments) {
-    const method = p.method === "cash" || p.method === "card" ? p.method : "other";
-    methodShare[method] += p.amount_cents;
-    const i = indexOf(ts(p.created_at));
+  for (const movement of rangeMovements) {
+    const method =
+      movement.method === "cash" || movement.method === "card" ? movement.method : "other";
+    methodShare[method] += movement.cents;
+    const i = indexOf(ts(movement.createdAt));
     if (i < 0) continue;
-    if (method === "cash") points[i].cash += p.amount_cents / 100;
-    else points[i].card += p.amount_cents / 100; // "other" plots with card, rare
+    if (method === "cash") points[i].cash += movement.cents / 100;
+    else points[i].card += movement.cents / 100; // "other" plots with card, rare
   }
 
   // Revenue by crew (per-contractor contribution): ledger → job → crew.
   const jobById = new Map(jobs.map((j) => [j.id, j]));
+  const invoiceById = new Map(invoices.map((i) => [i.id, i]));
   const crewAgg = new Map<
     string,
     { name: string; color: string; cents: number; jobs: Set<string>; expenseCents: number }
@@ -330,19 +389,28 @@ export async function getInsights(key: RangeKey): Promise<Insights> {
   // crew revenue. An expense counts iff its job appears here, so cost and revenue
   // land in the same period no matter when the expense row was created.
   const paidJobIds = new Set<string>();
-  for (const p of rangePayments) {
-    const job = p.job_id ? jobById.get(p.job_id) : undefined;
+  for (const movement of rangeMovements) {
+    const resolvedJobId =
+      movement.jobId ??
+      (movement.invoiceId ? invoiceById.get(movement.invoiceId)?.job_id ?? null : null);
+    const job = resolvedJobId ? jobById.get(resolvedJobId) : undefined;
     const crew = job?.crew_id ? crews.find((c) => c.id === job.crew_id) : undefined;
     const k = crew?.id ?? "none";
     const entry =
       crewAgg.get(k) ??
       { name: crew?.name ?? "Unassigned", color: crew?.color ?? "#84888f", cents: 0, jobs: new Set<string>(), expenseCents: 0 };
-    entry.cents += p.amount_cents;
-    if (p.job_id) {
-      entry.jobs.add(p.job_id);
-      paidJobIds.add(p.job_id);
-    }
+    entry.cents += movement.cents;
+    if (resolvedJobId) entry.jobs.add(resolvedJobId);
     crewAgg.set(k, entry);
+  }
+  // A refund-only period carries the revenue reversal, but it must not charge
+  // the job's historical expenses a second time. Costs join only jobs with a
+  // positive payment movement in this period.
+  for (const payment of rangePayments) {
+    const resolvedJobId =
+      payment.job_id ??
+      (payment.invoice_id ? invoiceById.get(payment.invoice_id)?.job_id ?? null : null);
+    if (resolvedJobId) paidJobIds.add(resolvedJobId);
   }
 
   // Fold expenses into the crew breakdown. Attribute each expense to the SAME
@@ -462,7 +530,6 @@ export async function getInsights(key: RangeKey): Promise<Insights> {
   // integration is shelved, so we have no spend data yet). Until then this ranks
   // channels by money in, not return on spend — no cost/ROI numbers are invented.
   const leadById = new Map(leads.map((l) => [l.id, l]));
-  const invoiceById = new Map(invoices.map((i) => [i.id, i]));
   const srcAgg = new Map<LeadSource, { leads: number; won: number; wonCents: number; collectedCents: number }>();
   const srcEntry = (source: LeadSource) =>
     srcAgg.get(source) ?? { leads: 0, won: 0, wonCents: 0, collectedCents: 0 };
@@ -483,13 +550,13 @@ export async function getInsights(key: RangeKey): Promise<Insights> {
   // falling back to payment → invoice → lead.source when the payment has no job.
   // Anything that resolves to no lead/source lands in the 'other' bucket, so the
   // per-channel collected totals still sum to the headline Collected figure.
-  for (const p of rangePayments) {
-    const job = p.job_id ? jobById.get(p.job_id) : undefined;
-    const invoice = p.invoice_id ? invoiceById.get(p.invoice_id) : undefined;
+  for (const movement of rangeMovements) {
+    const job = movement.jobId ? jobById.get(movement.jobId) : undefined;
+    const invoice = movement.invoiceId ? invoiceById.get(movement.invoiceId) : undefined;
     const leadId = job?.lead_id ?? invoice?.lead_id ?? null;
     const source: LeadSource = (leadId ? leadById.get(leadId)?.source : undefined) ?? "other";
     const entry = srcEntry(source);
-    entry.collectedCents += p.amount_cents;
+    entry.collectedCents += movement.cents;
     srcAgg.set(source, entry);
   }
   const sources = [...srcAgg.entries()]

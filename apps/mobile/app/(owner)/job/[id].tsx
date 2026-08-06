@@ -11,11 +11,12 @@
 // conversion is the deposit dollars input at the edge, using the web's own
 // inputToCents contract. Every timestamp is America/New_York via fmtEt.
 
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import {
   ActivityIndicator,
   Alert,
   Linking,
+  type LayoutChangeEvent,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -76,9 +77,17 @@ function GoodNotice({ text }: { text: string | null }) {
   );
 }
 
-function Section({ label, children }: { label: string; children: ReactNode }) {
+function Section({
+  label,
+  children,
+  onLayout,
+}: {
+  label: string;
+  children: ReactNode;
+  onLayout?: (event: LayoutChangeEvent) => void;
+}) {
   return (
-    <View style={styles.section}>
+    <View style={styles.section} onLayout={onLayout}>
       <Text style={styles.sectionLabel}>{label}</Text>
       {children}
     </View>
@@ -95,8 +104,10 @@ function Field({ label, value }: { label: string; value: string }) {
 }
 
 export default function JobScreen(): React.ReactElement {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, focus } = useLocalSearchParams<{ id: string; focus?: string }>();
   const insets = useSafeAreaInsets();
+  const scrollRef = useRef<ScrollView>(null);
+  const focusedSectionKeyRef = useRef<string | null>(null);
 
   // The job is the only read whose refusal blocks the screen; crews and
   // invoices each say their sentence in the section that needed them. Like
@@ -495,6 +506,7 @@ export default function JobScreen(): React.ReactElement {
     <View style={styles.screen}>
       {header}
       <ScrollView
+        ref={scrollRef}
         contentContainerStyle={[styles.scrollBody, { paddingBottom: insets.bottom + space.xxl }]}
         keyboardShouldPersistTaps="handled"
         // The Edit-details form lives at the bottom of this page, exactly where
@@ -827,7 +839,18 @@ export default function JobScreen(): React.ReactElement {
           </View>
         </Section>
 
-        <Section label="Crew checklist">
+        <Section
+          label="Crew checklist"
+          onLayout={(event) => {
+            const focusKey = focus === "checklist" ? id : null;
+            if (!focusKey || focusedSectionKeyRef.current === `checklist:${focusKey}`) return;
+            focusedSectionKeyRef.current = `checklist:${focusKey}`;
+            const y = event.nativeEvent.layout.y;
+            requestAnimationFrame(() => {
+              scrollRef.current?.scrollTo({ y: Math.max(0, y - space.sm), animated: true });
+            });
+          }}
+        >
           <View style={[styles.card, styles.checklistCard]}>
             <View style={styles.checklistHead}>
               <Text style={styles.sectionTitle}>Crew checklist</Text>
@@ -974,7 +997,18 @@ export default function JobScreen(): React.ReactElement {
           </Section>
         ) : null}
 
-        <Section label="Billing">
+        <Section
+          label="Billing"
+          onLayout={(event) => {
+            const focusKey = focus === "billing" ? id : null;
+            if (!focusKey || focusedSectionKeyRef.current === `billing:${focusKey}`) return;
+            focusedSectionKeyRef.current = `billing:${focusKey}`;
+            const y = event.nativeEvent.layout.y;
+            requestAnimationFrame(() => {
+              scrollRef.current?.scrollTo({ y: Math.max(0, y - space.sm), animated: true });
+            });
+          }}
+        >
           <Notice text={invoicesNotice} />
           <View style={styles.card}>
             <View style={styles.pad}>
@@ -982,10 +1016,12 @@ export default function JobScreen(): React.ReactElement {
                 <Text style={styles.fieldLabel}>Total</Text>
                 <Text style={styles.moneyBig}>{fmtMoney(job.total_cents)}</Text>
               </View>
-              {job.deposit_cents > 0 ? (
+              {job.deposit_cents > 0 || (job.deposit_collected_cents ?? 0) > 0 ? (
                 <View style={styles.moneyRow}>
-                  <Text style={styles.fieldLabel}>Deposit</Text>
-                  <Text style={styles.money}>{fmtMoney(job.deposit_cents)}</Text>
+                  <Text style={styles.fieldLabel}>{job.deposit_paid_at ? "Deposit collected" : "Deposit requested"}</Text>
+                  <Text style={styles.money}>
+                    {fmtMoney(job.deposit_paid_at ? (job.deposit_collected_cents ?? job.deposit_cents) : job.deposit_cents)}
+                  </Text>
                 </View>
               ) : null}
               {job.deposit_paid_at != null ? (

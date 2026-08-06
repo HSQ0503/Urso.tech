@@ -13,8 +13,11 @@ import { adminPinKey, crewPinKey } from "@/lib/canes/pin";
 export type PinKind = "admin" | "crew";
 export type PinIdentity = { key: string; home: string; kind: PinKind; firstName: string };
 
-const firstNameForAdmin = (email: string) =>
-  email === "canespressurewashing@gmail.com" ? "Sebastian" : "Han";
+const firstNameForAdmin = (email: string) => {
+  if (email === "canespressurewashing@gmail.com") return "Sebastian";
+  if (email === "skormanmax@gmail.com") return "Max";
+  return "Han";
+};
 
 export async function resolvePinIdentity(returnTo?: string): Promise<PinIdentity | null> {
   const wantsCrew = Boolean(returnTo && returnTo.startsWith("/CanesPressure/crew"));
