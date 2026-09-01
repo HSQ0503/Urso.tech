@@ -5,7 +5,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { canesConfigured, canesDb, squareConfigured } from "@/lib/canes/supabase";
 import { getSettings, getLead } from "@/lib/canes/data";
-import { sendCanesSms, fillTemplate, canesTwilioCreds, alertOwner } from "@/lib/canes/twilio";
+import { sendCanesSms, fillTemplate, canesTwilioCreds, canesVoiceNumber, alertOwner } from "@/lib/canes/twilio";
+import { signedMessageMediaUrl } from "@/lib/canes/message-media";
 import {
   getEstimate,
   getEstimateByToken,
@@ -757,6 +758,43 @@ export async function sendMessage(peerPhone: string, body: string, leadId?: stri
   return { ok: true };
 }
 
+export async function sendMessageWithMedia(
+  peerPhone: string,
+  body: string,
+  mediaRefs: string[],
+  leadId?: string | null,
+): Promise<ActionResult> {
+  if (!body.trim() && mediaRefs.length === 0) return { ok: false, notice: "Add a message or photo." };
+  if (mediaRefs.length !== 1 || typeof mediaRefs[0] !== "string") {
+    return { ok: false, notice: "Attach one photo at a time." };
+  }
+  if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted("leads");
+  if (denied) return denied;
+
+  const mediaUrl = await signedMessageMediaUrl(mediaRefs[0]);
+  if (!mediaUrl) return { ok: false, notice: "That photo could not be prepared. Try again." };
+
+  const res = await sendCanesSms({
+    to: peerPhone,
+    body: body.trim(),
+    mediaUrls: [mediaUrl],
+    storedMediaUrls: mediaRefs,
+    leadId: leadId ?? null,
+    automated: false,
+  });
+  if (!res.ok) return { ok: false, notice: res.skipped ?? res.error ?? "Send failed." };
+  if (leadId) {
+    const lead = await getLead(leadId);
+    if (lead && lead.status === "new") {
+      await canesDb().from("leads").update({ status: "contacted" }).eq("id", leadId);
+    }
+    await touch(leadId);
+  }
+  refresh();
+  return { ok: true };
+}
+
 // Send (or re-send) the confirmation text right now, outside the scheduler.
 export async function sendConfirmationNow(leadId: string): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
@@ -803,8 +841,9 @@ export async function bridgeCall(
   const to = toE164(phone ?? "");
   if (!to) return { ok: false, notice: "No phone number to call." };
   const owner = process.env.CANES_OWNER_PHONE;
-  const { accountSid, authToken, from } = canesTwilioCreds();
-  if (!owner || !accountSid || !authToken || !from) {
+  const { accountSid, authToken } = canesTwilioCreds();
+  const voiceFrom = canesVoiceNumber();
+  if (!owner || !accountSid || !authToken || !voiceFrom) {
     return { ok: false, notice: "Twilio isn't configured yet." };
   }
   const base = process.env.NEXT_PUBLIC_APP_URL ?? "https://urso.ws";
@@ -821,7 +860,7 @@ export async function bridgeCall(
     // as "No answer".
     body: new URLSearchParams({
       To: owner,
-      From: from,
+      From: voiceFrom,
       Url: twimlUrl,
       StatusCallback: `${base}/api/canes/twilio/status`,
     }),

@@ -5,6 +5,7 @@ import {
   alertOwner,
   fillTemplate,
   isConfirmation,
+  isOptIn,
   isOptOut,
   nextAllowedSendTime,
   sendCanesSms,
@@ -21,8 +22,8 @@ import { fmtEt, fmtPhone, toE164 } from "@/lib/canes/types";
 import type { CanesSettings, Job, Lead } from "@/lib/canes/types";
 
 // The shared inbound-SMS pipeline. Both the Twilio webhook and the dev
-// simulator funnel through processInboundSms so the routing rules (opt-out →
-// vendor → known lead → organic) live in exactly one place.
+// simulator funnel through processInboundSms so the routing rules
+// (subscription keyword → vendor → known lead → organic) live in one place.
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://urso.ws";
 
@@ -30,6 +31,7 @@ export type InboundOutcome = {
   handled:
     | "unconfigured"
     | "opt_out"
+    | "opt_in"
     | "vendor"
     | "vendor_unparsed"
     | "confirmed"
@@ -44,7 +46,7 @@ export type InboundOutcome = {
 
 type InboundRoute = "opt_out" | "vendor" | "known_lead" | "organic";
 type InboundRouteContext = {
-  kind?: "appointment_confirmation" | "job_confirmation" | "reply";
+  kind?: "appointment_confirmation" | "job_confirmation" | "opt_in" | "reply";
   jobId?: string;
   appointmentAt?: string | null;
   jobScheduledAt?: string | null;
@@ -115,6 +117,11 @@ export async function processInboundSms(params: {
         if (isOptOut(body)) {
           route = "opt_out";
           routeLeadId = (await findLeadByPhone(from))?.id ?? null;
+        } else if (isOptIn(body)) {
+          const lead = await findLeadByPhone(from);
+          route = lead ? "known_lead" : "organic";
+          routeLeadId = lead?.id ?? null;
+          routeContext = { kind: "opt_in" };
         } else {
           settings = await getSettings();
           const vendorPhones = settings.lead_vendor_phones
@@ -176,7 +183,9 @@ export async function processInboundSms(params: {
       await storeInbound({ leadId: routeLeadId, peer: from, body, sid: messageSid, media: mediaUrls });
 
       let outcome: InboundOutcome;
-      if (route === "opt_out") {
+      if (routeContext.kind === "opt_in") {
+        outcome = await handleOptIn(from, body, messageSid, mediaUrls, routeLeadId);
+      } else if (route === "opt_out") {
         outcome = await handleOptOut(from, body, messageSid, mediaUrls);
       } else if (route === "vendor") {
         outcome = await handleVendorText(
@@ -239,6 +248,7 @@ export async function processInboundSms(params: {
 
   // STOP always wins, no matter who sent it.
   if (isOptOut(body)) return handleOptOut(from, body, messageSid, mediaUrls);
+  if (isOptIn(body)) return handleOptIn(from, body, messageSid, mediaUrls);
 
   const settings = await getSettings();
   const vendorPhones = settings.lead_vendor_phones.filter(Boolean).map((p) => toE164(p) ?? p);
@@ -315,6 +325,49 @@ async function handleOptOut(
   }
   console.log(`[canes] opt-out recorded for ${from}`);
   return { handled: "opt_out", leadIds: lead ? [lead.id] : [], notes: ["Opt-out recorded."] };
+}
+
+async function handleOptIn(
+  from: string,
+  body: string,
+  sid?: string,
+  media?: string[],
+  pinnedLeadId?: string | null,
+): Promise<InboundOutcome> {
+  const db = canesDb();
+  let lead = pinnedLeadId ? await findLeadById(pinnedLeadId) : await findLeadByPhone(from);
+  if (lead) {
+    const restoreOptOutStub = lead.status === "lost" && lead.lost_reason === "Opted out";
+    const { data, error } = await db
+      .from("leads")
+      .update({
+        opted_out: false,
+        last_activity_at: new Date().toISOString(),
+        ...(restoreOptOutStub ? { status: "new", lost_reason: null } : {}),
+      })
+      .eq("id", lead.id)
+      .select("*")
+      .single();
+    if (error) throw new Error(`opt-in update failed: ${error.message}`);
+    lead = data as Lead;
+  }
+
+  const messageId = await storeInbound({ leadId: lead?.id ?? null, peer: from, body, sid, media });
+  if (lead && messageId) {
+    await pushCustomerMessage({
+      messageId: sid ?? messageId,
+      peerPhone: from,
+      displayName: lead.name,
+    });
+    await logLeadEvent(
+      lead.id,
+      "opt_in",
+      "Customer texted START; automated texts enabled",
+      sid ? `sms:${sid}:opt_in` : undefined,
+    );
+  }
+  console.log(`[canes] opt-in recorded for ${from}`);
+  return { handled: "opt_in", leadIds: lead ? [lead.id] : [], notes: ["Opt-in recorded."] };
 }
 
 // ── Branch b: lead vendor text ───────────────────────────────────────────────
@@ -1263,11 +1316,12 @@ async function notifyUpcomingJobChangeRequest(
 
 // Shared by the Twilio webhook routes. Twilio signs the externally visible
 // URL; Vercel terminates TLS ahead of the function, so rebuild it from
-// NEXT_PUBLIC_APP_URL rather than trusting req.url's host. No auth token set
-// (Twilio not wired up yet) → let requests through, e.g. local testing.
+// NEXT_PUBLIC_APP_URL rather than trusting req.url's host. Once the Canes
+// database is configured, a missing token is a production misconfiguration,
+// not a reason to accept unsigned provider writes.
 export function verifyTwilioRequest(req: Request, params: Record<string, string>): boolean {
   const token = process.env.CANES_TWILIO_AUTH_TOKEN;
-  if (!token) return true;
+  if (!token) return !canesConfigured();
   const u = new URL(req.url);
   const base = (process.env.NEXT_PUBLIC_APP_URL ?? u.origin).replace(/\/$/, "");
   return validateSignature(

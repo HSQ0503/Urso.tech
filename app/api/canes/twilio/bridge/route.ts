@@ -1,5 +1,5 @@
 import type { NextRequest } from "next/server";
-import { canesTwilioCreds } from "@/lib/canes/twilio";
+import { canesVoiceNumber } from "@/lib/canes/twilio";
 import { toE164 } from "@/lib/canes/types";
 import { escapeXml, xmlResponse } from "@/lib/twilio";
 
@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 function bridge(req: NextRequest): Response {
   const to = toE164(req.nextUrl.searchParams.get("to") ?? "");
   if (!to) return new Response("Invalid `to` number", { status: 400 });
-  const { from } = canesTwilioCreds();
+  const from = canesVoiceNumber();
   const callerId = from ? ` callerId="${escapeXml(from)}"` : "";
   return xmlResponse(`<Response><Dial${callerId}>${escapeXml(to)}</Dial></Response>`);
 }

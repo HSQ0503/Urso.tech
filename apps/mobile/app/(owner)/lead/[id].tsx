@@ -752,7 +752,15 @@ export default function LeadScreen(): React.ReactElement {
             disabled={phone === null}
             onPress={() => {
               if (phone !== null) {
-                router.push({ pathname: "/(owner)/thread/[phone]", params: { phone } });
+                router.push({
+                  pathname: "/(owner)/thread/[phone]",
+                  params: {
+                    phone,
+                    name: lead.name ?? "",
+                    leadId: lead.id,
+                    ...(lead.contact_id ? { contactId: lead.contact_id } : {}),
+                  },
+                });
               }
             }}
             style={({ pressed }) => [

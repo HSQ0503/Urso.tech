@@ -19,7 +19,7 @@
       "infoPlist": {
         "NSFaceIDUsageDescription": "Unlock Urso with Face ID instead of re-entering your PIN.",
         "NSCameraUsageDescription": "Take before and after photos of a job.",
-        "NSPhotoLibraryUsageDescription": "Attach existing photos to a job.",
+        "NSPhotoLibraryUsageDescription": "Choose a customer photo to send in a text message.",
         "ITSAppUsesNonExemptEncryption": false
       }
     },
@@ -42,6 +42,12 @@
       "expo-status-bar",
       "expo-secure-store",
       "expo-local-authentication",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Choose a customer photo to send in a text message."
+        }
+      ],
       [
         "expo-notifications",
         {

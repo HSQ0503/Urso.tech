@@ -47,6 +47,13 @@ import { getAdminToken } from "./session";
 // real API rather than silently at localhost.
 export const API_BASE: string = process.env.EXPO_PUBLIC_API_BASE ?? "https://urso.ws";
 
+// Image requests are made by React Native's native loader rather than through
+// request(), so it needs the absolute endpoint. The caller adds the same owner
+// bearer token used by every JSON read; Twilio credentials never reach the app.
+export function messageMediaUrl(messageId: string, index: number): string {
+  return `${API_BASE}/api/v1/canes/messages/${encodeURIComponent(messageId)}/media/${index}`;
+}
+
 // `transient` marks the two transport failures (no connection, unparseable
 // response) — the only refusals it is ever correct to retry. A server refusal
 // is a sentence written for the reader and retrying it would just repeat the
@@ -82,14 +89,20 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<A
   if (!token) throw new SessionExpiredError();
 
   const headers: Record<string, string> = { authorization: `Bearer ${token}` };
-  if (options.body !== undefined) headers["content-type"] = "application/json";
+  const formBody = typeof FormData !== "undefined" && options.body instanceof FormData;
+  if (options.body !== undefined && !formBody) headers["content-type"] = "application/json";
 
   let res: Response;
   try {
     res = await fetch(`${API_BASE}/api/v1${path}`, {
       method: options.method ?? "GET",
       headers,
-      body: options.body === undefined ? undefined : JSON.stringify(options.body),
+      body:
+        options.body === undefined
+          ? undefined
+          : formBody
+            ? (options.body as FormData)
+            : JSON.stringify(options.body),
       signal: options.signal,
     });
   } catch {
@@ -462,6 +475,24 @@ export const leadActions = {
 export const threadActions = {
   sendMessage: (phone: string, message: string) =>
     act(`/canes/threads/${encodeURIComponent(phone)}/messages`, { message }),
+  sendMedia: (
+    phone: string,
+    leadId: string | null,
+    message: string,
+    file: { uri: string; name: string; mimeType: string },
+  ) => {
+    const form = new FormData();
+    form.append("message", message);
+    form.append("leadId", leadId ?? "");
+    form.append(
+      "file",
+      { uri: file.uri, name: file.name, type: file.mimeType } as unknown as Blob,
+    );
+    return request<Record<string, never>>(
+      `/canes/threads/${encodeURIComponent(phone)}/media`,
+      { method: "POST", body: form, auth: "owner" },
+    );
+  },
 };
 
 export const customerActions = {

@@ -399,7 +399,15 @@ export default function CustomerScreen(): React.ReactElement {
             disabled={phone === null}
             onPress={() =>
               phone !== null &&
-              router.push({ pathname: "/(owner)/thread/[phone]", params: { phone } })
+              router.push({
+                pathname: "/(owner)/thread/[phone]",
+                params: {
+                  phone,
+                  name: contact.name ?? "",
+                  contactId: contact.id,
+                  ...(lead?.id ? { leadId: lead.id } : {}),
+                },
+              })
             }
           />
           <ProfileAction

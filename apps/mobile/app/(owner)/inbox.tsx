@@ -24,11 +24,12 @@ import {
 } from "@urso/types";
 import { useThreads } from "@/queries";
 import { noticeFrom, usePullToRefresh, useRefetchOnFocus } from "@/query";
-import { color, HIT, radius, space, type } from "@/theme";
+import { color, font, HIT, radius, space, type } from "@/theme";
 import {
   Avatar,
   Chip,
   ChromeBar,
+  FilterChips,
   SearchStrip,
   listRowStyle,
   searchInputStyle,
@@ -102,6 +103,15 @@ function relativeEt(iso: string, dayKeys: string[]): string {
 // read the query. Driving refetch() from an interval owned by the screen keeps
 // polling a property of the SCREEN, which is what it actually is.
 const POLL_MS = 30_000;
+
+type InboxFilter = "all" | "waiting" | "leads" | "customers";
+
+const FILTER_LABEL: Record<InboxFilter, string> = {
+  all: "All",
+  waiting: "Needs reply",
+  leads: "Leads",
+  customers: "Customers",
+};
 
 // ── Thread reading ──────────────────────────────────────────────────────────
 
@@ -230,10 +240,22 @@ function buildRows(threads: Thread[], nowMs: number, grouped: boolean): Row[] {
 
   if (!grouped) return threadGroup(sorted, dayKeys);
 
-  const vendors = sorted.filter((thread) => thread.kind === "vendor");
-  const leads = sorted.filter((thread) => thread.kind === "lead");
-  const customers = sorted.filter((thread) => thread.kind === "customer");
-  const rows: Row[] = [...threadGroup(vendors, dayKeys)];
+  const waiting = sorted.filter(isWaiting);
+  const handled = sorted.filter((thread) => !isWaiting(thread));
+  const vendors = handled.filter((thread) => thread.kind === "vendor");
+  const leads = handled.filter((thread) => thread.kind === "lead");
+  const customers = handled.filter((thread) => thread.kind === "customer");
+  const rows: Row[] = [];
+
+  if (waiting.length > 0) {
+    rows.push({
+      kind: "label",
+      key: "label-waiting",
+      label: "Needs reply",
+      count: waiting.length,
+    });
+    rows.push(...threadGroup(waiting, dayKeys));
+  }
 
   if (leads.length > 0) {
     rows.push({ kind: "label", key: "label-leads", label: "Leads", count: leads.length });
@@ -248,6 +270,15 @@ function buildRows(threads: Thread[], nowMs: number, grouped: boolean): Row[] {
     });
     rows.push(...threadGroup(customers, dayKeys));
   }
+  if (vendors.length > 0) {
+    rows.push({
+      kind: "label",
+      key: "label-vendors",
+      label: "Lead source",
+      count: vendors.length,
+    });
+    rows.push(...threadGroup(vendors, dayKeys));
+  }
   return rows;
 }
 
@@ -261,6 +292,7 @@ function ThreadRow({
 }) {
   const vendor = row.category === "vendor";
   const callPreview = row.preview.toLowerCase().includes("call");
+  const photoPreview = row.preview.toLowerCase().includes("photo");
   return (
     <Pressable
       accessibilityRole="button"
@@ -269,6 +301,7 @@ function ThreadRow({
       style={({ pressed }) => [
         ...listRowStyle(row.first, row.last),
         styles.thread,
+        row.waiting && styles.threadWaiting,
         pressed && styles.pressed,
       ]}
     >
@@ -281,6 +314,7 @@ function ThreadRow({
       )}
       <View style={styles.threadMain}>
         <View style={styles.threadTop}>
+          {row.waiting ? <View style={styles.waitingDot} /> : null}
           <Text style={styles.name} numberOfLines={1}>
             {row.name}
           </Text>
@@ -289,13 +323,17 @@ function ThreadRow({
           ) : row.category === "customer" ? (
             <Chip label={KIND_LABEL.customer} tone="neutral" />
           ) : null}
-          <Text style={styles.when} numberOfLines={1}>
+          <Text style={[styles.when, row.waiting && styles.whenWaiting]} numberOfLines={1}>
             {row.when}
           </Text>
         </View>
 
         <View style={styles.previewRow}>
-          {callPreview ? <Feather name="phone-call" size={13} color={color.muted} /> : null}
+          {callPreview ? (
+            <Feather name="phone-call" size={13} color={color.muted} />
+          ) : photoPreview ? (
+            <Feather name="image" size={13} color={color.muted} />
+          ) : null}
           <Text style={styles.preview} numberOfLines={1}>
             {row.preview}
           </Text>
@@ -356,11 +394,22 @@ export default function InboxScreen(): React.ReactElement {
   }, []);
 
   const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<InboxFilter>("all");
   const searching = query.trim().length > 0;
 
+  const subsets = useMemo(() => {
+    const all = threads ?? [];
+    return {
+      all,
+      waiting: all.filter(isWaiting),
+      leads: all.filter((thread) => thread.kind === "lead"),
+      customers: all.filter((thread) => thread.kind === "customer"),
+    } satisfies Record<InboxFilter, Thread[]>;
+  }, [threads]);
+
   const visible = useMemo(
-    () => (threads ?? []).filter((thread) => matchesThread(thread, query)),
-    [threads, query],
+    () => subsets[filter].filter((thread) => matchesThread(thread, query)),
+    [subsets, filter, query],
   );
 
   // Searching collapses "Waiting on you" / "Everything else" into one
@@ -373,11 +422,23 @@ export default function InboxScreen(): React.ReactElement {
   // orange left rule and orange timestamp, which is where waiting actually lives
   // — the headings only ever grouped what the rows already said.
   const rows = useMemo(
-    () => buildRows(visible, nowMs, !searching),
-    [visible, nowMs, searching],
+    () => buildRows(visible, nowMs, !searching && filter === "all"),
+    [visible, nowMs, searching, filter],
   );
 
-  const header = <ChromeBar title="Inbox" />;
+  const waitingCount = subsets.waiting.length;
+  const header = (
+    <ChromeBar
+      title="Inbox"
+      action="New chat"
+      onAction={() => router.push("/(owner)/thread/new")}
+      sub={
+        waitingCount > 0
+          ? `${waitingCount} ${waitingCount === 1 ? "conversation needs" : "conversations need"} a reply.`
+          : "Calls and texts are caught up."
+      }
+    />
+  );
 
   const searchBar = (
     <SearchStrip>
@@ -452,6 +513,16 @@ export default function InboxScreen(): React.ReactElement {
     <View style={styles.screen}>
       {header}
       {searchBar}
+      <FilterChips
+        current={filter}
+        onPick={setFilter}
+        filters={(Object.keys(FILTER_LABEL) as InboxFilter[]).map((key) => ({
+          key,
+          label: FILTER_LABEL[key],
+          count: subsets[key].length,
+          weight: key === "waiting" ? 1.6 : key === "customers" ? 1.25 : 1,
+        }))}
+      />
       <FlatList
         data={rows}
         keyExtractor={(item) => item.key}
@@ -484,6 +555,12 @@ export default function InboxScreen(): React.ReactElement {
             <Text style={styles.emptyText}>
               {searching
                 ? "No conversations match that."
+                : filter === "waiting"
+                  ? "Nothing needs a reply. You’re caught up."
+                  : filter === "leads"
+                    ? "No lead conversations yet."
+                    : filter === "customers"
+                      ? "No customer conversations yet."
                 : "No conversations yet. They appear when someone texts or calls the shop."}
             </Text>
           </View>
@@ -541,6 +618,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 11,
   },
+  threadWaiting: {
+    borderLeftWidth: 2,
+    borderLeftColor: color.brand,
+    backgroundColor: color.brandWash,
+  },
   vendorAvatar: {
     width: 44,
     height: 44,
@@ -556,6 +638,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 7,
   },
+  waitingDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: color.brand,
+  },
   name: { ...type.title, color: color.ink, flexShrink: 1 },
   when: {
     ...type.small,
@@ -563,6 +651,7 @@ const styles = StyleSheet.create({
     fontVariant: ["tabular-nums"],
     marginLeft: "auto",
   },
+  whenWaiting: { color: color.brandDeep, fontFamily: font.bodyMedium },
   previewRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 3 },
   preview: { ...type.small, color: color.muted, flexShrink: 1 },
 

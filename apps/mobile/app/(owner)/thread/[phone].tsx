@@ -31,6 +31,7 @@ import { useCallback, useRef, useState } from "react";
 import {
   ActivityIndicator,
   AppState,
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -42,6 +43,7 @@ import {
   View,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
+import * as ImagePicker from "expo-image-picker";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
@@ -56,6 +58,7 @@ import {
   type ThreadKind,
 } from "@urso/types";
 import { callActions, leadActions, threadActions } from "@/api";
+import { MessageContent } from "@/components/message-content";
 import { Notice } from "@/components/notice";
 import { keys, useThreadCalls, useThreadMessages, useThreads } from "@/queries";
 import { noticeFrom, useAction, usePullToRefresh } from "@/query";
@@ -81,11 +84,6 @@ const POLL_MS = 30_000;
 // to fmtEt output — never by parsing a formatted string back apart.
 function etDayKey(iso: string): string {
   return fmtEt(iso, { year: "numeric", month: "2-digit", day: "2-digit" });
-}
-
-function mediaLabel(count: number): string {
-  if (count === 0) return "No text";
-  return count === 1 ? "Photo" : `${count} photos`;
 }
 
 type StreamItem =
@@ -130,21 +128,44 @@ function stampTime(iso: string): string {
   return fmtEt(iso, { hour: "numeric", minute: "2-digit" });
 }
 
-function MessageBubble({ message }: { message: Message }) {
+function deliveryLabel(message: Message, latestOutbound: boolean): string | null {
+  if (message.delivery_status === "failed" || message.delivery_status === "undelivered") {
+    return "Not delivered";
+  }
+  if (!latestOutbound || message.direction !== "out") return null;
+  if (message.delivery_status === "delivered") return "Delivered";
+  if (message.delivery_status === "sent") return "Sent";
+  if (message.delivery_status === "queued") return "Sending";
+  return null;
+}
+
+function MessageBubble({ message, latestOutbound }: { message: Message; latestOutbound: boolean }) {
   const out = message.direction === "out";
-  const body = message.body.trim() || mediaLabel(message.media_urls.length);
-  const failed =
-    message.delivery_status === "failed" || message.delivery_status === "undelivered";
+  const delivery = deliveryLabel(message, latestOutbound);
+  const failed = delivery === "Not delivered";
   return (
     <View style={[styles.itemWrap, out ? styles.wrapOut : styles.wrapIn]}>
       {/* An automated send is not an answer — the marker keeps the hold text
           from reading as a reply Sebastian wrote. */}
       {out && message.automated ? <Text style={styles.autoMark}>Auto</Text> : null}
       <View style={[styles.bubble, out ? styles.bubbleOut : styles.bubbleIn]}>
-        <Text style={styles.bubbleText}>{body}</Text>
+        {message.body.trim() || message.media_urls.length > 0 ? (
+          <MessageContent message={message} />
+        ) : (
+          <Text style={styles.bubbleText}>No text</Text>
+        )}
       </View>
       <Text style={styles.stamp}>{stampTime(message.created_at)}</Text>
-      {failed ? <Text style={styles.failed}>Not delivered</Text> : null}
+      {delivery ? (
+        <View style={styles.deliveryRow}>
+          <Feather
+            name={failed ? "alert-circle" : delivery === "Delivered" ? "check-circle" : "check"}
+            size={11}
+            color={failed ? color.danger : color.faint}
+          />
+          <Text style={failed ? styles.failed : styles.delivery}>{delivery}</Text>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -154,17 +175,30 @@ function CallRow({ call }: { call: Call }) {
   const missed = isMissedCall(call);
   const duration = fmtCallDuration(call.duration_seconds);
   const label = missed ? "Missed call" : out ? "Outgoing call" : "Incoming call";
-  const line = !missed && duration ? `${label} · ${duration}` : label;
+  const detail = missed
+    ? call.recording_url || call.transcript
+      ? "Voicemail received"
+      : "No one answered"
+    : duration || (out ? "Called from the business line" : "Answered");
   return (
-    <View style={[styles.itemWrap, styles.callRow, out ? styles.wrapOut : styles.wrapIn]}>
-      <Feather
-        name={missed ? "phone-missed" : out ? "phone-outgoing" : "phone-incoming"}
-        size={13}
-        color={missed ? color.danger : color.muted}
-      />
-      <Text style={[styles.callLine, missed && styles.callMissed]} numberOfLines={1}>
-        {line}
-      </Text>
+    <View style={[styles.itemWrap, out ? styles.wrapOut : styles.wrapIn]}>
+      <View style={[styles.callCard, out && styles.callCardOut]}>
+        <View style={[styles.callIcon, missed && styles.callIconMissed]}>
+          <Feather
+            name={missed ? "phone-missed" : out ? "phone-outgoing" : "phone-incoming"}
+            size={15}
+            color={missed ? color.danger : color.muted}
+          />
+        </View>
+        <View style={styles.callMain}>
+          <Text style={[styles.callTitle, missed && styles.callMissed]} numberOfLines={1}>
+            {label}
+          </Text>
+          <Text style={styles.callDetail} numberOfLines={1}>
+            {detail}
+          </Text>
+        </View>
+      </View>
       <Text style={styles.stamp}>{stampTime(call.created_at)}</Text>
     </View>
   );
@@ -190,22 +224,45 @@ function GoodNotice({ text }: { text: string | null }) {
   );
 }
 
-function threadTitle(thread: Thread | null, phone: string): string {
-  const name = thread?.display_name?.trim();
+function threadTitle(thread: Thread | null, phone: string, fallbackName: string | null): string {
+  const name = thread?.display_name?.trim() || fallbackName?.trim();
   return name ? name : fmtPhone(phone);
 }
 
 // Kind, plus the lead's stage when there is a lead — the inbox row's marker,
 // carried into the header so the context survives the tap.
-function threadMeta(thread: Thread | null, phone: string): string | null {
-  if (thread === null) return null;
+function threadMeta(
+  thread: Thread | null,
+  phone: string,
+  fallbackKind: "customer" | "lead" | null,
+): string | null {
+  if (thread === null) {
+    return fallbackKind === null
+      ? "New conversation"
+      : `${fmtPhone(phone)} · ${KIND_LABEL[fallbackKind]}`;
+  }
   const kind = KIND_LABEL[thread.kind];
   const marker = thread.lead ? `${kind} · ${STATUS_LABEL[thread.lead.status]}` : kind;
   return thread.display_name?.trim() ? `${fmtPhone(phone)} · ${marker}` : marker;
 }
 
+function firstParam(value: string | string[] | undefined): string | null {
+  const first = Array.isArray(value) ? value[0] : value;
+  const trimmed = first?.trim();
+  return trimmed ? trimmed : null;
+}
+
 export default function ThreadScreen(): React.ReactElement {
-  const { phone } = useLocalSearchParams<{ phone: string }>();
+  const params = useLocalSearchParams<{
+    phone: string | string[];
+    name?: string | string[];
+    contactId?: string | string[];
+    leadId?: string | string[];
+  }>();
+  const phone = firstParam(params.phone) ?? "";
+  const fallbackName = firstParam(params.name);
+  const fallbackContactId = firstParam(params.contactId);
+  const fallbackLeadId = firstParam(params.leadId);
   const insets = useSafeAreaInsets();
 
   // Three reads: the stream's two halves, plus the threads list — already
@@ -248,9 +305,11 @@ export default function ThreadScreen(): React.ReactElement {
 
   const thread = (threadsQuery.data ?? []).find((t) => t.peer_phone === phone) ?? null;
   const lead = thread?.lead ?? null;
-  const contactId = thread?.contact_id ?? null;
+  const contactId = thread?.contact_id ?? fallbackContactId;
+  const activeLeadId = lead?.id ?? fallbackLeadId;
 
   const [draft, setDraft] = useState("");
+  const [attachment, setAttachment] = useState<ImagePicker.ImagePickerAsset | null>(null);
   const [sendNotice, setSendNotice] = useState<string | null>(null);
   // The bridge answers in two directions: a refusal (no Twilio credentials, no
   // owner phone, no number) and a success that still has something to say.
@@ -269,13 +328,13 @@ export default function ThreadScreen(): React.ReactElement {
     // the inbox refreshes with it; a lead-bound call also writes the event and
     // the lead's own call list.
     invalidates:
-      lead !== null
+      activeLeadId !== null
         ? [
             keys.threads.calls(phone),
             keys.threads.all(),
-            keys.leads.calls(lead.id),
-            keys.leads.events(lead.id),
-            keys.leads.one(lead.id),
+            keys.leads.calls(activeLeadId),
+            keys.leads.events(activeLeadId),
+            keys.leads.one(activeLeadId),
           ]
         : [keys.threads.calls(phone), keys.threads.all()],
   });
@@ -284,21 +343,36 @@ export default function ThreadScreen(): React.ReactElement {
   // lead event when the thread has a lead. The lead-free path is the thread
   // route, which the same action backs — never a client-side refusal.
   const sendRun = useAction(
-    (vars: { leadId: string | null; message: string }) =>
-      vars.leadId === null
+    (vars: {
+      leadId: string | null;
+      message: string;
+      attachment: ImagePicker.ImagePickerAsset | null;
+    }) => {
+      if (vars.attachment) {
+        const mimeType = vars.attachment.mimeType ?? "image/jpeg";
+        const extension =
+          mimeType === "image/png" ? "png" : mimeType === "image/webp" ? "webp" : "jpg";
+        return threadActions.sendMedia(phone, vars.leadId, vars.message, {
+          uri: vars.attachment.uri,
+          name: vars.attachment.fileName ?? `message-photo.${extension}`,
+          mimeType,
+        });
+      }
+      return vars.leadId === null
         ? threadActions.sendMessage(phone, vars.message)
-        : leadActions.sendMessage(vars.leadId, phone, vars.message),
+        : leadActions.sendMessage(vars.leadId, phone, vars.message);
+    },
     {
       // A successful send can flip a "new" lead to "contacted" server-side, so
       // the lead's own record and every attention surface refresh with the
       // thread — the same set the lead-detail composer invalidates.
       invalidates:
-        lead !== null
+        activeLeadId !== null
           ? [
               keys.threads.messages(phone),
               keys.threads.all(),
-              keys.leads.events(lead.id),
-              keys.leads.one(lead.id),
+              keys.leads.events(activeLeadId),
+              keys.leads.one(activeLeadId),
               keys.leads.all(),
               keys.overview(),
               keys.agenda(),
@@ -314,6 +388,7 @@ export default function ThreadScreen(): React.ReactElement {
   const threadsNotice = noticeFrom(threadsQuery.error);
 
   const stream = buildStream(messages, calls);
+  const latestOutboundId = [...messages].reverse().find((message) => message.direction === "out")?.id;
 
   // Scroll to the newest item when the newest item CHANGES — first load and
   // new activity, but not a refetch that added nothing. A reader scrolled up
@@ -337,11 +412,11 @@ export default function ThreadScreen(): React.ReactElement {
     // otherwise the lead. A thread with neither has nowhere to go yet.
     if (contactId !== null) {
       router.push({ pathname: "/(owner)/customer/[id]", params: { id: contactId } });
-    } else if (lead !== null) {
-      router.push({ pathname: "/(owner)/lead/[id]", params: { id: lead.id } });
+    } else if (activeLeadId !== null) {
+      router.push({ pathname: "/(owner)/lead/[id]", params: { id: activeLeadId } });
     }
   };
-  const navigable = contactId !== null || lead !== null;
+  const navigable = contactId !== null || activeLeadId !== null;
 
   // The action returns once Twilio has ACCEPTED the call — before any phone has
   // rung. The server's sentence says exactly that and is shown verbatim; the
@@ -350,7 +425,7 @@ export default function ThreadScreen(): React.ReactElement {
   const startBridge = async () => {
     setCallNotice(null);
     setCallGood(null);
-    const r = await bridgeRun.mutateAsync(lead?.id);
+    const r = await bridgeRun.mutateAsync(activeLeadId ?? undefined);
     if (r.ok) {
       setCallGood(
         successNotice(r.data) ?? "Your phone should ring in a moment — answer to connect.",
@@ -361,16 +436,51 @@ export default function ThreadScreen(): React.ReactElement {
   };
 
   const send = async () => {
-    const r = await sendRun.mutateAsync({ leadId: lead?.id ?? null, message: draft.trim() });
+    const r = await sendRun.mutateAsync({
+      leadId: activeLeadId,
+      message: draft.trim(),
+      attachment,
+    });
     if (r.ok) {
       setDraft(""); // cleared ONLY on ok — a refused message stays put for a retry
+      setAttachment(null);
       setSendNotice(null);
     } else {
       setSendNotice(r.notice);
     }
   };
 
-  const meta = threadMeta(thread, phone);
+  const pickPhoto = async () => {
+    setSendNotice(null);
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      setSendNotice("Allow photo access to attach an image.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      allowsEditing: false,
+      quality: 0.72,
+      preferredAssetRepresentationMode:
+        ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
+    });
+    if (result.canceled) return;
+    const picked = result.assets[0];
+    if (!picked) return;
+    const mimeType = picked.mimeType ?? "image/jpeg";
+    if (!["image/jpeg", "image/png", "image/webp"].includes(mimeType)) {
+      setSendNotice("Choose a JPEG, PNG, or WebP photo.");
+      return;
+    }
+    if (picked.fileSize && picked.fileSize > 4 * 1024 * 1024) {
+      setSendNotice("That photo is too large. Choose one under 4 MB.");
+      return;
+    }
+    setAttachment(picked);
+  };
+
+  const fallbackKind = contactId !== null ? "customer" : activeLeadId !== null ? "lead" : null;
+  const meta = threadMeta(thread, phone, fallbackKind);
 
   const header = (
     <>
@@ -391,7 +501,7 @@ export default function ThreadScreen(): React.ReactElement {
               list has landed — there is nothing else it needs to know. */}
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={`Call ${threadTitle(thread, phone)} on the business line`}
+            accessibilityLabel={`Call ${threadTitle(thread, phone, fallbackName)} on the business line`}
             accessibilityHint="Rings this phone first, then dials them from the shop’s number"
             disabled={bridgeRun.isPending}
             onPress={() => void startBridge()}
@@ -411,7 +521,7 @@ export default function ThreadScreen(): React.ReactElement {
           accessibilityRole={navigable ? "button" : undefined}
           accessibilityLabel={
             navigable
-              ? `Open ${contactId !== null ? "customer" : "lead"} ${threadTitle(thread, phone)}`
+              ? `Open ${contactId !== null ? "customer" : "lead"} ${threadTitle(thread, phone, fallbackName)}`
               : undefined
           }
           disabled={!navigable}
@@ -420,7 +530,7 @@ export default function ThreadScreen(): React.ReactElement {
           style={({ pressed }) => [styles.peer, pressed && navigable && styles.backPressed]}
         >
           <Text style={styles.chromeName} numberOfLines={1}>
-            {threadTitle(thread, phone)}
+            {threadTitle(thread, phone, fallbackName)}
           </Text>
           {navigable ? (
             <Feather name="chevron-right" size={18} color={color.chromeFaint} />
@@ -495,38 +605,82 @@ export default function ThreadScreen(): React.ReactElement {
               );
             }
             if (item.kind === "message") {
-              return <MessageBubble key={item.key} message={item.message} />;
+              return (
+                <MessageBubble
+                  key={item.key}
+                  message={item.message}
+                  latestOutbound={item.message.id === latestOutboundId}
+                />
+              );
             }
             return <CallRow key={item.key} call={item.call} />;
           })}
         </ScrollView>
 
         <View style={[styles.composerBar, { paddingBottom: insets.bottom + space.sm }]}>
+          {attachment ? (
+            <View style={styles.attachmentPreview}>
+              <Image source={{ uri: attachment.uri }} style={styles.attachmentThumb} />
+              <View style={styles.attachmentMain}>
+                <Text style={styles.attachmentTitle}>Photo ready</Text>
+                <Text style={styles.attachmentDetail} numberOfLines={1}>
+                  {attachment.fileName ?? "Customer photo"}
+                </Text>
+              </View>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Remove attached photo"
+                disabled={sendRun.isPending}
+                onPress={() => setAttachment(null)}
+                style={({ pressed }) => [styles.attachmentRemove, pressed && styles.backPressed]}
+              >
+                <Feather name="x" size={20} color={color.muted} />
+              </Pressable>
+            </View>
+          ) : null}
           <View style={styles.composerRow}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Attach a photo"
+              disabled={sendRun.isPending}
+              onPress={() => void pickPhoto()}
+              style={({ pressed }) => [
+                styles.attach,
+                pressed && styles.attachPressed,
+                sendRun.isPending && styles.disabled,
+              ]}
+            >
+              <Feather name="paperclip" size={19} color={color.brandDeep} />
+            </Pressable>
             <TextInput
               value={draft}
               onChangeText={setDraft}
               editable={!sendRun.isPending}
               multiline
-              placeholder="Type a message"
+              placeholder={attachment ? "Add a caption (optional)" : "Type a message"}
               placeholderTextColor={color.faint}
-              accessibilityLabel={`Message ${threadTitle(thread, phone)}`}
+              accessibilityLabel={`Message ${threadTitle(thread, phone, fallbackName)}`}
               onFocus={() => scrollRef.current?.scrollToEnd({ animated: true })}
               style={styles.composerInput}
             />
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Send message"
-              disabled={sendRun.isPending || draft.trim().length === 0}
+              disabled={sendRun.isPending || (draft.trim().length === 0 && attachment === null)}
               onPress={() => void send()}
               style={({ pressed }) => [
                 styles.send,
                 pressed && styles.sendPressed,
-                (sendRun.isPending || draft.trim().length === 0) && styles.disabled,
+                (sendRun.isPending || (draft.trim().length === 0 && attachment === null)) &&
+                  styles.disabled,
               ]}
             >
               <Text style={styles.sendText}>{sendRun.isPending ? "Sending…" : "Send"}</Text>
             </Pressable>
+          </View>
+          <View style={styles.composerMeta}>
+            <Text style={styles.composerHint}>SMS from the Canes business line</Text>
+            {draft.length > 0 ? <Text style={styles.composerCount}>{draft.length}</Text> : null}
           </View>
           <Notice text={sendNotice} />
         </View>
@@ -547,12 +701,12 @@ const styles = StyleSheet.create({
   },
 
   chrome: {
-    backgroundColor: color.surface,
+    backgroundColor: color.chrome,
     paddingHorizontal: space.lg,
     paddingBottom: space.md,
     gap: space.xs,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: color.line,
+    borderBottomColor: color.chromeLine,
   },
   chromeRow: {
     flexDirection: "row",
@@ -579,10 +733,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.md,
     borderRadius: radius.md,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: color.lineStrong,
-    backgroundColor: color.surface,
+    borderColor: color.chromeEdge,
+    backgroundColor: color.chromeRaise,
   },
-  callChipText: { ...type.body, color: color.ink, flexShrink: 1 },
+  callChipText: { ...type.body, color: color.chromeInk, flexShrink: 1 },
   callBand: {
     backgroundColor: color.bg,
     paddingHorizontal: space.lg,
@@ -602,8 +756,8 @@ const styles = StyleSheet.create({
     gap: space.xs,
     maxWidth: "100%",
   },
-  chromeName: { ...type.titleLg, color: color.ink, flexShrink: 1 },
-  chromeMeta: { ...type.small, color: color.muted },
+  chromeName: { ...type.titleLg, color: color.chromeInk, flexShrink: 1 },
+  chromeMeta: { ...type.small, color: color.chromeMuted },
 
   streamBody: { padding: space.lg, gap: space.sm },
   empty: { ...type.small, color: color.muted, textAlign: "center", marginTop: space.xl },
@@ -616,7 +770,7 @@ const styles = StyleSheet.create({
     marginBottom: space.xs,
   },
 
-  itemWrap: { maxWidth: "78%", gap: 2 },
+  itemWrap: { maxWidth: "88%", gap: 2 },
   wrapIn: { alignSelf: "flex-start", alignItems: "flex-start" },
   wrapOut: { alignSelf: "flex-end", alignItems: "flex-end" },
 
@@ -633,14 +787,33 @@ const styles = StyleSheet.create({
   autoMark: { ...type.micro, color: color.faint },
   stamp: { ...type.micro, color: color.faint, fontVariant: ["tabular-nums"] },
   failed: { ...type.micro, color: color.danger },
+  delivery: { ...type.micro, color: color.faint },
+  deliveryRow: { flexDirection: "row", alignItems: "center", gap: 3 },
 
-  callRow: {
+  callCard: {
     flexDirection: "row",
     alignItems: "center",
-    gap: space.xs,
-    paddingVertical: space.xs,
+    gap: space.sm,
+    minWidth: 214,
+    borderRadius: radius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.line,
+    backgroundColor: color.surface,
+    padding: space.sm,
   },
-  callLine: { ...type.small, color: color.muted, flexShrink: 1 },
+  callCardOut: { backgroundColor: color.brandSoft },
+  callIcon: {
+    width: 34,
+    height: 34,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 17,
+    backgroundColor: color.hover,
+  },
+  callIconMissed: { backgroundColor: color.dangerBg },
+  callMain: { flex: 1, minWidth: 0 },
+  callTitle: { ...type.small, fontFamily: font.bodySemi, color: color.ink },
+  callDetail: { ...type.smaller, color: color.muted },
   callMissed: { color: color.danger },
 
   composerBar: {
@@ -652,6 +825,52 @@ const styles = StyleSheet.create({
     gap: space.sm,
   },
   composerRow: { flexDirection: "row", alignItems: "flex-end", gap: space.sm },
+  attach: {
+    width: HIT,
+    height: HIT,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.brandEdgeSoft,
+    backgroundColor: color.brandWash,
+  },
+  attachPressed: { backgroundColor: color.brandPressed },
+  attachmentPreview: {
+    minHeight: 58,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.line,
+    backgroundColor: color.bg,
+    padding: space.xs,
+  },
+  attachmentThumb: {
+    width: 50,
+    height: 50,
+    borderRadius: radius.sm,
+    backgroundColor: color.line,
+  },
+  attachmentMain: { flex: 1, minWidth: 0 },
+  attachmentTitle: { ...type.small, fontFamily: font.bodySemi, color: color.ink },
+  attachmentDetail: { ...type.smaller, color: color.muted },
+  attachmentRemove: {
+    width: HIT,
+    height: HIT,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  composerMeta: {
+    minHeight: 17,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: space.sm,
+  },
+  composerHint: { ...type.smaller, color: color.faint },
+  composerCount: { ...type.smaller, color: color.faint, fontVariant: ["tabular-nums"] },
   composerInput: {
     // No lineHeight — iOS renders a TextInput placeholder with visibly wrong
     // tracking when lineHeight rides a custom font (see customers.tsx search).

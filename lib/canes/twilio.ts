@@ -1,14 +1,14 @@
-import { sendSms as twilioSend, validateSignature } from "@/lib/twilio";
+import { isOptIn, isOptOut, sendSms as twilioSend, validateSignature } from "@/lib/twilio";
 import { canesDb, canesConfigured, twilioConfigured } from "@/lib/canes/supabase";
 import { getSettings } from "@/lib/canes/data";
-import type { CanesSettings } from "@/lib/canes/types";
+import { toE164, type CanesSettings } from "@/lib/canes/types";
 
 // Canes-scoped Twilio helpers layered on the shared raw-REST lib. All sends go
 // through sendCanesSms so quiet hours, opt-outs, and message logging are never
 // bypassed. Credentials are the CANES_* env vars (separate Twilio account or
 // subaccount from anything Woof Gang does later).
 
-export { validateSignature };
+export { isOptIn, isOptOut, validateSignature };
 
 export function canesTwilioCreds() {
   return {
@@ -16,6 +16,10 @@ export function canesTwilioCreds() {
     authToken: process.env.CANES_TWILIO_AUTH_TOKEN ?? "",
     from: process.env.CANES_TWILIO_NUMBER ?? "",
   };
+}
+
+export function canesVoiceNumber(): string {
+  return process.env.CANES_TWILIO_VOICE_NUMBER ?? process.env.CANES_TWILIO_NUMBER ?? "";
 }
 
 // Twilio POSTs queued→sent→delivered/undelivered transitions here, and the
@@ -64,11 +68,34 @@ export function fillTemplate(
 
 export type SendResult = { ok: boolean; sid?: string; skipped?: string; error?: string };
 
+async function checkSmsConsent(to: string): Promise<SendResult | null> {
+  if (!canesConfigured()) {
+    return { ok: false, error: "SMS blocked because customer consent could not be verified." };
+  }
+
+  const phone = toE164(to) ?? to.trim();
+  const { data, error } = await canesDb()
+    .from("leads")
+    .select("opted_out")
+    .eq("phone", phone)
+    .maybeSingle();
+  if (error) {
+    console.error(`[canes] SMS consent lookup failed for ${phone}: ${error.message}`);
+    return { ok: false, error: "SMS blocked because customer consent could not be verified." };
+  }
+  if (data?.opted_out === true) {
+    return { ok: false, skipped: "This customer opted out of texts." };
+  }
+  return null;
+}
+
 // The one true send path. `automated` messages respect quiet hours (unless
 // force), human replies from the inbox always send. Logs to `messages`.
 export async function sendCanesSms(opts: {
   to: string;
   body: string;
+  mediaUrls?: string[];
+  storedMediaUrls?: string[];
   leadId?: string | null;
   automated?: boolean;
   force?: boolean;
@@ -76,6 +103,8 @@ export async function sendCanesSms(opts: {
   if (!twilioConfigured()) {
     return { ok: false, skipped: "Twilio is not configured yet (CANES_TWILIO_* env vars missing)." };
   }
+  const consentRefusal = await checkSmsConsent(opts.to);
+  if (consentRefusal) return consentRefusal;
   if (opts.automated && !opts.force) {
     const settings = await getSettings();
     if (nextAllowedSendTime(settings)) {
@@ -83,20 +112,23 @@ export async function sendCanesSms(opts: {
     }
   }
   const creds = canesTwilioCreds();
+  const to = toE164(opts.to) ?? opts.to.trim();
   const res = await twilioSend({
     accountSid: creds.accountSid,
     authToken: creds.authToken,
     from: creds.from,
-    to: opts.to,
+    to,
     body: opts.body,
+    mediaUrls: opts.mediaUrls,
     statusCallback: statusCallbackUrl(),
   });
   if (canesConfigured()) {
     const row = {
       lead_id: opts.leadId ?? null,
-      peer_phone: opts.to,
+      peer_phone: to,
       direction: "out",
       body: opts.body,
+      media_urls: opts.storedMediaUrls ?? [],
       automated: opts.automated ?? false,
       twilio_sid: res.sid ?? null,
       delivery_status: res.ok ? "queued" : "failed",
@@ -120,11 +152,6 @@ export async function alertOwner(body: string): Promise<SendResult> {
   if (!twilioConfigured()) return { ok: false, skipped: "Twilio not configured" };
   const creds = canesTwilioCreds();
   return twilioSend({ ...creds, from: creds.from, to, body });
-}
-
-const STOP_WORDS = /^\s*(stop|stopall|unsubscribe|cancel|end|quit)\s*$/i;
-export function isOptOut(body: string): boolean {
-  return STOP_WORDS.test(body);
 }
 
 const YES_WORDS = /^\s*(yes|y|yeah|yep|si|sí|confirm|confirmed|ok|okay)\b/i;

@@ -37,17 +37,30 @@ export function validateSignature(
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
+const STOP_WORDS = /^\s*(stop|stopall|unsubscribe|cancel|end|quit)\s*$/i;
+export function isOptOut(body: string): boolean {
+  return STOP_WORDS.test(body);
+}
+
+const START_WORDS = /^\s*(start|unstop)\s*$/i;
+export function isOptIn(body: string): boolean {
+  return START_WORDS.test(body);
+}
+
 export async function sendSms(opts: {
   accountSid: string;
   authToken: string;
   from: string;
   to: string;
   body: string;
+  mediaUrls?: string[];
   statusCallback?: string; // Twilio POSTs delivery-status updates here
 }): Promise<{ ok: boolean; sid?: string; error?: string }> {
   try {
     const basic = Buffer.from(`${opts.accountSid}:${opts.authToken}`).toString("base64");
-    const params = new URLSearchParams({ To: opts.to, From: opts.from, Body: opts.body });
+    const params = new URLSearchParams({ To: opts.to, From: opts.from });
+    if (opts.body) params.set("Body", opts.body);
+    for (const mediaUrl of opts.mediaUrls ?? []) params.append("MediaUrl", mediaUrl);
     if (opts.statusCallback) params.set("StatusCallback", opts.statusCallback);
     const res = await fetch(messagesUrl(opts.accountSid), {
       method: "POST",

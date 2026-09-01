@@ -30,7 +30,8 @@
   "submit": {
     "production": {
       "ios": {
-        "bundleIdentifier": "ws.urso.app"
+        "bundleIdentifier": "ws.urso.app",
+        "ascAppId": "6797935113"
       }
     }
   }

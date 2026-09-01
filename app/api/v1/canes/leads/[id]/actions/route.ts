@@ -112,13 +112,13 @@ export const POST = apiRoute<{ id: string }>(async ({ req, params }) => {
       // `{ ...fields }` straight into .update(), so EVERY column on `leads`
       // became caller-writable.
       //
-      // The one that matters is `opted_out`. It is the entire consent record:
-      // sendCanesSms performs no opt-out check of its own, and every automation
-      // gates on reading that column. A single POST flipping it back to false
-      // resumes texting a number that sent STOP — which is a legal problem, not
-      // a data problem, and it was reachable by any technician holding the leads
-      // flag. `appointment_at` was writable too, booking a visit while bypassing
-      // the confirmation-task machinery that setAppointment exists to run.
+      // The one that matters is `opted_out`. It is the consent record consumed
+      // by sendCanesSms and the automation queries. A single POST flipping it
+      // back to false would attempt to resume texting a number that sent STOP —
+      // which is a legal problem, not a data problem — and it was reachable by
+      // any technician holding the leads flag. `appointment_at` was writable
+      // too, booking a visit while bypassing the confirmation-task machinery
+      // that setAppointment exists to run.
       //
       // Absent stays distinct from empty: a key nobody sent must not wipe a
       // live value.

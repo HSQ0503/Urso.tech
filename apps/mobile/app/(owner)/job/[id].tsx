@@ -3,7 +3,7 @@
 // Sebastian opens this from the schedule with wet gloves on. The customer card
 // sits at the top because "who is this and how do I reach them" is the question
 // he is asking nine times out of ten; the status actions live with the schedule
-// facts they change; the dangerous thing is one row, at the bottom, behind a
+// facts they change; deletion is visible in the header and remains behind a
 // confirm. Every mutation refusal is the server's own sentence, shown verbatim
 // in the section where the tap happened — never rephrased, never an Alert.
 //
@@ -125,6 +125,7 @@ export default function JobScreen(): React.ReactElement {
   // — its own root, NOT under the schedule prefix — so it is named explicitly.
   const everywhere: QueryKey[] = [
     keys.jobs.one(id),
+    keys.jobs.all(),
     ["owner", "schedule"],
     keys.schedule.unscheduled(),
     keys.agenda(),
@@ -227,7 +228,7 @@ export default function JobScreen(): React.ReactElement {
 
   const loading = jobQuery.isPending || crewsQuery.isPending || invoicesQuery.isPending;
 
-  const header = (
+  const header = (deleteAction?: () => void) => (
     <View style={[styles.chrome, { paddingTop: insets.top + space.sm }]}>
       <Pressable
         accessibilityRole="button"
@@ -239,16 +240,34 @@ export default function JobScreen(): React.ReactElement {
         <Feather name="chevron-left" size={20} color={color.muted} />
         <Text style={styles.backText}>Schedule</Text>
       </Pressable>
-      <Text style={styles.chromeName} numberOfLines={1}>
-        Job editor
-      </Text>
+      <View style={styles.chromeTitleRow}>
+        <Text style={styles.chromeName} numberOfLines={1}>
+          Job editor
+        </Text>
+        {deleteAction ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Delete job"
+            disabled={del.isPending}
+            onPress={deleteAction}
+            style={({ pressed }) => [
+              styles.headerDelete,
+              pressed && styles.headerDeletePressed,
+              del.isPending && styles.disabled,
+            ]}
+          >
+            <Feather name="trash-2" size={16} color={color.danger} />
+            <Text style={styles.headerDeleteText}>{del.isPending ? "Deleting…" : "Delete"}</Text>
+          </Pressable>
+        ) : null}
+      </View>
     </View>
   );
 
   if (loading) {
     return (
       <View style={styles.screen}>
-        {header}
+        {header()}
         <View style={styles.centre}>
           <ActivityIndicator color={color.brand} size="large" />
         </View>
@@ -259,7 +278,7 @@ export default function JobScreen(): React.ReactElement {
   if (!job) {
     return (
       <View style={styles.screen}>
-        {header}
+        {header()}
         <View style={styles.centre}>
           {notice !== null ? <Notice text={notice} /> : <Text style={styles.muted}>Not found.</Text>}
           <Pressable
@@ -477,21 +496,25 @@ export default function JobScreen(): React.ReactElement {
   };
 
   const onDelete = () => {
-    Alert.alert("Delete job?", undefined, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: () => {
-          void (async () => {
-            setDangerNotice(null);
-            const r = await del.mutateAsync();
-            if (r.ok) router.back();
-            else setDangerNotice(r.notice);
-          })();
+    Alert.alert(
+      "Delete job?",
+      "Only an unused manual job with no invoice, payment, or crew hours can be removed. This cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => {
+            void (async () => {
+              setDangerNotice(null);
+              const r = await del.mutateAsync();
+              if (r.ok) router.back();
+              else setDangerNotice(r.notice);
+            })();
+          },
         },
-      },
-    ]);
+      ],
+    );
   };
 
   // "Start job" also shows for `confirmed`: a customer saying YES moves the
@@ -501,10 +524,13 @@ export default function JobScreen(): React.ReactElement {
   // Invoices are often prepared before the appointment. Billing the customer
   // must not hide the operational checklist from an upcoming job.
   const checklistLocked = ["completed", "paid", "canceled"].includes(job.status);
+  const canDelete =
+    job.estimate_id === null &&
+    ["unscheduled", "scheduled", "confirmed", "canceled"].includes(job.status);
 
   return (
     <View style={styles.screen}>
-      {header}
+      {header(canDelete ? onDelete : undefined)}
       <ScrollView
         ref={scrollRef}
         contentContainerStyle={[styles.scrollBody, { paddingBottom: insets.bottom + space.xxl }]}
@@ -535,6 +561,7 @@ export default function JobScreen(): React.ReactElement {
           />
         ) : null}
         <Notice text={notice} />
+        <Notice text={dangerNotice} />
 
         <View style={[styles.card, styles.summaryCard]}>
           <View style={styles.summaryTop}>
@@ -591,7 +618,12 @@ export default function JobScreen(): React.ReactElement {
                 if (job.customer_phone !== null) {
                   router.push({
                     pathname: "/(owner)/thread/[phone]",
-                    params: { phone: job.customer_phone },
+                    params: {
+                      phone: job.customer_phone,
+                      name: job.customer_name ?? "",
+                      ...(job.contact_id ? { contactId: job.contact_id } : {}),
+                      ...(job.lead_id ? { leadId: job.lead_id } : {}),
+                    },
                   });
                 }
               }}
@@ -1227,35 +1259,38 @@ export default function JobScreen(): React.ReactElement {
           </View>
         </Section>
 
-        <View style={styles.section}>
-          <Notice text={dangerNotice} />
-          {job.status !== "canceled" ? (
-            <Pressable
-              accessibilityRole="button"
-              onPress={onCancel}
-              disabled={cancel.isPending}
-              style={({ pressed }) => [
-                styles.danger,
-                pressed && styles.dangerPressed,
-                cancel.isPending && styles.disabled,
-              ]}
-            >
-              <Text style={styles.dangerText}>Cancel job</Text>
-            </Pressable>
-          ) : null}
-          <Pressable
-            accessibilityRole="button"
-            onPress={onDelete}
-            disabled={del.isPending}
-            style={({ pressed }) => [
-              styles.danger,
-              pressed && styles.dangerPressed,
-              del.isPending && styles.disabled,
-            ]}
-          >
-            <Text style={styles.dangerText}>Delete job</Text>
-          </Pressable>
-        </View>
+        {job.status !== "canceled" || canDelete ? (
+          <View style={styles.section}>
+            {job.status !== "canceled" ? (
+              <Pressable
+                accessibilityRole="button"
+                onPress={onCancel}
+                disabled={cancel.isPending}
+                style={({ pressed }) => [
+                  styles.danger,
+                  pressed && styles.dangerPressed,
+                  cancel.isPending && styles.disabled,
+                ]}
+              >
+                <Text style={styles.dangerText}>Cancel job</Text>
+              </Pressable>
+            ) : null}
+            {canDelete ? (
+              <Pressable
+                accessibilityRole="button"
+                onPress={onDelete}
+                disabled={del.isPending}
+                style={({ pressed }) => [
+                  styles.danger,
+                  pressed && styles.dangerPressed,
+                  del.isPending && styles.disabled,
+                ]}
+              >
+                <Text style={styles.dangerText}>Delete job</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null}
       </ScrollView>
     </View>
   );
@@ -1285,7 +1320,28 @@ const styles = StyleSheet.create({
   },
   backPressed: { opacity: 0.6 },
   backText: { ...type.body, color: color.muted },
+  chromeTitleRow: {
+    minHeight: HIT,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: space.md,
+  },
   chromeName: { ...type.chromeTitle, color: color.ink },
+  headerDelete: {
+    minHeight: HIT,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.danger,
+    backgroundColor: color.dangerBg,
+    paddingHorizontal: space.md,
+  },
+  headerDeletePressed: { backgroundColor: color.dangerWash },
+  headerDeleteText: { ...type.small, fontFamily: font.bodySemi, color: color.danger },
 
   scrollBody: { padding: space.lg, gap: space.lg },
   body: { ...type.body, color: color.ink },
