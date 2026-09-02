@@ -599,7 +599,7 @@ export default function CustomerScreen(): React.ReactElement {
                 accessibilityLabel="Create a job for this customer"
                 onPress={() =>
                   router.push(
-                    `/(owner)/job/new?contactId=${encodeURIComponent(contact.id)}&name=${encodeURIComponent(contact.name ?? "")}&phone=${encodeURIComponent(contact.phone ?? "")}&address=${encodeURIComponent(primaryLine)}`,
+                    `/(owner)/job/new?contactId=${encodeURIComponent(contact.id)}&name=${encodeURIComponent(contact.name ?? "")}&phone=${encodeURIComponent(contact.phone ?? "")}&email=${encodeURIComponent(contact.email ?? "")}&address=${encodeURIComponent(primaryLine)}`,
                   )
                 }
                 style={({ pressed }) => [styles.neutralBtn, pressed && styles.rowPressed]}

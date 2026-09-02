@@ -552,6 +552,7 @@ export const jobActions = {
     contactId?: string;
     customerName: string;
     customerPhone?: string;
+    customerEmail?: string;
     jobAddress?: string;
     jobName: string;
     totalCents: number;

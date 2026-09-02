@@ -16,10 +16,13 @@
 // slot is an ET wall clock turned into an instant by etLocalToIso at the edge —
 // the device's own timezone is never read.
 
-import { useCallback, useRef, useState, type ReactNode } from "react";
+import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
 import {
+  ActivityIndicator,
+  Modal,
   Pressable,
   ScrollView,
+  SectionList,
   StyleSheet,
   Text,
   TextInput,
@@ -29,14 +32,14 @@ import { Feather } from "@expo/vector-icons";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { QueryKey } from "@tanstack/react-query";
-import { etLocalToIso, fmtPhone } from "@urso/types";
+import { etLocalToIso, fmtPhone, type CustomerSummary } from "@urso/types";
 import { jobActions } from "@/api";
 import { AddressInput } from "@/components/address-input";
 import { Avatar } from "@/components/avatar";
 import { Notice } from "@/components/notice";
 import { PhoneInput } from "@/components/phone-input";
 import { isCompleteWhen, SlotPicker } from "@/components/slot-picker";
-import { keys, useCrews } from "@/queries";
+import { keys, useCrews, useCustomers } from "@/queries";
 import { noticeFrom, useAction } from "@/query";
 import { color, font, HIT, radius, space, type } from "@/theme";
 
@@ -77,6 +80,24 @@ function Section({ label, children }: { label: string; children: ReactNode }) {
 }
 
 const ET_DAY = /^\d{4}-\d{2}-\d{2}$/;
+type CustomerSection = { title: string; data: CustomerSummary[] };
+
+function matchesCustomer(customer: CustomerSummary, query: string): boolean {
+  const term = query.trim().toLowerCase();
+  if (!term) return true;
+  const digits = term.replace(/\D/g, "");
+  return (
+    customer.name?.toLowerCase().includes(term) === true ||
+    customer.email?.toLowerCase().includes(term) === true ||
+    customer.primary_address?.toLowerCase().includes(term) === true ||
+    (digits.length > 0 && (customer.phone ?? "").includes(digits))
+  );
+}
+
+function customerDetail(customer: CustomerSummary): string {
+  const phone = customer.phone ? fmtPhone(customer.phone) : null;
+  return phone ?? customer.primary_address ?? customer.email ?? "No contact details";
+}
 
 export default function NewJobScreen(): React.ReactElement {
   const insets = useSafeAreaInsets();
@@ -84,26 +105,38 @@ export default function NewJobScreen(): React.ReactElement {
     contactId?: string;
     name?: string;
     phone?: string;
+    email?: string;
     address?: string;
     day?: string;
   }>();
 
   // A caller that has nothing to say sends an empty value rather than omitting
   // the key, so every read normalises the same way.
-  const contactId = (params.contactId ?? "").trim();
-  const tied = contactId.length > 0;
+  const routeContactId = (params.contactId ?? "").trim();
+  const routeTied = routeContactId.length > 0;
   const paramName = (params.name ?? "").trim();
   const paramPhone = (params.phone ?? "").trim();
+  const paramEmail = (params.email ?? "").trim();
 
   const crewsQuery = useCrews();
+  const customersQuery = useCustomers();
   const crews = (crewsQuery.data ?? []).filter((c) => c.active);
   const crewsNotice = noticeFrom(crewsQuery.error);
+  const customersNotice = noticeFrom(customersQuery.error);
 
   // Identity is typed only when the job has no contact behind it. A tied job
   // carries the profile's own name and number — editing them here would look
   // like editing the customer, which this screen does not do.
   const [nameDraft, setNameDraft] = useState("");
   const [phoneDraft, setPhoneDraft] = useState("");
+  const [selectedCustomer, setSelectedCustomer] = useState<CustomerSummary | null>(null);
+  const [customerOpen, setCustomerOpen] = useState(false);
+  const [customerSearch, setCustomerSearch] = useState("");
+
+  const contactId = selectedCustomer?.id ?? routeContactId;
+  const tied = contactId.length > 0;
+  const tiedPhone = selectedCustomer?.phone ?? paramPhone;
+  const tiedEmail = selectedCustomer?.email ?? paramEmail;
 
   const [jobName, setJobName] = useState("");
   const [totalText, setTotalText] = useState("");
@@ -136,12 +169,15 @@ export default function NewJobScreen(): React.ReactElement {
   // focus alone: re-running it on every focus would wipe a form the reader had
   // half-filled and then glanced away from, which is the same mistake the
   // estimate builder made and had to have taken out.
-  const seedKey = `${contactId}|${params.address ?? ""}|${params.day ?? ""}|${paramName}|${paramPhone}`;
+  const seedKey = `${routeContactId}|${params.address ?? ""}|${params.day ?? ""}|${paramName}|${paramPhone}|${paramEmail}`;
   const seededRef = useRef<string | null>(null);
   useFocusEffect(
     useCallback(() => {
       if (seededRef.current === seedKey) return;
       seededRef.current = seedKey;
+      setSelectedCustomer(null);
+      setCustomerOpen(false);
+      setCustomerSearch("");
       setNameDraft("");
       setPhoneDraft("");
       setJobName("");
@@ -161,6 +197,7 @@ export default function NewJobScreen(): React.ReactElement {
   // covers every board window; the tray sits on its own root key, so it is
   // named explicitly — the same list job/[id].tsx invalidates on.
   const invalidates: QueryKey[] = [
+    keys.jobs.all(),
     ["owner", "schedule"],
     keys.schedule.unscheduled(),
     keys.agenda(),
@@ -174,9 +211,46 @@ export default function NewJobScreen(): React.ReactElement {
     { invalidates },
   );
 
+  const customerSections = useMemo<CustomerSection[]>(() => {
+    const grouped = new Map<string, CustomerSummary[]>();
+    for (const customer of customersQuery.data ?? []) {
+      if (!matchesCustomer(customer, customerSearch)) continue;
+      const letter = (customer.name?.trim().charAt(0) || "#").toUpperCase();
+      grouped.set(letter, [...(grouped.get(letter) ?? []), customer]);
+    }
+    return [...grouped.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([title, data]) => ({
+        title,
+        data: data.sort((a, b) => (a.name ?? "").localeCompare(b.name ?? "")),
+      }));
+  }, [customerSearch, customersQuery.data]);
+
+  const chooseCustomer = (customer: CustomerSummary) => {
+    setSelectedCustomer(customer);
+    setNameDraft("");
+    setPhoneDraft("");
+    setAddress(customer.primary_address ?? "");
+    setCustomerOpen(false);
+    setCustomerSearch("");
+    setSaveNotice(null);
+  };
+
+  const useNewCustomer = () => {
+    setSelectedCustomer(null);
+    setNameDraft("");
+    setPhoneDraft("");
+    setAddress(params.address ?? "");
+    setCustomerOpen(false);
+    setCustomerSearch("");
+    setSaveNotice(null);
+  };
+
   // createManualJob requires a name, and a phone-only contact still has one —
   // the web sheet's own fallback, character for character.
-  const tiedName = paramName || (paramPhone ? fmtPhone(paramPhone) : "") || "Customer";
+  const tiedName =
+    selectedCustomer?.name ??
+    (paramName || (tiedPhone ? fmtPhone(tiedPhone) : "") || "Customer");
 
   // The total is the one field this screen refuses to guess at. An empty box
   // parses to zero cents, and the server accepts zero happily (a free job is a
@@ -200,12 +274,13 @@ export default function NewJobScreen(): React.ReactElement {
       // sentence, and owns what a valid phone number is.
       customerName: tied ? tiedName : nameDraft,
       ...(tied
-        ? paramPhone
-          ? { customerPhone: paramPhone }
+        ? tiedPhone
+          ? { customerPhone: tiedPhone }
           : {}
         : phoneDraft.trim()
           ? { customerPhone: phoneDraft }
           : {}),
+      ...(tied && tiedEmail ? { customerEmail: tiedEmail } : {}),
       ...(trimmedAddress ? { jobAddress: trimmedAddress } : {}),
       jobName,
       totalCents: inputToCents(totalText),
@@ -303,19 +378,65 @@ export default function NewJobScreen(): React.ReactElement {
         <Section label="Customer">
           <View style={styles.card}>
             {tied ? (
-              <View style={styles.customer}>
-                <Avatar name={paramName || null} />
-                <View style={styles.customerBody}>
-                  <Text style={styles.customerName} numberOfLines={1}>
-                    {tiedName}
-                  </Text>
-                  {paramPhone ? (
-                    <Text style={styles.customerPhone}>{fmtPhone(paramPhone)}</Text>
-                  ) : null}
+              <>
+                <View style={styles.customer}>
+                  <Avatar name={tiedName} />
+                  <View style={styles.customerBody}>
+                    <Text style={styles.customerName} numberOfLines={1}>
+                      {tiedName}
+                    </Text>
+                    {tiedPhone ? (
+                      <Text style={styles.customerPhone}>{fmtPhone(tiedPhone)}</Text>
+                    ) : null}
+                    {selectedCustomer?.archived ? (
+                      <Text style={styles.pastClient}>Past client</Text>
+                    ) : null}
+                  </View>
+                  <Feather name="check-circle" size={20} color={color.good} />
                 </View>
-              </View>
+                {!routeTied ? (
+                  <View style={[styles.pad, styles.divided, styles.customerActions]}>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Choose a different customer"
+                      onPress={() => setCustomerOpen(true)}
+                      style={({ pressed }) => [styles.button, pressed && styles.pressed]}
+                    >
+                      <Text style={styles.buttonText}>Change customer</Text>
+                    </Pressable>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Enter a new customer"
+                      onPress={useNewCustomer}
+                      style={({ pressed }) => [styles.inlineAction, pressed && styles.dim]}
+                    >
+                      <Text style={styles.inlineActionText}>Enter someone new instead</Text>
+                    </Pressable>
+                  </View>
+                ) : null}
+              </>
             ) : (
               <View style={styles.pad}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Choose an existing or past customer"
+                  onPress={() => setCustomerOpen(true)}
+                  style={({ pressed }) => [styles.customerPickerButton, pressed && styles.pressed]}
+                >
+                  <View style={styles.customerPickerIcon}>
+                    <Feather name="users" size={20} color={color.brandDeep} />
+                  </View>
+                  <View style={styles.customerPickerCopy}>
+                    <Text style={styles.customerPickerTitle}>Choose a saved customer</Text>
+                    <Text style={styles.customerPickerHint}>Search current and past clients by name, phone, or address</Text>
+                  </View>
+                  <Feather name="chevron-right" size={20} color={color.brandDeep} />
+                </Pressable>
+                <View style={styles.orRow}>
+                  <View style={styles.orLine} />
+                  <Text style={styles.orText}>OR ENTER SOMEONE NEW</Text>
+                  <View style={styles.orLine} />
+                </View>
                 <Text style={styles.fieldLabel}>Name</Text>
                 <TextInput
                   value={nameDraft}
@@ -329,9 +450,6 @@ export default function NewJobScreen(): React.ReactElement {
                 />
                 <Text style={styles.fieldLabel}>Phone</Text>
                 <PhoneInput value={phoneDraft} onChange={setPhoneDraft} style={styles.input} />
-                <Text style={styles.hint}>
-                  A number files the job against an existing customer instead of a new one.
-                </Text>
               </View>
             )}
           </View>
@@ -487,6 +605,110 @@ export default function NewJobScreen(): React.ReactElement {
           </Pressable>
         </View>
       </ScrollView>
+
+      <Modal
+        visible={customerOpen}
+        animationType="slide"
+        presentationStyle="fullScreen"
+        onRequestClose={() => setCustomerOpen(false)}
+      >
+        <View style={[styles.pickerScreen, { paddingTop: insets.top }]} accessibilityViewIsModal>
+          <View style={styles.pickerHeader}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Close customer picker"
+              onPress={() => setCustomerOpen(false)}
+              style={({ pressed }) => [styles.pickerBack, pressed && styles.dim]}
+            >
+              <Feather name="chevron-left" size={28} color={color.brand} />
+              <Text style={styles.pickerTitle}>Customers</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Enter a new customer"
+              onPress={useNewCustomer}
+              style={({ pressed }) => [styles.newCustomerButton, pressed && styles.primaryPressed]}
+            >
+              <Feather name="plus" size={18} color={color.surface} />
+              <Text style={styles.newCustomerText}>New</Text>
+            </Pressable>
+          </View>
+
+          <View style={styles.pickerSearch}>
+            <Feather name="search" size={20} color={color.faint} />
+            <TextInput
+              value={customerSearch}
+              onChangeText={setCustomerSearch}
+              placeholder="Search name, phone, or address"
+              placeholderTextColor={color.faint}
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoFocus
+              clearButtonMode="while-editing"
+              returnKeyType="search"
+              accessibilityLabel="Search existing customers"
+              style={styles.customerSearch}
+            />
+          </View>
+
+          {customersNotice ? (
+            <View style={styles.pickerNotice}>
+              <Notice text={customersNotice} />
+            </View>
+          ) : null}
+          <SectionList
+            sections={customerSections}
+            keyExtractor={(customer) => customer.id}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            stickySectionHeadersEnabled
+            contentContainerStyle={styles.customerList}
+            renderSectionHeader={({ section }) => (
+              <View style={styles.letterHeader}>
+                <Text style={styles.letterText}>{section.title}</Text>
+              </View>
+            )}
+            renderItem={({ item }) => {
+              const name = item.name ?? item.phone ?? "Customer";
+              return (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Book this job for ${name}`}
+                  onPress={() => chooseCustomer(item)}
+                  style={({ pressed }) => [styles.customerOption, pressed && styles.pressed]}
+                >
+                  <Avatar name={name} />
+                  <View style={styles.customerOptionCopy}>
+                    <View style={styles.customerOptionTop}>
+                      <Text style={styles.customerOptionName} numberOfLines={1}>
+                        {name}
+                      </Text>
+                      {item.archived ? <Text style={styles.pastBadge}>Past</Text> : null}
+                    </View>
+                    <Text style={styles.customerOptionDetail} numberOfLines={1}>
+                      {customerDetail(item)}
+                    </Text>
+                  </View>
+                  <Feather name="chevron-right" size={20} color={color.faint} />
+                </Pressable>
+              );
+            }}
+            ListEmptyComponent={
+              customersQuery.isPending ? (
+                <View style={styles.pickerLoading}>
+                  <ActivityIndicator color={color.brand} />
+                </View>
+              ) : (
+                <Text style={styles.emptyCustomers}>
+                  {customerSearch.trim()
+                    ? "No customers match that search."
+                    : "No saved customers yet. Tap New to enter one."}
+                </Text>
+              )
+            }
+          />
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -537,6 +759,34 @@ const styles = StyleSheet.create({
   customerBody: { flex: 1, gap: 2 },
   customerName: { ...type.title, color: color.ink },
   customerPhone: { ...type.small, color: color.muted, fontVariant: ["tabular-nums"] },
+  pastClient: { ...type.ruleSm, color: color.brandDeep },
+  customerActions: { alignItems: "stretch" },
+
+  customerPickerButton: {
+    minHeight: 68,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.brandEdgeSoft,
+    backgroundColor: color.brandWash,
+    paddingHorizontal: space.md,
+  },
+  customerPickerIcon: {
+    width: 38,
+    height: 38,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: radius.md,
+    backgroundColor: color.brandSoft,
+  },
+  customerPickerCopy: { flex: 1, minWidth: 0, gap: 2 },
+  customerPickerTitle: { ...type.title, color: color.ink },
+  customerPickerHint: { ...type.small, color: color.muted },
+  orRow: { flexDirection: "row", alignItems: "center", gap: space.sm, marginVertical: space.xs },
+  orLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: color.lineStrong },
+  orText: { ...type.ruleSm, color: color.muted },
 
   fieldLabel: { ...type.micro, color: color.faint },
   hint: { ...type.small, color: color.faint },
@@ -607,4 +857,76 @@ const styles = StyleSheet.create({
     padding: space.md,
   },
   goodNoticeText: { ...type.small, color: color.good },
+
+  pickerScreen: { flex: 1, backgroundColor: color.bg },
+  pickerHeader: {
+    minHeight: 70,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: space.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: color.chromeLine,
+    backgroundColor: color.chrome,
+    paddingHorizontal: space.md,
+  },
+  pickerBack: { minHeight: HIT, flexDirection: "row", alignItems: "center", gap: space.xs },
+  pickerTitle: { ...type.heading, color: color.chromeInk },
+  newCustomerButton: {
+    minHeight: HIT,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    borderRadius: radius.md,
+    backgroundColor: color.brandFill,
+    paddingHorizontal: space.md,
+  },
+  newCustomerText: { ...type.small, fontFamily: font.bodySemi, color: color.surface },
+  pickerSearch: {
+    minHeight: 58,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: color.line,
+    backgroundColor: color.surface,
+    paddingHorizontal: space.lg,
+  },
+  pickerNotice: { paddingHorizontal: space.lg, paddingTop: space.md },
+  customerSearch: { flex: 1, ...type.body, color: color.ink, minHeight: HIT },
+  customerList: { flexGrow: 1, paddingBottom: space.xxl },
+  letterHeader: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: color.line,
+    backgroundColor: color.bg,
+    paddingHorizontal: space.lg,
+    paddingVertical: space.sm,
+  },
+  letterText: { ...type.rule, color: color.muted },
+  customerOption: {
+    minHeight: 72,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: color.line,
+    backgroundColor: color.surface,
+    paddingHorizontal: space.lg,
+    paddingVertical: space.sm,
+  },
+  customerOptionCopy: { flex: 1, minWidth: 0, gap: 3 },
+  customerOptionTop: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  customerOptionName: { ...type.title, color: color.ink, flexShrink: 1 },
+  customerOptionDetail: { ...type.small, color: color.muted },
+  pastBadge: {
+    ...type.ruleSm,
+    color: color.brandDeep,
+    borderRadius: radius.chip,
+    backgroundColor: color.brandSoft,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+  },
+  pickerLoading: { minHeight: 180, alignItems: "center", justifyContent: "center" },
+  emptyCustomers: { ...type.body, color: color.muted, textAlign: "center", padding: space.xl },
 });
