@@ -14,6 +14,9 @@ export const PUSH_EVENT_TYPES = [
   "crew_late",
   "morning_summary",
   "daily_followups",
+  // Everything alertOwner() used to text: escalations, failed sends, Square
+  // warnings. Its own category so Sebastian can quiet it without losing leads.
+  "owner_alert",
 ] as const;
 
 export type PushEventType = (typeof PUSH_EVENT_TYPES)[number];
@@ -34,6 +37,7 @@ export const DEFAULT_PUSH_EVENT_TYPES: Record<PushEventType, boolean> = {
   crew_late: true,
   morning_summary: true,
   daily_followups: true,
+  owner_alert: true,
 };
 
 type PushIdentity = {
@@ -434,6 +438,16 @@ async function resolveAudience(audience: PushAudience): Promise<ResolvedPushAudi
   if (audience.kind === "owner") return audience;
   const crewId = audience.crewId ?? await crewIdForAccountIds(audience.accountIds);
   return crewId ? { kind: "crew_accounts", crewId } : null;
+}
+
+// Whether the owner audience can be reached by push AT ALL, ignoring per-event
+// preferences. alertOwner() uses this to decide between push and its SMS
+// fallback: no device means Sebastian still needs a text; a device with the
+// category switched off means he chose silence, and SMS must not override that.
+export async function ownerHasPushDevice(): Promise<boolean> {
+  if (!canesConfigured()) return false;
+  const devices = await devicesForAudience({ kind: "owner" });
+  return devices.length > 0;
 }
 
 async function devicesForAudience(audience: ResolvedPushAudience): Promise<PushDeviceRow[]> {

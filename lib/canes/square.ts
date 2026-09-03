@@ -861,7 +861,7 @@ export async function reconcileLegacySquarePaymentHistory(limit = 5): Promise<{
         flagged += 1;
         const detail = `Legacy Square payments on ${invoice.number} need review (${reason}). Automated repair has stopped for this invoice.`;
         await Promise.all([
-          alertOwner(`⚠️ ${detail}`),
+          alertOwner(`⚠️ ${detail}`, { alreadyPushed: true }),
           pushPaymentIssue({
             eventId: `square-legacy-history:${invoice.id}`,
             invoiceId: invoice.id,
@@ -1033,7 +1033,7 @@ export async function handleSquarePaymentEvent(
         : event.currency ? `currency ${event.currency}` : "no currency";
       const detail = `Card payment event on ${invoice.number} had ${issue}. Review it before treating the invoice as paid.`;
       await Promise.all([
-        alertOwner(`⚠️ ${detail}`),
+        alertOwner(`⚠️ ${detail}`, { alreadyPushed: true }),
         pushPaymentIssue({
           eventId: `square-invoice-invalid:${event.squarePaymentId ?? event.eventId}`,
           invoiceId: invoice.id,
@@ -1100,7 +1100,7 @@ export async function handleSquarePaymentEvent(
     if (legacy.had_legacy && !legacy.reconciled) {
       const detail = `Legacy Square payments on ${invoice.number} could not be matched safely (${legacy.reason ?? "unknown mismatch"}). Review the payment ledger before collecting or refunding more money.`;
       await Promise.all([
-        alertOwner(`⚠️ ${detail}`),
+        alertOwner(`⚠️ ${detail}`, { alreadyPushed: true }),
         pushPaymentIssue({
           eventId: `square-legacy-ledger:${invoice.id}:${event.eventId}`,
           invoiceId: invoice.id,
@@ -1120,7 +1120,7 @@ export async function handleSquarePaymentEvent(
     if (squarePayment.currency !== "USD" || !validPaymentCents(squarePayment.amountCents)) {
       const detail = `Square returned an invalid tender on ${invoice.number}. Review the payment before treating the invoice as paid.`;
       await Promise.all([
-        alertOwner(`⚠️ ${detail}`),
+        alertOwner(`⚠️ ${detail}`, { alreadyPushed: true }),
         pushPaymentIssue({
           eventId: `square-invoice-invalid-tender:${squarePayment.paymentId}`,
           invoiceId: invoice.id,
@@ -1158,7 +1158,7 @@ export async function handleSquarePaymentEvent(
     if (!claim.owned_event) {
       const detail = `Square payment ${squarePayment.paymentId} conflicts with another ledger record. Review ${invoice.number} before issuing any refund.`;
       await Promise.all([
-        alertOwner(`⚠️ ${detail}`),
+        alertOwner(`⚠️ ${detail}`, { alreadyPushed: true }),
         pushPaymentIssue({
           eventId: `square-invoice-collision:${squarePayment.paymentId}`,
           invoiceId: invoice.id,
@@ -1182,7 +1182,7 @@ export async function handleSquarePaymentEvent(
   if (settlement.invoiceStatus === "void" && eventAmount > 0) {
     const detail = `${fmtMoney(eventAmount)} reached void invoice ${invoice.number}. The payment was recorded, but the void invoice was not reopened; review the ledger and refund or carry the credit forward.`;
     await Promise.all([
-      alertOwner(`⚠️ ${detail}`),
+      alertOwner(`⚠️ ${detail}`, { alreadyPushed: true }),
       pushPaymentIssue({
         eventId: `void-invoice-payment:${invoice.id}:${settlement.paidCents}`,
         invoiceId: invoice.id,
@@ -1223,7 +1223,7 @@ export async function handleSquarePaymentEvent(
     const remaining = Math.max(0, settlement.totalCents - settlement.paidCents);
     const detail = `Partial card payment ${fmtMoney(eventAmount)} on ${invoice.number}; ${fmtMoney(remaining)} remains due on the ${fmtMoney(settlement.totalCents)} invoice.`;
     await Promise.all([
-      alertOwner(detail),
+      alertOwner(detail, { alreadyPushed: true }),
       pushPaymentIssue({
         eventId: `square-invoice-partial:${event.eventId}`,
         invoiceId: invoice.id,
@@ -1271,7 +1271,7 @@ async function notifyFailedSquarePayment(
   if (invoice) {
     const detail = `A card payment on ${invoice.number} ${statusLabel} in Square. No money was recorded.`;
     await Promise.all([
-      alertOwner(`⚠️ ${detail}`),
+      alertOwner(`⚠️ ${detail}`, { alreadyPushed: true }),
       pushPaymentIssue({
         eventId: `square-status:${stablePaymentKey}:${status}`,
         invoiceId: invoice.id,
@@ -1304,7 +1304,7 @@ async function notifyFailedSquarePayment(
       const label = job.customer_name ?? job.job_name ?? "a job";
       const detail = `A deposit payment for ${label} ${statusLabel} in Square. No money was recorded.`;
       await Promise.all([
-        alertOwner(`⚠️ ${detail}`),
+        alertOwner(`⚠️ ${detail}`, { alreadyPushed: true }),
         pushPaymentIssue({
           eventId: `square-status:${stablePaymentKey}:${status}`,
           jobId: job.id,
@@ -1431,7 +1431,7 @@ async function requireDepositLinkRetired(input: {
   });
   if (pushed.skipped !== "duplicate") {
     const { alertOwner } = await import("@/lib/canes/twilio");
-    await alertOwner(`⚠️ ${detail}`);
+    await alertOwner(`⚠️ ${detail}`, { alreadyPushed: true });
   }
   return false;
 }
@@ -1456,7 +1456,7 @@ async function resumeFinalizedRefundEffects(
     : `Refund of ${fmtMoney(amount)} recorded from Square. The books have been corrected.`;
   const { alertOwner } = await import("@/lib/canes/twilio");
   await Promise.all([
-    alertOwner(`↩️ ${detail}`),
+    alertOwner(`↩️ ${detail}`, { alreadyPushed: true }),
     invoice && invoice.amount_paid_cents < invoice.total_cents
       ? pushPaymentIssue({
           eventId: `square-refund-reissue:${refund.refundId}`,
@@ -1522,7 +1522,7 @@ async function resumeFinalizedDepositEffects(
   if (job.status === "canceled") {
     const detail = `A deposit of ${fmtMoney(amount)} arrived after ${label}'s job was canceled. The payment is recorded, but it needs a refund review in Square.`;
     await Promise.all([
-      alertOwner(`⚠️ ${detail}`),
+      alertOwner(`⚠️ ${detail}`, { alreadyPushed: true }),
       pushPaymentIssue({
         eventId: `square-deposit-canceled-job:${paymentId}`,
         jobId: job.id,
@@ -1534,7 +1534,7 @@ async function resumeFinalizedDepositEffects(
   } else if (otherNetDeposits) {
     const detail = `A second deposit payment of ${fmtMoney(amount)} arrived for ${label}. Likely a double charge — refund it from Square.`;
     await Promise.all([
-      alertOwner(`⚠️ ${detail}`),
+      alertOwner(`⚠️ ${detail}`, { alreadyPushed: true }),
       pushPaymentIssue({
         eventId: `square-deposit-second:${paymentId}`,
         jobId: job.id,
@@ -1545,7 +1545,7 @@ async function resumeFinalizedDepositEffects(
   } else if (amount !== Math.round(Number(job.deposit_cents))) {
     const detail = `Deposit of ${fmtMoney(amount)} for ${label} doesn't match the ${fmtMoney(Number(job.deposit_cents))} requested. Review it in Square.`;
     await Promise.all([
-      alertOwner(`⚠️ ${detail}`),
+      alertOwner(`⚠️ ${detail}`, { alreadyPushed: true }),
       pushPaymentIssue({
         eventId: `square-deposit-amount:${paymentId}`,
         jobId: job.id,
@@ -1555,7 +1555,7 @@ async function resumeFinalizedDepositEffects(
     ]);
   } else {
     await Promise.all([
-      alertOwner(`💰 Deposit ${fmtMoney(amount)} received from ${label}. The job is ready to schedule.`),
+      alertOwner(`💰 Deposit ${fmtMoney(amount)} received from ${label}. The job is ready to schedule.`, { alreadyPushed: true }),
       pushDepositReceived({
         eventId: `square:${paymentId}`,
         estimateId: job.estimate_id,
@@ -1695,7 +1695,7 @@ async function recordRefund(event: NormalizedPaymentEvent): Promise<ReconcileOut
     if (source.currency !== null && event.currency !== source.currency) {
       const detail = `Square refund ${refund.refundId} has currency ${event.currency ?? "missing"}, but its source payment is ${source.currency}. Review it manually.`;
       await Promise.all([
-        alertOwner(`⚠️ ${detail}`),
+        alertOwner(`⚠️ ${detail}`, { alreadyPushed: true }),
         pushPaymentIssue({
           eventId: `square-refund-currency:${refund.refundId}`,
           invoiceId: knownInvoiceId,
@@ -1743,7 +1743,7 @@ async function recordRefund(event: NormalizedPaymentEvent): Promise<ReconcileOut
         // ambiguous, refuse rather than refund the wrong row.
         const detail = `Square refund ${refund.refundId} matches multiple legacy payments on this invoice. Review the payment ledger before assigning it.`;
         await Promise.all([
-          alertOwner(`⚠️ ${detail}`),
+          alertOwner(`⚠️ ${detail}`, { alreadyPushed: true }),
           pushPaymentIssue({
             eventId: `square-refund-ambiguous:${refund.refundId}`,
             invoiceId: knownInvoiceId,
@@ -1760,7 +1760,7 @@ async function recordRefund(event: NormalizedPaymentEvent): Promise<ReconcileOut
         // the ledger unchanged for deliberate manual resolution.
         const detail = `Square refund ${refund.refundId} did not match the original amount of any legacy payment on this invoice. Review the payment ledger.`;
         await Promise.all([
-          alertOwner(`⚠️ ${detail}`),
+          alertOwner(`⚠️ ${detail}`, { alreadyPushed: true }),
           pushPaymentIssue({
             eventId: `square-refund-legacy-mismatch:${refund.refundId}`,
             invoiceId: knownInvoiceId,
@@ -1793,7 +1793,7 @@ async function recordRefund(event: NormalizedPaymentEvent): Promise<ReconcileOut
   if (!payment) {
     const detail = `A Square refund of ${fmtMoney(refund.amountCents ?? 0)} did not match any payment on record. Check the books.`;
     await Promise.all([
-      alertOwner(`⚠️ ${detail}`),
+      alertOwner(`⚠️ ${detail}`, { alreadyPushed: true }),
       pushPaymentIssue({
         eventId: `square-refund-unmatched:${refund.refundId}`,
         title: "Unmatched Square refund",
@@ -1807,7 +1807,7 @@ async function recordRefund(event: NormalizedPaymentEvent): Promise<ReconcileOut
   if (!validPaymentCents(refund.amountCents ?? 0) || event.currency !== payment.currency) {
     const detail = `Square refund ${refund.refundId} has an invalid amount or currency. Review it manually before changing the ledger.`;
     await Promise.all([
-      alertOwner(`⚠️ ${detail}`),
+      alertOwner(`⚠️ ${detail}`, { alreadyPushed: true }),
       pushPaymentIssue({
         eventId: `square-refund-invalid:${refund.refundId}`,
         invoiceId: payment.invoice_id,
@@ -1886,7 +1886,7 @@ async function recordRefund(event: NormalizedPaymentEvent): Promise<ReconcileOut
       if (retirement === "error") {
         const detail = `A refund affects ${attachedInvoice.number}, but its old Square payment page could not be disabled. Do not use that link; reconciliation will retry automatically.`;
         await Promise.all([
-          alertOwner(`⚠️ ${detail}`),
+          alertOwner(`⚠️ ${detail}`, { alreadyPushed: true }),
           pushPaymentIssue({
             eventId: `deposit-refund-square-live:${refund.refundId}`,
             invoiceId: attachedInvoice.id,
@@ -1958,7 +1958,7 @@ async function recordRefund(event: NormalizedPaymentEvent): Promise<ReconcileOut
     }
     const detail = `Square refund ${refund.refundId} exceeds or conflicts with its recorded payment. Review the payment ledger.`;
     await Promise.all([
-      alertOwner(`⚠️ ${detail}`),
+      alertOwner(`⚠️ ${detail}`, { alreadyPushed: true }),
       pushPaymentIssue({
         eventId: `square-refund-conflict:${refund.refundId}`,
         invoiceId: refundedInvoiceId,
@@ -2016,7 +2016,7 @@ async function recordRefund(event: NormalizedPaymentEvent): Promise<ReconcileOut
     ? `Refund of ${fmtMoney(refundedAmount)} recorded. The old Square invoice was retired; create a replacement invoice for the remaining balance.`
     : `Refund of ${fmtMoney(refundedAmount)} recorded from Square. The books have been corrected.`;
   await Promise.all([
-    alertOwner(`↩️ ${refundDetail}`),
+    alertOwner(`↩️ ${refundDetail}`, { alreadyPushed: true }),
     refundedInvoiceId && recomputed && !recomputed.fullyPaid
       ? pushPaymentIssue({
           eventId: `square-refund-reissue:${refund.refundId}`,
@@ -2085,7 +2085,7 @@ async function recordDepositPayment(event: NormalizedPaymentEvent): Promise<Reco
       : event.currency ? `currency ${event.currency}` : "no currency";
     const detail = `Deposit payment event for ${label} had ${issue}. Review it in Square before treating the deposit as paid.`;
     await Promise.all([
-      alertOwner(`⚠️ ${detail}`),
+      alertOwner(`⚠️ ${detail}`, { alreadyPushed: true }),
       pushPaymentIssue({
         eventId: `square-deposit-invalid:${event.squarePaymentId ?? event.eventId}`,
         jobId: job.id,
@@ -2151,7 +2151,7 @@ async function recordDepositPayment(event: NormalizedPaymentEvent): Promise<Reco
     if (retirement === "error") {
       const detail = `A late deposit reached ${invoice?.number ?? "an invoice"}, but its old Square payment page could not be disabled. Do not resend that invoice link; reconciliation will retry automatically.`;
       await Promise.all([
-        alertOwner(`⚠️ ${detail}`),
+        alertOwner(`⚠️ ${detail}`, { alreadyPushed: true }),
         pushPaymentIssue({
           eventId: `late-deposit-square-live:${paymentId}`,
           invoiceId: invoice?.id ?? operation.invoiceId,
@@ -2204,7 +2204,7 @@ async function recordDepositPayment(event: NormalizedPaymentEvent): Promise<Reco
     }
     const detail = `Square reused payment ${paymentId} against a different ledger record while processing ${label}. Review the payment ledger before changing the job.`;
     await Promise.all([
-      alertOwner(`⚠️ ${detail}`),
+      alertOwner(`⚠️ ${detail}`, { alreadyPushed: true }),
       pushPaymentIssue({
         eventId: `square-deposit-collision:${paymentId}:${event.eventId}`,
         jobId: job.id,
@@ -2330,7 +2330,7 @@ async function recordDepositPayment(event: NormalizedPaymentEvent): Promise<Reco
   if (currentJob?.status === "canceled" || job.status === "canceled") {
     const detail = `A deposit of ${fmtMoney(amount)} arrived after ${label}'s job was canceled. The payment is recorded, but it needs a refund review in Square.`;
     await Promise.all([
-      alertOwner(`⚠️ ${detail}`),
+      alertOwner(`⚠️ ${detail}`, { alreadyPushed: true }),
       pushPaymentIssue({
         eventId: `square-deposit-canceled-job:${paymentId}`,
         jobId: job.id,
@@ -2360,7 +2360,7 @@ async function recordDepositPayment(event: NormalizedPaymentEvent): Promise<Reco
   if (secondPayment) {
     const detail = `A second deposit payment of ${fmtMoney(amount)} arrived for ${label}. Likely a double charge — refund it from Square.`;
     await Promise.all([
-      alertOwner(`⚠️ ${detail}`),
+      alertOwner(`⚠️ ${detail}`, { alreadyPushed: true }),
       pushPaymentIssue({
         eventId: `square-deposit-second:${paymentId}`,
         jobId: job.id,
@@ -2376,7 +2376,7 @@ async function recordDepositPayment(event: NormalizedPaymentEvent): Promise<Reco
   if (amount !== Math.round(job.deposit_cents)) {
     const detail = `Deposit of ${fmtMoney(amount)} for ${label} doesn't match the ${fmtMoney(job.deposit_cents)} requested. Review it in Square.`;
     await Promise.all([
-      alertOwner(`⚠️ ${detail}`),
+      alertOwner(`⚠️ ${detail}`, { alreadyPushed: true }),
       pushPaymentIssue({
         eventId: `square-deposit-amount:${paymentId}`,
         jobId: job.id,
@@ -2390,7 +2390,7 @@ async function recordDepositPayment(event: NormalizedPaymentEvent): Promise<Reco
     return { handled: "amount_mismatch", depositJobId: job.id, amountCents: amount };
   }
   await Promise.all([
-    alertOwner(`💰 Deposit ${fmtMoney(amount)} received from ${label}. The job is ready to schedule.`),
+    alertOwner(`💰 Deposit ${fmtMoney(amount)} received from ${label}. The job is ready to schedule.`, { alreadyPushed: true }),
     pushDepositReceived({
       eventId: `square:${paymentId}`,
       estimateId: job.estimate_id,
@@ -2585,6 +2585,7 @@ export async function recomputeInvoicePaid(
     if (pushed.skipped !== "duplicate") {
       await alertOwner(
         `⚠️ Overpaid: ${fmtMoney(result.paidCents)} collected on an invoice billed at ${fmtMoney(result.totalCents)}. A refund of ${fmtMoney(result.overpaidCents)} may be owed.`,
+        { alreadyPushed: true },
       );
     }
   }

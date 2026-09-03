@@ -1,5 +1,7 @@
+import { randomUUID } from "node:crypto";
 import { isOptIn, isOptOut, sendSms as twilioSend, validateSignature } from "@/lib/twilio";
 import { canesDb, canesConfigured, twilioConfigured } from "@/lib/canes/supabase";
+import { ownerHasPushDevice, sendCanesPush, type CanesPush } from "@/lib/canes/push";
 import { getSettings } from "@/lib/canes/data";
 import { toE164, type CanesSettings } from "@/lib/canes/types";
 
@@ -148,15 +150,88 @@ export async function sendCanesSms(opts: {
   return res.ok ? { ok: true, sid: res.sid } : { ok: false, error: res.error };
 }
 
-// Owner alerts (escalations, digests) go to Sebastian's own phone and are
-// exempt from quiet-hours logic — he asked to be woken up by leads, not
-// protected from them. No-op when unconfigured.
-export async function alertOwner(body: string): Promise<SendResult> {
+// Owner alerts (escalations, digests, Square warnings) reach Sebastian by PUSH
+// first and by SMS only when no owner device is registered.
+//
+// Why: the business line is now the A2P-registered sender for customer texts.
+// Dozens of self-addressed alerts a day carrying urso.ws links and urgency
+// wording were the spammiest traffic on that number — exactly what handset
+// filters learn on — so they leave the SMS channel. Exempt from quiet hours
+// either way: he asked to be woken up by leads, not protected from them.
+//
+// `alreadyPushed`: the caller sent its own richer push for this event (the
+// Square paths do). Then this is fallback-only — SMS if push can't reach him,
+// nothing otherwise, so he never gets the same warning twice.
+export type OwnerAlertOptions = { alreadyPushed?: boolean };
+
+export async function alertOwner(body: string, opts: OwnerAlertOptions = {}): Promise<SendResult> {
+  let reachable = false;
+  try {
+    reachable = await ownerHasPushDevice();
+  } catch (error) {
+    console.error("[canes] owner push device lookup failed:", error);
+  }
+
+  if (reachable) {
+    if (opts.alreadyPushed) return { ok: true, skipped: "push covers it" };
+    try {
+      const push = await sendCanesPush(ownerAlertPush(body));
+      if (push.accepted > 0 || push.skipped === "duplicate" || push.skipped === "no enabled devices") {
+        // "no enabled devices" here means the category is switched off on
+        // every device — a preference, honoured rather than routed around.
+        return { ok: true, skipped: push.accepted > 0 ? undefined : push.skipped };
+      }
+      console.error(`[canes] owner alert push failed (${push.skipped ?? "provider"}), falling back to SMS`);
+    } catch (error) {
+      console.error("[canes] owner alert push threw, falling back to SMS:", error);
+    }
+  }
+
   const to = process.env.CANES_OWNER_PHONE;
   if (!to) return { ok: false, skipped: "CANES_OWNER_PHONE not set" };
   if (!twilioConfigured()) return { ok: false, skipped: "Twilio not configured" };
   const creds = canesTwilioCreds();
   return twilioSend({ ...creds, from: creds.from, to, body });
+}
+
+// Console links in the SMS text map onto the app's own screens; the URL itself
+// is dropped from the push body (the notification IS the link).
+const CONSOLE_LINK = /\s*Open:\s*https?:\/\/\S+\/CanesPressure(\/[\w\-/]*)?\S*/i;
+const APP_ROUTES: Array<[RegExp, (id: string) => string]> = [
+  [/^\/leads\/([0-9a-f-]{36})/i, (id) => `/(owner)/lead/${id}`],
+  [/^\/invoices\/([0-9a-f-]{36})/i, (id) => `/(owner)/invoice/${id}`],
+  [/^\/estimates\/([0-9a-f-]{36})/i, (id) => `/(owner)/estimate/${id}`],
+  [/^\/schedule/i, () => "/(owner)/schedule"],
+  [/^\/inbox/i, () => "/(owner)/inbox"],
+];
+
+function ownerAlertPush(body: string): CanesPush {
+  const link = body.match(CONSOLE_LINK);
+  let href = "/(owner)/dashboard";
+  for (const [pattern, route] of APP_ROUTES) {
+    const m = link?.[1]?.match(pattern);
+    if (m) {
+      href = route(m[1]);
+      break;
+    }
+  }
+  const text = body.replace(CONSOLE_LINK, "").trim();
+  const title = text.startsWith("⚠️")
+    ? "Needs attention"
+    : text.startsWith("💰")
+      ? "Money in"
+      : text.startsWith("↩️")
+        ? "Refund"
+        : "Canes";
+  return {
+    dedupeKey: `owner_alert:${randomUUID()}`,
+    audience: { kind: "owner" },
+    eventType: "owner_alert",
+    urgency: "time_sensitive",
+    title,
+    body: text.replace(/^(⚠️|💰|↩️)\s*/, ""),
+    href,
+  };
 }
 
 const YES_WORDS = /^\s*(yes|y|yeah|yep|si|sí|confirm|confirmed|ok|okay)\b/i;

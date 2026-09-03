@@ -73,6 +73,11 @@ const EVENT_PREFERENCES: EventPreference[] = [
     label: "Overdue & dormant summary",
     detail: "A quiet list of follow-ups to recover.",
   },
+  {
+    key: "owner_alert",
+    label: "Other alerts",
+    detail: "Escalations, failed sends, and Square warnings that used to arrive by text.",
+  },
 ];
 
 const CREW_EVENT_KEYS = new Set(["job_changed"]);
