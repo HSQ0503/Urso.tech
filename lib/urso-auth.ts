@@ -20,6 +20,7 @@ const ADMINS: Record<string, Admin> = {
   "canespressurewashing@gmail.com": { name: "Sebastian", scope: "canes" },
   "theyeeterboi53@gmail.com": { name: "Han", scope: "canes" },
   "skormanmax@gmail.com": { name: "Max", scope: "canes" },
+  "max@canespressurewashing.com": { name: "Max", scope: "canes" },
   "han@urso.ws": { name: "Han", scope: "admin" },
   "han@urso.tech": { name: "Han", scope: "admin" },
   "guga@urso.ws": { name: "Guga", scope: "admin" },
