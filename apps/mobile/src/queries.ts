@@ -32,6 +32,7 @@ export const keys = {
   invoiceOne: (id: string) => ["owner", "invoices", id] as const,
   invoiceRewards: (id: string) => ["owner", "invoices", id, "rewards"] as const,
   schedule: {
+    all: () => ["owner", "schedule"] as const,
     board: (fromIso: string, toIso: string) => ["owner", "schedule", fromIso, toIso] as const,
     unscheduled: () => ["owner", "unscheduled"] as const,
   },

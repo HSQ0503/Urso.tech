@@ -46,8 +46,8 @@ export type ParsedLead = z.infer<typeof LeadParse>["leads"][number] & { phone_e1
 //   <Friday, December 25, 2026 2:00 PM>                     (hot only)
 //   Requested Service/s: <services>
 
-const HEADER_COLD = /^wants a virtual quote/i;
-const HEADER_HOT = /^new booked appointment/i;
+const HEADER_COLD = /^(?:wants a )?virtual quote\b/i;
+const HEADER_HOT = /^(?:new )?booked appointment\b/i;
 const SERVICES_RE = /^requested service(?:\/?s)?\s*:\s*(.*)$/i;
 const DATE_RE =
   /^(?:sunday|monday|tuesday|wednesday|thursday|friday|saturday),?\s+(january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{1,2}),?\s+(\d{4})[\s,]+(\d{1,2}):(\d{2})\s*(am|pm)$/i;
@@ -61,6 +61,11 @@ function parseTemplateDate(line: string): string | null {
   const m = line.match(DATE_RE);
   if (!m) return null;
   const [, month, day, year, hourRaw, minute, ampm] = m;
+  if (Number(hourRaw) < 1 || Number(hourRaw) > 12 || Number(minute) > 59) return null;
+  const calendarDate = new Date(Date.UTC(Number(year), Number(MONTH_NUM[month.toLowerCase()]) - 1, Number(day)));
+  if (calendarDate.getUTCFullYear() !== Number(year) ||
+    calendarDate.getUTCMonth() !== Number(MONTH_NUM[month.toLowerCase()]) - 1 ||
+    calendarDate.getUTCDate() !== Number(day)) return null;
   let hour = Number(hourRaw) % 12;
   if (ampm.toLowerCase() === "pm") hour += 12;
   const naive = `${year}-${MONTH_NUM[month.toLowerCase()]}-${day.padStart(2, "0")}T${String(hour).padStart(2, "0")}:${minute}`;

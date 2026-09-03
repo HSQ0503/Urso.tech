@@ -131,26 +131,31 @@ export function AutomationsPanel({ settings }: { settings: CanesSettings }) {
       <div className="mt-3 flex items-start gap-2.5 rounded-md bg-[var(--cp-cold-bg)] px-3 py-2.5">
         <Info aria-hidden size={15} className="mt-0.5 shrink-0 text-[var(--cp-cold)]" />
         <p className="text-[12.5px] leading-snug text-[var(--cp-muted)]">
-          Outbound texts queue until the number&rsquo;s A2P registration is approved, then send
-          automatically. Email alerts already work today.
+          Check the inbox for delivery status. If an automatic text fails, review it before resending.
         </p>
       </div>
 
       <div className="mt-2 flex flex-col">
         <AutomationRow
-          name="New-lead greeting"
-          description="Sent the moment a form submission or vendor lead arrives, so they know a call is coming. Uses the Hold text template."
+          name="Virtual quote introduction"
+          description="Introduces Sebastian and asks what the customer wants cleaned when a new vendor virtual quote arrives."
           config="Instant"
           channel="Text"
         />
         <div className="cp-divider" />
         <AutomationRow
           name="Estimate-visit confirmation"
-          description="Asks the customer to reply YES before the estimate visit; a final notice follows if they haven't. Uses the Appointment confirmation template."
-          config={`${settings.confirmation_offset_hours}h before · final ${settings.confirmation_final_offset_hours}h`}
+          description="Sent when a vendor-booked appointment arrives. Asks the customer to reply YES; a final notice follows if unanswered."
+          config={`Instant · final ${settings.confirmation_final_offset_hours}h`}
           channel="Text"
         />
         <div className="cp-divider" />
+        <AutomationRow
+          name="Manually booked appointment"
+          description="Confirms the visit you booked and sends a booking notice. No confirmation request or no-reply follow-up."
+          config="On booking"
+          channel="Text"
+        />
         <AutomationRow
           name="Day-before job confirmation"
           description="Reminds the customer their scheduled job is coming up."

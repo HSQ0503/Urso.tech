@@ -50,11 +50,13 @@ const DEFAULT_SETTINGS: CanesSettings = {
   confirmation_offset_hours: 12,
   templates: {
     hold_text:
-      "Hi{name}! This is Canes Pressure Washing. You are now opted in to text updates about your request - we got it, and Sebastian will call you in just a few minutes. Msg & data rates may apply, msg frequency varies. Reply HELP for help or STOP to opt out.",
+      "Hi{name}, it's Sebastian with Canes Pressure Washing. I got your virtual quote request for our exterior services. What were you looking to get done? Reply STOP to opt out.",
     confirmation:
       "Hi{name}, this is Canes Pressure Washing confirming your free estimate visit {when} at {address}. Reply YES to confirm your appointment time, or reply here to reschedule. Reply STOP to opt out.",
     confirmation_ack:
       "You are confirmed for {when}. See you then! - Canes Pressure Washing. Reply STOP to opt out.",
+    manual_booking:
+      "Hi{name}, Canes Pressure Washing will see you {when}. If anything changes, reply here. Reply STOP to opt out.",
     missed_call:
       "Hi, this is Canes Pressure Washing. Sorry we missed your call - we will get back to you shortly. Reply here and we will text you right back. Msg & data rates may apply. Reply HELP for help or STOP to opt out.",
   },

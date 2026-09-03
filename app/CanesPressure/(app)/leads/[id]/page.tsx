@@ -144,6 +144,7 @@ function NextStep({ lead }: { lead: Lead }) {
             Confirmed {fmtEt(lead.confirmed_at)}
           </p>
         )}
+        {lead.phone && <ResendConfirmationButton leadId={lead.id} confirmed />}
         {lead.address && <MapsLink address={lead.address} />}
       </div>
     );

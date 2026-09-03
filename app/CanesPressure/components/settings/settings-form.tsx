@@ -82,13 +82,18 @@ function hourLabel(h: number): string {
 const TEMPLATE_FIELDS: { key: keyof CanesSettings["templates"]; label: string; help: string }[] = [
   {
     key: "hold_text",
-    label: "Hold text",
-    help: "Sent the moment a virtual-quote lead arrives so they know a call is coming.",
+    label: "Virtual quote introduction",
+    help: "Sent when a new vendor virtual-quote inquiry arrives, asking what they want cleaned.",
   },
   {
     key: "confirmation",
     label: "Appointment confirmation",
-    help: "Sent before each estimate visit, asking the customer to reply YES.",
+    help: "Sent when a vendor-booked appointment arrives, asking the customer to reply YES.",
+  },
+  {
+    key: "manual_booking",
+    label: "Manually booked appointment",
+    help: "A booking notice for appointments you have already confirmed. No reply is required.",
   },
   {
     key: "confirmation_ack",
@@ -281,7 +286,7 @@ export function SettingsForm({ settings }: { settings: CanesSettings }) {
       >
         <div>
           <label className="cp-label" htmlFor="confirmation-offset">
-            Confirmation offset (hours)
+            Fallback confirmation lead time (hours)
           </label>
           <input
             id="confirmation-offset"
@@ -293,7 +298,7 @@ export function SettingsForm({ settings }: { settings: CanesSettings }) {
             onChange={(e) => setOffset(e.target.value)}
           />
           <p className="mt-1 text-[12px] text-[var(--cp-faint)]">
-            12 = text goes out 12 hours before the visit.
+            Used to recover appointments missing a confirmation task. New vendor bookings text immediately; your manual bookings send a confirmed notice.
           </p>
         </div>
         <div className="grid grid-cols-2 gap-3 sm:max-w-[340px]">

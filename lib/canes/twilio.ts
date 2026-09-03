@@ -99,6 +99,7 @@ export async function sendCanesSms(opts: {
   leadId?: string | null;
   automated?: boolean;
   force?: boolean;
+  beforeSend?: () => Promise<boolean>;
 }): Promise<SendResult> {
   if (!twilioConfigured()) {
     return { ok: false, skipped: "Twilio is not configured yet (CANES_TWILIO_* env vars missing)." };
@@ -110,6 +111,10 @@ export async function sendCanesSms(opts: {
     if (nextAllowedSendTime(settings)) {
       return { ok: false, skipped: "quiet_hours" };
     }
+  }
+  // Appointment tasks can be canceled while consent/settings are being read.
+  if (opts.beforeSend && !(await opts.beforeSend())) {
+    return { ok: false, skipped: "superseded" };
   }
   const creds = canesTwilioCreds();
   const to = toE164(opts.to) ?? opts.to.trim();

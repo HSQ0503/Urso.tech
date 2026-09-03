@@ -74,6 +74,7 @@ export type Call = {
 export type TaskKind =
   | "hold_text"
   | "confirmation"
+  | "manual_booking"
   | "no_reply_escalation"
   | "cold_escalation"
   | "follow_up"
@@ -117,6 +118,7 @@ export type CanesSettings = {
     hold_text: string;
     confirmation: string;
     confirmation_ack: string;
+    manual_booking: string;
     missed_call: string;
   };
   lead_vendor_phones: string[];

@@ -372,6 +372,7 @@ export default function LeadScreen(): React.ReactElement {
   const [visitOpen, setVisitOpen] = useState(false);
   const [visitValue, setVisitValue] = useState("");
   const [visitNotice, setVisitNotice] = useState<string | null>(null);
+  const [visitResult, setVisitResult] = useState<{ leadId: string; text: string } | null>(null);
 
   const setStatusRun = useAction(
     (vars: { status: LeadStatus; lostReason?: string }) =>
@@ -386,8 +387,8 @@ export default function LeadScreen(): React.ReactElement {
       ],
     },
   );
-  // Booking flips the lead to appointment_set and arms the confirmation text,
-  // so every attention surface refreshes with it.
+  // Booking confirms the visit and sends a notice, so the schedule and inbox
+  // refresh alongside the lead.
   const bookVisitRun = useAction(
     (appointmentIso: string) => leadActions.setAppointment(id, appointmentIso),
     {
@@ -397,6 +398,8 @@ export default function LeadScreen(): React.ReactElement {
         keys.leads.events(id),
         keys.overview(),
         keys.agenda(),
+        keys.schedule.all(),
+        keys.threads.all(),
       ],
     },
   );
@@ -464,14 +467,7 @@ export default function LeadScreen(): React.ReactElement {
   const buildEstimateRun = useAction((_: void) => estimateActions.createFromLead(id), {
     invalidates: [keys.estimates(), keys.leads.one(id), keys.leads.events(id)],
   });
-  // The same confirmation text the scheduler sends, fired NOW. It writes an
-  // outbound message on the thread and an automation event on the lead, so
-  // both refresh; no status moves, so the attention queues are left alone.
-  //
-  // A2P: the 10DLC campaign has not cleared, so an outbound text is accepted by
-  // Twilio and then dropped carrier-side — the customer may never see it. The
-  // send still succeeds and still logs against the lead, which is exactly what
-  // this button claims to do, and what the web claims too.
+  // The server chooses a confirmation request or booking notice from current status.
   const resendRun = useAction((_: void) => leadActions.sendConfirmationNow(id), {
     invalidates: [keys.leads.one(id), keys.leads.events(id), keys.threads.all()],
   });
@@ -690,7 +686,7 @@ export default function LeadScreen(): React.ReactElement {
     setResendNotice(null);
     setResendGood(null);
     const r = await resendRun.mutateAsync();
-    if (r.ok) setResendGood(successNotice(r.data) ?? "Confirmation text sent.");
+    if (r.ok) setResendGood(successNotice(r.data) ?? (lead.status === "confirmed" ? "Booking notice sent." : "Confirmation text sent."));
     else setResendNotice(r.notice);
   };
 
@@ -1111,6 +1107,7 @@ export default function LeadScreen(): React.ReactElement {
                 </Text>
               </Pressable>
 
+              <GoodNotice text={visitResult?.leadId === id ? visitResult.text : null} />
               {visitOpen ? (
                 <View style={styles.visitCard}>
                   {/* Future-only, same as the web lead-appointment flow — a
@@ -1123,9 +1120,11 @@ export default function LeadScreen(): React.ReactElement {
                     onPress={() => {
                       void (async () => {
                         setVisitNotice(null);
+                        setVisitResult(null);
                         const r = await bookVisitRun.mutateAsync(etLocalToIso(visitValue));
                         if (!r.ok) setVisitNotice(r.notice);
                         else {
+                          setVisitResult({ leadId: id, text: successNotice(r.data) ?? "Appointment confirmed." });
                           setVisitOpen(false);
                           setVisitValue("");
                         }
@@ -1145,24 +1144,12 @@ export default function LeadScreen(): React.ReactElement {
                 </View>
               ) : null}
 
-              {/* Directly under the booking controls, because the appointment
-                  is what the text is about. The customer replies YES to this
-                  message and the lead moves itself to confirmed; when the
-                  scheduled one never arrived — or the customer deleted it the
-                  day before the visit — this is how it goes again.
-
-                  Only while the lead is actually WAITING on that reply, which
-                  is the single branch the web offers it in. sendConfirmationNow
-                  has no status guard of its own, so an always-visible button
-                  would happily text a won or lost customer a confirmation for a
-                  visit that already happened — and under A2P nobody would see
-                  the bounce. This is not client-gating a server rule; there is
-                  no server rule here to duplicate. */}
-              {lead.status === "appointment_set" ? (
+              {/* Confirmed visits resend a notice; vendor bookings still ask for a reply. */}
+              {lead.status === "appointment_set" || lead.status === "confirmed" ? (
                 <>
                   <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel="Resend the appointment confirmation text"
+                    accessibilityLabel={lead.status === "confirmed" ? "Resend booking notice" : "Resend the appointment confirmation text"}
                     disabled={resendRun.isPending}
                     onPress={() => void resendConfirmation()}
                     style={({ pressed }) => [
@@ -1172,7 +1159,7 @@ export default function LeadScreen(): React.ReactElement {
                     ]}
                   >
                     <Text style={styles.buttonText}>
-                      {resendRun.isPending ? "Sending…" : "Resend confirmation"}
+                      {resendRun.isPending ? "Sending…" : lead.status === "confirmed" ? "Resend booking notice" : "Resend confirmation"}
                     </Text>
                   </Pressable>
                   <Notice text={resendNotice} />

@@ -51,8 +51,7 @@ function Notice({ value }: { value: Feedback }) {
 
 // ── Post-call dispositions ───────────────────────────────────────────────────
 // "Closed" over the phone means the estimate visit is booked, so it only calls
-// setAppointment — that action moves the lead to appointment_set and schedules
-// the confirmation text.
+// setAppointment records owner confirmation and sends a booking notice.
 
 export function Disposition({ leadId }: { leadId: string }) {
   const { isPending, feedback, run } = useAction();
@@ -207,7 +206,7 @@ export function CallFlow({ leadId, phone }: { leadId: string; phone: string | nu
   );
 }
 
-export function ResendConfirmationButton({ leadId }: { leadId: string }) {
+export function ResendConfirmationButton({ leadId, confirmed = false }: { leadId: string; confirmed?: boolean }) {
   const { isPending, feedback, run } = useAction();
   return (
     <div className="space-y-1.5">
@@ -218,7 +217,7 @@ export function ResendConfirmationButton({ leadId }: { leadId: string }) {
         onClick={() => run(() => sendConfirmationNow(leadId))}
       >
         <MessageSquareText size={16} strokeWidth={2} />
-        {isPending ? "Sending..." : "Resend confirmation"}
+        {isPending ? "Sending..." : confirmed ? "Resend booking notice" : "Resend confirmation"}
       </button>
       <Notice value={feedback} />
     </div>
@@ -299,7 +298,6 @@ export function StatusCard({ leadId, status }: { leadId: string; status: LeadSta
 export function AppointmentCard({
   leadId,
   appointmentAt,
-  offsetHours,
 }: {
   leadId: string;
   appointmentAt: string | null;
@@ -328,7 +326,7 @@ export function AppointmentCard({
         {isPending ? "Saving..." : appointmentAt ? "Reschedule" : "Save"}
       </button>
       <p className="text-[12px] leading-snug text-[var(--cp-faint)]">
-        Confirmation text goes out automatically {offsetHours}h before the visit.
+        Saving confirms the appointment and sends a booking notice. The customer does not need to confirm again.
       </p>
       <Notice value={feedback} />
     </div>

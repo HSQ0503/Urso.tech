@@ -7,10 +7,11 @@ import {
   isConfirmation,
   isOptIn,
   isOptOut,
-  nextAllowedSendTime,
   sendCanesSms,
   validateSignature,
 } from "@/lib/canes/twilio";
+import { queueVirtualQuote, upsertConfirmationTask } from "@/lib/canes/lead-messaging";
+export { upsertConfirmationTask } from "@/lib/canes/lead-messaging";
 import { parseVendorMessage, type ParsedLead } from "@/lib/canes/parse";
 import { notifyColdLead } from "@/lib/canes/notify";
 import {
@@ -431,8 +432,13 @@ async function upsertVendorLead(
   parsedIndex = 0,
 ): Promise<string | null> {
   const db = canesDb();
+  // An AI fallback must not turn "morning" into an invented appointment time.
+  const explicitTime = /\b\d{1,2}(?::\d{2})?\s*(?:a\.?m\.?|p\.?m\.?)\b|\b\d{1,2}:\d{2}\b/i.test(rawBody);
+  const reliable = Boolean(p.phone_e164) && p.confidence >= 0.8;
   const apptIso =
-    p.type === "hot" && p.appointment_iso && !Number.isNaN(new Date(p.appointment_iso).getTime())
+    reliable && explicitTime && p.type === "hot" && p.appointment_iso &&
+    /(?:Z|[+-]\d{2}:\d{2})$/.test(p.appointment_iso) &&
+    Number.isFinite(Date.parse(p.appointment_iso)) && Date.parse(p.appointment_iso) > Date.now()
       ? new Date(p.appointment_iso).toISOString()
       : null;
 
@@ -579,17 +585,26 @@ async function upsertVendorLead(
 
   if (!lead) throw new Error("vendor lead was not created or recovered");
 
-  if (p.type === "hot" && lead.appointment_at) {
-    await upsertConfirmationTask(lead, settings);
+  if (!reliable || (p.type === "hot" && !apptIso)) {
+    await logLeadEvent(lead.id, "parsed", "Vendor lead needs review before an automatic text can be sent.",
+      messageSid ? `sms:${messageSid}:vendor:${parsedIndex}:review` : undefined);
+    await runInboundEffect(messageSid, `vendor-${parsedIndex}-review`, async () => {
+      const result = await alertOwner("A vendor lead needs its phone number or appointment details checked. Open the Canes inbox.");
+      if (!result.ok) throw new Error(result.error ?? result.skipped ?? "Owner alert failed");
+    });
+  }
+
+  if (reliable && apptIso && p.type === "hot" && lead.appointment_at) {
+    await upsertConfirmationTask(lead, settings, true);
   }
 
   if (created) await pushNewLead(lead, "new_lead", createdEventId);
 
   // Hold text + notifications only fire for brand-new cold leads; a re-sent
   // lead has already been greeted and alerted once.
-  if (p.type === "cold" && created) {
+  if (p.type === "cold" && created && reliable) {
     await runInboundEffect(messageSid, `vendor-${parsedIndex}-hold-text`, async () => {
-      await sendHoldText(lead, settings);
+      await queueVirtualQuote(lead, settings);
     });
     await runInboundEffect(messageSid, `vendor-${parsedIndex}-owner-email`, async () => {
       await notifyColdLead(lead, messageSid ? `${messageSid}-${parsedIndex}` : createdEventId ?? lead.id);
@@ -603,93 +618,6 @@ async function upsertVendorLead(
     });
   }
   return lead.id;
-}
-
-async function sendHoldText(lead: Lead, settings: CanesSettings): Promise<void> {
-  if (!lead.phone || lead.opted_out) return;
-  const body = fillTemplate(settings.templates.hold_text, { name: lead.name });
-  const res = await sendCanesSms({ to: lead.phone, body, leadId: lead.id, automated: true });
-  if (res.ok) {
-    await logLeadEvent(lead.id, "automation", "Hold text sent");
-    return;
-  }
-  if (res.skipped === "quiet_hours") {
-    const at = nextAllowedSendTime(settings) ?? new Date(Date.now() + 3_600_000);
-    await canesDb()
-      .from("tasks")
-      .upsert(
-        {
-          lead_id: lead.id,
-          kind: "hold_text",
-          dedupe_key: `hold_text:${lead.id}`,
-          scheduled_for: at.toISOString(),
-          status: "pending",
-          payload: {},
-        },
-        { onConflict: "dedupe_key", ignoreDuplicates: true },
-      );
-    await logLeadEvent(lead.id, "automation", `Hold text queued for ${fmtEt(at.toISOString())} (quiet hours)`);
-    return;
-  }
-  console.warn(`[canes] hold text not sent for lead ${lead.id}: ${res.skipped ?? res.error}`);
-}
-
-// Schedule the confirmation text at T-minus the configured offset, clamped to
-// now for near-term appointments. Insert-only on dedupe_key so a task that
-// already ran is never resurrected to pending. Returns true if newly created.
-// Also enqueues the final "confirm or we release your slot" text at T-minus the
-// (shorter) final offset, on its own dedupe_key. Both key on the appointment
-// ISO so a rescheduled visit gets fresh tasks and the stale ones are ignored.
-export async function upsertConfirmationTask(lead: Lead, settings: CanesSettings): Promise<boolean> {
-  if (!canesConfigured() || !lead.phone || !lead.appointment_at || lead.opted_out) return false;
-  const appt = new Date(lead.appointment_at);
-  const sendAt = new Date(appt.getTime() - settings.confirmation_offset_hours * 3_600_000);
-  const { data, error } = await canesDb()
-    .from("tasks")
-    .upsert(
-      {
-        lead_id: lead.id,
-        kind: "confirmation",
-        dedupe_key: `confirmation:${lead.id}:${appt.toISOString()}`,
-        scheduled_for: (sendAt.getTime() < Date.now() ? new Date() : sendAt).toISOString(),
-        status: "pending",
-        payload: { appointment_at: appt.toISOString() },
-      },
-      { onConflict: "dedupe_key", ignoreDuplicates: true },
-    )
-    .select("id");
-  if (error) {
-    console.error(`[canes] confirmation task upsert failed for lead ${lead.id}: ${error.message}`);
-    return false;
-  }
-  const created = (data ?? []).length > 0;
-
-  // Final nudge before we release the slot. Only worth queuing when its send
-  // time is still ahead of us AND strictly before the appointment — a same-day
-  // booking inside the final window has no room for this text.
-  const finalAt = new Date(appt.getTime() - settings.confirmation_final_offset_hours * 3_600_000);
-  if (finalAt.getTime() > Date.now() && finalAt.getTime() < appt.getTime()) {
-    const { error: finalError } = await canesDb()
-      .from("tasks")
-      .upsert(
-        {
-          lead_id: lead.id,
-          kind: "confirmation_final",
-          dedupe_key: `confirmation_final:${lead.id}:${appt.toISOString()}`,
-          scheduled_for: finalAt.toISOString(),
-          status: "pending",
-          payload: { appointment_at: appt.toISOString() },
-        },
-        { onConflict: "dedupe_key", ignoreDuplicates: true },
-      );
-    if (finalError) {
-      console.error(
-        `[canes] final confirmation task upsert failed for lead ${lead.id}: ${finalError.message}`,
-      );
-    }
-  }
-
-  return created;
 }
 
 // ── Branch c: reply from a known lead ────────────────────────────────────────

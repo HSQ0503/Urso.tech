@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { canesConfigured, canesDb, squareConfigured } from "@/lib/canes/supabase";
 import { getSettings, getLead } from "@/lib/canes/data";
+import { bookManualAppointment } from "@/lib/canes/lead-messaging";
 import { sendCanesSms, fillTemplate, canesTwilioCreds, canesVoiceNumber, alertOwner } from "@/lib/canes/twilio";
 import { signedMessageMediaUrl } from "@/lib/canes/message-media";
 import {
@@ -178,62 +179,17 @@ export async function setLeadStatus(leadId: string, status: LeadStatus, lostReas
   return { ok: true };
 }
 
-// Closing over the phone: mark won-path and book the estimate visit in one go.
-// The manual appointment enters the exact same confirmation automation as a
-// hot lead from the vendor: a `confirmation` task at T-minus the configured
-// offset, then YES-handling in the SMS webhook.
+// A booking made by the owner is already confirmed; it gets a receipt,
+// never the vendor's request to confirm again.
 export async function setAppointment(leadId: string, appointmentIso: string): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
   const denied = await denyUnlessPermitted("leads");
   if (denied) return denied;
   const when = new Date(appointmentIso);
   if (Number.isNaN(when.getTime())) return { ok: false, notice: "Invalid date." };
-  const db = canesDb();
-  // Claimed write, and it has to be THIS write that refuses rather than anything
-  // downstream. Everything below assumes the appointment landed: the confirmation
-  // task upsert carries lead_id, so on a missing lead it fails its foreign key —
-  // and its error is deliberately unchecked, so the failure is silent. The owner
-  // was told the visit was booked, no appointment_at was stored, no confirmation
-  // text was queued, and nothing anywhere reported a problem.
-  const { data: claimed, error } = await db
-    .from("leads")
-    .update({ appointment_at: when.toISOString(), status: "appointment_set", confirmed_at: null })
-    .eq("id", leadId)
-    .select("id");
-  if (error) return { ok: false, notice: error.message };
-  if (!claimed || claimed.length === 0) {
-    return { ok: false, notice: "This lead just changed — refresh and try again." };
-  }
-
-  const settings = await getSettings();
-  const sendAt = new Date(when.getTime() - settings.confirmation_offset_hours * 3_600_000);
-  const dedupeKey = `confirmation:${leadId}:${when.toISOString()}`;
-  // Rescheduling: pending tasks tied to the old appointment time are stale —
-  // cancel them so the customer is only texted about the new slot.
-  await db
-    .from("tasks")
-    .update({ status: "canceled" })
-    .eq("lead_id", leadId)
-    .in("kind", ["confirmation", "no_reply_escalation"])
-    .eq("status", "pending")
-    .neq("dedupe_key", dedupeKey);
-  // Insert-only: a dedupe_key that already exists means the task ran (or is
-  // queued) for this exact time — never resurrect a sent one back to pending.
-  await db.from("tasks").upsert(
-    {
-      lead_id: leadId,
-      kind: "confirmation",
-      dedupe_key: dedupeKey,
-      scheduled_for: (sendAt.getTime() < Date.now() ? new Date() : sendAt).toISOString(),
-      status: "pending",
-      payload: { appointment_at: when.toISOString() },
-    },
-    { onConflict: "dedupe_key", ignoreDuplicates: true },
-  );
-  await logEvent(leadId, "appointment", `Estimate visit set for ${fmtEt(when.toISOString())}`);
-  await touch(leadId);
+  const result = await bookManualAppointment(leadId, when.toISOString(), await getSettings());
   refresh();
-  return { ok: true };
+  return result;
 }
 
 // Calendar-side quote booking: creates a fresh appointment from free-text
@@ -242,6 +198,7 @@ export async function setAppointment(leadId: string, appointmentIso: string): Pr
 // phone-less standalone quote does not enqueue confirmation texts.
 export async function createQuoteVisit(input: {
   customerName: string;
+  customerPhone?: string;
   jobName: string;
   address: string;
   appointmentIso: string;
@@ -251,6 +208,8 @@ export async function createQuoteVisit(input: {
   if (denied) return denied;
 
   const customerName = input.customerName.trim();
+  const phone = input.customerPhone?.trim() ? toE164(input.customerPhone) : null;
+  if (input.customerPhone?.trim() && !phone) return { ok: false, notice: "Enter a valid phone number." };
   const jobName = input.jobName.trim();
   const address = input.address.trim();
   if (!customerName) return { ok: false, notice: "Enter the customer's name." };
@@ -268,9 +227,9 @@ export async function createQuoteVisit(input: {
     .from("leads")
     .insert({
       type: "hot",
-      status: "appointment_set",
+      status: "new",
       name: customerName,
-      phone: null,
+      phone,
       address,
       service: jobName,
       source: "other",
@@ -279,11 +238,13 @@ export async function createQuoteVisit(input: {
     })
     .select("id")
     .single();
-  if (error) return { ok: false, notice: error.message };
+  if (error) return { ok: false, notice: error.code === "23505"
+    ? "This number already has a lead. Book the appointment from that lead to keep its history."
+    : "The quote visit could not be created." };
 
-  await logEvent(data.id, "appointment", `Standalone quote visit set for ${fmtEt(when.toISOString())}`);
+  const result = await bookManualAppointment(data.id, when.toISOString(), await getSettings());
   refresh();
-  return { ok: true, notice: "Quote visit booked." };
+  return result.ok ? result : { ok: false, notice: "The lead was created, but the booking failed. Open it from Leads to finish booking." };
 }
 
 export async function snoozeLead(leadId: string, untilIso: string): Promise<ActionResult> {
@@ -804,17 +765,20 @@ export async function sendConfirmationNow(leadId: string): Promise<ActionResult>
   if (!lead?.phone) return { ok: false, notice: "Lead has no phone number." };
   if (lead.opted_out) return { ok: false, notice: "This customer opted out of texts." };
   if (!lead.appointment_at) return { ok: false, notice: "Set an appointment first." };
+  if (!["appointment_set", "confirmed"].includes(lead.status) || Date.parse(lead.appointment_at) <= Date.now()) {
+    return { ok: false, notice: "This appointment is no longer awaiting a visit." };
+  }
   const settings = await getSettings();
-  const body = fillTemplate(settings.templates.confirmation, {
+  const body = fillTemplate(lead.status === "confirmed" ? settings.templates.manual_booking : settings.templates.confirmation, {
     name: lead.name,
     when: fmtEt(lead.appointment_at),
     address: lead.address,
   });
   const res = await sendCanesSms({ to: lead.phone, body, leadId, automated: true, force: true });
   if (!res.ok) return { ok: false, notice: res.skipped ?? res.error ?? "Send failed." };
-  await logEvent(leadId, "automation", "Confirmation text sent manually");
+  await logEvent(leadId, "automation", lead.status === "confirmed" ? "Booking notice resent manually" : "Confirmation text sent manually");
   refresh();
-  return { ok: true };
+  return { ok: true, notice: lead.status === "confirmed" ? "Booking notice sent." : "Confirmation text sent." };
 }
 
 // Click-to-call, the one true outbound-voice path: Twilio rings Sebastian's own
@@ -925,6 +889,10 @@ export async function saveSettings(patch: {
   const denied = await denyUnlessPermitted();
   if (denied) return denied;
   const db = canesDb();
+  if (patch.templates) {
+    // Older clients send only the template keys they know.
+    patch = { ...patch, templates: { ...(await getSettings()).templates, ...patch.templates } };
+  }
   const rows = Object.entries(patch)
     .filter(([, v]) => v !== undefined)
     .map(([key, value]) => ({ key, value, updated_at: new Date().toISOString() }));
@@ -986,7 +954,11 @@ export async function createLead(fields: {
     return { ok: false, notice: error.message };
   }
   await logEvent(data.id, "created", "Lead added manually");
-  if (fields.appointmentIso) await setAppointment(data.id, fields.appointmentIso);
+  if (fields.appointmentIso) {
+    const booking = await setAppointment(data.id, fields.appointmentIso);
+    if (!booking.ok) return { ok: false, existingLeadId: data.id, notice: "Lead created, but the appointment could not be saved. Open the lead to finish booking." };
+    return booking;
+  }
   refresh();
   return { ok: true };
 }

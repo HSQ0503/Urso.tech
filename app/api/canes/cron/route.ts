@@ -16,6 +16,7 @@ import {
   looksLikeScheduleRequest,
   upsertConfirmationTask,
 } from "@/lib/canes/inbound";
+import { LEAD_MESSAGE_KINDS, currentAppointmentTask, sendLeadMessageTask } from "@/lib/canes/lead-messaging";
 import { PRACTICE_PHONE } from "@/lib/canes/tour";
 import { sweepStalePractice } from "@/app/CanesPressure/components/tour/practice";
 import { ET, etLocalToIso, fmtEt, fmtPhone, minutesSince } from "@/lib/canes/types";
@@ -164,6 +165,12 @@ async function drainDueTasks(deadlineAt: number) {
   const db = canesDb();
   const settings = await getSettings();
 
+  // An interrupted lead SMS can already be at the carrier. Flag it for review
+  // instead of replaying an uncertain delivery.
+  await db.from("tasks").update({ status: "failed" })
+    .in("kind", [...LEAD_MESSAGE_KINDS]).eq("status", "sending")
+    .lt("scheduled_for", new Date(Date.now() - 10 * 60_000).toISOString());
+
   // Crash recovery: the claim below stamps scheduled_for with the claim time,
   // so a 'sending' row whose scheduled_for is >10 minutes old belongs to a run
   // that died mid-send. Put those back in the queue instead of stranding them.
@@ -171,14 +178,14 @@ async function drainDueTasks(deadlineAt: number) {
     .from("tasks")
     .update({ status: "pending" })
     .eq("status", "sending")
+    .not("kind", "in", `(${LEAD_MESSAGE_KINDS.join(",")})`)
     .lt("scheduled_for", new Date(Date.now() - 10 * 60_000).toISOString());
 
   const { data } = await db
     .from("tasks")
     .select("*")
     .in("kind", [
-      "hold_text",
-      "confirmation",
+      ...LEAD_MESSAGE_KINDS,
       "confirmation_final",
       "estimate_send",
       "estimate_reminder",
@@ -204,6 +211,15 @@ async function drainDueTasks(deadlineAt: number) {
     if (!hasCronBudget(taskDeadlineAt, 9_000)) {
       stoppedAtDeadline = true;
       break;
+    }
+    if ((LEAD_MESSAGE_KINDS as readonly string[]).includes(task.kind)) {
+      const outcome = await sendLeadMessageTask(task.id, settings);
+      if (outcome === "sent") sent++;
+      else if (outcome === "deferred") deferred++;
+      else if (outcome === "canceled") canceled++;
+      else if (outcome === "failed") failed++;
+      else contested++;
+      continue;
     }
     // Atomic claim: exactly one run flips pending → sending; an overlapping
     // run sees zero updated rows and skips, so nobody is double-texted.
@@ -438,11 +454,7 @@ async function drainDueTasks(deadlineAt: number) {
         !lead.phone ||
         lead.opted_out ||
         lead.status !== "appointment_set" ||
-        !lead.appointment_at ||
-        // Never send a "confirm or we release your slot" text once the
-        // appointment has already passed (late fire, or quiet-hours deferral
-        // pushed the send past the appointment) — it would only confuse.
-        new Date(lead.appointment_at).getTime() <= Date.now()
+        !currentAppointmentTask(task, lead)
       ) {
         await db.from("tasks").update({ status: "canceled" }).eq("id", task.id);
         canceled++;
@@ -490,77 +502,6 @@ async function drainDueTasks(deadlineAt: number) {
       }
       continue;
     }
-
-    const lead = task.lead_id ? await getLead(task.lead_id) : null;
-    // The moment a lead confirms, wins, loses, or opts out, its queued
-    // automated texts are noise — cancel instead of sending.
-    if (
-      !lead ||
-      !lead.phone ||
-      lead.opted_out ||
-      (task.kind === "confirmation" && (lead.status !== "appointment_set" || !lead.appointment_at)) ||
-      (task.kind === "hold_text" && lead.status !== "new")
-    ) {
-      await db.from("tasks").update({ status: "canceled" }).eq("id", task.id);
-      canceled++;
-      continue;
-    }
-
-    const body =
-      task.kind === "hold_text"
-        ? fillTemplate(settings.templates.hold_text, { name: lead.name })
-        : fillTemplate(settings.templates.confirmation, {
-            name: lead.name,
-            when: fmtEt(lead.appointment_at),
-            address: lead.address,
-          });
-    const res = await sendCanesSms({ to: lead.phone, body, leadId: lead.id, automated: true });
-
-    if (res.ok) {
-      await db
-        .from("tasks")
-        .update({ status: "sent", sent_at: new Date().toISOString() })
-        .eq("id", task.id);
-      await logLeadEvent(
-        lead.id,
-        "automation",
-        task.kind === "hold_text" ? "Hold text sent" : "Confirmation text sent",
-      );
-      if (task.kind === "confirmation" && lead.appointment_at) {
-        // No YES by T-minus-3h → escalate to Sebastian before he drives out.
-        const appt = new Date(lead.appointment_at);
-        const at = new Date(appt.getTime() - 3 * 3_600_000);
-        await db.from("tasks").upsert(
-          {
-            lead_id: lead.id,
-            kind: "no_reply_escalation",
-            dedupe_key: `no_reply:${lead.id}:${appt.toISOString()}`,
-            scheduled_for: (at.getTime() < Date.now() ? new Date() : at).toISOString(),
-            status: "pending",
-            payload: { appointment_at: appt.toISOString() },
-          },
-          { onConflict: "dedupe_key", ignoreDuplicates: true },
-        );
-      }
-      sent++;
-    } else if (res.skipped === "quiet_hours") {
-      const at = nextAllowedSendTime(settings) ?? new Date(Date.now() + 3_600_000);
-      await db
-        .from("tasks")
-        .update({ status: "pending", scheduled_for: at.toISOString() })
-        .eq("id", task.id);
-      deferred++;
-    } else if (res.skipped) {
-      // Twilio not configured yet — release the claim for a later run.
-      await db.from("tasks").update({ status: "pending" }).eq("id", task.id);
-      deferred++;
-    } else {
-      await db
-        .from("tasks")
-        .update({ status: "failed", payload: { ...task.payload, error: res.error ?? "send failed" } })
-        .eq("id", task.id);
-      failed++;
-    }
   }
   return { due: tasks.length, sent, deferred, canceled, failed, contested, stoppedAtDeadline };
 }
@@ -603,7 +544,7 @@ async function noReplyEscalations(deadlineAt: number) {
   for (const task of tasks) {
     if (!hasCronBudget(deadlineAt, 10_000)) break;
     const lead = task.lead_id ? await getLead(task.lead_id) : null;
-    if (!lead || lead.status !== "appointment_set") {
+    if (!lead || lead.status !== "appointment_set" || lead.opted_out || !currentAppointmentTask(task, lead)) {
       await db.from("tasks").update({ status: "canceled" }).eq("id", task.id);
       canceled++;
       continue;

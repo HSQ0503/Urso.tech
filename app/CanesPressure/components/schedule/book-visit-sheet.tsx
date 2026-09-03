@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { createQuoteVisit, type ActionResult } from "@/app/CanesPressure/actions";
+import { PhoneInput } from "@/app/CanesPressure/components/phone-input";
 import { etLocalToIso } from "@/lib/canes/types";
 import { AddressInput } from "../address-input";
 import { SheetShell } from "./sheet-shell";
@@ -15,7 +16,9 @@ type Feedback = { ok: boolean; text: string } | null;
 export function BookVisitSheet({ onClose }: { onClose: () => void }) {
   const [isPending, startTransition] = useTransition();
   const [feedback, setFeedback] = useState<Feedback>(null);
+  const [saved, setSaved] = useState(false);
   const [customerName, setCustomerName] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
   const [jobName, setJobName] = useState("");
   const [address, setAddress] = useState("");
   const [when, setWhen] = useState("");
@@ -37,7 +40,7 @@ export function BookVisitSheet({ onClose }: { onClose: () => void }) {
 
   function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!canSubmit || isPastSlot(when)) {
+    if (saved || !canSubmit || isPastSlot(when)) {
       setInPast(isPastSlot(when));
       return;
     }
@@ -45,12 +48,13 @@ export function BookVisitSheet({ onClose }: { onClose: () => void }) {
     startTransition(async () => {
       const res: ActionResult = await createQuoteVisit({
         customerName,
+        customerPhone,
         jobName,
         address,
         appointmentIso: etLocalToIso(when),
       });
       setFeedback(res.notice ? { ok: res.ok, text: res.notice } : null);
-      if (res.ok) onClose();
+      if (res.ok) setSaved(true);
     });
   }
 
@@ -70,6 +74,14 @@ export function BookVisitSheet({ onClose }: { onClose: () => void }) {
             required
             onChange={(event) => setCustomerName(event.target.value)}
           />
+        </div>
+
+        <div>
+          <label className="cp-label" htmlFor="visit-phone">Customer phone (optional)</label>
+          <PhoneInput id="visit-phone" onChange={setCustomerPhone} disabled={isPending} />
+          <p className="mt-1 text-[12px] text-[var(--cp-muted)]">
+            Sends a booking notice. This appointment is already confirmed by you.
+          </p>
         </div>
 
         <div>
@@ -138,9 +150,9 @@ export function BookVisitSheet({ onClose }: { onClose: () => void }) {
           <button
             type="submit"
             className="cp-btn cp-btn-primary cp-btn-sm flex-1"
-            disabled={!canSubmit || isPending}
+            disabled={saved || !canSubmit || isPending}
           >
-            {isPending ? "Booking..." : "Book quote"}
+            {saved ? "Booked" : isPending ? "Booking..." : "Book quote"}
           </button>
           <button
             type="button"
@@ -148,7 +160,7 @@ export function BookVisitSheet({ onClose }: { onClose: () => void }) {
             disabled={isPending}
             onClick={onClose}
           >
-            Cancel
+            {saved ? "Done" : "Cancel"}
           </button>
         </div>
       </form>
