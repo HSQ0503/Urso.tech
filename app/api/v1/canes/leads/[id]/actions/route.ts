@@ -161,6 +161,9 @@ export const POST = apiRoute<{ id: string }>(async ({ req, params }) => {
       if (!isCallOutcome(body.outcome)) {
         return apiFail(`\`outcome\` must be one of ${CALL_OUTCOMES.join(", ")}.`, 422);
       }
+      if (body.detail !== undefined && (typeof body.detail !== "string" || body.detail.length > 4000)) {
+        return apiFail("Keep call notes to 4,000 characters or fewer.", 422);
+      }
       // `detail` becomes the lost_reason when the outcome is "lost"; the action
       // decides that, not this route.
       const detail = typeof body.detail === "string" ? body.detail : undefined;

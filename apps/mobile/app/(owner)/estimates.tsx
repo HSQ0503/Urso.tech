@@ -157,7 +157,7 @@ export default function EstimatesScreen(): React.ReactElement {
 
   const chooseType = (estimateType: EstimateType) => {
     setTypeOpen(false);
-    router.push({ pathname: "/(owner)/estimate/new", params: { type: estimateType } });
+    router.push({ pathname: "/(owner)/estimate/new", params: { type: estimateType, draftKey: String(Date.now()) } });
   };
 
   return (

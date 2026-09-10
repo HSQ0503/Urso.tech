@@ -351,7 +351,7 @@ export default function EstimatePreviewScreen(): React.ReactElement {
             </Pressable>
             {busy ? <ActivityIndicator color={color.brand} style={styles.busy} /> : null}
             <View style={styles.actionGrid}>
-              <ActionTile label="Edit" icon="edit-3" disabled={!canEdit || busy} onPress={() => { setMenuOpen(false); router.push({ pathname: "/(owner)/estimate/new", params: { id } }); }} />
+              <ActionTile label="Edit" icon="edit-3" disabled={!canEdit || busy} onPress={() => { setMenuOpen(false); router.push({ pathname: "/(owner)/estimate/new", params: { id, draftKey: String(Date.now()) } }); }} />
               <ActionTile label="Cancel" icon="slash" danger disabled={!canSend || busy} onPress={voidNow} />
               <ActionTile label={estimate.sent_at ? "Re-Send" : "Send"} icon="send" disabled={!canSend || busy} onPress={() => { setMenuOpen(false); setDeliveryOpen(true); }} />
               <ActionTile label="Mark As Lost" icon="thumbs-down" danger disabled={!canSend || busy} onPress={voidNow} />

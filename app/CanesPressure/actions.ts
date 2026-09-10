@@ -3,6 +3,8 @@
 import { createHash, randomBytes, randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { getAdminSession } from "@/lib/urso-auth";
+import { getTechnicianActor } from "@/lib/canes/crew-auth";
 import { canesConfigured, canesDb, squareConfigured } from "@/lib/canes/supabase";
 import { getSettings, getLead } from "@/lib/canes/data";
 import { bookManualAppointment } from "@/lib/canes/lead-messaging";
@@ -278,24 +280,52 @@ export async function logCallOutcome(
   if (!canesConfigured()) return DEMO;
   const denied = await denyUnlessPermitted("calls");
   if (denied) return denied;
+  if (!["closed", "follow_up", "no_answer", "lost"].includes(outcome)) {
+    return { ok: false, notice: "Choose a valid call outcome." };
+  }
+  if (detail !== undefined && (typeof detail !== "string" || detail.length > 4000)) {
+    return { ok: false, notice: "Keep call notes to 4,000 characters or fewer." };
+  }
+  const note = detail?.trim() || null;
   const db = canesDb();
   const lead = await getLead(leadId);
   if (!lead) return { ok: false, notice: "Lead not found." };
-  await db.from("calls").insert({
+  const admin = await getAdminSession();
+  const technician = admin ? null : await getTechnicianActor();
+
+  // Persist the shared note before secondary call/status updates. A failed
+  // note write must leave the form intact rather than report a saved note.
+  const { error: noteError } = await db.from("events").insert({
+    lead_id: leadId,
+    kind: "call",
+    detail: `Call logged — ${outcome.replace("_", " ")}${note ? `: ${note}` : ""}`,
+    data: { outcome, note, recorded_by: admin?.email ?? technician?.name ?? technician?.email ?? null },
+  });
+  if (noteError) {
+    console.error("[canes] save call note:", noteError.message);
+    return { ok: false, notice: "The call note could not be saved. Your note is still here; try again." };
+  }
+  const { error: callError } = await db.from("calls").insert({
     lead_id: leadId,
     peer_phone: lead.phone ?? "",
     direction: "out",
     status: outcome === "no_answer" ? "no-answer" : "completed",
   });
-  if (outcome === "follow_up" || outcome === "no_answer") {
-    await db.from("leads").update({ status: "contacted" }).eq("id", leadId);
+  const patch: Record<string, string> = { last_activity_at: new Date().toISOString() };
+  // Calling about existing booked work must not move it back into the funnel.
+  if ((outcome === "follow_up" || outcome === "no_answer") && ["new", "contacted"].includes(lead.status)) {
+    patch.status = "contacted";
   } else if (outcome === "lost") {
-    await db.from("leads").update({ status: "lost", lost_reason: detail ?? "Lost on call" }).eq("id", leadId);
+    patch.status = "lost";
+    patch.lost_reason = note ?? "Lost on call";
   }
-  await logEvent(leadId, "call", `Call logged — ${outcome.replace("_", " ")}${detail ? `: ${detail}` : ""}`);
-  await touch(leadId);
+  const { data: updated, error: leadError } = await db.from("leads").update(patch).eq("id", leadId).select("id");
   refresh();
-  return { ok: true };
+  if (callError || leadError || !updated?.length) {
+    console.error("[canes] call note saved with incomplete history/status:", callError?.message ?? leadError?.message ?? "lead missing");
+    return { ok: true, notice: "Call note saved in Activity. Call history or lead status could not be updated; refresh to check." };
+  }
+  return { ok: true, notice: "Call saved. Your team can see the note in Activity." };
 }
 
 // ── Messaging ────────────────────────────────────────────────────────────────

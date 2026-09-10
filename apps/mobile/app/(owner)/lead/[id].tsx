@@ -52,6 +52,7 @@ import {
   type CallOutcome,
   type LeadPatch,
 } from "@/api";
+import { CallNotes } from "@/components/call-notes";
 import { AddressInput } from "@/components/address-input";
 import { isCompleteWhen, SlotPicker } from "@/components/slot-picker";
 import { Avatar } from "@/components/avatar";
@@ -59,7 +60,7 @@ import { NavigateButton } from "@/components/navigate";
 import { Notice } from "@/components/notice";
 import { PhoneInput, toPhoneDisplay } from "@/components/phone-input";
 import { keys, useEstimates, useLead, useLeadCalls, useLeadEvents } from "@/queries";
-import { noticeFrom, useAction, usePullToRefresh } from "@/query";
+import { noticeFrom, useAction, usePullToRefresh, useRefetchOnFocus } from "@/query";
 import { color, font, HIT, radius, space, type } from "@/theme";
 
 // Funnel order comes from the label map's own key order — one source of truth,
@@ -69,13 +70,6 @@ const STATUSES = Object.keys(STATUS_LABEL) as LeadStatus[];
 // Below this, the parse is worth a second look before the name, phone, and
 // service on the lead are believed. Same threshold the web list marks rows at.
 const LOW_CONFIDENCE = 0.8;
-
-const OUTCOMES: ReadonlyArray<{ outcome: CallOutcome; label: string }> = [
-  { outcome: "closed", label: "Closed" },
-  { outcome: "follow_up", label: "Follow up" },
-  { outcome: "no_answer", label: "No answer" },
-  { outcome: "lost", label: "Lost" },
-];
 
 // The ET calendar date one day from now, at 09:00 ET, as an ISO instant.
 // "Tomorrow" is computed from the ET clock, never the device's: at 11pm in a
@@ -302,6 +296,10 @@ function EditSheet({
 
 export default function LeadScreen(): React.ReactElement {
   const { id } = useLocalSearchParams<{ id: string }>();
+  return <LeadDetail key={id} id={id} />;
+}
+
+function LeadDetail({ id }: { id: string }): React.ReactElement {
   const insets = useSafeAreaInsets();
 
   // Three reads, one round trip's worth of waiting. The lead is the only one
@@ -310,14 +308,12 @@ export default function LeadScreen(): React.ReactElement {
   // belongs to and in the server's own words, while whatever loaded before
   // stays up (query.data survives an error state). Session death routes to
   // /login in the query cache's onError, not here.
-  // No focus refetch here, deliberately: the original loaded on mount/id-change
-  // only, and this is a kept-mounted hidden tab — adding useRefetchOnFocus made
-  // every return to the screen fire three requests and let the lead mutate in
-  // place, which the hand-rolled version never did. Pull-to-refresh is the
-  // reader's explicit refresh, same as before.
   const leadQuery = useLead(id);
   const eventsQuery = useLeadEvents(id);
   const callsQuery = useLeadCalls(id);
+  // A teammate's latest note must appear when this customer is reopened.
+  useRefetchOnFocus(leadQuery.refetch);
+  useRefetchOnFocus(eventsQuery.refetch);
   // There is NO per-lead estimates read on the API, so the quote book is
   // fetched whole and narrowed here on lead_id. It shares the key the estimates
   // tab already fetched under, so on a warm cache this costs nothing, and it
@@ -336,6 +332,7 @@ export default function LeadScreen(): React.ReactElement {
   const lead = leadQuery.data ?? null;
   const events = eventsQuery.data ?? [];
   const calls = callsQuery.data ?? [];
+  const latestCallNote = events.find((event) => event.kind === "call" && typeof event.data?.note === "string");
   const notice = noticeFrom(leadQuery.error);
   const eventsNotice = noticeFrom(eventsQuery.error);
   const callsNotice = noticeFrom(callsQuery.error);
@@ -353,6 +350,8 @@ export default function LeadScreen(): React.ReactElement {
   const [statusNotice, setStatusNotice] = useState<string | null>(null);
   const [snoozeNotice, setSnoozeNotice] = useState<string | null>(null);
   const [callNotice, setCallNotice] = useState<string | null>(null);
+  const [callGood, setCallGood] = useState<string | null>(null);
+  const [callNote, setCallNote] = useState("");
   // The two dial affordances answer separately: the bridge can be refused by
   // the server (no credentials, no owner phone, no number) and can succeed WITH
   // a sentence, while the tel: link can only fail on this handset.
@@ -465,7 +464,7 @@ export default function LeadScreen(): React.ReactElement {
   // contact, and logs an event on the lead — so the quote book and the lead's
   // own reads both refresh.
   const buildEstimateRun = useAction((_: void) => estimateActions.createFromLead(id), {
-    invalidates: [keys.estimates(), keys.leads.one(id), keys.leads.events(id)],
+    invalidates: [keys.estimates(), keys.leads.one(id), keys.leads.events(id), keys.customers.all()],
   });
   // The server chooses a confirmation request or booking notice from current status.
   const resendRun = useAction((_: void) => leadActions.sendConfirmationNow(id), {
@@ -611,16 +610,21 @@ export default function LeadScreen(): React.ReactElement {
   };
 
   const applyOutcome = async (outcome: CallOutcome, detail?: string) => {
+    setCallGood(null);
     const r = await logCallRun.mutateAsync({ outcome, detail });
     setCallNotice(r.ok ? null : r.notice);
+    if (r.ok) {
+      setCallNote("");
+      setCallGood(successNotice(r.data) ?? "Call saved. Your team can see it in Activity.");
+    }
   };
 
   const logCall = (outcome: CallOutcome) => {
-    if (outcome === "lost") {
+    if (outcome === "lost" && !callNote.trim()) {
       promptLostDetail((detail) => void applyOutcome("lost", detail));
       return;
     }
-    void applyOutcome(outcome);
+    void applyOutcome(outcome, callNote.trim() || undefined);
   };
 
   const send = async () => {
@@ -713,6 +717,8 @@ export default function LeadScreen(): React.ReactElement {
       <ScrollView
         contentContainerStyle={[styles.scrollBody, { paddingBottom: insets.bottom + space.xxl }]}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        automaticallyAdjustKeyboardInsets
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -839,24 +845,15 @@ export default function LeadScreen(): React.ReactElement {
             </Text>
           </Pressable>
           {outcomesOpen ? (
-            <View style={styles.outcomeGrid}>
-              {OUTCOMES.map(({ outcome, label }) => (
-                <Pressable
-                  key={outcome}
-                  accessibilityRole="button"
-                  disabled={logCallRun.isPending}
-                  onPress={() => logCall(outcome)}
-                  style={({ pressed }) => [
-                    styles.button,
-                    styles.outcomeButton,
-                    logCallRun.isPending && styles.disabled,
-                    pressed && styles.pressed,
-                  ]}
-                >
-                  <Text style={styles.buttonText}>{label}</Text>
-                </Pressable>
-              ))}
-              <Notice text={callNotice} />
+            <CallNotes note={callNote} onChange={setCallNote} onSave={logCall} busy={logCallRun.isPending} />
+          ) : null}
+          <Notice text={callNotice} />
+          <GoodNotice text={callGood} />
+          {latestCallNote ? (
+            <View style={styles.callContext}>
+              <Text style={styles.fieldLabel}>Latest call note · {fmtEt(latestCallNote.created_at)}</Text>
+              <Text style={styles.body}>{String(latestCallNote.data.note)}</Text>
+              {typeof latestCallNote.data.recorded_by === "string" ? <Text style={styles.muted}>{latestCallNote.data.recorded_by}</Text> : null}
             </View>
           ) : null}
         </View>
@@ -1230,26 +1227,9 @@ export default function LeadScreen(): React.ReactElement {
         <Section label="Log a call">
           <View style={styles.card}>
             <View style={styles.pad}>
-              <View style={styles.grid}>
-                {OUTCOMES.map(({ outcome, label }) => (
-                  <Pressable
-                    key={outcome}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Log call: ${label}`}
-                    disabled={logCallRun.isPending}
-                    onPress={() => logCall(outcome)}
-                    style={({ pressed }) => [
-                      styles.button,
-                      styles.gridItem,
-                      logCallRun.isPending && styles.disabled,
-                      pressed && styles.pressed,
-                    ]}
-                  >
-                    <Text style={styles.buttonText}>{label}</Text>
-                  </Pressable>
-                ))}
-              </View>
+              <CallNotes note={callNote} onChange={setCallNote} onSave={logCall} busy={logCallRun.isPending} />
               <Notice text={callNotice} />
+              <GoodNotice text={callGood} />
             </View>
           </View>
         </Section>
@@ -1444,10 +1424,9 @@ const styles = StyleSheet.create({
   waitChipText: { ...type.micro, color: color.danger },
   nextCopy: { ...type.body, color: color.muted, flex: 1, minWidth: 180 },
   nextPrimary: { flexDirection: "row", gap: 8, minHeight: 54 },
+  callContext: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.line, paddingTop: space.md, gap: space.xs },
   outcomeToggle: { minHeight: HIT, alignItems: "center", justifyContent: "center" },
   outcomeToggleText: { ...type.body, fontFamily: font.bodySemi, color: color.brand },
-  outcomeGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  outcomeButton: { flexBasis: "47%", flexGrow: 1 },
   moreOptions: {
     minHeight: 78,
     flexDirection: "row",

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -25,6 +26,8 @@ import {
   type EstimateType,
 } from "@urso/types";
 import { estimateActions, type EstimateLineInput } from "@/api";
+import { DatePicker } from "@/components/date-picker";
+import { addCalendarDays, expiryForDate, todayEt } from "@/dates";
 import { AddressInput } from "@/components/address-input";
 import { Notice } from "@/components/notice";
 import { keys, useCatalog, useCustomers, useEstimate } from "@/queries";
@@ -71,7 +74,7 @@ function quantity(value: string): number {
 }
 
 function futureIso(days: number): string {
-  return new Date(Date.now() + days * 86_400_000).toISOString();
+  return expiryForDate(addCalendarDays(todayEt(), days));
 }
 
 function lineTotal(line: DraftLine): number {
@@ -219,11 +222,17 @@ function LineEditor({
 }
 
 export default function EstimateEditorScreen(): React.ReactElement {
-  const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ type?: string; id?: string }>();
+  const params = useLocalSearchParams<{ type?: string; id?: string; draftKey?: string }>();
   const editId = typeof params.id === "string" ? params.id : null;
   const requestedType: EstimateType =
     params.type === "options" || params.type === "packages" ? params.type : "standard";
+
+  // Expo keeps hidden tabs mounted. Each document needs its own draft state.
+  return <EstimateEditor key={`${editId ?? `new-${requestedType}`}:${params.draftKey ?? ""}`} editId={editId} requestedType={requestedType} />;
+}
+
+function EstimateEditor({ editId, requestedType }: { editId: string | null; requestedType: EstimateType }): React.ReactElement {
+  const insets = useSafeAreaInsets();
 
   const estimateQuery = useEstimate(editId);
   const customersQuery = useCustomers();
@@ -238,6 +247,7 @@ export default function EstimateEditorScreen(): React.ReactElement {
   const [jobAddress, setJobAddress] = useState("");
   const [jobName, setJobName] = useState("");
   const [expiresAtIso, setExpiresAtIso] = useState(() => futureIso(28));
+  const [expiryOpen, setExpiryOpen] = useState(false);
   const [quantityType, setQuantityType] = useState<"Qty" | "Sq Ft">("Qty");
   const [lines, setLines] = useState<DraftLine[]>([]);
   const [seeded, setSeeded] = useState(false);
@@ -269,11 +279,11 @@ export default function EstimateEditorScreen(): React.ReactElement {
   );
   const update = useAction(
     ({ id, patch }: { id: string; patch: Parameters<typeof estimateActions.update>[1] }) => estimateActions.update(id, patch),
-    { invalidates: [keys.estimates()] },
+    { invalidates: [keys.estimates(), ...(editId ? [keys.estimateOne(editId)] : []), keys.customers.all()] },
   );
   const saveItems = useAction(
     ({ id, items }: { id: string; items: EstimateLineInput[] }) => estimateActions.saveItems(id, items),
-    { invalidates: [keys.estimates()] },
+    { invalidates: [keys.estimates(), ...(editId ? [keys.estimateOne(editId)] : [])] },
   );
 
   const customerSections = useMemo<CustomerSection[]>(() => {
@@ -465,11 +475,12 @@ export default function EstimateEditorScreen(): React.ReactElement {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Change expiry date"
-            onPress={() => setExpiresAtIso(futureIso(Math.max(14, Math.round((Date.parse(expiresAtIso) - Date.now()) / 86_400_000) + 14)))}
+            onPress={() => { Keyboard.dismiss(); setExpiryOpen(true); }}
             style={styles.detailField}
           >
             <Text style={styles.detailLabel}>Expiry Date</Text>
             <Text style={styles.detailValue}>{fmtEt(expiresAtIso, { month: "short", day: "numeric", year: "numeric" })}</Text>
+            <Text style={styles.detailLabel}>Choose date · end of day (ET)</Text>
           </Pressable>
           <Pressable
             accessibilityRole="button"
@@ -549,6 +560,15 @@ export default function EstimateEditorScreen(): React.ReactElement {
           />
         </View>
       </Modal>
+
+      <DatePicker
+        visible={expiryOpen}
+        title="Estimate expiry"
+        value={todayEt(new Date(expiresAtIso))}
+        minimumDate={todayEt()}
+        onChange={(date) => setExpiresAtIso(expiryForDate(date))}
+        onClose={() => setExpiryOpen(false)}
+      />
 
       <Modal visible={catalogOpen} transparent animationType="slide" onRequestClose={() => setCatalogOpen(false)}>
         <View style={styles.sheetScrim}>

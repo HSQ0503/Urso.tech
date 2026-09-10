@@ -1,6 +1,9 @@
 import { useMemo, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Keyboard, Pressable, StyleSheet, Text, View } from "react-native";
 import { ET } from "@urso/types";
+import { Feather } from "@expo/vector-icons";
+import { DatePicker } from "@/components/date-picker";
+import { dateLabel, isCalendarDate } from "@/dates";
 import { color, font, HIT, radius, space, type } from "@/theme";
 
 // Tap-to-book scheduler, ported line-for-line from the web SchedulePicker
@@ -12,9 +15,7 @@ import { color, font, HIT, radius, space, type } from "@/theme";
 // incomplete. The fixed 8–18 hour range is also the AM/PM guard: a slot that
 // can only be daytime cannot be mis-booked to 2 AM.
 //
-// The web's "Custom time" datetime-local escape hatch has no native RN
-// equivalent and is deliberately absent — back-dating odd hours stays a web
-// task until a real need surfaces.
+// The calendar extends the quick picks to any date without changing the time.
 
 const HOURS = ["08", "09", "10", "11", "12", "13", "14", "15", "16", "17", "18"];
 const QUARTERS = ["00", "15", "30", "45"];
@@ -118,6 +119,7 @@ export function SlotPicker({
   allowPast?: boolean;
 }) {
   const days = useMemo(() => nextDays(7), []);
+  const [calendarOpen, setCalendarOpen] = useState(false);
   // ET "now" is captured per render of a picker that lives inside a sheet the
   // user just opened — fresh enough, and it keeps the maths identical to web.
   const [nowHm] = useState(etNowHm);
@@ -127,13 +129,20 @@ export function SlotPicker({
   const hour = time.slice(0, 2);
   const minute = time.slice(3, 5);
   // Nothing picked yet reads as tomorrow — the most common booking.
-  const day = days.some((d) => d.date === pickedDay) ? pickedDay : days[1].date;
+  const day = isCalendarDate(pickedDay) ? pickedDay : days[1].date;
   const isToday = day === days[0].date;
-  const isPast = (t: string) => !allowPast && isToday && t <= nowHm;
+  const isPast = (t: string) => !allowPast && (day < days[0].date || (isToday && t <= nowHm));
+
+  function pickDay(date: string) {
+    Keyboard.dismiss();
+    const keep = time && (allowPast || date > days[0].date || (date === days[0].date && time > nowHm));
+    onChange(keep ? `${date}T${time}` : date);
+  }
 
   // Tapping an hour keeps the chosen quarter when it still works, else falls
   // to the hour's first future quarter.
   function pickHour(hh: string) {
+    Keyboard.dismiss();
     const mm =
       minute && !isPast(`${hh}:${minute}`)
         ? minute
@@ -144,7 +153,7 @@ export function SlotPicker({
   const summary = time
     ? (() => {
         const d = days.find((x) => x.date === day);
-        if (!d) return "";
+        if (!d) return `${dateLabel(day)} · ${slotLabel(time)} ET`;
         const dayName = d.label === "Today" || d.label === "Tomorrow" ? d.label : `${d.label} ${d.sub}`;
         return `${dayName} · ${slotLabel(time)} ET`;
       })()
@@ -159,15 +168,25 @@ export function SlotPicker({
             label={d.label}
             sub={d.sub}
             selected={d.date === day}
-            onPress={() => {
-              // Switching to today drops a time that is already in the past
-              // (unless back-dating is allowed).
-              const keep = time && (allowPast || !(d.date === days[0].date && time <= nowHm));
-              onChange(keep ? `${d.date}T${time}` : d.date);
-            }}
+            onPress={() => pickDay(d.date)}
           />
         ))}
       </View>
+
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Choose another date"
+        onPress={() => { Keyboard.dismiss(); setCalendarOpen(true); }}
+        style={({ pressed }) => [styles.dateButton, pressed && styles.slotPressed]}
+      >
+        <Feather name="calendar" size={20} color={color.brandDeep} />
+        <View style={{ flex: 1 }}>
+          <Text style={styles.dateTitle}>{isCalendarDate(pickedDay) ? dateLabel(pickedDay) : "Choose another date"}</Text>
+          <Text style={styles.dateHint}>Browse any month or enter a date</Text>
+        </View>
+        <Feather name="chevron-right" size={20} color={color.brandDeep} />
+      </Pressable>
+      <DatePicker visible={calendarOpen} value={day} minimumDate={allowPast ? undefined : days[0].date} onChange={pickDay} onClose={() => setCalendarOpen(false)} />
 
       <View style={styles.row}>
         {HOURS.map((hh) => (
@@ -196,7 +215,7 @@ export function SlotPicker({
       </View>
 
       <Text style={styles.summary}>
-        {summary ? `Visit ${summary}` : "Pick a day and a time (ET)."}
+        {summary || "Pick a day and a time (ET)."}
       </Text>
     </View>
   );
@@ -207,8 +226,11 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", flexWrap: "wrap", gap: space.xs + 2 },
   rowEven: { flexDirection: "row", gap: space.xs + 2 },
 
+  dateButton: { minHeight: HIT, flexDirection: "row", alignItems: "center", gap: 12, padding: 12, borderRadius: radius.md, backgroundColor: color.brandWash, borderWidth: 1, borderColor: color.brandEdgeSoft },
+  dateTitle: { fontFamily: font.bodyMedium, fontSize: 15, color: color.ink },
+  dateHint: { ...type.small, color: color.muted, marginTop: 3 },
   slot: {
-    minHeight: HIT - 6,
+    minHeight: HIT,
     minWidth: 72,
     alignItems: "center",
     justifyContent: "center",
