@@ -145,9 +145,13 @@ export default function EstimatePreviewScreen(): React.ReactElement {
     { invalidates: [...quoteKeys, keys.jobs.all(), ["owner", "schedule"], keys.schedule.unscheduled(), keys.overview()] },
   );
   const duplicate = useAction<void, { estimateId?: string }>(() => estimateActions.duplicate(id), { invalidates: [keys.estimates()] });
+  const convert = useAction<void, { invoiceId?: string; jobId?: string | null; notice?: string }>(
+    () => estimateActions.convertToInvoice(id),
+    { invalidates: [...quoteKeys, keys.jobs.all(), keys.invoices(), ["owner", "schedule"], keys.schedule.unscheduled(), keys.overview()] },
+  );
   const voidEstimate = useAction<void, Record<string, never>>(() => estimateActions.void(id), { invalidates: quoteKeys });
   const deleteEstimate = useAction<void, Record<string, never>>(() => estimateActions.delete(id), { invalidates: [keys.estimates()] });
-  const busy = send.isPending || approve.isPending || duplicate.isPending || voidEstimate.isPending || deleteEstimate.isPending;
+  const busy = send.isPending || approve.isPending || duplicate.isPending || voidEstimate.isPending || deleteEstimate.isPending || convert.isPending;
 
   if (estimateQuery.isPending) {
     return <View style={styles.loading}><ActivityIndicator size="large" color={color.brand} /></View>;
@@ -196,6 +200,34 @@ export default function EstimatePreviewScreen(): React.ReactElement {
         })(),
       },
     ]);
+  };
+  const convertNow = () => {
+    setMenuOpen(false);
+    const accepted = estimate?.status === "approved";
+    Alert.alert(
+      "Convert to invoice?",
+      accepted
+        ? "This creates the bill from the work order. You'll land on it to send or record a payment."
+        : "This accepts the estimate, creates its work order, and creates the bill in one step. You'll land on the invoice.",
+      [
+        { text: "Not yet", style: "cancel" },
+        {
+          text: "Convert",
+          onPress: () => void (async () => {
+            const result = await convert.mutateAsync();
+            if (!result.ok) {
+              setNotice(result.notice);
+              return;
+            }
+            toast.show(successNotice(result.data) ?? "Invoice created.");
+            const invoiceId = result.data.invoiceId;
+            if (typeof invoiceId === "string") {
+              router.push({ pathname: "/(owner)/invoice/[id]", params: { id: invoiceId } });
+            }
+          })(),
+        },
+      ],
+    );
   };
   const voidNow = () => {
     setMenuOpen(false);
@@ -397,7 +429,11 @@ export default function EstimatePreviewScreen(): React.ReactElement {
               {canSend ? <ActionTile label={estimate.sent_at ? "Re-Send" : "Send"} icon="send" disabled={busy} onPress={() => { setMenuOpen(false); setDeliveryOpen(true); }} /> : null}
               {canApprove ? <ActionTile label="Accept & Create Work Order" icon="briefcase" disabled={busy} onPress={approveNow} /> : null}
               {job ? <ActionTile label="Open Work Order" icon="briefcase" disabled={busy} onPress={openJob} /> : null}
-              {invoice ? <ActionTile label="Open Invoice" icon="file-text" disabled={busy} onPress={openInvoice} /> : null}
+              {invoice ? (
+                <ActionTile label="Open Invoice" icon="file-text" disabled={busy} onPress={openInvoice} />
+              ) : canApprove || statusGood ? (
+                <ActionTile label="Convert To Invoice" icon="file-text" disabled={busy} onPress={convertNow} />
+              ) : null}
               <ActionTile label="Clone Estimate" icon="copy" disabled={busy} onPress={() => void duplicateNow()} />
               <ActionTile label="Share Estimate Link" icon="link" disabled={busy} onPress={() => void shareNow()} />
               {canSend ? <ActionTile label="Cancel Estimate" icon="slash" danger disabled={busy} onPress={voidNow} /> : null}

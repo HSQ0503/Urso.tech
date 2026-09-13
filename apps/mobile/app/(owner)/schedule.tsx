@@ -1,24 +1,20 @@
-// The owner's dispatch view — a day at a time, or the week he already fetched.
+// The owner's calendar — a month at a glance, then a day in full.
 //
-// The web console renders a drag-and-drop grid. A phone cannot, and a shrunken
-// grid is worse than no grid: too small to read, too fiddly to move a job with a
-// thumb. What Sebastian needs away from the desk is narrower — what is happening
-// today, what is happening next, and what is still sitting in the tray unbooked.
-// So this is an agenda, not a calendar: one day at a time, a WEEK when he wants
-// the shape of the run, and the unscheduled pile pinned at the bottom where it
-// can't be forgotten.
+// Sebastian, 2026-09-13: "The scheduling should be how Markate is, where it's
+// a month view, then you can click on each day to see your booked jobs." So
+// this is that: a Sun–Sat month grid with a dot under every day that has work
+// (green for sold jobs, purple for quote visits) and the day's booked money
+// under the number, and beneath it the selected day as a list — time,
+// customer, address, crew, price — in the order he will drive it.
 //
-// MONTH is deliberately absent. The web keeps it because a desktop planner has
-// the pixels for it; a 42-cell grid on a 390pt screen gives each day roughly
-// 55x60pt, which fits a number and nothing else — no customer, no time, no crew.
-// A month view here would be a picture of a month rather than a way to read one,
-// and the day strip plus the week list already answer "what is coming" at the
-// range a phone can actually show.
+// The unscheduled pile is NOT here any more. Sold-but-unbooked work lives in
+// Work orders (its Unscheduled tab), exactly where Markate keeps it; this
+// screen is only ever about days that have something on them.
 //
-// Three objects share the board: JOBS (sold work), QUOTE VISITS (a lead with an
-// appointment — tappable, offering the four things the web's VisitSheet offers),
-// and CALENDAR EVENTS (time off, blocks, holidays), which this screen can now
-// CREATE but cannot yet draw — see the note over calendarEventCreate.
+// Three objects share the board: JOBS (sold work), QUOTE VISITS (a lead with
+// an appointment — tappable, offering what the web's VisitSheet offers), and
+// CALENDAR EVENTS (time off, blocks, holidays), which this screen can create
+// but does not yet draw — see the note over calendarEventCreate.
 //
 // EVERY timestamp is America/New_York. Days are derived with fmtEt and ET wall
 // times with etLocalToIso; no local calendar method is ever read, or a phone
@@ -52,21 +48,15 @@ import {
   STATUS_LABEL,
   type CalendarEventKind,
   type Crew,
-  type Job,
   type JobStatus,
   type Lead,
   type LeadStatus,
 } from "@urso/types";
-import {
-  calendarEventActions,
-  callActions,
-  estimateActions,
-  jobActions,
-} from "@/api";
+import { calendarEventActions, callActions, estimateActions } from "@/api";
 import { NavigateButton } from "@/components/navigate";
 import { Notice } from "@/components/notice";
 import { isCompleteWhen, SlotPicker } from "@/components/slot-picker";
-import { keys, useCrews, useLeads, useScheduleBoard, useUnscheduled } from "@/queries";
+import { keys, useCrews, useLeads, useScheduleBoard } from "@/queries";
 import { noticeFrom, useAction, usePullToRefresh, useRefetchOnFocus } from "@/query";
 import { color, font, HIT, radius, space, type } from "@/theme";
 
@@ -79,8 +69,10 @@ const UNASSIGNED = "Unassigned";
 // than invented, so the phone and the board never disagree about what a visit is.
 const VISIT_STATUSES: LeadStatus[] = ["appointment_set", "confirmed"];
 
-const DAYS = 7;
 const DAY_MS = 86_400_000;
+// Six Sun–Sat rows cover any month; the grid never changes height between
+// months, so the day list below never jumps.
+const GRID_CELLS = 42;
 
 // What the board actually returns is JobWithItems[] (lib/canes/estimates.ts
 // getScheduleBoard → joinJobs): the job row joined to its item snapshot and its
@@ -94,9 +86,6 @@ type BoardJob = {
   scheduled_at: string | null;
   ends_at: string | null;
   crew_id: string | null;
-  // Already in the payload — getScheduleBoard returns JobWithItems[], and Job
-  // carries total_cents. This local narrowing simply had not declared it, so
-  // the money was arriving and being thrown away.
   total_cents: number;
 };
 
@@ -106,21 +95,21 @@ type Visit = Lead & { appointment_at: string };
 type DayCell = {
   key: string; // ET calendar key, "2026-07-28"
   instant: string; // ET noon on that day, as an instant — safe to format
-  weekday: string;
-  day: string;
+  day: string; // "28"
+  inMonth: boolean; // padding days from the neighbouring months are drawn faint
 };
 
-type Window = { days: DayCell[]; fromIso: string; toIso: string };
+type MonthWindow = {
+  monthKey: string; // "2026-09"
+  title: string; // "September 2026"
+  cells: DayCell[]; // 42, Sunday-first
+  fromIso: string; // ET midnight of the first cell
+  days: number; // cells.length — what the board is asked for
+};
 
 type Row =
-  | { kind: "section"; key: string; label: string; meta: string | null }
   | { kind: "job"; key: string; job: BoardJob; crewName: string | null }
   | { kind: "visit"; key: string; visit: Visit }
-  | { kind: "tray"; key: string; job: Job }
-  // The whole selected day as one hour-rail item. It replaces that day's rows
-  // rather than sitting beside them — the same events drawn twice, once as a
-  // list and once on a grid, is two answers to one question.
-  | { kind: "timeline"; key: string; blocks: Block[] }
   | { kind: "calm"; key: string; text: string };
 
 // fmtEt formats en-US, so 2-digit parts arrive as MM/DD/YYYY. Reordered here
@@ -142,36 +131,49 @@ function nextDayKey(ymd: string): string {
   return new Date(anchor.getTime() + DAY_MS).toISOString().slice(0, 10);
 }
 
-// Seven days starting today, plus the instants the board is asked for.
-//
-// Epoch arithmetic is timezone-neutral, so days are stepped from ET NOON: a DST
-// change shifts the wall clock by an hour, which lands at 11am or 1pm and still
-// inside the intended calendar day. Stepping from midnight would slide onto the
-// day before. The window itself is ET midnight to ET midnight seven days on.
-// `fromKey` anchors the strip somewhere other than today. It defaults to today,
-// which is what every existing caller wants and what the app opens on; the
-// parameter exists so the week arrows can move the window without a second
-// window-building path to keep in step with this one.
-function buildWindow(fromKey?: string): Window {
-  const todayKey = fromKey ?? etDateKey(new Date().toISOString());
-  const noon = Date.parse(etLocalToIso(`${todayKey}T12:00`));
+// Calendar arithmetic on YYYY-MM-DD keys is done at UTC noon, which is
+// timezone-neutral and cannot straddle a DST change; the key is then handed
+// to etLocalToIso when a real ET instant is needed.
+function keyToNoonUtc(key: string): Date {
+  return new Date(`${key}T12:00:00Z`);
+}
 
-  const days: DayCell[] = [];
-  for (let i = 0; i < DAYS; i++) {
-    const instant = new Date(noon + i * DAY_MS).toISOString();
-    days.push({
-      key: etDateKey(instant),
-      instant,
-      weekday: fmtEt(instant, { weekday: "short" }),
-      day: fmtEt(instant, { day: "numeric" }),
+function shiftMonthKey(monthKey: string, months: number): string {
+  const [y, m] = monthKey.split("-").map(Number);
+  const d = new Date(Date.UTC(y, m - 1 + months, 1, 12));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+function todayKey(): string {
+  return etDateKey(new Date().toISOString());
+}
+
+// The Sun–Sat grid for a month: Markate's calendar starts the week on Sunday,
+// and his eyes are trained on that layout, so ours does too. (Payouts' "this
+// week" starts Monday; that is a money window, not a calendar he looks at.)
+function buildMonth(monthKey?: string): MonthWindow {
+  const anchor = monthKey ?? todayKey().slice(0, 7);
+  const [y, m] = anchor.split("-").map(Number);
+  const first = new Date(Date.UTC(y, m - 1, 1, 12));
+  const lead = first.getUTCDay(); // 0 = Sunday
+  const start = new Date(first.getTime() - lead * DAY_MS);
+  const cells: DayCell[] = [];
+  for (let i = 0; i < GRID_CELLS; i++) {
+    const d = new Date(start.getTime() + i * DAY_MS);
+    const key = d.toISOString().slice(0, 10);
+    cells.push({
+      key,
+      instant: etLocalToIso(`${key}T12:00`),
+      day: String(d.getUTCDate()),
+      inMonth: d.getUTCMonth() === m - 1,
     });
   }
-
-  const endKey = etDateKey(new Date(noon + DAYS * DAY_MS).toISOString());
   return {
-    days,
-    fromIso: etLocalToIso(`${todayKey}T00:00`),
-    toIso: etLocalToIso(`${endKey}T00:00`),
+    monthKey: anchor,
+    title: fmtEt(etLocalToIso(`${anchor}-15T12:00`), { month: "long", year: "numeric" }),
+    cells,
+    fromIso: etLocalToIso(`${cells[0].key}T00:00`),
+    days: GRID_CELLS,
   };
 }
 
@@ -179,40 +181,12 @@ function toBoardJobs(value: unknown): BoardJob[] {
   return Array.isArray(value) ? (value as BoardJob[]) : [];
 }
 
-// The week list's day headers. This USED to be positional — index 0 was always
-// today because buildWindow started there. The week arrows broke that: a window
-// anchored three weeks out still has an index 0, and calling it "Today" would
-// be a confident lie about a date. Compare the day key instead.
-function weekLabel(cell: DayCell): string {
-  const todayKey = etDateKey(new Date().toISOString());
-  if (cell.key === todayKey) return "Today";
-  if (cell.key === nextDayKey(todayKey)) return "Tomorrow";
-  return fmtEt(cell.instant, { weekday: "short", month: "short", day: "numeric" });
-}
-
-function weekTitle(days: DayCell[]): string {
-  const first = days[0];
-  const last = days.at(-1);
-  if (!first || !last) return "";
-  const firstMonth = fmtEt(first.instant, { month: "short" });
-  const lastMonth = fmtEt(last.instant, { month: "short" });
-  const firstDay = fmtEt(first.instant, { day: "numeric" });
-  const lastDay = fmtEt(last.instant, { day: "numeric" });
-  return `${firstMonth} ${firstDay} – ${lastMonth} ${lastDay}`;
-}
-
-// The figure on the right of a date band. Only JOBS carry money — a quote visit
-// is work that has not been sold — so a day of visits returns null and the band
-// simply has no figure. Rendering $0.00 there would say the day earned nothing,
-// which is a different and wrong claim.
-function dayTotal(
-  entries: readonly { kind: string; job?: { total_cents: number } }[],
-): string | null {
-  const cents = entries.reduce(
-    (sum, entry) => (entry.kind === "job" && entry.job ? sum + entry.job.total_cents : sum),
-    0,
-  );
-  return cents > 0 ? fmtMoney(cents) : null;
+// The selected day's band label: Today / Tomorrow / "Tue, Sep 16".
+function dayLabel(key: string): string {
+  const today = todayKey();
+  if (key === today) return "Today";
+  if (key === nextDayKey(today)) return "Tomorrow";
+  return fmtEt(etLocalToIso(`${key}T12:00`), { weekday: "short", month: "short", day: "numeric" });
 }
 
 // A success payload can carry a sentence of its own (apiResult keeps ok:true
@@ -260,83 +234,6 @@ const KINDS: { value: CalendarEventKind; label: string }[] = [
   { value: "holiday", label: "Holiday" },
   { value: "note", label: "Note" },
 ];
-
-// ── Book from the tray ───────────────────────────────────────────────────────
-//
-// The unscheduled pile is the biggest thing on this screen and, until now, the
-// only thing on it he could not act on: booking meant tapping into the job
-// sheet, finding Schedule, picking, and coming back. Four screens to move sold
-// work onto a day, on the screen whose entire job is deciding which day.
-//
-// Deliberately NOT a crew picker. The tray row's question is "when", and the
-// job already carries a crew (or does not, which is a normal way to book).
-// jobActions.schedule's crewId is required-and-nullable, so passing the job's
-// own value means booking from here can never silently unassign — crew changes
-// stay on the job sheet, where they are the point rather than a side effect.
-function BookSheet({ job, onClose }: { job: Job; onClose: () => void }) {
-  const [slot, setSlot] = useState("");
-  const [notice, setNotice] = useState<string | null>(null);
-
-  const book = useAction(
-    (vars: { iso: string }) =>
-      jobActions.schedule(job.id, vars.iso, job.duration_minutes ?? 120, job.crew_id ?? null),
-    { invalidates: [["owner", "schedule"], keys.schedule.unscheduled(), keys.agenda(), keys.overview()] },
-  );
-
-  const ready = isCompleteWhen(slot);
-  const busy = book.isPending;
-
-  const onBook = async () => {
-    setNotice(null);
-    const r = await book.mutateAsync({ iso: etLocalToIso(slot) });
-    if (!r.ok) {
-      setNotice(r.notice);
-      return;
-    }
-    // The job has left the tray, so the sheet has nothing left to act on.
-    onClose();
-  };
-
-  return (
-    <Modal visible animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <View style={styles.sheet}>
-        <View style={styles.sheetHead}>
-          <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={onClose} hitSlop={8}>
-            <Text style={styles.sheetCancel}>Cancel</Text>
-          </Pressable>
-          <Text style={styles.sheetTitle}>Book</Text>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Book this job"
-            disabled={!ready || busy}
-            onPress={() => void onBook()}
-            hitSlop={8}
-          >
-            <Text style={[styles.sheetSave, (!ready || busy) && styles.sheetSaveOff]}>
-              {busy ? "Booking…" : "Book"}
-            </Text>
-          </Pressable>
-        </View>
-
-        <ScrollView contentContainerStyle={styles.sheetBody} keyboardShouldPersistTaps="handled">
-          <Notice text={notice} />
-          <View style={styles.fieldGroup}>
-            <Text style={styles.fieldLabel}>Job</Text>
-            <Text style={styles.body}>{job.customer_name ?? "Customer"}</Text>
-            <Text style={styles.muted}>{job.job_address ?? "Address pending"}</Text>
-          </View>
-          <View style={styles.fieldGroup}>
-            <Text style={styles.fieldLabel}>When</Text>
-            {/* No allowPast: sold work being booked is future work. Back-dating
-                belongs on the job sheet, where reopening and back-dating a
-                completed job is a deliberate, separate act. */}
-            <SlotPicker value={slot} onChange={setSlot} />
-          </View>
-        </ScrollView>
-      </View>
-    </Modal>
-  );
-}
 
 // ── Create event ─────────────────────────────────────────────────────────────
 //
@@ -803,6 +700,7 @@ function VisitSheet({
 // read that way because the two things being scanned for are who and how much;
 // the old row led with the time, which is the one fact the date band above it
 // has already established.
+
 function JobRow({
   job,
   crewName,
@@ -898,198 +796,87 @@ function VisitRow({ visit, onPress }: { visit: Visit; onPress: () => void }) {
   );
 }
 
-// ── Day timeline ─────────────────────────────────────────────────────────────
-//
-// Markate's Day View: an hour rail down the left and events drawn as coloured
-// blocks positioned and sized by their real times, so a day reads as shape
-// before it reads as text — where the gaps are, what overlaps, how long the
-// morning job actually runs.
-//
-// ALL TIME MATH IS ET. Minutes-from-midnight is derived through Intl with an
-// explicit timeZone, never through getHours(): a phone that has travelled would
-// otherwise draw every block at the wrong height on the rail, which is a
-// worse failure than a wrong label because it looks authoritative.
+// ── Month grid ───────────────────────────────────────────────────────────────
 
-const HOUR_HEIGHT = 62;
-const RAIL_WIDTH = 56;
-// A 30-minute block is 31pt tall, which is under the tap floor and too short
-// for two lines. Blocks never render shorter than this; they just overlap their
-// own slot slightly, which is what Markate does too.
-const MIN_BLOCK = 40;
+type DayMarks = { jobs: number; visits: number; cents: number };
 
-const ET_CLOCK = new Intl.DateTimeFormat("en-GB", {
-  timeZone: "America/New_York",
-  hour: "2-digit",
-  minute: "2-digit",
-  hour12: false,
-});
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-// "14:30" → 870. Returns null rather than guessing if the platform hands back
-// something unparseable — a block at the wrong height is worse than no block.
-function etMinutes(iso: string): number | null {
-  const parts = ET_CLOCK.format(new Date(iso)).match(/(\d{1,2}):(\d{2})/);
-  if (!parts) return null;
-  const hours = Number(parts[1]) % 24;
-  const minutes = Number(parts[2]);
-  return Number.isFinite(hours) && Number.isFinite(minutes) ? hours * 60 + minutes : null;
+// "$1.4k" fits under a day number where "$1,400.00" cannot. Exact money is on
+// the band and the rows below; the cell only has to say "there is money here
+// and roughly how much".
+function shortMoney(cents: number): string {
+  const dollars = cents / 100;
+  if (dollars >= 10_000) return `$${Math.round(dollars / 1000)}k`;
+  if (dollars >= 1_000) return `$${(dollars / 1000).toFixed(1).replace(/\.0$/, "")}k`;
+  return `$${Math.round(dollars)}`;
 }
 
-function hourLabel(hour: number): string {
-  const h = hour % 24;
-  if (h === 0) return "12AM";
-  if (h === 12) return "12PM";
-  return h < 12 ? `${h}AM` : `${h - 12}PM`;
-}
-
-type Block = {
-  key: string;
-  kind: "job" | "visit";
-  startMin: number;
-  endMin: number;
-  title: string;
-  sub: string | null;
-  onPress: () => void;
-};
-
-// Column packing for overlaps: walk blocks in start order and drop each into
-// the first column whose last block has already ended. Two jobs at the same
-// hour then sit side by side instead of on top of each other.
-function packColumns(blocks: Block[]): { block: Block; column: number; columns: number }[] {
-  const ordered = [...blocks].sort((a, b) => a.startMin - b.startMin || a.endMin - b.endMin);
-  const columnEnds: number[] = [];
-  const placed = ordered.map((block) => {
-    let column = columnEnds.findIndex((end) => end <= block.startMin);
-    if (column === -1) {
-      column = columnEnds.length;
-      columnEnds.push(block.endMin);
-    } else {
-      columnEnds[column] = block.endMin;
-    }
-    return { block, column };
-  });
-  // One width for the whole day rather than per-cluster: a block that changes
-  // width as you scroll past an unrelated overlap reads as a different object.
-  const columns = Math.max(1, columnEnds.length);
-  return placed.map((entry) => ({ ...entry, columns }));
-}
-
-function DayTimeline({ blocks }: { blocks: Block[] }): React.ReactElement {
-  const packed = packColumns(blocks);
-
-  // The visible span: the day's own events, padded an hour either side, but
-  // never narrower than a working day. An empty day still shows a real
-  // calendar rather than a single blank hour.
-  const startHour = Math.max(
-    0,
-    Math.min(8, ...blocks.map((b) => Math.floor(b.startMin / 60) - 1)),
-  );
-  const endHour = Math.min(
-    24,
-    Math.max(19, ...blocks.map((b) => Math.ceil(b.endMin / 60) + 1)),
-  );
-  const hours = Array.from({ length: Math.max(1, endHour - startHour) }, (_, i) => startHour + i);
-  const originMin = startHour * 60;
-
+function MonthGrid({
+  cells,
+  marks,
+  selectedKey,
+  onPick,
+}: {
+  cells: DayCell[];
+  marks: Map<string, DayMarks>;
+  selectedKey: string;
+  onPick: (key: string) => void;
+}) {
+  const today = todayKey();
   return (
-    <View style={styles.timeline}>
-      {hours.map((hour) => (
-        <View key={hour} style={styles.hourRow}>
-          <Text style={styles.hourLabel}>{hourLabel(hour)}</Text>
-          <View style={styles.hourLine} />
+    <View style={styles.grid}>
+      <View style={styles.gridHead}>
+        {WEEKDAYS.map((label) => (
+          <Text key={label} style={styles.gridHeadText}>
+            {label}
+          </Text>
+        ))}
+      </View>
+      {Array.from({ length: GRID_CELLS / 7 }, (_, row) => (
+        <View key={row} style={styles.gridRow}>
+          {cells.slice(row * 7, row * 7 + 7).map((cell) => {
+            const mark = marks.get(cell.key);
+            const selected = cell.key === selectedKey;
+            const isToday = cell.key === today;
+            return (
+              <Pressable
+                key={cell.key}
+                accessibilityRole="button"
+                accessibilityState={{ selected }}
+                accessibilityLabel={`${fmtEt(cell.instant, { weekday: "long", month: "long", day: "numeric" })}${
+                  mark ? `, ${mark.jobs} job${mark.jobs === 1 ? "" : "s"}, ${mark.visits} quote visit${mark.visits === 1 ? "" : "s"}` : ""
+                }`}
+                onPress={() => onPick(cell.key)}
+                style={({ pressed }) => [
+                  styles.cell,
+                  selected && styles.cellOn,
+                  isToday && !selected && styles.cellToday,
+                  pressed && !selected && styles.pressedSurface,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.cellDay,
+                    !cell.inMonth && styles.cellDayOut,
+                    isToday && !selected && styles.cellDayToday,
+                    selected && styles.cellInkOn,
+                  ]}
+                >
+                  {cell.day}
+                </Text>
+                <View style={styles.dots}>
+                  {mark && mark.jobs > 0 ? <View style={[styles.dot, styles.dotJob, selected && styles.dotOn]} /> : null}
+                  {mark && mark.visits > 0 ? <View style={[styles.dot, styles.dotVisit, selected && styles.dotOn]} /> : null}
+                </View>
+                <Text style={[styles.cellMoney, selected && styles.cellInkOn]} numberOfLines={1}>
+                  {mark && mark.cents > 0 ? shortMoney(mark.cents) : " "}
+                </Text>
+              </Pressable>
+            );
+          })}
         </View>
       ))}
-
-      {/* Absolute layer over the rail. pointerEvents box-none so the empty grid
-          underneath keeps scrolling normally where there is no block. */}
-      <View style={styles.blockLayer} pointerEvents="box-none">
-        {packed.map(({ block, column, columns }) => {
-          const top = ((block.startMin - originMin) / 60) * HOUR_HEIGHT;
-          const height = Math.max(
-            MIN_BLOCK,
-            ((block.endMin - block.startMin) / 60) * HOUR_HEIGHT,
-          );
-          const widthPct = 100 / columns;
-          return (
-            <Pressable
-              key={block.key}
-              accessibilityRole="button"
-              accessibilityLabel={block.title}
-              onPress={block.onPress}
-              style={({ pressed }) => [
-                styles.block,
-                block.kind === "job" ? styles.blockJob : styles.blockVisit,
-                {
-                  top,
-                  height,
-                  left: `${column * widthPct}%`,
-                  width: `${widthPct}%`,
-                },
-                pressed && styles.blockPressed,
-              ]}
-            >
-              <Text style={styles.blockTitle} numberOfLines={1}>
-                {block.title}
-              </Text>
-              {block.sub !== null && height > 52 ? (
-                <Text style={styles.blockSub} numberOfLines={1}>
-                  {block.sub}
-                </Text>
-              ) : null}
-            </Pressable>
-          );
-        })}
-      </View>
-    </View>
-  );
-}
-
-function TrayRow({
-  job,
-  onPress,
-  onBook,
-}: {
-  job: Job;
-  onPress: () => void;
-  onBook: () => void;
-}) {
-  // The name leads, not the amount. Every row in this section is by definition
-  // unscheduled, so repeating "UNSCHEDULED" on each one said nothing the section
-  // header had not already said, while the customer — the thing being scanned
-  // for — sat second. A zero total is left blank rather than shown as $0.00:
-  // an unpriced job is not a nothing job, and rendering it as money reads as one.
-  const total = job.total_cents > 0 ? fmtMoney(job.total_cents) : null;
-  // The card and the Book button are SIBLINGS, not parent and child. Nesting a
-  // Pressable inside a Pressable looked tidier and lost the tap to the outer
-  // one — tapping Book opened the job sheet, which is the screen this button
-  // exists to save him from. Two targets side by side cannot be ambiguous
-  // about which one was pressed, to the runtime or to the reader.
-  return (
-    <View style={styles.trayRow}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`Schedule ${job.customer_name ?? "customer"}`}
-        onPress={onBook}
-        style={({ pressed }) => [styles.trayBody, pressed && styles.pressedSurface]}
-      >
-        <View style={styles.rowTop}>
-          <Text style={styles.customerLead} numberOfLines={1}>
-            {job.customer_name ?? "Customer"}
-          </Text>
-          {total !== null && <Text style={styles.money}>{total}</Text>}
-        </View>
-        <Text style={styles.address} numberOfLines={1}>
-          {job.job_name ?? job.job_address ?? "Job"}
-        </Text>
-        <Text style={styles.tapToSchedule}>Tap to schedule</Text>
-      </Pressable>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`Open actions for ${job.customer_name ?? "this job"}`}
-        onPress={onPress}
-        style={({ pressed }) => [styles.trayBook, pressed && styles.pressedSurface]}
-      >
-        <Feather name="more-horizontal" size={20} color={color.faint} />
-      </Pressable>
     </View>
   );
 }
@@ -1105,93 +892,68 @@ export default function ScheduleScreen(): React.ReactElement {
     [router],
   );
 
-  const [win, setWin] = useState<Window>(buildWindow);
-  const [selectedKey, setSelectedKey] = useState<string | null>(null);
-  const [showAllUnscheduled, setShowAllUnscheduled] = useState(false);
+  // null = the month containing today, and rolling: an app left open past
+  // midnight (or past the month end) moves with the calendar on the next focus.
+  // The arrows pin a month; Today clears the pin.
+  const [monthKey, setMonthKey] = useState<string | null>(null);
+  const [win, setWin] = useState<MonthWindow>(() => buildMonth());
+  const [selectedKey, setSelectedKey] = useState<string>(todayKey);
   const [createOpen, setCreateOpen] = useState(false);
   const [eventOpen, setEventOpen] = useState(false);
-  // The job whose "Book" was tapped, held by value rather than by id: the tray
-  // it came from re-reads the moment the booking lands, and looking the job up
-  // again through a list it has just left would find nothing.
-  const [bookJob, setBookJob] = useState<Job | null>(null);
   const [visitId, setVisitId] = useState<string | null>(null);
 
-  // Recomputed on every focus and every pull so an app left open overnight
-  // rolls onto the new day the moment it is picked back up. The board's query
-  // key carries the window, so a rolled window fetches itself.
-  // null means "anchored on today, and rolling" — the original behaviour. A
-  // week arrow pins it, and the pin is what stops a focus (coming back from a
-  // job sheet he opened three weeks out) snapping the board back to today under
-  // him. "Today" clears the pin and resumes rolling.
-  const [anchorKey, setAnchorKey] = useState<string | null>(null);
-
   const rollWindow = useCallback(() => {
-    const next = buildWindow(anchorKey ?? undefined);
+    const next = buildMonth(monthKey ?? undefined);
     setWin(next);
-    setSelectedKey((key) => (key !== null && next.days.some((d) => d.key === key) ? key : null));
-  }, [anchorKey]);
+    // Unpinned and the day rolled: follow today. Pinned: keep whatever day he
+    // picked, as long as it is still on the grid.
+    setSelectedKey((key) => {
+      if (monthKey === null) return todayKey();
+      return next.cells.some((c) => c.key === key) ? key : `${next.monthKey}-01`;
+    });
+  }, [monthKey]);
   useFocusEffect(rollWindow);
 
-  // Seven days at a time, matching the window the board already fetches — so a
-  // jump is one read, not a scroll through reads. Three weeks out is three
-  // taps rather than a long swipe on a strip that only moves a day at a time.
-  const shiftWeeks = useCallback((weeks: number) => {
-    setSelectedKey(null);
-    setAnchorKey((current) => {
-      const from = current ?? etDateKey(new Date().toISOString());
-      const noon = Date.parse(etLocalToIso(`${from}T12:00`));
-      return etDateKey(new Date(noon + weeks * DAYS * DAY_MS).toISOString());
+  const shiftMonth = useCallback((months: number) => {
+    setMonthKey((current) => {
+      const from = current ?? todayKey().slice(0, 7);
+      const next = shiftMonthKey(from, months);
+      const built = buildMonth(next);
+      setWin(built);
+      // Land on the 1st of the new month — or on today if we just came home.
+      setSelectedKey(next === todayKey().slice(0, 7) ? todayKey() : `${next}-01`);
+      return next;
     });
   }, []);
 
   const goToday = useCallback(() => {
-    const next = buildWindow();
-    setAnchorKey(null);
-    setSelectedKey(null);
-    setWin(next);
+    setMonthKey(null);
+    setWin(buildMonth());
+    setSelectedKey(todayKey());
   }, []);
 
-  // One trip each, in parallel: the board covers the whole week, so switching
-  // days — or switching to the WEEK view — is instant and offline-friendly. The
-  // week is presentation over data already in hand, not a second read.
-  //
-  // The board route takes (from, days) and defaults days to 7 — `to` is part
-  // of the client signature but the server derives the end itself. DAYS is 7
-  // for exactly that reason: the strip and the fetched window are the same
-  // seven days, not two windows that drift apart.
-  const boardQuery = useScheduleBoard(win.fromIso, win.toIso);
-  const trayQuery = useUnscheduled();
+  // One read covers the whole grid (42 days — inside the route's 92-day cap), so
+  // tapping around the month is instant and offline-friendly.
+  const boardQuery = useScheduleBoard(win.fromIso, win.days);
   const crewsQuery = useCrews();
-  // Quote visits are leads with an appointment. There is no visits route on the
-  // API yet, so this is the lead list narrowed by the same rule the server's own
-  // listVisitsInRange applies. Note it is gated on `leads`, NOT on `schedule` —
-  // an account with the board but not the pipeline gets a refusal here alone,
-  // which is why it never joins the dead-screen test below.
+  // Quote visits are leads with an appointment. Gated on `leads`, NOT on
+  // `schedule` — an account with the board but not the pipeline gets a refusal
+  // here alone, which is why it never joins the dead-screen test below.
   const leadsQuery = useLeads();
 
   useRefetchOnFocus(boardQuery.refetch);
-  useRefetchOnFocus(trayQuery.refetch);
   useRefetchOnFocus(crewsQuery.refetch);
   useRefetchOnFocus(leadsQuery.refetch);
 
   const { refreshing, onRefresh } = usePullToRefresh(() => {
     rollWindow();
-    return Promise.all([
-      boardQuery.refetch(),
-      trayQuery.refetch(),
-      crewsQuery.refetch(),
-      leadsQuery.refetch(),
-    ]);
+    return Promise.all([boardQuery.refetch(), crewsQuery.refetch(), leadsQuery.refetch()]);
   });
 
-  // Each read is permission-gated on its own, so one refusal must not discard
-  // the other answers. Whatever came back stays on screen (query data survives
-  // an error state); every refusal is collected and shown verbatim.
   const board = useMemo(
     () => (boardQuery.data === undefined ? null : toBoardJobs(boardQuery.data)),
     [boardQuery.data],
   );
-  const tray = trayQuery.data ?? null;
   const crews = useMemo(() => (crewsQuery.data ?? []).filter((c) => c.active), [crewsQuery.data]);
   const crewNames = useMemo(
     () => new Map<string, string>((crewsQuery.data ?? []).map((c) => [c.id, c.name])),
@@ -1199,189 +961,77 @@ export default function ScheduleScreen(): React.ReactElement {
   );
   const crewsNotice = noticeFrom(crewsQuery.error);
   const notices = useMemo(() => {
-    const failures = [boardQuery.error, trayQuery.error, crewsQuery.error, leadsQuery.error]
+    const failures = [boardQuery.error, crewsQuery.error, leadsQuery.error]
       .map(noticeFrom)
       .filter((notice): notice is string => notice !== null);
     return [...new Set(failures)];
-  }, [boardQuery.error, trayQuery.error, crewsQuery.error, leadsQuery.error]);
+  }, [boardQuery.error, crewsQuery.error, leadsQuery.error]);
 
-  const visits = useMemo<Visit[]>(() => {
-    const from = Date.parse(win.fromIso);
-    const to = Date.parse(win.toIso);
-    return (leadsQuery.data ?? [])
-      .filter(
-        (lead): lead is Visit =>
-          lead.appointment_at !== null && VISIT_STATUSES.includes(lead.status),
-      )
-      .filter((lead) => {
-        const at = Date.parse(lead.appointment_at);
-        return at >= from && at < to;
-      });
-  }, [leadsQuery.data, win.fromIso, win.toIso]);
+  const gridKeys = useMemo(() => new Set(win.cells.map((c) => c.key)), [win.cells]);
+
+  const visits = useMemo<Visit[]>(
+    () =>
+      (leadsQuery.data ?? [])
+        .filter((lead): lead is Visit => lead.appointment_at !== null && VISIT_STATUSES.includes(lead.status))
+        .filter((lead) => gridKeys.has(etDateKey(lead.appointment_at))),
+    [leadsQuery.data, gridKeys],
+  );
 
   const activeVisit = visitId === null ? null : visits.find((v) => v.id === visitId) ?? null;
 
-  const countsByDay = useMemo(() => {
-    const counts = new Map<string, number>();
-    const bump = (iso: string) => {
-      const key = etDateKey(iso);
-      counts.set(key, (counts.get(key) ?? 0) + 1);
+  // What each cell shows: how many jobs, how many visits, and the day's booked
+  // money (jobs only — a quote visit is not sold work).
+  const marks = useMemo(() => {
+    const map = new Map<string, DayMarks>();
+    const at = (key: string) => {
+      const existing = map.get(key);
+      if (existing) return existing;
+      const fresh = { jobs: 0, visits: 0, cents: 0 };
+      map.set(key, fresh);
+      return fresh;
     };
-    for (const job of board ?? []) if (job.scheduled_at) bump(job.scheduled_at);
-    for (const visit of visits) bump(visit.appointment_at);
-    return counts;
+    for (const job of board ?? []) {
+      if (!job.scheduled_at) continue;
+      const mark = at(etDateKey(job.scheduled_at));
+      mark.jobs += 1;
+      mark.cents += job.total_cents;
+    }
+    for (const visit of visits) at(etDateKey(visit.appointment_at)).visits += 1;
+    return map;
   }, [board, visits]);
 
-  // A refused board and a refused lead list are different failures; either one
-  // answering is enough to have something honest to draw under the header.
-  const calendarReadable = board !== null || leadsQuery.data !== undefined;
-
+  // The selected day, interleaved by clock time — the order he will physically
+  // drive it, which is the only order that helps from a truck.
   const rows = useMemo<Row[]>(() => {
-    const out: Row[] = [];
-
-    // Jobs and visits share a day, interleaved by clock time — the order he will
-    // physically drive them in, which is the only order that helps from a truck.
-    const entriesFor = (dayKey: string): Row[] => {
-      const dayJobs = (board ?? [])
-        .filter((job) => job.scheduled_at !== null && etDateKey(job.scheduled_at) === dayKey)
-        .map((job) => ({
-          at: job.scheduled_at as string,
-          row: {
-            kind: "job" as const,
-            key: job.id,
-            job,
-            // A scheduled job with nobody on it is the thing a dispatcher is
-            // hunting for, so it is stated rather than left blank. A crew we
-            // cannot name (the crews read was refused) says nothing instead.
-            crewName: job.crew_id === null ? UNASSIGNED : crewNames.get(job.crew_id) ?? null,
-          },
-        }));
-      const dayVisits = visits
-        .filter((visit) => etDateKey(visit.appointment_at) === dayKey)
-        .map((visit) => ({
-          at: visit.appointment_at,
-          row: { kind: "visit" as const, key: `visit-${visit.id}`, visit },
-        }));
-      return [...dayJobs, ...dayVisits]
-        .sort((a, b) => Date.parse(a.at) - Date.parse(b.at))
-        .map((entry) => entry.row);
-    };
-
-    // Match the mobile website: urgent unscheduled work comes first and is
-    // capped at three rows until explicitly expanded.
-    if (tray !== null && tray.length > 0) {
-      out.push({
-        kind: "section",
-        key: "section-tray",
-        label: `Unscheduled · ${tray.length}`,
-        meta: null,
-      });
-      const visibleTray = showAllUnscheduled ? tray : tray.slice(0, 3);
-      for (const job of visibleTray) out.push({ kind: "tray", key: `tray-${job.id}`, job });
+    const dayJobs = (board ?? [])
+      .filter((job) => job.scheduled_at !== null && etDateKey(job.scheduled_at) === selectedKey)
+      .map((job) => ({
+        at: job.scheduled_at as string,
+        row: {
+          kind: "job" as const,
+          key: job.id,
+          job,
+          crewName: job.crew_id === null ? UNASSIGNED : crewNames.get(job.crew_id) ?? null,
+        },
+      }));
+    const dayVisits = visits
+      .filter((visit) => etDateKey(visit.appointment_at) === selectedKey)
+      .map((visit) => ({ at: visit.appointment_at, row: { kind: "visit" as const, key: `visit-${visit.id}`, visit } }));
+    const entries = [...dayJobs, ...dayVisits]
+      .sort((a, b) => Date.parse(a.at) - Date.parse(b.at))
+      .map((entry) => entry.row);
+    if (entries.length === 0) {
+      return [{ kind: "calm", key: "calm-day", text: "Nothing booked for this day." }];
     }
+    return entries;
+  }, [board, visits, selectedKey, crewNames]);
 
-    if (calendarReadable) {
-      if (selectedKey !== null) {
-        const entries = entriesFor(selectedKey);
-        out.push({
-          kind: "section",
-          key: "section-day",
-          label: weekLabel(win.days.find((day) => day.key === selectedKey) ?? win.days[0]),
-          // The money booked on the day, the way Markate ends every date band
-          // with that day's figure. Only JOBS contribute — a quote visit is not
-          // sold work, so a day of visits shows no figure rather than $0.00,
-          // which would read as a day that earned nothing.
-          meta: dayTotal(entries),
-        });
-        if (entries.length === 0) {
-          out.push({ kind: "calm", key: "calm-day", text: "Nothing booked for this day." });
-        } else {
-          // A single day is drawn on the hour rail, not listed. The week view
-          // keeps the list — seven days of grid would be a scroll, not a glance.
-          const blocks: Block[] = [];
-          for (const entry of entries) {
-            if (entry.kind === "job") {
-              const start = entry.job.scheduled_at === null ? null : etMinutes(entry.job.scheduled_at);
-              if (start === null) continue;
-              const end =
-                entry.job.ends_at === null ? null : etMinutes(entry.job.ends_at);
-              blocks.push({
-                key: entry.key,
-                kind: "job",
-                startMin: start,
-                // No end on the row means an unbounded job; an hour is the
-                // schedule's own default duration, so it is what we draw.
-                endMin: end !== null && end > start ? end : start + 60,
-                title:
-                  entry.job.total_cents > 0
-                    ? fmtMoney(entry.job.total_cents)
-                    : (entry.job.customer_name ?? "Job"),
-                sub: entry.crewName ?? entry.job.customer_name,
-                onPress: () => openJob(entry.job.id),
-              });
-            } else if (entry.kind === "visit") {
-              // Checked explicitly rather than as an `else`: entriesFor returns
-              // the full Row union, so the negative branch is "not a job",
-              // which is wider than "is a visit" and narrows to neither.
-              const start = etMinutes(entry.visit.appointment_at);
-              if (start === null) continue;
-              blocks.push({
-                key: entry.key,
-                kind: "visit",
-                startMin: start,
-                // A quote visit carries no end time. Thirty minutes is what the
-                // slot picker offers for one, so it is what the block shows.
-                endMin: start + 30,
-                title: `Quote — ${entry.visit.name ?? "Estimate visit"}`,
-                sub: entry.visit.service,
-                onPress: () => setVisitId(entry.visit.id),
-              });
-            }
-          }
-          out.push({ kind: "timeline", key: "timeline-day", blocks });
-        }
-      } else {
-        // Empty days are skipped rather than listed. Seven "nothing booked"
-        // lines is the same information as one, spread over a scroll.
-        let any = false;
-        win.days.forEach((cell) => {
-          const entries = entriesFor(cell.key);
-          if (entries.length === 0) return;
-          any = true;
-          out.push({
-            kind: "section",
-            key: `section-${cell.key}`,
-            label: weekLabel(cell),
-            meta: dayTotal(entries),
-          });
-          out.push(...entries);
-        });
-        if (!any) {
-          out.push({ kind: "calm", key: "calm-week", text: "Nothing booked this week." });
-        }
-      }
-    }
+  const dayCents = marks.get(selectedKey)?.cents ?? 0;
 
-    return out;
-  }, [
-    board,
-    tray,
-    visits,
-    selectedKey,
-    crewNames,
-    win.days,
-    calendarReadable,
-    showAllUnscheduled,
-  ]);
-
-  const selected = win.days.find((d) => d.key === selectedKey) ?? win.days[0];
-  // "Loading" in the old sense — any of the reads in flight. isPending alone
-  // would drop the spinner during the dead screen's Try again, where the
-  // queries sit in error state while fetching again.
-  const loading =
-    boardQuery.isFetching || trayQuery.isFetching || crewsQuery.isFetching || leadsQuery.isFetching;
-  const showSpinner = loading && board === null && tray === null;
-  const dead = !loading && board === null && tray === null;
+  const calendarReadable = board !== null || leadsQuery.data !== undefined;
+  const loading = boardQuery.isFetching || crewsQuery.isFetching || leadsQuery.isFetching;
+  const showSpinner = loading && !calendarReadable;
+  const dead = !loading && !calendarReadable;
 
   const header = (
     <View style={[styles.chrome, { paddingTop: insets.top + space.md }]}>
@@ -1389,95 +1039,52 @@ export default function ScheduleScreen(): React.ReactElement {
         <Text style={styles.title}>
           Schedule<Text style={styles.stop}>.</Text>
         </Text>
-        <Text style={styles.subtitle}>Tap a job to schedule it. Tap anything on the calendar for details.</Text>
       </View>
     </View>
   );
 
-  // The website's mobile scheduler has one compact week control. Day/week and
-  // Event controls belong to the desktop board and consumed almost the entire
-  // first viewport when copied onto a phone.
   const bar = (
-    <View style={styles.weekNav}>
-      <Text style={styles.weekTitle}>{weekTitle(win.days)}</Text>
-      <View style={styles.weekActions}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Back to today"
-          onPress={goToday}
-          style={({ pressed }) => [styles.todayButton, pressed && styles.pressedSurface]}
-        >
-          <Text style={styles.todayText}>Today</Text>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Previous week"
-          onPress={() => shiftWeeks(-1)}
-          style={({ pressed }) => [styles.weekArrow, pressed && styles.pressedSurface]}
-        >
-          <Feather name="chevron-left" size={17} color={color.ink} />
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Next week"
-          onPress={() => shiftWeeks(1)}
-          style={({ pressed }) => [styles.weekArrow, pressed && styles.pressedSurface]}
-        >
-          <Feather name="chevron-right" size={17} color={color.ink} />
-        </Pressable>
-      </View>
+    <View style={styles.monthNav}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Previous month"
+        onPress={() => shiftMonth(-1)}
+        style={({ pressed }) => [styles.monthArrow, pressed && styles.pressedSurface]}
+      >
+        <Feather name="chevron-left" size={20} color={color.ink} />
+      </Pressable>
+      <Text style={styles.monthTitle}>{win.title}</Text>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Next month"
+        onPress={() => shiftMonth(1)}
+        style={({ pressed }) => [styles.monthArrow, pressed && styles.pressedSurface]}
+      >
+        <Feather name="chevron-right" size={20} color={color.ink} />
+      </Pressable>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Back to today"
+        disabled={monthKey === null && selectedKey === todayKey()}
+        onPress={goToday}
+        style={({ pressed }) => [
+          styles.todayButton,
+          pressed && styles.pressedSurface,
+          monthKey === null && selectedKey === todayKey() && styles.disabled,
+        ]}
+      >
+        <Text style={styles.todayText}>Today</Text>
+      </Pressable>
     </View>
   );
 
-  // Seven 44pt-or-larger cells fit at 375pt with compact gaps. Keeping the
-  // whole week visible is the reason this control exists.
-  const strip = (
-    <View style={styles.strip}>
-      {win.days.map((cell) => {
-        const marked = cell.key === selectedKey;
-        const today = cell.key === etDateKey(new Date().toISOString());
-        const count = countsByDay.get(cell.key) ?? 0;
-        return (
-          <Pressable
-            key={cell.key}
-            accessibilityRole="button"
-            accessibilityState={{ selected: marked }}
-            accessibilityLabel={fmtEt(cell.instant, {
-              weekday: "long",
-              month: "long",
-              day: "numeric",
-            })}
-            onPress={() => {
-              setSelectedKey((current) => (current === cell.key ? null : cell.key));
-            }}
-            style={({ pressed }) => [
-              styles.cell,
-              marked && styles.cellOn,
-              pressed && !marked && styles.pressedSurface,
-            ]}
-          >
-            <Text style={[styles.cellDay, today && !marked && styles.cellToday, marked && styles.cellInkOn]}>
-              {cell.day}
-            </Text>
-            <Text style={[styles.cellWeekday, marked && styles.cellInkOn]}>
-              {cell.weekday}{count > 0 ? ` · ${count}` : ""}
-            </Text>
-          </Pressable>
-        );
-      })}
-    </View>
-  );
+  const grid = <MonthGrid cells={win.cells} marks={marks} selectedKey={selectedKey} onPick={setSelectedKey} />;
 
   // Mounted in every branch: a refused board is exactly the moment he still
   // wants to block out the afternoon.
   const eventSheet = (
     <>
-      <Modal
-        visible={createOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setCreateOpen(false)}
-      >
+      <Modal visible={createOpen} transparent animationType="fade" onRequestClose={() => setCreateOpen(false)}>
         <View style={styles.menuOverlay}>
           <Pressable
             accessibilityRole="button"
@@ -1501,14 +1108,14 @@ export default function ScheduleScreen(): React.ReactElement {
               accessibilityRole="button"
               onPress={() => {
                 setCreateOpen(false);
-                router.push(`/(owner)/job/new?day=${encodeURIComponent(selected.key)}`);
+                router.push(`/(owner)/job/new?day=${encodeURIComponent(selectedKey)}`);
               }}
               style={({ pressed }) => [styles.createChoice, pressed && styles.pressedSurface]}
             >
               <Feather name="tool" size={18} color={color.brandDeep} />
               <View style={styles.createChoiceBody}>
-                <Text style={styles.createChoiceTitle}>Job</Text>
-                <Text style={styles.createChoiceSub}>Add manual work for a customer</Text>
+                <Text style={styles.createChoiceTitle}>Work order</Text>
+                <Text style={styles.createChoiceSub}>Add work for a customer on {dayLabel(selectedKey).toLowerCase()}</Text>
               </View>
               <Feather name="chevron-right" size={18} color={color.faint} />
             </Pressable>
@@ -1530,16 +1137,7 @@ export default function ScheduleScreen(): React.ReactElement {
           </View>
         </View>
       </Modal>
-      {eventOpen ? (
-        <CreateEventSheet
-          crews={crews}
-          crewsNotice={crewsNotice}
-          onClose={() => setEventOpen(false)}
-        />
-      ) : null}
-      {bookJob !== null ? (
-        <BookSheet job={bookJob} onClose={() => setBookJob(null)} />
-      ) : null}
+      {eventOpen ? <CreateEventSheet crews={crews} crewsNotice={crewsNotice} onClose={() => setEventOpen(false)} /> : null}
     </>
   );
 
@@ -1548,7 +1146,7 @@ export default function ScheduleScreen(): React.ReactElement {
       <View style={styles.screen}>
         {header}
         {bar}
-        {strip}
+        {grid}
         <View style={styles.centre}>
           <ActivityIndicator color={color.brand} size="large" />
         </View>
@@ -1562,7 +1160,7 @@ export default function ScheduleScreen(): React.ReactElement {
       <View style={styles.screen}>
         {header}
         {bar}
-        {strip}
+        {grid}
         <View style={styles.centre}>
           <Notices items={notices.length > 0 ? notices : ["The schedule isn't available."]} />
           <Pressable
@@ -1570,7 +1168,6 @@ export default function ScheduleScreen(): React.ReactElement {
             onPress={() => {
               rollWindow();
               void boardQuery.refetch();
-              void trayQuery.refetch();
               void crewsQuery.refetch();
               void leadsQuery.refetch();
             }}
@@ -1588,70 +1185,36 @@ export default function ScheduleScreen(): React.ReactElement {
     <View style={styles.screen}>
       {header}
       {bar}
-      {strip}
       <FlatList
         data={rows}
         keyExtractor={(item) => item.key}
-        contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + space.xxl }]}
+        contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + space.xxl + HIT }]}
         refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={color.brand}
-            colors={[color.brand]}
-          />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={color.brand} colors={[color.brand]} />
         }
-        ListHeaderComponent={<Notices items={notices} />}
+        ListHeaderComponent={
+          <View>
+            {grid}
+            <Notices items={notices} />
+            {/* Markate's date band: the day on the left and what it is worth on
+                the right. Only JOBS contribute — a quote visit is not sold
+                work, so a day of visits shows no figure rather than $0.00. */}
+            <View style={styles.sectionHead}>
+              <Text style={styles.sectionLabel} numberOfLines={1}>
+                {dayLabel(selectedKey)}
+                <Text style={styles.sectionDate}>
+                  {"  "}
+                  {fmtEt(etLocalToIso(`${selectedKey}T12:00`), { month: "short", day: "numeric" })}
+                </Text>
+              </Text>
+              {dayCents > 0 ? <Text style={styles.sectionMeta}>{fmtMoney(dayCents)}</Text> : null}
+            </View>
+          </View>
+        }
         renderItem={({ item }) => {
-          if (item.kind === "section") {
-            return (
-              <View>
-                {/* Markate's date band: a full-width tinted strip with the day
-                    on the left and what it is worth on the right, rather than a
-                    faint label floating over the rows. It is the piece that
-                    makes their lists scannable — you find the day, then the
-                    money, without reading a single row. */}
-                <View style={styles.sectionHead}>
-                  <Text style={styles.sectionLabel} numberOfLines={1}>
-                    {item.label}
-                  </Text>
-                  {item.key === "section-tray" && (tray?.length ?? 0) > 3 ? (
-                    <Pressable
-                      accessibilityRole="button"
-                      onPress={() => setShowAllUnscheduled((shown) => !shown)}
-                      hitSlop={space.sm}
-                    >
-                      <Text style={styles.sectionAction}>
-                        {showAllUnscheduled ? "Show less" : `Show all ${tray?.length ?? 0}`}
-                      </Text>
-                    </Pressable>
-                  ) : item.meta !== null ? (
-                    <Text style={styles.sectionMeta}>{item.meta}</Text>
-                  ) : null}
-                </View>
-                {item.key === "section-tray" ? (
-                  <Text style={styles.sectionHint}>Tap a job to book it. Tap ••• to open it, cancel it, or delete it.</Text>
-                ) : null}
-              </View>
-            );
-          }
-          if (item.kind === "timeline") return <DayTimeline blocks={item.blocks} />;
           if (item.kind === "calm") return <Text style={styles.calm}>{item.text}</Text>;
-          if (item.kind === "tray") {
-            return (
-              <TrayRow
-                job={item.job}
-                onPress={() => openJob(item.job.id)}
-                onBook={() => setBookJob(item.job)}
-              />
-            );
-          }
-          if (item.kind === "visit") {
-            return <VisitRow visit={item.visit} onPress={() => setVisitId(item.visit.id)} />;
-          }
-          return (
-            <JobRow job={item.job} crewName={item.crewName} onPress={() => openJob(item.job.id)} />
-          );
+          if (item.kind === "visit") return <VisitRow visit={item.visit} onPress={() => setVisitId(item.visit.id)} />;
+          return <JobRow job={item.job} crewName={item.crewName} onPress={() => openJob(item.job.id)} />;
         }}
       />
       <Pressable
@@ -1696,55 +1259,90 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.lg,
     paddingBottom: space.md,
   },
-  chromeText: { flex: 1, gap: space.xs },
+  chromeText: { flex: 1 },
   title: { ...type.chromeTitle, color: color.ink },
   stop: { color: color.brand },
-  subtitle: { ...type.body, color: color.muted },
   chromeActionPressed: { opacity: 0.6 },
 
-  strip: {
+  // ── Month nav + grid ───────────────────────────────────────────────────────
+  monthNav: {
     flexDirection: "row",
+    alignItems: "center",
     gap: space.xs,
     paddingHorizontal: space.lg,
-    paddingTop: space.sm,
-    paddingBottom: space.md,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: color.line,
+    paddingBottom: space.sm,
   },
+  monthTitle: {
+    flex: 1,
+    textAlign: "center",
+    fontFamily: font.displayMedium,
+    fontSize: 17,
+    lineHeight: 21,
+    color: color.ink,
+  },
+  monthArrow: {
+    width: HIT,
+    height: HIT,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: radius.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.lineStrong,
+    backgroundColor: color.surface,
+  },
+  todayButton: {
+    minHeight: HIT,
+    justifyContent: "center",
+    paddingHorizontal: space.md,
+    borderRadius: radius.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.lineStrong,
+    backgroundColor: color.surface,
+    marginLeft: space.xs,
+  },
+  todayText: { ...type.small, fontFamily: font.bodySemi, color: color.ink },
+  grid: {
+    marginHorizontal: space.lg,
+    marginBottom: space.sm,
+    backgroundColor: color.surface,
+    borderRadius: radius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.line,
+    padding: 6,
+    gap: 2,
+  },
+  gridHead: { flexDirection: "row", marginBottom: 2 },
+  gridHeadText: { flex: 1, textAlign: "center", ...type.ruleSm, color: color.faint },
+  gridRow: { flexDirection: "row", gap: 2 },
   cell: {
     flex: 1,
     minWidth: 0,
-    minHeight: HIT,
+    minHeight: 54,
     alignItems: "center",
-    justifyContent: "center",
-    gap: 1,
-    paddingHorizontal: 1,
-    paddingVertical: 5,
+    justifyContent: "flex-start",
+    paddingTop: 5,
+    paddingBottom: 3,
     borderRadius: radius.sm,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: color.line,
-    backgroundColor: color.surface,
+    borderWidth: 1.5,
+    borderColor: "transparent",
   },
   cellOn: { backgroundColor: color.brandFill, borderColor: color.brandFill },
+  cellToday: { borderColor: color.brand },
+  cellDay: { fontFamily: font.bodySemi, fontSize: 14, lineHeight: 17, color: color.ink, fontVariant: ["tabular-nums"] },
+  cellDayOut: { color: color.faint, fontFamily: font.body },
+  cellDayToday: { color: color.brandDeep },
+  cellInkOn: { color: color.chromeInk },
+  dots: { flexDirection: "row", gap: 3, height: 6, marginTop: 3, alignItems: "center" },
+  dot: { width: 6, height: 6, borderRadius: 3 },
+  dotJob: { backgroundColor: color.job },
+  dotVisit: { backgroundColor: color.quote },
+  dotOn: { backgroundColor: color.chromeInk },
+  cellMoney: { fontFamily: font.mono, fontSize: 9, lineHeight: 12, color: color.muted, marginTop: 2 },
   pressedSurface: { backgroundColor: color.hover },
   dim: { opacity: 0.6 },
   disabled: { opacity: 0.5 },
-  cellWeekday: {
-    fontFamily: font.body,
-    fontSize: 10.5,
-    lineHeight: 13,
-    color: color.muted,
-    fontVariant: ["tabular-nums"],
-  },
-  cellDay: {
-    fontFamily: font.bodySemi,
-    fontSize: 14,
-    lineHeight: 17,
-    color: color.ink,
-    fontVariant: ["tabular-nums"],
-  },
-  cellToday: { color: color.brandDeep },
-  cellInkOn: { color: color.chromeInk },
+
+  sectionDate: { ...type.rule, color: color.muted },
 
   list: { paddingHorizontal: space.lg, paddingTop: space.xs },
 
@@ -1775,8 +1373,6 @@ const styles = StyleSheet.create({
     color: color.ink,
     fontVariant: ["tabular-nums"],
   },
-  sectionAction: { ...type.small, fontFamily: font.bodySemi, color: color.brandDeep },
-  sectionHint: { ...type.smaller, color: color.muted, marginBottom: space.sm },
 
   // The event card. A thick coloured rail down the left and a wash of the same
   // colour across the card — Markate's calendar reads as green work and purple
@@ -1847,52 +1443,6 @@ const styles = StyleSheet.create({
   crew: { ...type.ruleSm, color: color.muted, flexShrink: 1 },
   crewUnassigned: { ...type.small, color: color.danger, flexShrink: 1 },
 
-  // ── Day timeline ───────────────────────────────────────────────────────────
-  timeline: {
-    position: "relative",
-    backgroundColor: color.surface,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: color.line,
-    borderRadius: radius.lg,
-    overflow: "hidden",
-    marginBottom: space.sm,
-  },
-  hourRow: { height: HOUR_HEIGHT, flexDirection: "row", alignItems: "flex-start" },
-  hourLabel: {
-    width: RAIL_WIDTH,
-    paddingTop: 6,
-    paddingLeft: 10,
-    ...type.ruleSm,
-    color: color.muted,
-    fontVariant: ["tabular-nums"],
-  },
-  // The rule sits at the TOP of its hour, so a block's offset and the line it
-  // starts against are the same coordinate.
-  hourLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: color.line },
-  blockLayer: {
-    position: "absolute",
-    left: RAIL_WIDTH,
-    right: 4,
-    top: 0,
-    bottom: 0,
-  },
-  block: {
-    position: "absolute",
-    borderRadius: radius.sm,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    justifyContent: "flex-start",
-    gap: 2,
-    // Blocks in adjacent columns must not touch, or two jobs read as one.
-    borderWidth: 1.5,
-    borderColor: color.surface,
-  },
-  blockJob: { backgroundColor: color.job },
-  blockVisit: { backgroundColor: color.quote },
-  blockPressed: { opacity: 0.82 },
-  blockTitle: { ...type.smaller, fontFamily: font.bodySemi, color: color.surface },
-  blockSub: { ...type.smaller, color: color.surface, opacity: 0.86 },
-
   calm: { ...type.body, color: color.muted, paddingVertical: space.md },
 
   button: {
@@ -1937,71 +1487,6 @@ const styles = StyleSheet.create({
   sheetCancel: { ...type.body, color: color.muted },
   sheetSave: { ...type.body, fontFamily: font.bodySemi, color: color.brand },
   sheetSaveOff: { color: color.faint },
-  weekNav: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: space.lg,
-    paddingTop: space.xs,
-    gap: space.sm,
-  },
-  weekTitle: {
-    flexShrink: 1,
-    fontFamily: font.displayMedium,
-    fontSize: 16,
-    lineHeight: 20,
-    color: color.ink,
-    fontVariant: ["tabular-nums"],
-  },
-  weekActions: { flexDirection: "row", alignItems: "center", gap: space.xs },
-  todayButton: {
-    minHeight: HIT,
-    justifyContent: "center",
-    paddingHorizontal: space.md,
-    borderRadius: radius.sm,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: color.lineStrong,
-    backgroundColor: color.surface,
-  },
-  todayText: { ...type.small, fontFamily: font.bodySemi, color: color.ink },
-  weekArrow: {
-    width: HIT,
-    height: HIT,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: radius.sm,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: color.lineStrong,
-    backgroundColor: color.surface,
-  },
-  trayRow: {
-    flexDirection: "row",
-    alignItems: "stretch",
-    marginBottom: StyleSheet.hairlineWidth,
-    borderRadius: radius.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: color.line,
-    backgroundColor: color.surface,
-    overflow: "hidden",
-  },
-  trayBody: {
-    flex: 1,
-    minHeight: HIT,
-    backgroundColor: color.surface,
-    padding: space.md,
-  },
-  trayBook: {
-    minWidth: HIT,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: color.surface,
-  },
-  tapToSchedule: {
-    ...type.smaller,
-    color: color.brandDeep,
-    fontFamily: font.bodySemi,
-    marginTop: 2,
-  },
   fab: {
     position: "absolute",
     right: space.lg,

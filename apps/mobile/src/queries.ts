@@ -35,7 +35,7 @@ export const keys = {
   invoiceRewards: (id: string) => ["owner", "invoices", id, "rewards"] as const,
   schedule: {
     all: () => ["owner", "schedule"] as const,
-    board: (fromIso: string, toIso: string) => ["owner", "schedule", fromIso, toIso] as const,
+    board: (fromIso: string, days: string) => ["owner", "schedule", fromIso, days] as const,
     unscheduled: () => ["owner", "unscheduled"] as const,
   },
   crews: () => ["owner", "crews"] as const,
@@ -113,10 +113,10 @@ export const useInvoices = () =>
 // and the day view renders with today's jobs simply gone — the hand-rolled
 // version kept the previous window (which still contained today) on screen
 // until the new one landed. Placeholder data restores exactly that.
-export const useScheduleBoard = (fromIso: string, toIso: string) =>
+export const useScheduleBoard = (fromIso: string, days: number) =>
   useQuery({
-    queryKey: keys.schedule.board(fromIso, toIso),
-    queryFn: () => owner.scheduleBoard(fromIso, toIso).then(unwrap),
+    queryKey: keys.schedule.board(fromIso, String(days)),
+    queryFn: () => owner.scheduleBoard(fromIso, days).then(unwrap),
     placeholderData: keepPreviousData,
   });
 

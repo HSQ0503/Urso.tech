@@ -132,17 +132,16 @@ export default function HomeScreen(): React.ReactElement {
       key: "schedule",
       label: "Schedule",
       icon: "calendar",
-      count: overview?.pipeline.jobs.unscheduledCount,
       onPress: () => router.push("/(owner)/schedule"),
     },
-    // Markate's eighth slot IS Work Orders. It was standing in as Insights only
-    // because Urso had no jobs list; now that /canes/jobs exists the grid is
-    // back to their real layout, and Insights keeps its row in More.
+    // Markate's eighth slot IS Work Orders. The unscheduled pile lives there now
+    // (its default tab), so that is the count the tile carries: sold work
+    // nobody has put on a day yet.
     {
       key: "jobs",
       label: "Work orders",
       icon: "briefcase",
-      count: overview?.pipeline.jobs.activeCount,
+      count: overview?.pipeline.jobs.unscheduledCount,
       onPress: () => router.push("/(owner)/jobs"),
     },
     {

@@ -6,6 +6,7 @@ import {
   voidEstimate,
   deleteEstimate,
   approveEstimateInPerson,
+  convertEstimateToInvoice,
   duplicateEstimate,
 } from "@/app/CanesPressure/actions";
 import type { CatalogKind, EstimateType } from "@urso/types";
@@ -266,6 +267,13 @@ export const POST = apiRoute<{ id: string }>(async ({ req, params }) => {
           depositMethod: body.depositMethod,
         }),
       );
+    }
+
+    case "convertToInvoice": {
+      // Approve-if-needed → work order → invoice, one tap. The action owns every
+      // guard (declined/canceled refuse, options estimates refuse to self-approve)
+      // and returns both ids so the app can land on the bill.
+      return apiResult(await convertEstimateToInvoice(id));
     }
 
     default:

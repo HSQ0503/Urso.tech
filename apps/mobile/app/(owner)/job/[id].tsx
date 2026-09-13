@@ -11,12 +11,13 @@
 // conversion is the deposit dollars input at the edge, using the web's own
 // inputToCents contract. Every timestamp is America/New_York via fmtEt.
 
-import { useRef, useState, type ReactNode } from "react";
+import { useRef, useState, type ComponentProps, type ReactNode } from "react";
 import {
   ActivityIndicator,
   Alert,
   Linking,
   type LayoutChangeEvent,
+  Modal,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -36,6 +37,7 @@ import {
   fmtMoney,
   fmtPhone,
   INVOICE_STATUS_LABEL,
+  invoiceBalanceCents,
   JOB_STATUS_LABEL,
   PAYMENT_METHOD_LABEL,
   RECURRENCE_LABEL,
@@ -218,6 +220,10 @@ export default function JobScreen(): React.ReactElement {
   const [newChecklistRequired, setNewChecklistRequired] = useState(true);
   const [dangerNotice, setDangerNotice] = useState<string | null>(null);
 
+  const [moreOpen, setMoreOpen] = useState(false);
+  // Where the Job section sits in the scroll, so More → Schedule / Assign can
+  // open the control AND bring it into view instead of toggling it off-screen.
+  const jobSectionY = useRef(0);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [slotOpen, setSlotOpen] = useState(false);
   const [slotValue, setSlotValue] = useState("");
@@ -248,11 +254,11 @@ export default function JobScreen(): React.ReactElement {
         style={({ pressed }) => [styles.back, pressed && styles.backPressed]}
       >
         <Feather name="chevron-left" size={20} color={color.muted} />
-        <Text style={styles.backText}>Schedule</Text>
+        <Text style={styles.backText}>Back</Text>
       </Pressable>
       <View style={styles.chromeTitleRow}>
         <Text style={styles.chromeName} numberOfLines={1}>
-          Job editor
+          Work order
         </Text>
         {deleteAction ? (
           <Pressable
@@ -309,6 +315,16 @@ export default function JobScreen(): React.ReactElement {
 
   // Const binding so the non-null narrowing survives into onPress closures.
   const estimateId = job.estimate_id;
+
+  // Markate's work order leads with what was SOLD — the services table — and
+  // ends the table with Grand Total, Deposit, Balance Due. Sold lines are the
+  // job_items that are not owner-added procedural steps; the checklist below
+  // still shows every item, including those.
+  const services = job.items.filter((item) => !item.checklist_only);
+  const depositCollected = job.deposit_paid_at ? (job.deposit_collected_cents ?? job.deposit_cents) : 0;
+  // Once a bill exists its ledger is the truth; before that, the job's own
+  // collected deposit is all that has been paid.
+  const balanceDue = invoice !== null ? invoiceBalanceCents(invoice) : Math.max(0, job.total_cents - depositCollected);
 
   const open = (url: string) => {
     Linking.openURL(url).catch(() => setCustomerNotice("This phone couldn't open that."));
@@ -398,10 +414,10 @@ export default function JobScreen(): React.ReactElement {
   };
 
   const onUnschedule = () => {
-    Alert.alert("Send back to tray?", undefined, [
-      { text: "Cancel", style: "cancel" },
+    Alert.alert("Unschedule this job?", "It comes off the calendar and goes back to Work orders → Unscheduled.", [
+      { text: "Keep it", style: "cancel" },
       {
-        text: "Send back",
+        text: "Unschedule",
         onPress: () => {
           void (async () => {
             setScheduleNotice(null);
@@ -685,6 +701,55 @@ export default function JobScreen(): React.ReactElement {
           <GoodNotice text={customerGood} />
         </View>
 
+        <Section label="Services">
+          <View style={styles.card}>
+            <View style={styles.servicesHead}>
+              <Text style={[styles.servicesCol, styles.servicesName]}>Service</Text>
+              <Text style={[styles.servicesCol, styles.servicesQty]}>Qty</Text>
+              <Text style={[styles.servicesCol, styles.servicesPrice]}>Price</Text>
+              <Text style={[styles.servicesCol, styles.servicesTotal]}>Total</Text>
+            </View>
+            {services.length === 0 ? (
+              <Text style={[styles.muted, styles.pad]}>No priced services on this work order.</Text>
+            ) : (
+              services.map((item) => (
+                <View key={item.id} style={styles.servicesRow}>
+                  <View style={styles.servicesName}>
+                    <Text style={styles.body} numberOfLines={2}>{item.name}</Text>
+                    {item.description ? <Text style={styles.muted} numberOfLines={2}>{item.description}</Text> : null}
+                  </View>
+                  <Text style={[styles.servicesFigure, styles.servicesQty]}>{Number.isInteger(item.quantity) ? item.quantity : item.quantity.toFixed(2)}</Text>
+                  <Text style={[styles.servicesFigure, styles.servicesPrice]}>
+                    {fmtMoney(item.quantity > 0 ? Math.round(item.line_total_cents / item.quantity) : item.line_total_cents)}
+                  </Text>
+                  <Text style={[styles.servicesFigure, styles.servicesTotal]}>{fmtMoney(item.line_total_cents)}</Text>
+                </View>
+              ))
+            )}
+            <View style={[styles.pad, styles.divided, styles.totals]}>
+              <View style={styles.moneyRow}>
+                <Text style={styles.grandLabel}>Grand Total</Text>
+                <Text style={styles.moneyBig}>{fmtMoney(job.total_cents)}</Text>
+              </View>
+              {depositCollected > 0 ? (
+                <View style={styles.moneyRow}>
+                  <Text style={styles.fieldLabel}>Deposit collected</Text>
+                  <Text style={styles.money}>−{fmtMoney(depositCollected)}</Text>
+                </View>
+              ) : job.deposit_cents > 0 ? (
+                <View style={styles.moneyRow}>
+                  <Text style={styles.fieldLabel}>Deposit requested</Text>
+                  <Text style={styles.money}>{fmtMoney(job.deposit_cents)}</Text>
+                </View>
+              ) : null}
+              <View style={styles.moneyRow}>
+                <Text style={styles.fieldLabel}>{invoice !== null && invoice.status === "paid" ? "Paid in full" : "Balance Due"}</Text>
+                <Text style={[styles.money, styles.balance]}>{fmtMoney(balanceDue)}</Text>
+              </View>
+            </View>
+          </View>
+        </Section>
+
         <Section label="Contact">
           <View style={[styles.card, styles.contactCard]}>
             <Field
@@ -701,7 +766,7 @@ export default function JobScreen(): React.ReactElement {
           </View>
         </Section>
 
-        <Section label="Job">
+        <Section label="Job" onLayout={(event) => { jobSectionY.current = event.nativeEvent.layout.y; }}>
           <Notice text={crewsNotice} />
           <View style={styles.card}>
             <View style={styles.pad}>
@@ -719,7 +784,7 @@ export default function JobScreen(): React.ReactElement {
                   ) : null}
                 </>
               ) : (
-                <Text style={styles.muted}>Not scheduled — this job is in the tray.</Text>
+                <Text style={styles.muted}>Not scheduled yet. Find it under Work orders → Unscheduled.</Text>
               )}
               <Field label="Crew" value={job.crew?.name ?? "No crew"} />
             </View>
@@ -728,51 +793,9 @@ export default function JobScreen(): React.ReactElement {
               <GoodNotice text={goodNotice} />
               <Notice text={scheduleNotice} />
 
-              {canStart ? (
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={onStart}
-                  disabled={start.isPending}
-                  style={({ pressed }) => [
-                    styles.primary,
-                    pressed && styles.primaryPressed,
-                    start.isPending && styles.disabled,
-                  ]}
-                >
-                  <Text style={styles.primaryText}>Start job</Text>
-                </Pressable>
-              ) : null}
-
-              {job.status === "in_progress" ? (
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={onComplete}
-                  disabled={complete.isPending}
-                  style={({ pressed }) => [
-                    styles.primary,
-                    pressed && styles.primaryPressed,
-                    complete.isPending && styles.disabled,
-                  ]}
-                >
-                  <Text style={styles.primaryText}>Complete job</Text>
-                </Pressable>
-              ) : null}
-
-              {job.status === "completed" ? (
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={onReopen}
-                  disabled={reopen.isPending}
-                  style={({ pressed }) => [
-                    styles.button,
-                    pressed && styles.pressed,
-                    reopen.isPending && styles.disabled,
-                  ]}
-                >
-                  <Text style={styles.buttonText}>Reopen</Text>
-                </Pressable>
-              ) : null}
-
+              {/* Start / Complete / Reopen / Cancel live on the bar at the bottom
+                  of the screen (Markate's Arrival · Start · Complete · More),
+                  so this card holds only the schedule facts and their controls. */}
               <Pressable
                 accessibilityRole="button"
                 onPress={() => setPickerOpen((v) => !v)}
@@ -890,7 +913,7 @@ export default function JobScreen(): React.ReactElement {
                     unschedule.isPending && styles.disabled,
                   ]}
                 >
-                  <Text style={styles.buttonText}>Send back to tray</Text>
+                  <Text style={styles.buttonText}>Unschedule</Text>
                 </Pressable>
               ) : null}
             </View>
@@ -1068,25 +1091,9 @@ export default function JobScreen(): React.ReactElement {
           }}
         >
           <Notice text={invoicesNotice} />
+          {/* The money itself is on the Services table above; this card is the
+              paperwork attached to it — the bill, the deposit, the quote. */}
           <View style={styles.card}>
-            <View style={styles.pad}>
-              <View style={styles.moneyRow}>
-                <Text style={styles.fieldLabel}>Total</Text>
-                <Text style={styles.moneyBig}>{fmtMoney(job.total_cents)}</Text>
-              </View>
-              {job.deposit_cents > 0 || (job.deposit_collected_cents ?? 0) > 0 ? (
-                <View style={styles.moneyRow}>
-                  <Text style={styles.fieldLabel}>{job.deposit_paid_at ? "Deposit collected" : "Deposit requested"}</Text>
-                  <Text style={styles.money}>
-                    {fmtMoney(job.deposit_paid_at ? (job.deposit_collected_cents ?? job.deposit_cents) : job.deposit_cents)}
-                  </Text>
-                </View>
-              ) : null}
-              {job.deposit_paid_at != null ? (
-                <Text style={styles.goodBadge}>Deposit collected</Text>
-              ) : null}
-            </View>
-
             {invoice !== null ? (
               // Presses through to the invoice screen, which exists now.
               <Pressable
@@ -1097,7 +1104,6 @@ export default function JobScreen(): React.ReactElement {
                 }
                 style={({ pressed }) => [
                   styles.pad,
-                  styles.divided,
                   styles.linkedRow,
                   pressed && styles.cardPressed,
                 ]}
@@ -1112,7 +1118,7 @@ export default function JobScreen(): React.ReactElement {
                 <Feather name="chevron-right" size={20} color={color.faint} />
               </Pressable>
             ) : (
-              <View style={[styles.pad, styles.divided, styles.actions]}>
+              <View style={[styles.pad, styles.actions]}>
                 <Notice text={moneyNotice} />
                 {depositOpen ? (
                   <>
@@ -1285,44 +1291,177 @@ export default function JobScreen(): React.ReactElement {
           </View>
         </Section>
 
-        {job.status !== "canceled" || canDelete ? (
-          <View style={styles.section}>
-            {/* Refusals for Cancel/Delete land HERE, beside the button that
-                earned them — a sentence at the top of a 1,500-line scroll is a
-                button that "did nothing". */}
-            <Notice text={dangerNotice} />
-            {job.status !== "canceled" ? (
-              <Pressable
-                accessibilityRole="button"
-                onPress={onCancel}
-                disabled={cancel.isPending}
-                style={({ pressed }) => [
-                  styles.danger,
-                  pressed && styles.dangerPressed,
-                  cancel.isPending && styles.disabled,
-                ]}
-              >
-                <Text style={styles.dangerText}>Cancel job</Text>
-              </Pressable>
-            ) : null}
-            {canDelete ? (
-              <Pressable
-                accessibilityRole="button"
-                onPress={onDelete}
-                disabled={del.isPending}
-                style={({ pressed }) => [
-                  styles.danger,
-                  pressed && styles.dangerPressed,
-                  del.isPending && styles.disabled,
-                ]}
-              >
-                <Text style={styles.dangerText}>Delete job</Text>
-              </Pressable>
-            ) : null}
-          </View>
-        ) : null}
+        <Notice text={dangerNotice} />
       </ScrollView>
+
+      {/* Markate's bar: Arrival · Start · Pause · Complete · More. Ours is Start ·
+          Complete · Cancel · More — there is no state behind Arrival or Pause,
+          and a button with nothing behind it is the "sloppy" he named. The slots
+          are fixed so a thumb learns them; a slot that cannot act right now is
+          greyed, because the ORDER (start, then complete) is the information. */}
+      <View style={[styles.bar, { paddingBottom: insets.bottom + space.sm }]}>
+        <BarButton
+          icon="play"
+          label={job.status === "completed" ? "Reopen" : "Start"}
+          disabled={job.status === "completed" ? reopen.isPending : !canStart || start.isPending}
+          onPress={job.status === "completed" ? onReopen : onStart}
+          hidden={["invoiced", "paid", "canceled"].includes(job.status)}
+        />
+        <BarButton
+          icon="check-circle"
+          label="Complete"
+          disabled={job.status !== "in_progress" || complete.isPending}
+          onPress={onComplete}
+          hidden={["completed", "invoiced", "paid", "canceled"].includes(job.status)}
+        />
+        <BarButton
+          icon="slash"
+          label="Cancel"
+          danger
+          disabled={cancel.isPending}
+          onPress={onCancel}
+          hidden={["completed", "invoiced", "paid", "canceled"].includes(job.status)}
+        />
+        <BarButton icon="more-horizontal" label="More" onPress={() => setMoreOpen(true)} />
+      </View>
+
+      <Modal visible={moreOpen} transparent animationType="slide" onRequestClose={() => setMoreOpen(false)}>
+        <View style={styles.sheetScrim}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setMoreOpen(false)} accessibilityLabel="Close" />
+          <View style={[styles.moreSheet, { paddingBottom: insets.bottom + space.lg }]}>
+            <View style={styles.sheetHandle} />
+            <View style={styles.moreGrid}>
+              <MoreTile
+                icon="calendar"
+                label={job.scheduled_at !== null ? "Move" : "Schedule"}
+                hidden={["completed", "invoiced", "paid", "canceled"].includes(job.status)}
+                onPress={() => {
+                  setMoreOpen(false);
+                  if (!slotOpen) openSlot();
+                  requestAnimationFrame(() => scrollRef.current?.scrollTo({ y: Math.max(0, jobSectionY.current - space.sm), animated: true }));
+                }}
+              />
+              <MoreTile
+                icon="users"
+                label="Assign crew"
+                hidden={["completed", "invoiced", "paid", "canceled"].includes(job.status)}
+                onPress={() => {
+                  setMoreOpen(false);
+                  setPickerOpen(true);
+                  requestAnimationFrame(() => scrollRef.current?.scrollTo({ y: Math.max(0, jobSectionY.current - space.sm), animated: true }));
+                }}
+              />
+              <MoreTile
+                icon="rotate-ccw"
+                label="Unschedule"
+                hidden={job.scheduled_at === null || ["completed", "invoiced", "paid", "canceled"].includes(job.status)}
+                onPress={() => { setMoreOpen(false); onUnschedule(); }}
+              />
+              <MoreTile
+                icon="file-text"
+                label={invoice !== null ? "Open invoice" : "Record deposit"}
+                hidden={invoice === null && ["canceled"].includes(job.status)}
+                onPress={() => {
+                  setMoreOpen(false);
+                  if (invoice !== null) router.push({ pathname: "/(owner)/invoice/[id]", params: { id: invoice.id } });
+                  else setDepositOpen(true);
+                }}
+              />
+              <MoreTile
+                icon="clipboard"
+                label="View estimate"
+                hidden={estimateId === null}
+                onPress={() => {
+                  setMoreOpen(false);
+                  if (estimateId !== null) router.push({ pathname: "/(owner)/estimate/[id]", params: { id: estimateId } });
+                }}
+              />
+              <MoreTile
+                icon="user"
+                label="View customer"
+                hidden={job.contact_id === null}
+                onPress={() => { setMoreOpen(false); goCustomer(); }}
+              />
+              <MoreTile
+                icon="edit-3"
+                label="Site details"
+                onPress={() => {
+                  setMoreOpen(false);
+                  openEdit();
+                  requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: true }));
+                }}
+              />
+              <MoreTile
+                icon="trash-2"
+                label="Delete"
+                danger
+                hidden={!canDelete}
+                onPress={() => { setMoreOpen(false); onDelete(); }}
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
+  );
+}
+
+function BarButton({
+  icon,
+  label,
+  onPress,
+  disabled = false,
+  danger = false,
+  hidden = false,
+}: {
+  icon: ComponentProps<typeof Feather>["name"];
+  label: string;
+  onPress: () => void;
+  disabled?: boolean;
+  danger?: boolean;
+  hidden?: boolean;
+}) {
+  if (hidden) return null;
+  const tint = disabled ? color.faint : danger ? color.danger : color.ink;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled }}
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => [styles.barButton, pressed && !disabled && styles.pressed]}
+    >
+      <Feather name={icon} size={21} color={tint} />
+      <Text style={[styles.barLabel, { color: tint }]}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function MoreTile({
+  icon,
+  label,
+  onPress,
+  danger = false,
+  hidden = false,
+}: {
+  icon: ComponentProps<typeof Feather>["name"];
+  label: string;
+  onPress: () => void;
+  danger?: boolean;
+  hidden?: boolean;
+}) {
+  if (hidden) return null;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      onPress={onPress}
+      style={({ pressed }) => [styles.moreTile, pressed && styles.pressed]}
+    >
+      <Feather name={icon} size={22} color={danger ? color.danger : color.muted} />
+      <Text style={[styles.moreTileText, danger && { color: color.danger }]}>{label}</Text>
+    </Pressable>
   );
 }
 
@@ -1695,6 +1834,75 @@ const styles = StyleSheet.create({
     padding: space.md,
   },
   goodNoticeText: { ...type.small, color: color.good },
+
+  // ── Services table ─────────────────────────────────────────────────────────
+  servicesHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: space.lg,
+    paddingTop: space.md,
+    paddingBottom: space.xs,
+  },
+  servicesCol: { ...type.micro, color: color.faint },
+  servicesRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: space.sm,
+    paddingHorizontal: space.lg,
+    paddingVertical: space.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: color.line,
+  },
+  servicesName: { flex: 1, minWidth: 0 },
+  servicesQty: { width: 36, textAlign: "right" },
+  servicesPrice: { width: 78, textAlign: "right" },
+  servicesTotal: { width: 84, textAlign: "right" },
+  servicesFigure: { ...type.small, color: color.ink, fontVariant: ["tabular-nums"] },
+  totals: { gap: space.xs },
+  grandLabel: { ...type.title, color: color.ink },
+  balance: { fontFamily: font.bodySemi },
+
+  // ── Bottom bar + More ──────────────────────────────────────────────────────
+  bar: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    paddingTop: space.sm,
+    paddingHorizontal: space.sm,
+    gap: space.xs,
+    backgroundColor: color.surface,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: color.line,
+  },
+  barButton: {
+    flex: 1,
+    minHeight: HIT + 6,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 3,
+    borderRadius: radius.md,
+  },
+  barLabel: { ...type.smaller, fontFamily: font.bodyMedium },
+  sheetScrim: { flex: 1, justifyContent: "flex-end", backgroundColor: color.scrim },
+  moreSheet: {
+    backgroundColor: color.surface,
+    borderTopLeftRadius: radius.sheet,
+    borderTopRightRadius: radius.sheet,
+    paddingHorizontal: space.lg,
+    paddingTop: space.sm,
+  },
+  sheetHandle: { alignSelf: "center", width: 40, height: 5, borderRadius: 3, backgroundColor: color.line, marginBottom: space.md },
+  moreGrid: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
+  moreTile: {
+    width: "48%",
+    flexGrow: 1,
+    minHeight: 72,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    borderRadius: radius.md,
+    backgroundColor: color.bg,
+  },
+  moreTileText: { ...type.small, fontFamily: font.bodyMedium, color: color.ink },
 
   canceledBanner: {
     flexDirection: "row",

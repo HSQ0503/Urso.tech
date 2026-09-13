@@ -263,9 +263,12 @@ export const owner = {
 
   // The board is the owner's dispatch view; crews come with it so a job can be
   // shown with its assignment without a second round trip.
-  scheduleBoard: (fromIso: string, toIso: string) =>
+  // The route takes (from, days) — it used to be sent a `to` it ignored, so
+  // every window silently came back as seven days regardless of what the
+  // screen asked for. The month grid asks for 42.
+  scheduleBoard: (fromIso: string, days: number) =>
     request<unknown>(
-      `/canes/schedule/board?from=${encodeURIComponent(fromIso)}&to=${encodeURIComponent(toIso)}`,
+      `/canes/schedule/board?from=${encodeURIComponent(fromIso)}&days=${encodeURIComponent(String(days))}`,
     ),
   unscheduled: () => request<Job[]>("/canes/schedule/unscheduled"),
 
@@ -709,5 +712,13 @@ export const estimateActions = {
     act<{ jobId?: string | null; depositUrl?: string | null; notice?: string }>(
       `/canes/estimates/${id}/actions`,
       { action: "approveInPerson", ...opts },
+    ),
+  // Markate's "Convert To Invoice": approve if not yet approved (which creates
+  // the work order), then mint the bill from it. Both ids come back so the app
+  // can land on the invoice; `notice` carries a qualified success verbatim.
+  convertToInvoice: (id: string) =>
+    act<{ invoiceId?: string; jobId?: string | null; notice?: string }>(
+      `/canes/estimates/${id}/actions`,
+      { action: "convertToInvoice" },
     ),
 };

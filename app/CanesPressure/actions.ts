@@ -1789,8 +1789,11 @@ export async function approveEstimateInPerson(
   const estimate = await getEstimate(estimateId);
   if (!estimate) return { ok: false, notice: "Estimate not found." };
   if (estimate.status === "approved") return { ok: false, notice: "This estimate is already approved." };
-  if (!["sent", "viewed"].includes(estimate.status)) {
-    return { ok: false, notice: "Only a sent estimate can be marked approved." };
+  // A draft counts: "in person" means the customer saw the quote on the phone
+  // in the driveway and said yes. Requiring a send first made the owner text
+  // himself a copy just to be allowed to accept it.
+  if (!["draft", "sent", "viewed"].includes(estimate.status)) {
+    return { ok: false, notice: "This estimate was declined or canceled — clone it to quote the work again." };
   }
   if (estimate.estimate_type !== "standard") {
     return {
@@ -1804,6 +1807,58 @@ export async function approveEstimateInPerson(
     depositCollected: Boolean(opts?.depositCollected),
     depositMethod: opts?.depositMethod ?? "cash",
   });
+}
+
+// Estimate → invoice in one tap (Markate's "Convert To Invoice"). The chain
+// underneath is unchanged — approve if not yet approved, which creates the
+// work order; then mint the bill from that work order — so history stays
+// connected: the invoice knows its job, the job knows its estimate. Nothing
+// is scheduled and nothing is marked complete; this is for work that was done
+// on the spot or billed ahead.
+export async function convertEstimateToInvoice(
+  estimateId: string,
+): Promise<ActionResult & { invoiceId?: string; jobId?: string | null }> {
+  if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted("invoices");
+  if (denied) return denied;
+  const estimate = await getEstimate(estimateId);
+  if (!estimate) return { ok: false, notice: "Estimate not found." };
+  if (estimate.status === "declined" || estimate.status === "expired") {
+    return { ok: false, notice: "This estimate was declined or canceled — clone it to bill this work." };
+  }
+
+  const db = canesDb();
+  const { data: existingJob } = await db.from("jobs").select("id").eq("estimate_id", estimate.id).maybeSingle();
+  let jobId: string | null = (existingJob?.id as string | undefined) ?? null;
+  let approvalNotice: string | null = null;
+
+  if (jobId === null) {
+    if (estimate.status === "approved") {
+      const withItems = await getEstimateWithItems(estimate.id);
+      jobId = withItems ? await createJobFromEstimate(withItems) : null;
+    } else {
+      const approved = await approveEstimateInPerson(estimate.id);
+      if (!approved.ok) return approved;
+      jobId = approved.jobId ?? null;
+      approvalNotice = approved.notice ?? null;
+    }
+  }
+  if (jobId === null) {
+    return { ok: false, notice: "The estimate was accepted but its work order could not be created. Refresh and try again." };
+  }
+
+  const existing = await getInvoiceByJob(jobId);
+  if (existing) {
+    return { ok: true, invoiceId: existing.id, jobId, notice: `This work already has invoice ${existing.number}.` };
+  }
+  const minted = await createInvoiceFromJob(jobId);
+  if (!minted.ok) return { ...minted, jobId };
+  return {
+    ok: true,
+    invoiceId: minted.invoiceId,
+    jobId,
+    notice: approvalNotice ?? undefined,
+  };
 }
 
 // The shared back half of an approval, after each caller's own guards: claim

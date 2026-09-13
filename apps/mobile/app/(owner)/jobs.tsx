@@ -1,24 +1,32 @@
-// Work orders — the jobs list.
+// Work orders — the jobs list, and now the home of the unscheduled pile.
 //
 // This screen has NO web equivalent. On the console a job is only ever reached
 // through the schedule or through the customer it belongs to; there is no list
 // of them. Sebastian's mental model coming off Markate is a "Work Orders"
-// screen he searches, so the phone gets the list the web never had, and
-// GET /canes/jobs exists for it.
+// screen he searches, and (2026-09-13) "I would rather have the unscheduled
+// jobs be in work orders rather than my scheduling section, just how Markate
+// has it" — so the tray moved here and became the default tab.
+//
+// Two things a row can do without opening it: an unscheduled row carries a
+// Schedule button that opens the slot picker in place, and any live row can be
+// swiped left to reveal Cancel. The swipe is a real gesture this time; the old
+// schedule tray printed "swipe left to remove" over rows that could not.
 //
 // Markate's row anatomy, followed closely because it is dense and good: the
 // title and the money share the lead line, then one icon-led fact per line —
-// customer, crew, schedule — with the status pill parked on the right of the
-// second line and the work-order number on the right of the third. Rows that
-// have no schedule simply drop those lines rather than printing placeholders,
-// which is why an unscheduled job reads shorter instead of emptier.
+// customer, crew, schedule — with the status pill on the right of the second
+// line. Rows that have no schedule simply drop those lines rather than
+// printing placeholders.
 //
 // Every time is America/New_York via fmtEt. The device clock is never read.
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import {
   ActivityIndicator,
+  Alert,
+  Animated,
   FlatList,
+  PanResponder,
   Pressable,
   RefreshControl,
   StyleSheet,
@@ -38,39 +46,47 @@ import {
   type Job,
   type JobStatus,
 } from "@urso/types";
+import { jobActions } from "@/api";
+import { BookSheet } from "@/components/book-sheet";
 import { ChromeBar, SearchStrip, searchInputStyle } from "@/components/ledger";
 import { Notice } from "@/components/notice";
-import { useCrews, useJobs } from "@/queries";
-import { noticeFrom, usePullToRefresh, useRefetchOnFocus } from "@/query";
+import { useToast } from "@/components/toast";
+import { keys, useCrews, useJobs } from "@/queries";
+import { noticeFrom, useAction, usePullToRefresh, useRefetchOnFocus } from "@/query";
 import { color, font, HIT, radius, space, type } from "@/theme";
 
-// The filter strip. "Open" is the working set — everything not finished and not
-// abandoned — because that is what someone opening this screen is looking for,
-// and it is the default for the same reason.
-type Filter = "open" | "unscheduled" | "scheduled" | "done" | "all";
+// The tabs, in the order he works them: what still needs a day, what has one,
+// what is finished, what was called off. Unscheduled is the default because
+// that pile is the thing this screen exists to shrink.
+type Filter = "unscheduled" | "scheduled" | "completed" | "canceled" | "all";
 
 const FILTERS: { value: Filter; label: string }[] = [
-  { value: "open", label: "Open" },
   { value: "unscheduled", label: "Unscheduled" },
   { value: "scheduled", label: "Scheduled" },
-  { value: "done", label: "Done" },
+  { value: "completed", label: "Completed" },
+  { value: "canceled", label: "Canceled" },
   { value: "all", label: "All" },
 ];
 
+// Completed includes the money states: he thinks in "done", and whether the
+// bill went out or got paid is the invoice's business — the pill still says.
 const DONE: JobStatus[] = ["completed", "invoiced", "paid"];
 const SCHEDULED: JobStatus[] = ["scheduled", "confirmed", "in_progress"];
 
 function matchesFilter(job: Job, filter: Filter): boolean {
   if (filter === "all") return true;
-  if (filter === "done") return DONE.includes(job.status);
+  if (filter === "completed") return DONE.includes(job.status);
   if (filter === "scheduled") return SCHEDULED.includes(job.status);
-  if (filter === "unscheduled") return job.status === "unscheduled";
-  // Open: still live work. Canceled is not open, and neither is finished.
+  if (filter === "canceled") return job.status === "canceled";
+  return job.status === "unscheduled";
+}
+
+// A cancel makes sense on live work only. Finished work has an invoice behind
+// it (reopen it from the job sheet instead), and canceled is already canceled.
+function canCancel(job: Job): boolean {
   return !DONE.includes(job.status) && job.status !== "canceled";
 }
 
-// Markate colours its pills by state: gold for scheduled work, cyan for a new
-// one, muted for everything settled. Same three meanings, our tokens.
 function pillTone(status: JobStatus): { fill: string; tint: string } {
   if (DONE.includes(status)) return { fill: color.goodBg, tint: color.good };
   if (status === "canceled") return { fill: color.dangerBg, tint: color.danger };
@@ -85,7 +101,7 @@ function IconLine({
 }: {
   icon: React.ComponentProps<typeof Feather>["name"];
   text: string;
-  right?: React.ReactNode;
+  right?: ReactNode;
 }): React.ReactElement {
   return (
     <View style={styles.line}>
@@ -98,14 +114,84 @@ function IconLine({
   );
 }
 
+// ── Swipe to reveal ──────────────────────────────────────────────────────────
+//
+// A horizontal pan on the row slides it left to uncover one action. Built on
+// PanResponder + Animated so it costs no native module: the gesture only claims
+// the touch once it is clearly horizontal (dx well ahead of dy), so the list
+// underneath keeps scrolling normally, and a tap still reaches the row.
+const REVEAL = 104;
+
+function SwipeRow({
+  enabled,
+  actionLabel,
+  onAction,
+  children,
+}: {
+  enabled: boolean;
+  actionLabel: string;
+  onAction: () => void;
+  children: ReactNode;
+}): React.ReactElement {
+  const x = useRef(new Animated.Value(0)).current;
+  const open = useRef(false);
+  const enabledRef = useRef(enabled);
+  enabledRef.current = enabled;
+
+  const settle = (to: number) => {
+    open.current = to !== 0;
+    Animated.spring(x, { toValue: to, useNativeDriver: true, bounciness: 0, speed: 24 }).start();
+  };
+
+  const pan = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, g) =>
+        enabledRef.current && Math.abs(g.dx) > 10 && Math.abs(g.dx) > Math.abs(g.dy) * 1.6,
+      onPanResponderMove: (_, g) => {
+        const base = open.current ? -REVEAL : 0;
+        x.setValue(Math.min(0, Math.max(-REVEAL, base + g.dx)));
+      },
+      onPanResponderRelease: (_, g) => {
+        const base = open.current ? -REVEAL : 0;
+        settle(base + g.dx < -REVEAL / 2 ? -REVEAL : 0);
+      },
+      onPanResponderTerminate: () => settle(open.current ? -REVEAL : 0),
+    }),
+  ).current;
+
+  return (
+    <View style={styles.swipeWrap}>
+      <View style={styles.swipeUnder} pointerEvents={enabled ? "auto" : "none"}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={actionLabel}
+          onPress={() => {
+            settle(0);
+            onAction();
+          }}
+          style={({ pressed }) => [styles.swipeAction, pressed && styles.swipeActionPressed]}
+        >
+          <Feather name="slash" size={18} color={color.surface} />
+          <Text style={styles.swipeActionText}>{actionLabel}</Text>
+        </Pressable>
+      </View>
+      <Animated.View style={{ transform: [{ translateX: x }] }} {...pan.panHandlers}>
+        {children}
+      </Animated.View>
+    </View>
+  );
+}
+
 function WorkOrderRow({
   job,
   crewName,
   onPress,
+  onSchedule,
 }: {
   job: Job;
   crewName: string | null;
   onPress: () => void;
+  onSchedule: () => void;
 }): React.ReactElement {
   const tone = pillTone(job.status);
   // An unpriced job is not a nothing job. Blank beats $0.00, which reads as one.
@@ -116,48 +202,64 @@ function WorkOrderRow({
       : `${fmtEt(job.scheduled_at, { weekday: "long", day: "2-digit", month: "short", year: "numeric" })}, ${fmtEtTimeRange(job.scheduled_at, job.ends_at)}`;
 
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`${job.job_name ?? job.customer_name ?? "Job"}, ${JOB_STATUS_LABEL[job.status]}`}
-      onPress={onPress}
-      style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
-    >
-      <View style={styles.rowTop}>
-        <Text style={styles.title} numberOfLines={1}>
-          {job.job_name ?? job.customer_name ?? "Job"}
-        </Text>
-        {total !== null && <Text style={styles.money}>{total}</Text>}
-      </View>
+    <View style={styles.row}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${job.job_name ?? job.customer_name ?? "Job"}, ${JOB_STATUS_LABEL[job.status]}`}
+        onPress={onPress}
+        style={({ pressed }) => [styles.rowBody, pressed && styles.rowPressed]}
+      >
+        <View style={styles.rowTop}>
+          <Text style={styles.title} numberOfLines={1}>
+            {job.job_name ?? job.customer_name ?? "Job"}
+          </Text>
+          {total !== null && <Text style={styles.money}>{total}</Text>}
+        </View>
 
-      <IconLine
-        icon="user"
-        text={job.customer_name ?? "No customer on this job"}
-        right={
-          <View style={[styles.pill, { backgroundColor: tone.fill, borderColor: tone.tint }]}>
-            <Text style={[styles.pillText, { color: tone.tint }]} numberOfLines={1}>
-              {JOB_STATUS_LABEL[job.status]}
-            </Text>
-          </View>
-        }
-      />
+        <IconLine
+          icon="user"
+          text={job.customer_name ?? "No customer on this job"}
+          right={
+            <View style={[styles.pill, { backgroundColor: tone.fill, borderColor: tone.tint }]}>
+              <Text style={[styles.pillText, { color: tone.tint }]} numberOfLines={1}>
+                {JOB_STATUS_LABEL[job.status]}
+              </Text>
+            </View>
+          }
+        />
 
-      {/* Crew and schedule only when they exist. Markate drops these lines on an
-          unscheduled work order rather than printing "—", so the row shrinks to
-          what is true about it. */}
-      {crewName !== null ? <IconLine icon="users" text={crewName} /> : null}
-      {when !== null ? <IconLine icon="calendar" text={when} /> : null}
-    </Pressable>
+        {crewName !== null ? <IconLine icon="users" text={crewName} /> : null}
+        {when !== null ? <IconLine icon="calendar" text={when} /> : null}
+        {job.status === "canceled" && job.canceled_reason ? (
+          <IconLine icon="slash" text={job.canceled_reason} />
+        ) : null}
+      </Pressable>
+
+      {/* The Schedule button is a SIBLING of the card body, not a child. Nested
+          inside the row's Pressable it looks tidier and loses the tap to the
+          outer one — pressing Schedule would open the job sheet, which is the
+          screen this button exists to save him from. */}
+      {job.status === "unscheduled" ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Schedule ${job.customer_name ?? "this job"}`}
+          onPress={onSchedule}
+          style={({ pressed }) => [styles.scheduleButton, pressed && styles.scheduleButtonPressed]}
+        >
+          <Feather name="calendar" size={16} color={color.surface} />
+          <Text style={styles.scheduleButtonText}>Schedule</Text>
+        </Pressable>
+      ) : null}
+    </View>
   );
 }
 
 export default function JobsScreen(): React.ReactElement {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const toast = useToast();
 
   const jobsQuery = useJobs();
-  // The board joins crews the same way. Names are looked up client-side rather
-  // than widened into the jobs payload, so one cached read serves every screen
-  // that needs to put a name on a crew_id.
   const crewsQuery = useCrews();
   useRefetchOnFocus(jobsQuery.refetch);
   const { refreshing, onRefresh } = usePullToRefresh(() =>
@@ -165,7 +267,17 @@ export default function JobsScreen(): React.ReactElement {
   );
 
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<Filter>("open");
+  const [filter, setFilter] = useState<Filter>("unscheduled");
+  // Held by value: the row it came from re-reads the moment the booking lands.
+  const [bookJob, setBookJob] = useState<Job | null>(null);
+  const [actionNotice, setActionNotice] = useState<string | null>(null);
+
+  const cancel = useAction(
+    (vars: { id: string }) => jobActions.setStatus(vars.id, "canceled"),
+    {
+      invalidates: [keys.jobs.all(), ["owner", "schedule"], keys.schedule.unscheduled(), keys.agenda(), keys.overview()],
+    },
+  );
 
   const crewNames = useMemo(() => {
     const map = new Map<string, string>();
@@ -174,6 +286,12 @@ export default function JobsScreen(): React.ReactElement {
   }, [crewsQuery.data]);
 
   const jobs = jobsQuery.data ?? [];
+
+  const counts = useMemo(() => {
+    const out = {} as Record<Filter, number>;
+    for (const option of FILTERS) out[option.value] = jobs.filter((job) => matchesFilter(job, option.value)).length;
+    return out;
+  }, [jobs]);
 
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -188,14 +306,42 @@ export default function JobsScreen(): React.ReactElement {
       );
   }, [jobs, filter, query]);
 
-  // The total of what is on screen, so the header figure always describes the
-  // rows underneath it rather than the whole book.
-  const shownCents = useMemo(
-    () => visible.reduce((sum, job) => sum + job.total_cents, 0),
-    [visible],
-  );
+  const shownCents = useMemo(() => visible.reduce((sum, job) => sum + job.total_cents, 0), [visible]);
 
   const notice = noticeFrom(jobsQuery.error);
+
+  const confirmCancel = (job: Job) => {
+    Alert.alert(
+      "Cancel this work order?",
+      `${job.customer_name ?? "This job"} comes off the calendar and moves to Canceled. It stays for the record.`,
+      [
+        { text: "Keep it", style: "cancel" },
+        {
+          text: "Cancel work order",
+          style: "destructive",
+          onPress: () => {
+            void (async () => {
+              setActionNotice(null);
+              const r = await cancel.mutateAsync({ id: job.id });
+              if (!r.ok) {
+                setActionNotice(r.notice);
+                return;
+              }
+              toast.show("Work order canceled.");
+            })();
+          },
+        },
+      ],
+    );
+  };
+
+  const emptyCopy: Record<Filter, string> = {
+    unscheduled: "Nothing waiting to be scheduled. Accepted estimates land here until you put them on a day.",
+    scheduled: "Nothing on the calendar. Schedule a work order from the Unscheduled tab.",
+    completed: "No completed work orders yet.",
+    canceled: "No canceled work orders.",
+    all: "No work orders yet. Accept an estimate, or tap New work order.",
+  };
 
   return (
     <View style={styles.screen}>
@@ -216,13 +362,12 @@ export default function JobsScreen(): React.ReactElement {
           data={visible}
           keyExtractor={(job) => job.id}
           contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + space.xxl }]}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={color.brand} />
-          }
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={color.brand} />}
           keyboardShouldPersistTaps="handled"
           ListHeaderComponent={
             <View style={styles.head}>
               {notice !== null ? <Notice text={notice} /> : null}
+              {actionNotice !== null ? <Notice text={actionNotice} /> : null}
               <SearchStrip>
                 <TextInput
                   value={query}
@@ -235,50 +380,55 @@ export default function JobsScreen(): React.ReactElement {
                 />
               </SearchStrip>
               <View style={styles.filters}>
-                {FILTERS.map((option) => (
-                  <Pressable
-                    key={option.value}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: filter === option.value }}
-                    onPress={() => setFilter(option.value)}
-                    style={({ pressed }) => [
-                      styles.filter,
-                      filter === option.value && styles.filterOn,
-                      pressed && styles.rowPressed,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.filterText,
-                        filter === option.value && styles.filterTextOn,
-                      ]}
-                      numberOfLines={1}
+                {FILTERS.map((option) => {
+                  const on = filter === option.value;
+                  return (
+                    <Pressable
+                      key={option.value}
+                      accessibilityRole="tab"
+                      accessibilityState={{ selected: on }}
+                      accessibilityLabel={`${option.label}, ${counts[option.value]}`}
+                      onPress={() => setFilter(option.value)}
+                      style={({ pressed }) => [styles.filter, on && styles.filterOn, pressed && !on && styles.rowPressed]}
                     >
-                      {option.label}
-                    </Text>
-                  </Pressable>
-                ))}
+                      <Text style={[styles.filterText, on && styles.filterTextOn]} numberOfLines={1}>
+                        {option.label}
+                      </Text>
+                      {counts[option.value] > 0 ? (
+                        <Text style={[styles.filterCount, on && styles.filterTextOn]}>{counts[option.value]}</Text>
+                      ) : null}
+                    </Pressable>
+                  );
+                })}
               </View>
+              {filter === "unscheduled" && visible.length > 0 ? (
+                <Text style={styles.hint}>Tap Schedule to pick a day. Swipe a row left to cancel it.</Text>
+              ) : null}
             </View>
           }
           ListEmptyComponent={
-            <Text style={styles.empty}>
-              {jobs.length === 0
-                ? "No work orders yet."
-                : "Nothing matches that search or filter."}
-            </Text>
+            <Text style={styles.empty}>{query.trim() ? "Nothing matches that search." : emptyCopy[filter]}</Text>
           }
           renderItem={({ item }) => (
-            <WorkOrderRow
-              job={item}
-              crewName={item.crew_id === null ? null : (crewNames.get(item.crew_id) ?? null)}
-              onPress={() =>
-                router.push({ pathname: "/(owner)/job/[id]", params: { id: item.id } })
-              }
-            />
+            <SwipeRow enabled={canCancel(item)} actionLabel="Cancel" onAction={() => confirmCancel(item)}>
+              <WorkOrderRow
+                job={item}
+                crewName={item.crew_id === null ? null : (crewNames.get(item.crew_id) ?? null)}
+                onPress={() => router.push({ pathname: "/(owner)/job/[id]", params: { id: item.id } })}
+                onSchedule={() => setBookJob(item)}
+              />
+            </SwipeRow>
           )}
         />
       )}
+
+      {bookJob !== null ? (
+        <BookSheet
+          job={bookJob}
+          onClose={() => setBookJob(null)}
+          onBooked={(job) => toast.show(`${job.customer_name ?? "Job"} is on the calendar.`)}
+        />
+      ) : null}
     </View>
   );
 }
@@ -288,11 +438,14 @@ const styles = StyleSheet.create({
   centre: { flex: 1, alignItems: "center", justifyContent: "center" },
   body: { paddingBottom: space.xxl },
   head: { gap: space.md, paddingTop: space.md, paddingBottom: space.sm },
+  hint: { ...type.small, color: color.muted, paddingHorizontal: 16 },
 
   filters: { flexDirection: "row", flexWrap: "wrap", gap: 7, paddingHorizontal: 16 },
   filter: {
     minHeight: HIT,
-    justifyContent: "center",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
     paddingHorizontal: 14,
     borderRadius: radius.md,
     borderWidth: StyleSheet.hairlineWidth,
@@ -301,17 +454,37 @@ const styles = StyleSheet.create({
   },
   filterOn: { borderColor: color.brandEdge, backgroundColor: color.brandSoft },
   filterText: { ...type.small, fontFamily: font.bodySemi, color: color.muted },
+  filterCount: { fontFamily: font.monoMedium, fontSize: 12, color: color.faint },
   filterTextOn: { color: color.brandDeep },
+
+  swipeWrap: { backgroundColor: color.danger },
+  swipeUnder: { position: "absolute", top: 0, bottom: 0, right: 0, width: REVEAL },
+  swipeAction: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    backgroundColor: color.danger,
+  },
+  swipeActionPressed: { opacity: 0.85 },
+  swipeActionText: { ...type.small, fontFamily: font.bodySemi, color: color.surface },
 
   // Markate's list is edge to edge with hairline separators rather than a stack
   // of floating cards — at four lines a row, cards would be all border.
   row: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    backgroundColor: color.surface,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: color.line,
+  },
+  rowBody: {
+    flex: 1,
+    minWidth: 0,
     gap: 7,
     paddingHorizontal: 16,
     paddingVertical: 14,
     backgroundColor: color.surface,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: color.line,
   },
   rowPressed: { backgroundColor: color.hover },
   rowTop: {
@@ -328,6 +501,21 @@ const styles = StyleSheet.create({
     flexShrink: 0,
     fontVariant: ["tabular-nums"],
   },
+
+  scheduleButton: {
+    alignSelf: "center",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 3,
+    minWidth: 78,
+    minHeight: HIT + 8,
+    marginRight: 12,
+    paddingHorizontal: 10,
+    borderRadius: radius.md,
+    backgroundColor: color.brandFill,
+  },
+  scheduleButtonPressed: { backgroundColor: color.brandDown },
+  scheduleButtonText: { ...type.smaller, fontFamily: font.bodySemi, color: color.surface },
 
   line: { flexDirection: "row", alignItems: "center", gap: 8 },
   lineText: { ...type.small, color: color.muted, flex: 1, minWidth: 0 },
