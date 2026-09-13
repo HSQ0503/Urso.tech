@@ -26,6 +26,7 @@ import {
 } from "@urso/types";
 import { API_BASE, invoiceActions } from "@/api";
 import { DeliverySheet, type DeliveryChannels } from "@/components/delivery-sheet";
+import { RecurringSheet } from "@/components/recurring-sheet";
 import { Mark, NextStep } from "@/components/ledger";
 import { Notice } from "@/components/notice";
 import { keys, useInvoice } from "@/queries";
@@ -116,6 +117,7 @@ export default function InvoicePreviewScreen(): React.ReactElement {
   const [tab, setTab] = useState<PreviewTab>("job");
   const [menuOpen, setMenuOpen] = useState(false);
   const [deliveryOpen, setDeliveryOpen] = useState(false);
+  const [recurringOpen, setRecurringOpen] = useState(false);
   const [paymentsOpen, setPaymentsOpen] = useState(payments === "1");
   const [paymentMethodsOpen, setPaymentMethodsOpen] = useState(false);
   const [messageOpen, setMessageOpen] = useState(false);
@@ -362,6 +364,7 @@ export default function InvoicePreviewScreen(): React.ReactElement {
               {invoice.status !== "paid" && invoice.status !== "void" ? <ActionTile label={invoice.sent_at ? "Re-Send" : "Send"} icon="send" disabled={busy} onPress={() => { setMenuOpen(false); setDeliveryOpen(true); }} /> : null}
               {invoice.status !== "paid" && invoice.status !== "void" ? <ActionTile label="Record Payment" icon="dollar-sign" disabled={busy} onPress={() => { setMenuOpen(false); setCashText((balance / 100).toFixed(2)); setRecordOpen(true); }} /> : null}
               {invoice.status !== "void" ? <ActionTile label="Share Invoice Link" icon="link" disabled={busy} onPress={() => void shareNow()} /> : null}
+              {invoice.status !== "void" ? <ActionTile label="Make It Recurring" icon="repeat" disabled={busy} onPress={() => { setMenuOpen(false); setRecurringOpen(true); }} /> : null}
               {invoice.job_id ? <ActionTile label="Open Work Order" icon="briefcase" disabled={busy} onPress={() => { setMenuOpen(false); router.push({ pathname: "/(owner)/job/[id]", params: { id: invoice.job_id as string } }); }} /> : null}
               {invoice.contact_id ? <ActionTile label="View Customer" icon="user" disabled={busy} onPress={() => { setMenuOpen(false); router.push({ pathname: "/(owner)/customer/[id]", params: { id: invoice.contact_id as string } }); }} /> : null}
               {invoice.status !== "paid" && invoice.status !== "void" ? <ActionTile label="Void Invoice" icon="slash" danger disabled={busy} onPress={voidNow} /> : null}
@@ -370,6 +373,15 @@ export default function InvoicePreviewScreen(): React.ReactElement {
           </View>
         </View>
       </Modal>
+
+      {recurringOpen ? (
+        <RecurringSheet
+          source={{ kind: "invoice", id }}
+          pricePerVisitCents={invoice.total_cents}
+          customerName={invoice.customer_name}
+          onClose={() => setRecurringOpen(false)}
+        />
+      ) : null}
 
       <DeliverySheet
         visible={deliveryOpen}

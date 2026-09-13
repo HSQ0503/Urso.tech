@@ -23,6 +23,9 @@ import type {
   Message,
   Overview,
   PayoutSummary,
+  PlanCadence,
+  RecurringPlan,
+  RecurringPlanDetail,
   RevenueSummary,
   TeamMember,
   TodayReport,
@@ -242,6 +245,11 @@ export const owner = {
   threads: () => request<Thread[]>("/canes/threads"),
   // The shop-wide call log, newest first — the Inbox's Call Logs tab.
   calls: () => request<Call[]>("/canes/calls"),
+  // Recurring plans (0027): the list with its MRR / ARR headline, and one plan
+  // with its services and every visit it has minted.
+  recurring: () =>
+    request<{ plans: RecurringPlan[]; summary: { activeCount: number; mrrCents: number; arrCents: number } }>("/canes/recurring"),
+  recurringPlan: (id: string) => request<RecurringPlanDetail>(`/canes/recurring/${id}`),
   threadMessages: (phone: string) =>
     request<Message[]>(`/canes/threads/${encodeURIComponent(phone)}/messages`),
   threadCalls: (phone: string) =>
@@ -720,5 +728,60 @@ export const estimateActions = {
     act<{ invoiceId?: string; jobId?: string | null; notice?: string }>(
       `/canes/estimates/${id}/actions`,
       { action: "convertToInvoice" },
+    ),
+};
+
+// ── Recurring plans ──────────────────────────────────────────────────────────
+//
+// A plan is the contract behind repeat work (0027). Creating one from a
+// document copies its lines and customer; the caller only supplies the cadence
+// and the first visit's date (an ET calendar day, YYYY-MM-DD).
+export type PlanLineInput = { name: string; description?: string | null; quantity: number; unitPriceCents: number };
+export type PlanPatchInput = {
+  jobName?: string;
+  customerName?: string;
+  customerPhone?: string | null;
+  customerEmail?: string | null;
+  jobAddress?: string | null;
+  cadence?: PlanCadence;
+  startsOn?: string;
+  nextDueOn?: string;
+  leadDays?: number;
+  noticeDays?: number;
+  messageToCustomer?: string | null;
+  items?: PlanLineInput[];
+};
+type PlanCreated = { planId?: string; notice?: string };
+
+export const recurringActions = {
+  createFromEstimate: (estimateId: string, cadence: PlanCadence, startsOn: string) =>
+    act<PlanCreated>("/canes/recurring", { action: "createFromEstimate", estimateId, cadence, startsOn }),
+  createFromInvoice: (invoiceId: string, cadence: PlanCadence, startsOn: string) =>
+    act<PlanCreated>("/canes/recurring", { action: "createFromInvoice", invoiceId, cadence, startsOn }),
+  createFromJob: (jobId: string, cadence: PlanCadence, startsOn: string) =>
+    act<PlanCreated>("/canes/recurring", { action: "createFromJob", jobId, cadence, startsOn }),
+  create: (input: {
+    contactId?: string | null;
+    customerName: string;
+    customerPhone?: string | null;
+    customerEmail?: string | null;
+    jobAddress?: string | null;
+    jobName?: string | null;
+    cadence: PlanCadence;
+    startsOn: string;
+    items: PlanLineInput[];
+  }) => act<PlanCreated>("/canes/recurring", { action: "create", input }),
+  update: (id: string, patch: PlanPatchInput) =>
+    act<{ notice?: string }>(`/canes/recurring/${id}/actions`, { action: "update", patch }),
+  send: (id: string, channels: { text?: boolean; email?: boolean }) =>
+    act<{ notice?: string }>(`/canes/recurring/${id}/actions`, { action: "send", channels }),
+  agreeInPerson: (id: string) => act<{ notice?: string }>(`/canes/recurring/${id}/actions`, { action: "agreeInPerson" }),
+  pause: (id: string) => act<{ notice?: string }>(`/canes/recurring/${id}/actions`, { action: "pause" }),
+  resume: (id: string, nextDueOn?: string) =>
+    act<{ notice?: string }>(`/canes/recurring/${id}/actions`, { action: "resume", ...(nextDueOn ? { nextDueOn } : {}) }),
+  cancel: (id: string, opts: { reason?: string; cancelOpenVisit?: boolean; billFee?: boolean }) =>
+    act<{ notice?: string; feeCents?: number; feeApplies?: boolean; feeInvoiceId?: string }>(
+      `/canes/recurring/${id}/actions`,
+      { action: "cancel", ...opts },
     ),
 };

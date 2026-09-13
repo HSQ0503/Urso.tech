@@ -40,12 +40,11 @@ import {
   invoiceBalanceCents,
   JOB_STATUS_LABEL,
   PAYMENT_METHOD_LABEL,
-  RECURRENCE_LABEL,
-  type JobRecurrence,
 } from "@urso/types";
 import { callActions, jobActions, type JobDetailsPatch } from "@/api";
 import { NavigateButton } from "@/components/navigate";
 import { NextStep } from "@/components/ledger";
+import { RecurringSheet } from "@/components/recurring-sheet";
 import { Notice } from "@/components/notice";
 import { useToast } from "@/components/toast";
 import { isCompleteWhen, SlotPicker } from "@/components/slot-picker";
@@ -181,10 +180,6 @@ export default function JobScreen(): React.ReactElement {
     (fields: JobDetailsPatch) => jobActions.updateDetails(id, fields),
     { invalidates: everywhere },
   );
-  const setRecurrence = useAction(
-    (recurrence: JobRecurrence) => jobActions.setRecurrence(id, recurrence),
-    { invalidates: everywhere },
-  );
   const addChecklistItem = useAction(
     (input: { name: string; required: boolean }) =>
       jobActions.addChecklistItem(id, input.name, input.required),
@@ -214,13 +209,13 @@ export default function JobScreen(): React.ReactElement {
   const toast = useToast();
   const [moneyNotice, setMoneyNotice] = useState<string | null>(null);
   const [siteNotice, setSiteNotice] = useState<string | null>(null);
-  const [recurrenceNotice, setRecurrenceNotice] = useState<string | null>(null);
   const [checklistNotice, setChecklistNotice] = useState<string | null>(null);
   const [newChecklistStep, setNewChecklistStep] = useState("");
   const [newChecklistRequired, setNewChecklistRequired] = useState(true);
   const [dangerNotice, setDangerNotice] = useState<string | null>(null);
 
   const [moreOpen, setMoreOpen] = useState(false);
+  const [recurringOpen, setRecurringOpen] = useState(false);
   // Where the Job section sits in the scroll, so More → Schedule / Assign can
   // open the control AND bring it into view instead of toggling it off-screen.
   const jobSectionY = useRef(0);
@@ -447,12 +442,6 @@ export default function JobScreen(): React.ReactElement {
       setDepositOpen(false);
       setDepositAmount("");
     }
-  };
-
-  const onSetRecurrence = async (recurrence: JobRecurrence) => {
-    setRecurrenceNotice(null);
-    const result = await setRecurrence.mutateAsync(recurrence);
-    if (!result.ok) setRecurrenceNotice(result.notice);
   };
 
   const onAddChecklistItem = async () => {
@@ -1040,40 +1029,38 @@ export default function JobScreen(): React.ReactElement {
         </Section>
 
         {job.status !== "canceled" ? (
-          <Section label="Repeats">
+          <Section label="Recurring">
             <View style={[styles.card, styles.repeatsCard]}>
-              <Notice text={recurrenceNotice} />
-              <View style={styles.recurrenceGrid}>
-                {(Object.entries(RECURRENCE_LABEL) as [JobRecurrence, string][]).map(
-                  ([recurrence, label]) => {
-                    const selected = (job.recurrence ?? "none") === recurrence;
-                    return (
-                      <Pressable
-                        key={recurrence}
-                        accessibilityRole="button"
-                        accessibilityState={{ selected }}
-                        disabled={setRecurrence.isPending}
-                        onPress={() => void onSetRecurrence(recurrence)}
-                        style={({ pressed }) => [
-                          styles.recurrenceButton,
-                          selected && styles.recurrenceButtonOn,
-                          setRecurrence.isPending && styles.disabled,
-                          pressed && styles.pressed,
-                        ]}
-                      >
-                        <Text style={[styles.buttonText, selected && styles.recurrenceTextOn]}>
-                          {label}
-                        </Text>
-                      </Pressable>
-                    );
-                  },
-                )}
-              </View>
-              <Text style={styles.muted}>
-                {(job.recurrence ?? "none") === "none"
-                  ? "Mark a maintenance plan here — it rolls into recurring revenue on Customers."
-                  : "Counted as an active recurring plan. Visits are never booked automatically."}
-              </Text>
+              {job.plan_id ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Open recurring plan"
+                  onPress={() => router.push({ pathname: "/(owner)/plan/[id]", params: { id: job.plan_id as string } })}
+                  style={({ pressed }) => [styles.linkedRow, pressed && styles.cardPressed]}
+                >
+                  <View style={styles.linkedRowBody}>
+                    <Text style={styles.body}>Part of a recurring plan</Text>
+                    <Text style={styles.muted}>
+                      {job.plan_visit_due_on ? `This is the visit due ${job.plan_visit_due_on}. ` : ""}Open the plan for its cadence, agreement and other visits.
+                    </Text>
+                  </View>
+                  <Feather name="chevron-right" size={20} color={color.faint} />
+                </Pressable>
+              ) : (
+                <>
+                  <Text style={styles.muted}>
+                    Does this customer want this done regularly? Turn the job into a plan — quarterly, twice a year, yearly — with a
+                    signed agreement. This job becomes visit one.
+                  </Text>
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => setRecurringOpen(true)}
+                    style={({ pressed }) => [styles.button, pressed && styles.pressed]}
+                  >
+                    <Text style={styles.buttonText}>Make it recurring</Text>
+                  </Pressable>
+                </>
+              )}
             </View>
           </Section>
         ) : null}
@@ -1324,6 +1311,15 @@ export default function JobScreen(): React.ReactElement {
         />
         <BarButton icon="more-horizontal" label="More" onPress={() => setMoreOpen(true)} />
       </View>
+
+      {recurringOpen ? (
+        <RecurringSheet
+          source={{ kind: "job", id: job.id }}
+          pricePerVisitCents={job.total_cents}
+          customerName={job.customer_name}
+          onClose={() => setRecurringOpen(false)}
+        />
+      ) : null}
 
       <Modal visible={moreOpen} transparent animationType="slide" onRequestClose={() => setMoreOpen(false)}>
         <View style={styles.sheetScrim}>

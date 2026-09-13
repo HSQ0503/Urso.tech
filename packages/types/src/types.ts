@@ -124,6 +124,8 @@ export type CanesSettings = {
   lead_vendor_phones: string[];
   estimate_terms: string;
   estimate_message: string;
+  // ── 0027 recurring plans: the contract copy snapshotted onto each plan ──
+  recurring_terms: string;
   deposit_presets: number[];
   estimate_expiry_days: number;
   estimate_tax_rate_bps: number;
@@ -434,7 +436,111 @@ export type Job = {
   deposit_collected_cents?: number;
   // ── recurrence (0015); optional so fixtures compile ──
   recurrence?: JobRecurrence;
+  // ── recurring plans (0027); optional so fixtures compile ──
+  plan_id?: string | null;
+  plan_visit_due_on?: string | null; // YYYY-MM-DD, ET calendar
 };
+
+// ── Recurring plans (mirrors supabase/canes/0027_recurring_plans.sql) ────────
+//
+// A plan is the contract behind repeat work: who, what, how much per visit,
+// how often. Every visit it produces is an ordinary Job with plan_id set.
+export type PlanCadence = "monthly" | "quarterly" | "semiannual" | "yearly";
+export type PlanStatus = "draft" | "active" | "paused" | "canceled";
+export type PlanAgreementSource = "customer" | "in_person";
+
+export const PLAN_CADENCE_LABEL: Record<PlanCadence, string> = {
+  monthly: "Monthly",
+  quarterly: "Quarterly",
+  semiannual: "Every 6 months",
+  yearly: "Yearly",
+};
+
+// Visits per year, for turning a price per visit into annual (and ÷12,
+// monthly) recurring revenue.
+export const PLAN_VISITS_PER_YEAR: Record<PlanCadence, number> = {
+  monthly: 12,
+  quarterly: 4,
+  semiannual: 2,
+  yearly: 1,
+};
+
+export const PLAN_STATUS_LABEL: Record<PlanStatus, string> = {
+  draft: "Draft",
+  active: "Active",
+  paused: "Paused",
+  canceled: "Canceled",
+};
+
+export type RecurringPlan = {
+  id: string;
+  created_at: string;
+  updated_at: string;
+  number: string; // PLAN-000001
+  contact_id: string | null;
+  source_estimate_id: string | null;
+  source_invoice_id: string | null;
+  source_job_id: string | null;
+  customer_name: string | null;
+  customer_phone: string | null;
+  customer_email: string | null;
+  job_address: string | null;
+  job_name: string | null;
+  cadence: PlanCadence;
+  price_per_visit_cents: number;
+  status: PlanStatus;
+  starts_on: string; // YYYY-MM-DD
+  next_due_on: string | null;
+  last_generated_for: string | null;
+  lead_days: number;
+  cancellation_fee_bps: number;
+  notice_days: number;
+  terms: string | null;
+  message_to_customer: string | null;
+  public_token: string;
+  sent_at: string | null;
+  viewed_at: string | null;
+  signed_at: string | null;
+  signature_name: string | null;
+  agreement_source: PlanAgreementSource | null;
+  paused_at: string | null;
+  canceled_at: string | null;
+  canceled_reason: string | null;
+  cancellation_fee_invoice_id: string | null;
+};
+
+export type RecurringPlanItem = {
+  id: string;
+  plan_id: string;
+  position: number;
+  name: string;
+  description: string | null;
+  quantity: number;
+  unit_price_cents: number;
+  line_total_cents: number;
+};
+
+export type RecurringPlanWithItems = RecurringPlan & { items: RecurringPlanItem[] };
+
+// What the mobile Recurring list and a plan's detail need beyond the row: the
+// visits it has produced so far, newest first.
+export type RecurringPlanVisit = Pick<
+  Job,
+  "id" | "status" | "scheduled_at" | "ends_at" | "total_cents" | "plan_visit_due_on" | "crew_id"
+>;
+
+export type RecurringPlanDetail = RecurringPlanWithItems & { visits: RecurringPlanVisit[] };
+
+// Normalized recurring revenue of one plan: price per visit × visits per year.
+export function planAnnualCents(plan: Pick<RecurringPlan, "cadence" | "price_per_visit_cents">): number {
+  return plan.price_per_visit_cents * PLAN_VISITS_PER_YEAR[plan.cadence];
+}
+
+export function planCancellationFeeCents(
+  plan: Pick<RecurringPlan, "price_per_visit_cents" | "cancellation_fee_bps">,
+): number {
+  return Math.round((plan.price_per_visit_cents * plan.cancellation_fee_bps) / 10_000);
+}
 
 export type Crew = {
   id: string; created_at: string; name: string;

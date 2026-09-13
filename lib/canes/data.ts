@@ -65,6 +65,8 @@ const DEFAULT_SETTINGS: CanesSettings = {
     "Payment due on completion unless a deposit is agreed. Estimates are valid for 28 days. Canes Pressure Washing is not responsible for pre-existing damage, loose or failing surfaces, or oxidation revealed by cleaning. Access to water and power required. Reschedules due to weather are expected.",
   estimate_message:
     "Thanks for having us out. Here is your estimate. Tap to review the details and approve, and we will get you on the schedule. Any questions, just reply to this text.",
+  recurring_terms:
+    "This is a recurring service agreement between Canes Pressure Washing and the customer named above. Canes will perform the services listed at the price per visit shown, on the schedule shown, and will contact you to book each visit in advance. Each visit is invoiced on completion and payment is due on receipt unless agreed otherwise. Prices may be adjusted for future visits with notice before the visit is booked. Either party may end this agreement at any time. If the customer cancels after the next visit has been scheduled, a cancellation fee of 50% of that visit's price applies. Access to water and power is required; weather reschedules are expected and carry no fee.",
   deposit_presets: [0, 25, 50],
   estimate_expiry_days: 28,
   estimate_tax_rate_bps: 0,
@@ -119,6 +121,7 @@ export async function getSettings(): Promise<CanesSettings> {
     ),
     estimate_terms: map.estimate_terms ?? DEFAULT_SETTINGS.estimate_terms,
     estimate_message: map.estimate_message ?? DEFAULT_SETTINGS.estimate_message,
+    recurring_terms: map.recurring_terms ?? DEFAULT_SETTINGS.recurring_terms,
     deposit_presets: map.deposit_presets ?? DEFAULT_SETTINGS.deposit_presets,
     estimate_expiry_days: Number(map.estimate_expiry_days ?? DEFAULT_SETTINGS.estimate_expiry_days),
     estimate_tax_rate_bps: Number(map.estimate_tax_rate_bps ?? DEFAULT_SETTINGS.estimate_tax_rate_bps),

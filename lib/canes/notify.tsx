@@ -1,9 +1,11 @@
 import { Resend } from "resend";
 import { render } from "@react-email/components";
 import { fmtEt, fmtMoney, fmtPhone, invoiceBalanceCents, minutesSince } from "@/lib/canes/types";
-import type { Estimate, Invoice, Lead, PaymentMethod } from "@/lib/canes/types";
+import type { Estimate, Invoice, Lead, PaymentMethod, RecurringPlan } from "@/lib/canes/types";
+import { PLAN_CADENCE_LABEL, etLocalToIso } from "@/lib/canes/types";
 import type { Overview } from "@/lib/canes/data";
 import { EstimateEmail } from "@/emails/canes/estimate-email";
+import { PlanEmail } from "@/emails/canes/plan-email";
 import { ColdLeadEmail, EscalationEmail, UnconfirmedEmail } from "@/emails/canes/lead-emails";
 import { DepositPaidOwnerEmail, EstimateApprovedEmail, EstimateDeclinedEmail } from "@/emails/canes/estimate-outcome-emails";
 import { InvoiceEmail } from "@/emails/canes/invoice-email";
@@ -68,7 +70,7 @@ async function sendCustomerEmail(input: {
   subject: string;
   html: string;
   idempotencyKey: string;
-  documentType: "estimate" | "invoice";
+  documentType: "estimate" | "invoice" | "plan";
   documentId: string;
 }): Promise<CustomerEmailResult> {
   const key = process.env.RESEND_API;
@@ -278,6 +280,56 @@ export async function notifyEstimateSent(estimate: Estimate, deliveryId = estima
     console.error("[canes/notify] estimate render failed:", message);
     return { ok: false, error: message };
   }
+}
+
+// Customer-facing: the recurring service agreement, for signature.
+export async function notifyPlanSent(plan: RecurringPlan, deliveryId = plan.id): Promise<CustomerEmailResult> {
+  if (!plan.customer_email) return { ok: false, skipped: "No email address is on file." };
+  try {
+    const html = await render(
+      <PlanEmail
+        number={plan.number}
+        customerName={plan.customer_name}
+        jobAddress={plan.job_address}
+        jobName={plan.job_name}
+        cadence={PLAN_CADENCE_LABEL[plan.cadence]}
+        pricePerVisit={fmtMoney(plan.price_per_visit_cents)}
+        firstVisit={fmtEt(etLocalToIso(`${plan.next_due_on ?? plan.starts_on}T12:00`), { month: "short", day: "numeric", year: "numeric" })}
+        message={plan.message_to_customer}
+        reviewUrl={`${APP_URL}/CanesPressure/r/${plan.public_token}`}
+      />,
+    );
+    return sendCustomerEmail({
+      to: plan.customer_email,
+      subject: `Your recurring service agreement from Canes Pressure Washing — ${plan.number}`,
+      html,
+      idempotencyKey: `plan-send/${plan.id}/${deliveryId}`,
+      documentType: "plan",
+      documentId: plan.id,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("[canes/notify] plan render failed:", message);
+    return { ok: false, error: message };
+  }
+}
+
+// Owner-facing: a customer signed their recurring agreement.
+export async function notifyPlanSigned(plan: RecurringPlan): Promise<void> {
+  const html = await render(
+    <EstimateApprovedEmail
+      number={plan.number}
+      customerName={plan.customer_name}
+      customerPhone={plan.customer_phone ? fmtPhone(plan.customer_phone) : null}
+      jobAddress={plan.job_address}
+      jobName={`${plan.job_name ?? "Recurring service"} · ${PLAN_CADENCE_LABEL[plan.cadence]}`}
+      total={`${fmtMoney(plan.price_per_visit_cents)} per visit`}
+      deposit={null}
+      openUrl={`${APP_URL}/CanesPressure`}
+      signatureName={plan.signature_name}
+    />,
+  );
+  await send(`✅ Signed — ${plan.customer_name ?? plan.number} recurring (${fmtMoney(plan.price_per_visit_cents)}/visit)`, html);
 }
 
 // Owner-facing: a customer approved their estimate — job created, get scheduling.

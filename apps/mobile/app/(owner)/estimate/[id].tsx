@@ -23,6 +23,7 @@ import {
 } from "@urso/types";
 import { API_BASE, estimateActions } from "@/api";
 import { DeliverySheet, type DeliveryChannels } from "@/components/delivery-sheet";
+import { RecurringSheet } from "@/components/recurring-sheet";
 import { Mark, NextStep } from "@/components/ledger";
 import { Notice } from "@/components/notice";
 import { useToast } from "@/components/toast";
@@ -127,6 +128,7 @@ export default function EstimatePreviewScreen(): React.ReactElement {
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [deliveryOpen, setDeliveryOpen] = useState(false);
+  const [recurringOpen, setRecurringOpen] = useState(false);
   const [tab, setTab] = useState<PreviewTab>("job");
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [messageOpen, setMessageOpen] = useState(false);
@@ -434,6 +436,7 @@ export default function EstimatePreviewScreen(): React.ReactElement {
               ) : canApprove || statusGood ? (
                 <ActionTile label="Convert To Invoice" icon="file-text" disabled={busy} onPress={convertNow} />
               ) : null}
+              {!statusBad ? <ActionTile label="Make It Recurring" icon="repeat" disabled={busy} onPress={() => { setMenuOpen(false); setRecurringOpen(true); }} /> : null}
               <ActionTile label="Clone Estimate" icon="copy" disabled={busy} onPress={() => void duplicateNow()} />
               <ActionTile label="Share Estimate Link" icon="link" disabled={busy} onPress={() => void shareNow()} />
               {canSend ? <ActionTile label="Cancel Estimate" icon="slash" danger disabled={busy} onPress={voidNow} /> : null}
@@ -442,6 +445,15 @@ export default function EstimatePreviewScreen(): React.ReactElement {
           </View>
         </View>
       </Modal>
+
+      {recurringOpen ? (
+        <RecurringSheet
+          source={{ kind: "estimate", id }}
+          pricePerVisitCents={estimate.total_cents}
+          customerName={estimate.customer_name}
+          onClose={() => setRecurringOpen(false)}
+        />
+      ) : null}
 
       <DeliverySheet
         visible={deliveryOpen}

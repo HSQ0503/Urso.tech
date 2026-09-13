@@ -1,6 +1,6 @@
 import { canesDb } from "@/lib/canes/supabase";
 import { isDemo } from "@/lib/canes/data";
-import { getRecurringInsights } from "@/lib/canes/growth";
+import { listPlans, mrrCentsOf, recurringCollectedByMonth } from "@/lib/canes/recurring";
 import { rangeBounds } from "@/lib/canes/payouts";
 import { DEMO_PAYMENTS } from "@/lib/canes/fixtures";
 import type { PayoutRangeKey, RevenueMonth, RevenueSummary, RevenueWindow } from "@/lib/canes/types";
@@ -49,10 +49,14 @@ export async function getRevenueSummary(): Promise<RevenueSummary> {
   // ET serves all four.
   const earliest = bounds.reduce((min, b) => (b.startIso < min ? b.startIso : min), bounds[0].startIso);
 
-  const [payments, refunds, recurring] = await Promise.all([
+  // Recurring is read off PLANS (0027): MRR is the sum of active plans'
+  // per-visit price normalized to a month; the monthly bars are money actually
+  // collected on plan visits. The old jobs.recurrence flag no longer counts.
+  const [payments, refunds, plans, months] = await Promise.all([
     paymentsSince(earliest),
     refundsSince(earliest),
-    getRecurringInsights(),
+    listPlans(),
+    recurringCollectedByMonth(),
   ]);
 
   const sumIn = (rows: LedgerRow[], startIso: string, endIso: string) => {
@@ -70,13 +74,14 @@ export async function getRevenueSummary(): Promise<RevenueSummary> {
     collectedCents: sumIn(payments, b.startIso, b.endIso) - sumIn(refunds, b.startIso, b.endIso),
   }));
 
+  const mrrCents = mrrCentsOf(plans);
   return {
     windows,
     recurring: {
-      mrrCents: recurring.mrrCents,
-      arrCents: recurring.mrrCents * 12,
-      activePlans: recurring.rows.length,
-      months: recurring.months.map((m) => ({ key: m.key, label: m.label, recurringCents: m.cents })),
+      mrrCents,
+      arrCents: mrrCents * 12,
+      activePlans: plans.filter((p) => p.status === "active").length,
+      months: months.map((m) => ({ key: m.key, label: m.label, recurringCents: m.cents })),
     },
   };
 }

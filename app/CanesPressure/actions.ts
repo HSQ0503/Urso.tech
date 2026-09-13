@@ -40,6 +40,7 @@ import {
 } from "@/lib/canes/expenses";
 import { addBusinessExpenseRow, deleteBusinessExpenseRow } from "@/lib/canes/overhead";
 import { ensureContact, getCustomer } from "@/lib/canes/customers";
+import * as recurring from "@/lib/canes/recurring";
 import { denyUnlessPermitted, denyUnlessPermittedOrAssignedTechnician } from "@/lib/canes/access";
 import { listInvoiceRewards, rewardConfigFrom, getRewardConfig, type RewardConfig } from "@/lib/canes/rewards";
 import {
@@ -47,6 +48,8 @@ import {
   notifyEstimateApproved,
   notifyEstimateDeclined,
   notifyInvoiceSent,
+  notifyPlanSent,
+  notifyPlanSigned,
   notifyRewardClaimed,
 } from "@/lib/canes/notify";
 import { drainPaymentEmailTasks, enqueueInvoicePaymentEmails } from "@/lib/canes/payment-notifications";
@@ -74,6 +77,8 @@ import {
   fmtPhone,
   toE164,
   PAYMENT_METHOD_LABEL,
+  PLAN_CADENCE_LABEL,
+  type PlanCadence,
   type CalendarEventKind,
   type CatalogKind,
   type Estimate,
@@ -5230,4 +5235,199 @@ export async function createEstimateForCustomer(
     jobAddress: primary?.line ?? lead?.address ?? undefined,
     jobName: lead?.service ?? undefined,
   });
+}
+
+// ── Recurring plans (0027) ───────────────────────────────────────────────────
+//
+// Thin guards over lib/canes/recurring.ts. A plan is a contract, so it sits
+// under the "estimates" permission like the other documents a customer signs;
+// the cancellation-fee invoice goes through createManualInvoice and therefore
+// carries the "invoices" gate of its own.
+
+export async function createRecurringPlan(input: recurring.CreatePlanInput): Promise<ActionResult & { planId?: string }> {
+  if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted("estimates");
+  if (denied) return denied;
+  const result = await recurring.createPlan(input);
+  if (result.ok) refresh();
+  return result;
+}
+
+export async function createRecurringPlanFromEstimate(
+  estimateId: string,
+  opts: { cadence: PlanCadence; startsOn: string },
+): Promise<ActionResult & { planId?: string }> {
+  if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted("estimates");
+  if (denied) return denied;
+  const result = await recurring.createPlanFromEstimate(estimateId, opts);
+  if (result.ok) refresh();
+  return result;
+}
+
+export async function createRecurringPlanFromInvoice(
+  invoiceId: string,
+  opts: { cadence: PlanCadence; startsOn: string },
+): Promise<ActionResult & { planId?: string }> {
+  if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted("estimates");
+  if (denied) return denied;
+  const result = await recurring.createPlanFromInvoice(invoiceId, opts);
+  if (result.ok) refresh();
+  return result;
+}
+
+export async function createRecurringPlanFromJob(
+  jobId: string,
+  opts: { cadence: PlanCadence; startsOn: string },
+): Promise<ActionResult & { planId?: string }> {
+  if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted("estimates");
+  if (denied) return denied;
+  const result = await recurring.createPlanFromJob(jobId, opts);
+  if (result.ok) refresh();
+  return result;
+}
+
+export async function updateRecurringPlan(planId: string, patch: recurring.PlanPatch): Promise<ActionResult> {
+  if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted("estimates");
+  if (denied) return denied;
+  const result = await recurring.updatePlan(planId, patch);
+  if (result.ok) refresh();
+  return result;
+}
+
+// Text and/or email the agreement link. Same channel rules as an estimate: the
+// text is an automated send (quiet hours, opt-out), the email is immediate.
+export async function sendRecurringPlanContract(
+  planId: string,
+  opts?: { channels?: { text?: boolean; email?: boolean } },
+): Promise<ActionResult> {
+  if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted("estimates");
+  if (denied) return denied;
+  const plan = await recurring.getPlan(planId);
+  if (!plan) return { ok: false, notice: "Plan not found." };
+  if (plan.status !== "draft") return { ok: false, notice: `This plan is already ${plan.status}. Only a draft can be sent for signature.` };
+  if (plan.price_per_visit_cents <= 0) return { ok: false, notice: "Add a priced service before sending the agreement." };
+  const wantText = opts?.channels?.text ?? true;
+  const wantEmail = opts?.channels?.email ?? true;
+  const canText = wantText && Boolean(plan.customer_phone);
+  const canEmail = wantEmail && Boolean(plan.customer_email);
+  if (!canText && !canEmail) {
+    return { ok: false, notice: "Add a phone number or email before sending this agreement." };
+  }
+  const url = `${process.env.NEXT_PUBLIC_APP_URL ?? "https://urso.ws"}/CanesPressure/r/${plan.public_token}`;
+  const outcomes: string[] = [];
+  if (canText && plan.customer_phone) {
+    const name = plan.customer_name ? ` ${plan.customer_name.split(" ")[0]}` : "";
+    const body = `Hi${name}, here is your recurring service agreement from Canes Pressure Washing (${PLAN_CADENCE_LABEL[plan.cadence].toLowerCase()}, ${fmtMoney(plan.price_per_visit_cents)} per visit). Review and sign here: ${url} Reply STOP to opt out.`;
+    const sms = await sendCanesSms({ to: plan.customer_phone, body, automated: true });
+    outcomes.push(sms.ok ? "Texted." : sms.skipped === "quiet_hours" ? "Text queued until texting hours." : `Text not sent: ${sms.skipped ?? sms.error ?? "unknown"}.`);
+  }
+  if (canEmail) {
+    const email = await notifyPlanSent(plan, new Date().toISOString());
+    outcomes.push(email.ok ? "Emailed." : `Email not sent: ${email.skipped ?? email.error ?? "unknown"}.`);
+  }
+  await recurring.markPlanSent(planId);
+  refresh();
+  return { ok: true, notice: `Agreement sent. ${outcomes.join(" ")}`.trim() };
+}
+
+export async function agreeRecurringPlanInPerson(planId: string): Promise<ActionResult> {
+  if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted("estimates");
+  if (denied) return denied;
+  const result = await recurring.agreePlanInPerson(planId);
+  if (result.ok) refresh();
+  return result;
+}
+
+export async function pauseRecurringPlan(planId: string): Promise<ActionResult> {
+  if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted("estimates");
+  if (denied) return denied;
+  const result = await recurring.pausePlan(planId);
+  if (result.ok) refresh();
+  return result;
+}
+
+export async function resumeRecurringPlan(planId: string, nextDueOn?: string): Promise<ActionResult> {
+  if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted("estimates");
+  if (denied) return denied;
+  const result = await recurring.resumePlan(planId, nextDueOn);
+  if (result.ok) refresh();
+  return result;
+}
+
+// Cancel the plan; optionally cancel its already-minted next visit and bill
+// the contract's cancellation fee as a standalone invoice. Billing is always
+// the owner's explicit choice — never automatic.
+export async function cancelRecurringPlan(
+  planId: string,
+  opts?: { reason?: string; cancelOpenVisit?: boolean; billFee?: boolean },
+): Promise<ActionResult & { feeCents?: number; feeApplies?: boolean; feeInvoiceId?: string }> {
+  if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted("estimates");
+  if (denied) return denied;
+  const plan = await recurring.getPlan(planId);
+  if (!plan) return { ok: false, notice: "Plan not found." };
+  const result = await recurring.cancelPlan(planId, opts?.reason ?? null);
+  if (!result.ok) return result;
+  const notes: string[] = [result.notice ?? "Plan canceled."];
+  if (opts?.cancelOpenVisit && result.canceledVisitId) {
+    const canceled = await setJobStatus(result.canceledVisitId, "canceled", opts?.reason?.trim() || `Recurring plan ${plan.number} canceled`);
+    if (!canceled.ok) notes.push(`The next visit could not be canceled: ${canceled.notice}`);
+    else notes.push("Its next visit was canceled too.");
+  }
+  let feeInvoiceId: string | undefined;
+  if (opts?.billFee && (result.feeCents ?? 0) > 0) {
+    const fee = await createManualInvoice({
+      contactId: plan.contact_id ?? undefined,
+      customerName: plan.customer_name ?? "Customer",
+      customerPhone: plan.customer_phone ?? undefined,
+      customerEmail: plan.customer_email ?? undefined,
+      jobAddress: plan.job_address ?? undefined,
+      jobName: `Cancellation fee — ${plan.job_name ?? "recurring service"} (${plan.number})`,
+      totalCents: result.feeCents ?? 0,
+    });
+    if (fee.ok && fee.invoiceId) {
+      feeInvoiceId = fee.invoiceId;
+      await recurring.recordPlanFeeInvoice(planId, fee.invoiceId);
+      notes.push(`A ${fmtMoney(result.feeCents ?? 0)} cancellation-fee invoice was drafted — send it from Invoices.`);
+    } else {
+      notes.push(`The fee invoice could not be created: ${fee.notice ?? "unknown"}`);
+    }
+  }
+  refresh();
+  return { ok: true, notice: notes.join(" "), feeCents: result.feeCents, feeApplies: result.feeApplies, feeInvoiceId };
+}
+
+// Public, token-scoped — the /CanesPressure/r/[token] page. NEVER exposed on
+// /api/v1 (same rule as approveEstimate / claimInvoiceReward).
+export async function signRecurringPlan(token: string, signatureName: string): Promise<ActionResult> {
+  if (!canesConfigured()) return DEMO;
+  const result = await recurring.signPlan(token, signatureName);
+  if (result.ok) {
+    const plan = await recurring.getPlanByToken(token);
+    if (plan && plan.agreement_source === "customer" && plan.signed_at) {
+      try {
+        await notifyPlanSigned(plan);
+        await alertOwner(
+          `${plan.customer_name ?? "A customer"} signed the ${PLAN_CADENCE_LABEL[plan.cadence].toLowerCase()} plan (${fmtMoney(plan.price_per_visit_cents)}/visit). First visit ${plan.next_due_on ?? plan.starts_on}.`,
+        );
+      } catch (error) {
+        console.error("[canes] plan signed notifications failed:", error);
+      }
+    }
+    refresh();
+  }
+  return result;
+}
+
+export async function markRecurringPlanViewed(token: string): Promise<void> {
+  if (!canesConfigured()) return;
+  await recurring.markPlanViewed(token);
 }

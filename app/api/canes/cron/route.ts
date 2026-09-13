@@ -34,6 +34,7 @@ import {
 } from "@/lib/canes/push";
 import { drainPaymentEmailTasks } from "@/lib/canes/payment-notifications";
 import { reconcileLegacySquarePaymentHistory } from "@/lib/canes/square";
+import { generateDueVisits } from "@/lib/canes/recurring";
 import type { AutomationTask, Estimate, Lead } from "@/lib/canes/types";
 
 // The Canes automation heartbeat, hit by Vercel cron every 5 minutes
@@ -113,6 +114,10 @@ export async function GET(req: NextRequest) {
   await section("legacy_square_history", businessDeadlineAt, () =>
     reconcileLegacySquarePaymentHistory(3));
   await section("expire_estimates", businessDeadlineAt, expireEstimates);
+  // Recurring plans: mint the next visit as an unscheduled work order once it
+  // is inside the plan's lead window. Idempotent (plan clock + unique index),
+  // so a retry after a half-run cannot double a visit.
+  await section("recurring_visits", businessDeadlineAt, generateDueVisits);
   await section("safety_net", businessDeadlineAt, () => confirmationSafetyNet(businessDeadlineAt));
   await section("no_reply", businessDeadlineAt, () => noReplyEscalations(businessDeadlineAt));
   await section("auto_release", businessDeadlineAt, () => autoReleaseUnconfirmed(businessDeadlineAt));

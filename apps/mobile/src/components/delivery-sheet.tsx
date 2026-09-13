@@ -84,7 +84,7 @@ export function DeliverySheet({
   onSend,
 }: {
   visible: boolean;
-  documentLabel: "estimate" | "invoice";
+  documentLabel: "estimate" | "invoice" | "agreement";
   phone: string | null;
   email: string | null;
   sending: boolean;
@@ -159,7 +159,11 @@ export function DeliverySheet({
           )}
 
           {canSend ? <Text style={styles.summary}>{summary}</Text> : null}
-          <Text style={styles.disclaimer}>Text delivery respects customer opt-outs and quiet hours. Card payments open on Square’s secure page.</Text>
+          <Text style={styles.disclaimer}>
+            {documentLabel === "agreement"
+              ? "Text delivery respects customer opt-outs and quiet hours. The customer signs by typing their name on the page."
+              : "Text delivery respects customer opt-outs and quiet hours. Card payments open on Square’s secure page."}
+          </Text>
 
           <Pressable
             accessibilityRole="button"

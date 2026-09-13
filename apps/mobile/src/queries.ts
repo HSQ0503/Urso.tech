@@ -18,6 +18,10 @@ export const keys = {
     calls: (phone: string) => ["owner", "threads", phone, "calls"] as const,
   },
   calls: () => ["owner", "calls"] as const,
+  recurring: {
+    all: () => ["owner", "recurring"] as const,
+    one: (id: string) => ["owner", "recurring", id] as const,
+  },
   leads: {
     all: () => ["owner", "leads"] as const,
     one: (id: string) => ["owner", "leads", id] as const,
@@ -67,6 +71,16 @@ export const useThreads = () =>
 
 export const useCalls = () =>
   useQuery({ queryKey: keys.calls(), queryFn: () => owner.calls().then(unwrap) });
+
+export const useRecurringPlans = () =>
+  useQuery({ queryKey: keys.recurring.all(), queryFn: () => owner.recurring().then(unwrap) });
+
+export const useRecurringPlan = (id: string | null) =>
+  useQuery({
+    queryKey: keys.recurring.one(id ?? "none"),
+    queryFn: () => owner.recurringPlan(id as string).then(unwrap),
+    enabled: id !== null,
+  });
 
 export const useThreadMessages = (phone: string) =>
   useQuery({

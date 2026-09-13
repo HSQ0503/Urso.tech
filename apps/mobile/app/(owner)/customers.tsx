@@ -188,15 +188,20 @@ export default function CustomersScreen(): React.ReactElement {
                 </View>
               ) : null}
               {!searching ? (
-                <View style={styles.recurringCard}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Open recurring plans"
+                  onPress={() => router.push("/(owner)/recurring")}
+                  style={({ pressed }) => [styles.recurringCard, pressed && { backgroundColor: color.hover }]}
+                >
                   <View style={styles.recurringTitleRow}>
                     <Feather name="repeat" size={16} color={color.brand} />
                     <Text style={styles.recurringTitle}>Recurring plans</Text>
                   </View>
                   <Text style={styles.recurringCopy}>
-                    None yet — set a job to repeat from the job editor.
+                    Repeat customers and their contracts live under Recurring. Tap to open.
                   </Text>
-                </View>
+                </Pressable>
               ) : null}
             </View>
           }
