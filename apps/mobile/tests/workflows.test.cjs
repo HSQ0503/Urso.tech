@@ -23,13 +23,15 @@ const native = {
 // Exercise the real React screens and handlers, replacing only native hosts,
 // navigation and network boundaries so tests never touch customer data.
 function harness() {
-  const state = { params: { id: "first" }, estimates: {}, jobs: {}, writes: [], navigation: [], actionData: { estimateId: "created" } };
+  const state = { params: { id: "first" }, estimates: {}, jobs: {}, writes: [], navigation: [], alerts: [], actionData: { estimateId: "created" } };
   const cache = new Map();
   const key = new Proxy(() => [], { get: () => key });
   const queries = {
     keys: key,
     useEstimate: (id) => ({ data: state.estimates[id] ?? null, isPending: false }),
     useJob: (id) => ({ data: state.jobs[id] ?? null, isPending: false, isError: false }),
+    useJobs: () => ({ data: [] }),
+    useInvoices: () => ({ data: [] }),
     useCustomers: () => ({ data: [] }),
     useCatalog: () => ({ data: [] }),
   };
@@ -42,7 +44,7 @@ function harness() {
     const module = { exports: {} };
     cache.set(file, module);
     function requireSource(name) {
-      if (name === "react-native") return native;
+      if (name === "react-native") return { ...native, Alert: { alert: (...args) => state.alerts.push(args) } };
       if (name === "react" || name.startsWith("react/")) return require(name);
       if (name === "expo-router") return { useLocalSearchParams: () => state.params, useFocusEffect: (effect) => React.useEffect(effect, [effect]), router: { back() {}, replace: (href) => state.navigation.push(href), push: (href) => state.navigation.push(href) } };
       if (name === "react-native-safe-area-context") return { useSafeAreaInsets: () => ({ top: 0, bottom: 0 }) };
@@ -50,7 +52,9 @@ function harness() {
       if (name === "@/queries") return queries;
       if (name === "@/api") return { estimateActions: api, recurringActions: api, customerActions: api };
       if (name === "@/components/toast") return { useToast: () => ({ show() {} }) };
-      if (name === "@/query") return { noticeFrom: () => null, useAction: (fn) => ({ mutateAsync: fn, isPending: false }) };
+      if (name === "@/query") return { noticeFrom: () => null, usePullToRefresh: () => ({ refreshing: false, onRefresh() {} }), useAction: (fn) => ({ mutateAsync: fn, isPending: false }) };
+      if (name === "@/components/ledger") return { Mark: host("Mark"), NextStep: host("NextStep") };
+      if (name === "@/components/delivery-sheet") return { DeliverySheet: host("DeliverySheet") };
       if (name === "@/components/address-input") return { AddressInput: host("AddressInput") };
       if (name === "@/components/notice") return { Notice: host("Notice") };
       if (name === "@urso/types") return load(path.resolve(root, "../../packages/types/src/types.ts"));
@@ -319,5 +323,24 @@ test("saving a customer opens the id returned by the server", async () => {
   await act(async () => button(renderer, "Save customer").props.onPress());
   assert.equal(state.navigation.at(-1)?.pathname, "/(owner)/customer/[id]");
   assert.equal(state.navigation.at(-1)?.params.id, "new-contact");
+  await act(async () => renderer.unmount());
+});
+
+test("changing estimates clears the previous document's cancellation notice", async () => {
+  const { state, load } = harness();
+  state.estimates.first = estimate("First");
+  state.estimates.second = { ...estimate("Second"), status: "approved" };
+  state.actionData = { notice: "Estimate canceled." };
+  const Screen = load("app/(owner)/estimate/[id].tsx").default;
+  const renderer = await mount(Screen);
+  await act(async () => button(renderer, "Estimate actions").props.onPress());
+  const cancel = renderer.root.findAllByType("Pressable").find((item) => text(item) === "Cancel Estimate");
+  await act(async () => cancel.props.onPress());
+  await act(async () => state.alerts.at(-1)[2].find((action) => action.text === "Cancel estimate").onPress());
+  assert.match(text(renderer.toJSON()), /Estimate canceled\./);
+  state.params = { id: "second" };
+  await act(async () => renderer.update(React.createElement(Screen)));
+  assert.doesNotMatch(text(renderer.toJSON()), /Estimate canceled\./);
+  assert.match(text(renderer.toJSON()), /Second/);
   await act(async () => renderer.unmount());
 });

@@ -113,6 +113,10 @@ function ActionTile({
 
 export default function EstimatePreviewScreen(): React.ReactElement {
   const { id } = useLocalSearchParams<{ id: string }>();
+  return <EstimatePreview key={id} id={id} />;
+}
+
+function EstimatePreview({ id }: { id: string }): React.ReactElement {
   const insets = useSafeAreaInsets();
   const estimateQuery = useEstimate(id);
   // Approval creates the work order silently; the preview has to be able to
