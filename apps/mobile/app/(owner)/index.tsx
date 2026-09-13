@@ -187,25 +187,10 @@ export default function HomeScreen(): React.ReactElement {
 
   return (
     <View style={styles.screen}>
-      <LauncherBar
-        onMenu={() => router.push("/(owner)/more")}
-        actions={[
-          {
-            key: "inbox",
-            icon: "message-square",
-            label: "Inbox",
-            count: unread,
-            onPress: () => router.push("/(owner)/inbox"),
-          },
-          {
-            key: "queue",
-            icon: "check-square",
-            label: "Needs you now",
-            count: needs,
-            onPress: () => router.push("/(owner)/dashboard"),
-          },
-        ]}
-      />
+      {/* The bar carries only the menu. Inbox already has a tab and the
+          announcement strip below already says what needs him — a third and
+          fourth door to the same two places was the clutter he named. */}
+      <LauncherBar onMenu={() => router.push("/(owner)/more")} actions={[]} />
 
       {showSpinner ? (
         <View style={styles.centre}>
@@ -232,7 +217,7 @@ export default function HomeScreen(): React.ReactElement {
               icon="phone-call"
               title={`Call ${cold} lead${cold === 1 ? "" : "s"} now`}
               detail="Speed to lead is what wins the job."
-              onPress={() => router.push("/(owner)/dashboard")}
+              onPress={() => router.push("/(owner)/leads")}
             />
           ) : needs > 0 ? (
             <Announcement

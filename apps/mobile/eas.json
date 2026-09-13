@@ -9,14 +9,16 @@
       "environment": "development",
       "ios": {
         "simulator": true
-      }
+      },
+      "channel": "development"
     },
     "preview": {
       "distribution": "internal",
       "environment": "preview",
       "env": {
         "EXPO_PUBLIC_API_BASE": "https://urso.ws"
-      }
+      },
+      "channel": "preview"
     },
     "production": {
       "distribution": "store",
@@ -24,7 +26,8 @@
       "environment": "production",
       "env": {
         "EXPO_PUBLIC_API_BASE": "https://urso.ws"
-      }
+      },
+      "channel": "production"
     }
   },
   "submit": {

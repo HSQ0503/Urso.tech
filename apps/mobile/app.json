@@ -66,6 +66,12 @@
         "projectId": "8a1cf05e-0b0d-4f25-a1c3-b68601d1a800"
       }
     },
-    "owner": "hsq0503"
+    "owner": "hsq0503",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/8a1cf05e-0b0d-4f25-a1c3-b68601d1a800"
+    }
   }
 }

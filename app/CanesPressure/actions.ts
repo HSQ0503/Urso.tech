@@ -2709,9 +2709,10 @@ export async function setJobStatus(
   if (!canesConfigured()) return DEMO;
   const denied = await denyUnlessPermitted("schedule");
   if (denied) return denied;
-  if (status === "canceled" && !reason?.trim()) {
-    return { ok: false, notice: "A reason is required to cancel a job." };
-  }
+  // A cancel with no typed reason is still a cancel. Requiring one made the
+  // mobile prompt's "Cancel job" button silently refuse whenever the field was
+  // left blank — the owner read that as the button doing nothing.
+  if (status === "canceled" && !reason?.trim()) reason = "Canceled by owner";
   const job = await getJob(jobId);
   if (!job) return { ok: false, notice: "Job not found." };
   if (job.status === status) return { ok: true, notice: `This job is already ${status}.` };

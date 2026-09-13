@@ -23,10 +23,10 @@ import {
 } from "@urso/types";
 import { API_BASE, estimateActions } from "@/api";
 import { DeliverySheet, type DeliveryChannels } from "@/components/delivery-sheet";
-import { Mark } from "@/components/ledger";
+import { Mark, NextStep } from "@/components/ledger";
 import { Notice } from "@/components/notice";
 import { useToast } from "@/components/toast";
-import { keys, useEstimate } from "@/queries";
+import { keys, useEstimate, useInvoices, useJobs } from "@/queries";
 import { noticeFrom, useAction, usePullToRefresh } from "@/query";
 import { color, font, HIT, radius, space, type } from "@/theme";
 
@@ -114,7 +114,15 @@ export default function EstimatePreviewScreen(): React.ReactElement {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const estimateQuery = useEstimate(id);
-  const { refreshing, onRefresh } = usePullToRefresh(estimateQuery.refetch);
+  // Approval creates the work order silently; the preview has to be able to
+  // point at it (and at the bill once the job is done), or the owner reads
+  // "Accepted" with a dead Convert button as "I can't convert this". There is
+  // no per-estimate job read, so both come from the cached lists.
+  const jobsQuery = useJobs();
+  const invoicesQuery = useInvoices();
+  const { refreshing, onRefresh } = usePullToRefresh(() =>
+    Promise.all([estimateQuery.refetch(), jobsQuery.refetch(), invoicesQuery.refetch()]),
+  );
   const estimate = estimateQuery.data ?? null;
 
   const [menuOpen, setMenuOpen] = useState(false);
@@ -134,7 +142,7 @@ export default function EstimatePreviewScreen(): React.ReactElement {
   );
   const approve = useAction<void, { jobId?: string | null; notice?: string }>(
     () => estimateActions.approveInPerson(id),
-    { invalidates: [...quoteKeys, ["owner", "schedule"], keys.schedule.unscheduled(), keys.overview()] },
+    { invalidates: [...quoteKeys, keys.jobs.all(), ["owner", "schedule"], keys.schedule.unscheduled(), keys.overview()] },
   );
   const duplicate = useAction<void, { estimateId?: string }>(() => estimateActions.duplicate(id), { invalidates: [keys.estimates()] });
   const voidEstimate = useAction<void, Record<string, never>>(() => estimateActions.void(id), { invalidates: quoteKeys });
@@ -164,10 +172,10 @@ export default function EstimatePreviewScreen(): React.ReactElement {
   };
   const approveNow = () => {
     setMenuOpen(false);
-    Alert.alert("Mark estimate as accepted?", "This creates the job and records an in-person approval.", [
+    Alert.alert("Accept this estimate?", "This records the customer's approval and creates the work order. You'll land on it next.", [
       { text: "Not yet", style: "cancel" },
       {
-        text: "Mark accepted",
+        text: "Accept",
         onPress: () => void (async () => {
           const result = await approve.mutateAsync();
           if (!result.ok) {
@@ -243,7 +251,35 @@ export default function EstimatePreviewScreen(): React.ReactElement {
   const statusBad = estimate.status === "declined" || estimate.status === "expired";
   const canEdit = estimate.status === "draft";
   const canSend = estimate.status === "draft" || estimate.status === "sent" || estimate.status === "viewed";
-  const canApprove = estimate.status === "draft" || estimate.status === "sent" || estimate.status === "viewed";
+  const canApprove = canSend;
+  // Mirrors deleteEstimate: drafts outright, canceled (stored as `expired`)
+  // after the fact. Approved and declined refuse server-side — hide, don't grey.
+  const canDelete = estimate.status === "draft" || estimate.status === "expired";
+
+  // The work order this quote became, and the bill that job minted.
+  const job = statusGood ? (jobsQuery.data ?? []).find((j) => j.estimate_id === estimate.id) ?? null : null;
+  const invoice = job ? (invoicesQuery.data ?? []).find((i) => i.job_id === job.id && i.status !== "void") ?? null : null;
+  const openJob = () => {
+    setMenuOpen(false);
+    if (job) router.push({ pathname: "/(owner)/job/[id]", params: { id: job.id } });
+  };
+  const openInvoice = () => {
+    setMenuOpen(false);
+    if (invoice) router.push({ pathname: "/(owner)/invoice/[id]", params: { id: invoice.id } });
+  };
+  // What the forward strip says once the quote is accepted: the job's own
+  // next step, so the preview never ends in a dead "Accepted".
+  const forward = !statusGood
+    ? null
+    : job === null
+      ? jobsQuery.isPending
+        ? null
+        : { label: "Work order missing", hint: "This estimate is accepted but no work order was found. Pull to refresh.", icon: "alert-circle" as const, onPress: onRefresh }
+      : invoice !== null
+        ? { label: "Open the invoice", hint: `${invoice.number} · ${invoice.status === "paid" ? "Paid" : "Balance due"}`, icon: "file-text" as const, onPress: openInvoice }
+        : job.scheduled_at === null && job.status !== "canceled"
+          ? { label: "Open the work order", hint: "Created when this quote was accepted. Not on the calendar yet.", icon: "briefcase" as const, onPress: openJob }
+          : { label: "Open the work order", hint: `Created when this quote was accepted · ${job.status === "canceled" ? "Canceled" : fmtEt(job.scheduled_at as string, { weekday: "short", month: "short", day: "numeric" })}`, icon: "briefcase" as const, onPress: openJob };
 
   return (
     <View style={styles.screen}>
@@ -265,6 +301,7 @@ export default function EstimatePreviewScreen(): React.ReactElement {
       >
         {notice !== null ? <Notice text={notice} /> : null}
         <GoodNotice text={good} />
+        {forward ? <NextStep label={forward.label} hint={forward.hint} icon={forward.icon} onPress={forward.onPress} /> : null}
 
         <View style={styles.identity}>
           <View style={styles.identityMark}>
@@ -350,18 +387,21 @@ export default function EstimatePreviewScreen(): React.ReactElement {
               <View style={styles.sheetHandle} />
             </Pressable>
             {busy ? <ActivityIndicator color={color.brand} style={styles.busy} /> : null}
+            {/* Only tiles that can do something right now. A greyed tile is a
+                question ("why can't I?") the sheet can't answer; a missing one
+                is just not an option. Accepting IS converting to a work order,
+                so it is one tile with one name; once accepted, the tile becomes
+                the door to that work order (and to its invoice, once minted). */}
             <View style={styles.actionGrid}>
-              <ActionTile label="Edit" icon="edit-3" disabled={!canEdit || busy} onPress={() => { setMenuOpen(false); router.push({ pathname: "/(owner)/estimate/new", params: { id, draftKey: String(Date.now()) } }); }} />
-              <ActionTile label="Cancel" icon="slash" danger disabled={!canSend || busy} onPress={voidNow} />
-              <ActionTile label={estimate.sent_at ? "Re-Send" : "Send"} icon="send" disabled={!canSend || busy} onPress={() => { setMenuOpen(false); setDeliveryOpen(true); }} />
-              <ActionTile label="Mark As Lost" icon="thumbs-down" danger disabled={!canSend || busy} onPress={voidNow} />
+              {canEdit ? <ActionTile label="Edit" icon="edit-3" disabled={busy} onPress={() => { setMenuOpen(false); router.push({ pathname: "/(owner)/estimate/new", params: { id, draftKey: String(Date.now()) } }); }} /> : null}
+              {canSend ? <ActionTile label={estimate.sent_at ? "Re-Send" : "Send"} icon="send" disabled={busy} onPress={() => { setMenuOpen(false); setDeliveryOpen(true); }} /> : null}
+              {canApprove ? <ActionTile label="Accept & Create Work Order" icon="briefcase" disabled={busy} onPress={approveNow} /> : null}
+              {job ? <ActionTile label="Open Work Order" icon="briefcase" disabled={busy} onPress={openJob} /> : null}
+              {invoice ? <ActionTile label="Open Invoice" icon="file-text" disabled={busy} onPress={openInvoice} /> : null}
               <ActionTile label="Clone Estimate" icon="copy" disabled={busy} onPress={() => void duplicateNow()} />
-              <ActionTile label="Mark As Accepted" icon="check" disabled={!canApprove || busy} onPress={approveNow} />
-              <ActionTile label="Convert To Invoice" icon="file-text" disabled onPress={() => undefined} />
               <ActionTile label="Share Estimate Link" icon="link" disabled={busy} onPress={() => void shareNow()} />
-              <ActionTile label="Declined By Customer" icon="slash" disabled={estimate.status !== "declined"} onPress={() => setMenuOpen(false)} />
-              <ActionTile label="Convert To Workorder" icon="briefcase" disabled={!canApprove || busy} onPress={approveNow} />
-              <ActionTile label="Delete Estimate" icon="trash-2" danger disabled={!canEdit || busy} onPress={deleteNow} />
+              {canSend ? <ActionTile label="Cancel Estimate" icon="slash" danger disabled={busy} onPress={voidNow} /> : null}
+              {canDelete ? <ActionTile label="Delete Estimate" icon="trash-2" danger disabled={busy} onPress={deleteNow} /> : null}
             </View>
           </View>
         </View>

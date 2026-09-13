@@ -1630,7 +1630,7 @@ export default function ScheduleScreen(): React.ReactElement {
                   ) : null}
                 </View>
                 {item.key === "section-tray" ? (
-                  <Text style={styles.sectionHint}>Swipe left or tap ••• to remove old jobs.</Text>
+                  <Text style={styles.sectionHint}>Tap a job to book it. Tap ••• to open it, cancel it, or delete it.</Text>
                 ) : null}
               </View>
             );

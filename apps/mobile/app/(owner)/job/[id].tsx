@@ -59,6 +59,14 @@ function inputToCents(v: string): number {
   return Number.isFinite(n) ? Math.round(n * 100) : 0;
 }
 
+// Qualified successes carry the server's own sentence on ok:true; surface it
+// rather than a generic one. Same helper the sibling detail screens keep.
+function successNotice(data: unknown): string | null {
+  if (typeof data !== "object" || data === null) return null;
+  const notice = (data as { notice?: unknown }).notice;
+  return typeof notice === "string" && notice.length > 0 ? notice : null;
+}
+
 function fmtDuration(minutes: number): string {
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
@@ -184,9 +192,11 @@ export default function JobScreen(): React.ReactElement {
     (itemId: string) => jobActions.removeChecklistItem(id, itemId),
     { invalidates: everywhere },
   );
+  // Canceling must reach the Work orders list too — it used to skip
+  // keys.jobs.all(), so the list still showed the job as live after a cancel.
   const cancel = useAction((reason: string | undefined) =>
     jobActions.setStatus(id, "canceled", reason), {
-    invalidates: [keys.jobs.one(id), ["owner", "schedule"], keys.schedule.unscheduled(), keys.agenda(), keys.overview()],
+    invalidates: everywhere,
   });
   const del = useAction<void, Record<string, never>>(() => jobActions.delete(id), {
     invalidates: everywhere,
@@ -474,11 +484,12 @@ export default function JobScreen(): React.ReactElement {
   };
 
   // Cancel is the web sheet's soft ending — the record survives, the schedule
-  // frees up. The reason is optional; the action owns the actual rules.
-  // (Scheduling/moving from this sheet is deliberately absent until the slot
-  // picker exists — the board is where jobs land on the calendar today.)
+  // frees up. The reason is optional (the server stores "Canceled by owner"
+  // when blank). Success is confirmed with the root toast because the status
+  // chip that changes sits at the top of a long scroll; a refusal lands next to
+  // the button that was tapped.
   const onCancel = () => {
-    Alert.prompt("Cancel this job?", "Add a reason if you have one.", [
+    Alert.prompt("Cancel this job?", "Optional: add a reason for the record.", [
       { text: "Keep job", style: "cancel" },
       {
         text: "Cancel job",
@@ -488,7 +499,12 @@ export default function JobScreen(): React.ReactElement {
             setDangerNotice(null);
             const detail = text?.trim();
             const r = await cancel.mutateAsync(detail ? detail : undefined);
-            if (!r.ok) setDangerNotice(r.notice);
+            if (!r.ok) {
+              setDangerNotice(r.notice);
+              return;
+            }
+            toast.show(successNotice(r.data) ?? "Job canceled. It stays in Work orders under Canceled.");
+            scrollRef.current?.scrollTo({ y: 0, animated: true });
           })();
         },
       },
@@ -561,7 +577,17 @@ export default function JobScreen(): React.ReactElement {
           />
         ) : null}
         <Notice text={notice} />
-        <Notice text={dangerNotice} />
+        {job.status === "canceled" ? (
+          <View style={styles.canceledBanner}>
+            <Feather name="slash" size={16} color={color.danger} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.canceledTitle}>This job is canceled</Text>
+              <Text style={styles.canceledReason}>
+                {job.canceled_reason ?? "No reason recorded."} · It stays here for the record.
+              </Text>
+            </View>
+          </View>
+        ) : null}
 
         <View style={[styles.card, styles.summaryCard]}>
           <View style={styles.summaryTop}>
@@ -1261,6 +1287,10 @@ export default function JobScreen(): React.ReactElement {
 
         {job.status !== "canceled" || canDelete ? (
           <View style={styles.section}>
+            {/* Refusals for Cancel/Delete land HERE, beside the button that
+                earned them — a sentence at the top of a 1,500-line scroll is a
+                button that "did nothing". */}
+            <Notice text={dangerNotice} />
             {job.status !== "canceled" ? (
               <Pressable
                 accessibilityRole="button"
@@ -1665,4 +1695,15 @@ const styles = StyleSheet.create({
     padding: space.md,
   },
   goodNoticeText: { ...type.small, color: color.good },
+
+  canceledBanner: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: space.sm,
+    backgroundColor: color.dangerBg,
+    borderRadius: radius.md,
+    padding: space.md,
+  },
+  canceledTitle: { ...type.body, fontFamily: font.bodyMedium, color: color.danger },
+  canceledReason: { ...type.small, color: color.muted, marginTop: 2 },
 });

@@ -355,14 +355,17 @@ export default function InvoicePreviewScreen(): React.ReactElement {
           <View style={[styles.actionSheet, { paddingBottom: insets.bottom + space.lg }]}>
             <Pressable accessibilityRole="button" accessibilityLabel="Close actions" onPress={() => setMenuOpen(false)} style={styles.sheetClose}><View style={styles.sheetHandle} /></Pressable>
             {busy ? <ActivityIndicator color={color.brand} style={styles.busy} /> : null}
+            {/* Same rule as the estimate sheet: only tiles that can act right
+                now. A paid bill used to open a grid of five greyed tiles. */}
             <View style={styles.actionGrid}>
-              <ActionTile label="Edit" icon="edit-3" disabled={invoice.status !== "draft" || busy} onPress={() => { setMenuOpen(false); router.push({ pathname: "/(owner)/invoice/new", params: { id } }); }} />
-              <ActionTile label={invoice.sent_at ? "Re-Send" : "Send"} icon="send" disabled={invoice.status === "paid" || invoice.status === "void" || busy} onPress={() => { setMenuOpen(false); setDeliveryOpen(true); }} />
-              <ActionTile label="Record Payment" icon="dollar-sign" disabled={invoice.status === "paid" || invoice.status === "void" || busy} onPress={() => { setMenuOpen(false); setCashText((balance / 100).toFixed(2)); setRecordOpen(true); }} />
-              <ActionTile label="Share Invoice Link" icon="link" disabled={invoice.status === "void" || busy} onPress={() => void shareNow()} />
-              <ActionTile label="View Customer" icon="user" disabled={!invoice.contact_id} onPress={() => { setMenuOpen(false); if (invoice.contact_id) router.push({ pathname: "/(owner)/customer/[id]", params: { id: invoice.contact_id } }); }} />
-              <ActionTile label="Void Invoice" icon="slash" danger disabled={invoice.status === "paid" || invoice.status === "void" || busy} onPress={voidNow} />
-              <ActionTile label="Delete Invoice" icon="trash-2" danger disabled={invoice.status !== "draft" || busy} onPress={deleteNow} />
+              {invoice.status === "draft" ? <ActionTile label="Edit" icon="edit-3" disabled={busy} onPress={() => { setMenuOpen(false); router.push({ pathname: "/(owner)/invoice/new", params: { id } }); }} /> : null}
+              {invoice.status !== "paid" && invoice.status !== "void" ? <ActionTile label={invoice.sent_at ? "Re-Send" : "Send"} icon="send" disabled={busy} onPress={() => { setMenuOpen(false); setDeliveryOpen(true); }} /> : null}
+              {invoice.status !== "paid" && invoice.status !== "void" ? <ActionTile label="Record Payment" icon="dollar-sign" disabled={busy} onPress={() => { setMenuOpen(false); setCashText((balance / 100).toFixed(2)); setRecordOpen(true); }} /> : null}
+              {invoice.status !== "void" ? <ActionTile label="Share Invoice Link" icon="link" disabled={busy} onPress={() => void shareNow()} /> : null}
+              {invoice.job_id ? <ActionTile label="Open Work Order" icon="briefcase" disabled={busy} onPress={() => { setMenuOpen(false); router.push({ pathname: "/(owner)/job/[id]", params: { id: invoice.job_id as string } }); }} /> : null}
+              {invoice.contact_id ? <ActionTile label="View Customer" icon="user" disabled={busy} onPress={() => { setMenuOpen(false); router.push({ pathname: "/(owner)/customer/[id]", params: { id: invoice.contact_id as string } }); }} /> : null}
+              {invoice.status !== "paid" && invoice.status !== "void" ? <ActionTile label="Void Invoice" icon="slash" danger disabled={busy} onPress={voidNow} /> : null}
+              {invoice.status === "draft" || invoice.status === "void" ? <ActionTile label="Delete Invoice" icon="trash-2" danger disabled={busy} onPress={deleteNow} /> : null}
             </View>
           </View>
         </View>
