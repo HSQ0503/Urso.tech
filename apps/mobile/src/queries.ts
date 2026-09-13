@@ -16,6 +16,7 @@ export const keys = {
     messages: (phone: string) => ["owner", "threads", phone, "messages"] as const,
     calls: (phone: string) => ["owner", "threads", phone, "calls"] as const,
   },
+  calls: () => ["owner", "calls"] as const,
   leads: {
     all: () => ["owner", "leads"] as const,
     one: (id: string) => ["owner", "leads", id] as const,
@@ -59,6 +60,9 @@ export const useTodayReport = () =>
 
 export const useThreads = () =>
   useQuery({ queryKey: keys.threads.all(), queryFn: () => owner.threads().then(unwrap) });
+
+export const useCalls = () =>
+  useQuery({ queryKey: keys.calls(), queryFn: () => owner.calls().then(unwrap) });
 
 export const useThreadMessages = (phone: string) =>
   useQuery({

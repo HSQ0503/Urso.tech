@@ -228,7 +228,7 @@ export const SOURCE_LABEL: Record<LeadSource, string> = {
   referral: "Referral",
   meta_ads: "Meta ads",
   yard_sign: "Yard sign",
-  door_hanger: "Door hanger",
+  door_hanger: "Door knock",
   other: "Other",
 };
 

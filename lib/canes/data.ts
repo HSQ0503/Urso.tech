@@ -311,6 +311,22 @@ export async function listThreads(): Promise<Thread[]> {
   return threads.sort((a, b) => b.last_activity_at.localeCompare(a.last_activity_at));
 }
 
+// The shop-wide call log, newest first — every inbound and outbound call across
+// all peers. Backs the mobile Inbox's "Call Logs" tab; the per-thread read below
+// stays the source for one conversation.
+export async function listRecentCalls(limit = 300): Promise<Call[]> {
+  if (isDemo()) {
+    return [...DEMO_CALLS].sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, limit);
+  }
+  const { data, error } = await canesDb()
+    .from("calls")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) throw new Error(`listRecentCalls: ${error.message}`);
+  return (data ?? []) as Call[];
+}
+
 export async function getThreadCalls(peerPhone: string): Promise<Call[]> {
   if (isDemo()) {
     return DEMO_CALLS.filter((c) => c.peer_phone === peerPhone).sort((a, b) =>

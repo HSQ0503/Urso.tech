@@ -236,6 +236,8 @@ export const owner = {
   todayReport: () => request<TodayReport>("/canes/today-report"),
 
   threads: () => request<Thread[]>("/canes/threads"),
+  // The shop-wide call log, newest first — the Inbox's Call Logs tab.
+  calls: () => request<Call[]>("/canes/calls"),
   threadMessages: (phone: string) =>
     request<Message[]>(`/canes/threads/${encodeURIComponent(phone)}/messages`),
   threadCalls: (phone: string) =>

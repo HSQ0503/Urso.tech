@@ -136,6 +136,7 @@ export default function OwnerLayout(): React.ReactElement {
       <Tabs.Screen name="thread/[phone]" options={{ href: null }} />
       <Tabs.Screen name="estimate/build" options={{ href: null, tabBarStyle: { display: "none" } }} />
       <Tabs.Screen name="invoice/lines" options={{ href: null, tabBarStyle: { display: "none" } }} />
+      <Tabs.Screen name="recurring" options={{ href: null }} />
       <Tabs.Screen name="expenses" options={{ href: null }} />
       <Tabs.Screen name="payouts" options={{ href: null }} />
       <Tabs.Screen name="insights" options={{ href: null }} />

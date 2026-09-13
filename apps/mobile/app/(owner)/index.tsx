@@ -20,11 +20,11 @@
 //
 // Every time is America/New_York via fmtEt. The device clock is never read.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { fmtMoney, type Thread } from "@urso/types";
+import { fmtMoney } from "@urso/types";
 import { Notice } from "@/components/notice";
 import {
   Announcement,
@@ -35,17 +35,10 @@ import {
   launcherBody,
   type LauncherTile,
 } from "@/components/launcher";
-import { useOverview, useThreads } from "@/queries";
+import { useOverview } from "@/queries";
 import { noticeFrom, usePullToRefresh, useRefetchOnFocus } from "@/query";
 import { getAdminProfile } from "@/session";
 import { color, space } from "@/theme";
-
-// The inbox's own definition of "waiting on you", reused verbatim rather than
-// re-derived: a vendor thread's newest event is always inbound, so counting it
-// would leave a permanent badge on the bar that never clears.
-function isWaiting(thread: Thread): boolean {
-  return thread.unread && thread.kind !== "vendor";
-}
 
 function firstNameOf(full: string | null): string | null {
   const first = (full ?? "").trim().split(/\s+/)[0];
@@ -68,27 +61,14 @@ export default function HomeScreen(): React.ReactElement {
   }, []);
 
   const overviewQuery = useOverview();
-  // Shares the cache the Inbox tab already fills, so opening home does not cost
-  // a second round trip once either screen has been visited.
-  const threadsQuery = useThreads();
   useRefetchOnFocus(overviewQuery.refetch);
-  useRefetchOnFocus(threadsQuery.refetch);
-  const { refreshing, onRefresh } = usePullToRefresh(() =>
-    Promise.all([overviewQuery.refetch(), threadsQuery.refetch()]),
-  );
+  const { refreshing, onRefresh } = usePullToRefresh(overviewQuery.refetch);
 
   const overview = overviewQuery.data ?? null;
-  const threads = threadsQuery.data ?? null;
 
-  // A refusal on one read must not blank the other — a permission-refused
-  // overview still leaves a perfectly usable grid, so the notice explains the
-  // missing counts and the tiles stay tappable.
-  const notice = noticeFrom(overviewQuery.error) ?? noticeFrom(threadsQuery.error);
-
-  const unread = useMemo(
-    () => (threads ?? []).filter(isWaiting).length,
-    [threads],
-  );
+  // A permission-refused overview still leaves a perfectly usable grid, so
+  // the notice explains the missing counts and the tiles stay tappable.
+  const notice = noticeFrom(overviewQuery.error);
 
   // What the Dashboard tile and the bar's checklist both count: the four
   // queues the action screen is built from.
@@ -101,8 +81,9 @@ export default function HomeScreen(): React.ReactElement {
   const cold = overview?.coldNeedingCall.length ?? 0;
   const overdue = overview?.pipeline.invoices.overdueCount ?? 0;
 
-  // Markate's slot order, kept: only their Route Planner slot differs, and it
-  // holds Inbox. Everything else sits exactly where his thumb already expects it.
+  // Markate's slot order, kept, with one swap Sebastian asked for (2026-09-13):
+  // Inbox already has a tab, so its tile became Recurring — the plans he is
+  // moving onto the system. Everything else sits where his thumb expects it.
   const tiles: LauncherTile[] = [
     {
       key: "dashboard",
@@ -113,11 +94,10 @@ export default function HomeScreen(): React.ReactElement {
       onPress: () => router.push("/(owner)/dashboard"),
     },
     {
-      key: "inbox",
-      label: "Inbox",
-      icon: "message-square",
-      count: unread,
-      onPress: () => router.push("/(owner)/inbox"),
+      key: "recurring",
+      label: "Recurring",
+      icon: "repeat",
+      onPress: () => router.push("/(owner)/recurring"),
     },
     {
       key: "expenses",

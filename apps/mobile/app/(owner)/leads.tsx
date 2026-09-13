@@ -5,9 +5,12 @@
 // never mistaken for the second, so hot rows carry the orange rail and the
 // orange age, and the age is the loudest thing after the name.
 //
-// Above the rows sit the same five pipeline tabs the web console has, with the
-// same membership and the same counts — all client-side over the one page of
-// leads already loaded, so switching costs nothing and never invents a number.
+// Above the rows sit the tabs Sebastian asked for (2026-09-13): WHERE the lead
+// came from — All · Lead Gen · Website · Meta Ads · Door Knock · Referral — so
+// he can watch a channel while his Meta ads run. The pipeline stage did not
+// disappear; it became the sections inside the list, with "Call these now"
+// pinned on top of every tab. All client-side over the one page of leads
+// already loaded, so switching costs nothing and never invents a number.
 //
 // Times are America/New_York via fmtEt. The only clock arithmetic here is
 // minutesSince, which is a pure epoch difference and has no timezone in it;
@@ -19,6 +22,7 @@ import {
   FlatList,
   Pressable,
   RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -31,46 +35,128 @@ import {
   SOURCE_LABEL,
   STATUS_LABEL,
   type Lead,
+  type LeadSource,
 } from "@urso/types";
 import { useLeads } from "@/queries";
 import { noticeFrom, usePullToRefresh, useRefetchOnFocus } from "@/query";
-import { color, font, space, type } from "@/theme";
+import { color, font, radius, space, type } from "@/theme";
 import {
   Avatar,
   Chevron,
   Chip,
   ChromeBar,
   EmptyState,
-  FilterChips,
   SectionRule,
   listRowStyle,
 } from "@/components/ledger";
 
-// The pipeline tabs, copied from the web list (app/CanesPressure/(app)/leads)
-// key for key. The membership rules are the web's exactly — "open" is anything
-// not yet won or lost, and working is open-minus-new — so a count read here and
-// a count read on the console are the same number about the same leads.
-const FILTERS = ["all", "new", "working", "won", "lost"] as const;
-type Filter = (typeof FILTERS)[number];
+// The channel tabs. Each maps onto one or more stored `leads.source` values;
+// `other` (organic texts and missed calls that named no channel) shows only
+// under All, because a tab for "we don't know" is not a channel.
+const CHANNELS = ["all", "lead_gen", "website", "meta_ads", "door_knock", "referral"] as const;
+type Channel = (typeof CHANNELS)[number];
 
-const FILTER_LABEL: Record<Filter, string> = {
+const CHANNEL_LABEL: Record<Channel, string> = {
   all: "All",
-  new: "Needs first call",
-  working: "Working",
+  lead_gen: "Lead Gen",
+  website: "Website",
+  meta_ads: "Meta Ads",
+  door_knock: "Door Knock",
+  referral: "Referral",
+};
+
+const CHANNEL_SOURCES: Record<Exclude<Channel, "all">, LeadSource[]> = {
+  lead_gen: ["lead_vendor"],
+  website: ["website"],
+  meta_ads: ["meta_ads"],
+  door_knock: ["door_hanger", "yard_sign"],
+  referral: ["referral"],
+};
+
+function inChannel(lead: Lead, channel: Channel): boolean {
+  return channel === "all" || CHANNEL_SOURCES[channel].includes(lead.source);
+}
+
+// The stage sections inside a tab, in the order he works them. Membership is
+// the web console's exactly — "working" is open-minus-new — so a count here and
+// a count on the console are the same number about the same leads.
+const STAGES = ["new", "working", "won", "lost"] as const;
+type Stage = (typeof STAGES)[number];
+
+const STAGE_LABEL: Record<Stage, string> = {
+  new: "Call these now",
+  working: "In progress",
   won: "Won",
   lost: "Lost",
 };
 
-// The web's empty copy. "New ones land here on their own" was true when this
-// list had no add button; it now has one, and a lead he takes in a driveway is
-// the whole reason it exists.
-const EMPTY_COPY: Record<Filter, string> = {
+function stageOf(lead: Lead): Stage {
+  if (lead.status === "won") return "won";
+  if (lead.status === "lost") return "lost";
+  return lead.status === "new" ? "new" : "working";
+}
+
+const EMPTY_COPY: Record<Channel, string> = {
   all: "No leads yet. New ones land here on their own — or tap New to take one down yourself.",
-  new: "Nobody is waiting on a first call. New requests land here the moment they arrive.",
-  working: "Nothing in progress. Leads move here once you have made contact.",
-  won: "No won jobs on the board yet.",
-  lost: "No lost leads.",
+  lead_gen: "Nothing from the lead vendor yet. Their texts to the business line land here parsed.",
+  website: "No website requests yet. The request form on canespressurewashing.com feeds this tab.",
+  meta_ads: "No Meta ad leads yet. Tag a lead's source as Meta ads and it shows up here.",
+  door_knock: "No door-knock or yard-sign leads yet.",
+  referral: "No referrals yet.",
 };
+
+type Row =
+  | { kind: "rule"; key: string; stage: Stage; count: number }
+  | { kind: "lead"; key: string; lead: Lead; first: boolean; last: boolean };
+
+// Sections only appear when they have rows; a tab with nothing in progress
+// does not show an empty "In progress" rule.
+function buildRows(leads: Lead[]): Row[] {
+  const rows: Row[] = [];
+  for (const stage of STAGES) {
+    const members = leads.filter((lead) => stageOf(lead) === stage);
+    if (members.length === 0) continue;
+    rows.push({ kind: "rule", key: `rule-${stage}`, stage, count: members.length });
+    members.forEach((lead, index) => {
+      rows.push({
+        kind: "lead",
+        key: lead.id,
+        lead,
+        first: index === 0,
+        last: index === members.length - 1,
+      });
+    });
+  }
+  return rows;
+}
+
+// The pill row from the mock: the active channel in ink-on-white, the rest
+// quiet. Scrolls sideways so a sixth channel never squeezes the labels.
+function ChannelTabs({ current, onPick }: { current: Channel; onPick: (channel: Channel) => void }) {
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.tabs}
+      keyboardShouldPersistTaps="handled"
+    >
+      {CHANNELS.map((channel) => {
+        const on = channel === current;
+        return (
+          <Pressable
+            key={channel}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: on }}
+            onPress={() => onPick(channel)}
+            style={({ pressed }) => [styles.tab, on && styles.tabOn, pressed && !on && styles.pressed]}
+          >
+            <Text style={[styles.tabText, on && styles.tabTextOn]}>{CHANNEL_LABEL[channel]}</Text>
+          </Pressable>
+        );
+      })}
+    </ScrollView>
+  );
+}
 
 // Below this the vendor text was parsed badly enough that the name, phone, and
 // service on the row may not be the ones in the original message. Same number
@@ -166,23 +252,14 @@ export default function LeadsScreen(): React.ReactElement {
   const leads = leadsQuery.data ?? null;
   const notice = noticeFrom(leadsQuery.error);
 
-  const [filter, setFilter] = useState<Filter>("new");
+  const [channel, setChannel] = useState<Channel>("all");
 
-  // Every count comes off the one page of leads already loaded — no second
-  // read, and no count that claims to know about rows this screen has not seen.
-  const subsets = useMemo<Record<Filter, Lead[]>>(() => {
-    const rows = leads ?? [];
-    const open = rows.filter((lead) => lead.status !== "won" && lead.status !== "lost");
-    return {
-      all: rows,
-      new: open.filter((lead) => lead.status === "new"),
-      working: open.filter((lead) => lead.status !== "new"),
-      won: rows.filter((lead) => lead.status === "won"),
-      lost: rows.filter((lead) => lead.status === "lost"),
-    };
-  }, [leads]);
-
-  const rows = subsets[filter];
+  // Rows come off the one page of leads already loaded — no second read, and
+  // no count that claims to know about rows this screen has not seen.
+  const rows = useMemo<Row[]>(
+    () => buildRows((leads ?? []).filter((lead) => inChannel(lead, channel))),
+    [leads, channel],
+  );
 
   const openLead = useCallback(
     (id: string) => {
@@ -204,27 +281,7 @@ export default function LeadsScreen(): React.ReactElement {
         onAction={() => router.push("/(owner)/lead/new")}
       />
 
-      {leads !== null ? (
-        <FilterChips
-          current={filter}
-          onPick={setFilter}
-          filters={FILTERS.map((key) => ({
-            key,
-            label: FILTER_LABEL[key],
-            count: subsets[key].length,
-            weight:
-              key === "new"
-                ? 1.85
-                : key === "working"
-                  ? 1.3
-                  : key === "won"
-                    ? 0.98
-                    : key === "lost"
-                      ? 0.97
-                      : 0.85,
-          }))}
-        />
-      ) : null}
+      {leads !== null ? <ChannelTabs current={channel} onPick={setChannel} /> : null}
 
       {showSpinner ? (
         <View style={styles.centre}>
@@ -233,7 +290,7 @@ export default function LeadsScreen(): React.ReactElement {
       ) : (
         <FlatList
           data={rows}
-          keyExtractor={(lead) => lead.id}
+          keyExtractor={(row) => row.key}
           contentContainerStyle={[
             styles.list,
             { paddingBottom: insets.bottom + space.xxl },
@@ -248,39 +305,35 @@ export default function LeadsScreen(): React.ReactElement {
             />
           }
           ListHeaderComponent={
-            <View>
-              {notice !== null ? (
-                <View style={styles.notice}>
-                  <Text style={styles.noticeText}>{notice}</Text>
-                </View>
-              ) : null}
-              <SectionRule
-                label={filter === "new" ? "Call these now" : FILTER_LABEL[filter]}
-                meta={rows.length}
-                tone={filter === "new" ? "danger" : "muted"}
-              />
-            </View>
-          }
-          ListEmptyComponent={
-            // Empty says WHICH empty — an unworked pipeline and a filter with
-            // nothing under it are different pieces of news.
-            leads !== null ? (
-              // A search that found nothing is not an empty pipeline, and
-              // saying "No leads yet" to someone holding 40 leads reads as
-              // data loss.
-              <EmptyState
-                text={EMPTY_COPY[filter]}
-              />
+            notice !== null ? (
+              <View style={styles.notice}>
+                <Text style={styles.noticeText}>{notice}</Text>
+              </View>
             ) : null
           }
-          renderItem={({ item, index }) => (
-            <LeadRow
-              lead={item}
-              first={index === 0}
-              last={index === rows.length - 1}
-              onPress={() => openLead(item.id)}
-            />
-          )}
+          ListEmptyComponent={
+            // Empty says WHICH empty — no leads at all and a channel with
+            // nothing under it are different pieces of news.
+            leads !== null ? <EmptyState text={EMPTY_COPY[channel]} /> : null
+          }
+          renderItem={({ item }) =>
+            item.kind === "rule" ? (
+              <View style={styles.rule}>
+                <SectionRule
+                  label={STAGE_LABEL[item.stage]}
+                  meta={item.count}
+                  tone={item.stage === "new" ? "danger" : "muted"}
+                />
+              </View>
+            ) : (
+              <LeadRow
+                lead={item.lead}
+                first={item.first}
+                last={item.last}
+                onPress={() => openLead(item.lead.id)}
+              />
+            )
+          }
         />
       )}
     </View>
@@ -291,8 +344,23 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: color.bg },
   centre: { flex: 1, alignItems: "center", justifyContent: "center" },
 
-  list: { paddingHorizontal: 14, paddingTop: 14 },
+  list: { paddingHorizontal: 14, paddingTop: 4 },
   listEmpty: { flexGrow: 1 },
+
+  tabs: { paddingHorizontal: 14, paddingVertical: 8, gap: 6, flexDirection: "row" },
+  tab: {
+    minHeight: 38,
+    paddingHorizontal: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: radius.md,
+    backgroundColor: color.hover,
+  },
+  tabOn: { backgroundColor: color.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: color.lineStrong },
+  tabText: { fontFamily: font.bodyMedium, fontSize: 14.5, color: color.muted },
+  tabTextOn: { fontFamily: font.bodySemi, color: color.ink },
+  // A stage rule sits a little clear of the block above it.
+  rule: { marginTop: 14 },
 
   // The one accent on this screen: a hot lead is a person waiting on a call.
   row: { minHeight: 72, flexDirection: "row", alignItems: "center", gap: 11 },
