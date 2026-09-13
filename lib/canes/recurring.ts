@@ -583,13 +583,12 @@ export async function cancelPlan(
   const open = await nextOpenVisit(planId);
   const feeCents = planCancellationFeeCents(plan);
   // The contract term: a fee when the next visit is already on the books
-  // (scheduled), unless the cancel comes with enough notice.
+  // (scheduled). notice_days = 0 means it applies to any such cancel; a
+  // positive value waives it when the cancel comes that many days ahead.
   let feeApplies = false;
-  if (open?.scheduled_at) {
+  if (open?.scheduled_at && feeCents > 0) {
     const daysOut = Math.floor((Date.parse(open.scheduled_at) - Date.now()) / 86_400_000);
-    feeApplies = feeCents > 0 && daysOut < plan.notice_days;
-  } else if (open && plan.notice_days === 0) {
-    feeApplies = feeCents > 0 && plan.status === "active";
+    feeApplies = plan.notice_days === 0 || daysOut < plan.notice_days;
   }
   const now = new Date().toISOString();
   const db = canesDb();
