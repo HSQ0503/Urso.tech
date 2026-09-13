@@ -23,18 +23,19 @@ const native = {
 // Exercise the real React screens and handlers, replacing only native hosts,
 // navigation and network boundaries so tests never touch customer data.
 function harness() {
-  const state = { params: { id: "first" }, estimates: {}, writes: [] };
+  const state = { params: { id: "first" }, estimates: {}, jobs: {}, writes: [], navigation: [], actionData: { estimateId: "created" } };
   const cache = new Map();
   const key = new Proxy(() => [], { get: () => key });
   const queries = {
     keys: key,
     useEstimate: (id) => ({ data: state.estimates[id] ?? null, isPending: false }),
+    useJob: (id) => ({ data: state.jobs[id] ?? null, isPending: false, isError: false }),
     useCustomers: () => ({ data: [] }),
     useCatalog: () => ({ data: [] }),
   };
   const api = new Proxy({}, { get: (_, action) => async (...args) => {
     state.writes.push({ action, args });
-    return { ok: true, data: { estimateId: "created" } };
+    return { ok: true, data: state.actionData };
   } });
   function load(file) {
     if (cache.has(file)) return cache.get(file).exports;
@@ -43,11 +44,12 @@ function harness() {
     function requireSource(name) {
       if (name === "react-native") return native;
       if (name === "react" || name.startsWith("react/")) return require(name);
-      if (name === "expo-router") return { useLocalSearchParams: () => state.params, router: { back() {}, replace() {}, push() {} } };
+      if (name === "expo-router") return { useLocalSearchParams: () => state.params, useFocusEffect: (effect) => React.useEffect(effect, [effect]), router: { back() {}, replace: (href) => state.navigation.push(href), push: (href) => state.navigation.push(href) } };
       if (name === "react-native-safe-area-context") return { useSafeAreaInsets: () => ({ top: 0, bottom: 0 }) };
       if (name === "@expo/vector-icons") return { Feather: host("Icon") };
       if (name === "@/queries") return queries;
-      if (name === "@/api") return { estimateActions: api };
+      if (name === "@/api") return { estimateActions: api, recurringActions: api, customerActions: api };
+      if (name === "@/components/toast") return { useToast: () => ({ show() {} }) };
       if (name === "@/query") return { noticeFrom: () => null, useAction: (fn) => ({ mutateAsync: fn, isPending: false }) };
       if (name === "@/components/address-input") return { AddressInput: host("AddressInput") };
       if (name === "@/components/notice") return { Notice: host("Notice") };
@@ -247,4 +249,75 @@ test("a secondary history failure reports that the note was saved", async () => 
   assert.equal(result.ok, true);
   assert.match(result.notice, /Call note saved in Activity/);
   assert.equal(writes.find((write) => write.table === "events").row.data.note, "Call at 5pm");
+});
+
+test("recurring conversion uses the linked job's Eastern date instead of an ignored first-visit choice", async () => {
+  const { state, load } = harness();
+  state.jobs.scheduled = { scheduled_at: "2026-09-15T01:00:00Z", plan_id: null };
+  const { RecurringSheet } = load("src/components/recurring-sheet.tsx");
+  const renderer = await mount(RecurringSheet, {
+    source: { kind: "invoice", id: "invoice", jobId: "scheduled" },
+    pricePerVisitCents: 15000, customerName: "Test", onClose() {},
+  });
+  assert.equal(Boolean(button(renderer, "Choose first visit date")), false);
+  assert.match(text(renderer.toJSON()), /Mon, Sep 14, 2026/);
+  assert.match(text(renderer.toJSON()), /linked work order is visit one/);
+  await act(async () => button(renderer, "Create recurring plan").props.onPress());
+  assert.deepEqual(state.writes[0].args, ["invoice", "quarterly", "2026-09-14"]);
+  await act(async () => renderer.unmount());
+});
+
+test("recurring conversion without a scheduled source keeps the chosen first visit", async () => {
+  const { state, load } = harness();
+  const { RecurringSheet } = load("src/components/recurring-sheet.tsx");
+  const renderer = await mount(RecurringSheet, {
+    source: { kind: "estimate", id: "draft" },
+    pricePerVisitCents: 15000, customerName: "Test", onClose() {},
+  });
+  await act(async () => button(renderer, "Choose first visit date").props.onPress());
+  await act(async () => button(renderer, "Previous month").props.onPress());
+  const date = renderer.root.findAllByType("Pressable").find((item) => item.props.accessibilityLabel === "Sun, Sep 20, 2026");
+  await act(async () => date.props.onPress());
+  await act(async () => button(renderer, "Use selected date").props.onPress());
+  await act(async () => button(renderer, "Create recurring plan").props.onPress());
+  assert.deepEqual(state.writes[0].args, ["draft", "quarterly", "2026-09-20"]);
+  await act(async () => renderer.unmount());
+});
+
+test("a new plan entry resets a saved hidden-tab form", async () => {
+  const { state, load } = harness();
+  state.params = { draftKey: "first" };
+  const Screen = load("app/(owner)/plan/new.tsx").default;
+  const renderer = await mount(Screen);
+  const input = (label) => renderer.root.findAllByType("TextInput").find((item) => item.props.accessibilityLabel === label);
+  await act(async () => {
+    input("Customer name").props.onChangeText("First customer");
+    input("Service name").props.onChangeText("Driveway wash");
+    input("Unit price in dollars").props.onChangeText("150");
+  });
+  await act(async () => button(renderer, "Save plan").props.onPress());
+  assert.equal(button(renderer, "Save plan").props.disabled, true);
+  state.params = { draftKey: "second" };
+  await act(async () => renderer.update(React.createElement(Screen)));
+  assert.equal(input("Customer name").props.value, "");
+  await act(async () => {
+    input("Customer name").props.onChangeText("Second customer");
+    input("Service name").props.onChangeText("House wash");
+    input("Unit price in dollars").props.onChangeText("300");
+  });
+  assert.equal(button(renderer, "Save plan").props.disabled, false);
+  await act(async () => renderer.unmount());
+});
+
+test("saving a customer opens the id returned by the server", async () => {
+  const { state, load } = harness();
+  state.actionData = { id: "new-contact" };
+  const Screen = load("app/(owner)/customer/new.tsx").default;
+  const renderer = await mount(Screen);
+  const name = renderer.root.findAllByType("TextInput").find((item) => item.props.accessibilityLabel === "Customer name");
+  await act(async () => name.props.onChangeText("ZZ Codex Test"));
+  await act(async () => button(renderer, "Save customer").props.onPress());
+  assert.equal(state.navigation.at(-1)?.pathname, "/(owner)/customer/[id]");
+  assert.equal(state.navigation.at(-1)?.params.id, "new-contact");
+  await act(async () => renderer.unmount());
 });

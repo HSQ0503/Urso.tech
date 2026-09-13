@@ -376,7 +376,7 @@ export default function InvoicePreviewScreen(): React.ReactElement {
 
       {recurringOpen ? (
         <RecurringSheet
-          source={{ kind: "invoice", id }}
+          source={{ kind: "invoice", id, jobId: invoice.job_id ?? undefined }}
           pricePerVisitCents={invoice.total_cents}
           customerName={invoice.customer_name}
           onClose={() => setRecurringOpen(false)}

@@ -116,6 +116,7 @@ export default function PlanScreen(): React.ReactElement {
   const agreementUrl = `${API_BASE}/CanesPressure/r/${plan.public_token}`;
   const openVisit = plan.visits.find((v) => ["unscheduled", "scheduled", "confirmed", "in_progress"].includes(v.status)) ?? null;
   const fee = planCancellationFeeCents(plan);
+  const choosingFirstVisit = plan.status === "draft" && !plan.last_generated_for;
 
   const run = async (result: Promise<{ ok: true; data: unknown } | { ok: false; notice: string }>, fallback: string) => {
     setNotice(null);
@@ -203,7 +204,7 @@ export default function PlanScreen(): React.ReactElement {
   return (
     <View style={styles.screen}>
       <View style={[styles.chrome, { paddingTop: insets.top + space.sm }]}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => router.back()} hitSlop={space.sm} style={styles.back}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Back to recurring plans" onPress={() => router.push("/(owner)/recurring")} hitSlop={space.sm} style={styles.back}>
           <Feather name="chevron-left" size={20} color={color.muted} />
           <Text style={styles.backText}>Recurring</Text>
         </Pressable>
@@ -247,7 +248,7 @@ export default function PlanScreen(): React.ReactElement {
         <Text style={styles.sectionLabel}>Schedule</Text>
         <View style={styles.card}>
           <Field
-            label={plan.status === "draft" ? "First visit" : "Next visit due"}
+            label={choosingFirstVisit ? "First visit" : "Next visit due"}
             value={plan.next_due_on ? dateLabel(plan.next_due_on) : plan.status === "canceled" ? "—" : dateLabel(plan.starts_on)}
           />
           <Field label="Visits are created" value={`${plan.lead_days} days before they're due, as unscheduled work orders`} />
@@ -255,7 +256,7 @@ export default function PlanScreen(): React.ReactElement {
           {plan.status !== "canceled" ? (
             <View style={styles.rowButtons}>
               <Pressable accessibilityRole="button" onPress={() => setNextOpen(true)} style={({ pressed }) => [styles.button, pressed && styles.pressed]}>
-                <Text style={styles.buttonText}>{plan.status === "draft" ? "Change first visit" : "Move next visit"}</Text>
+                <Text style={styles.buttonText}>{choosingFirstVisit ? "Change first visit" : "Move next visit"}</Text>
               </Pressable>
               <Pressable accessibilityRole="button" onPress={() => setCadenceOpen(true)} style={({ pressed }) => [styles.button, pressed && styles.pressed]}>
                 <Text style={styles.buttonText}>Change cadence</Text>
@@ -314,7 +315,7 @@ export default function PlanScreen(): React.ReactElement {
           {plan.visits.length === 0 ? (
             <Text style={styles.muted}>
               {plan.status === "active"
-                ? "No visits created yet. The first one appears three weeks before it's due."
+                ? "No visits yet. Automatic checks create work orders due within three weeks."
                 : "No visits yet."}
             </Text>
           ) : (
@@ -400,12 +401,12 @@ export default function PlanScreen(): React.ReactElement {
 
       <DatePicker
         visible={nextOpen}
-        title={plan.status === "paused" ? "Resume — next visit" : plan.status === "draft" ? "First visit" : "Next visit"}
+        title={plan.status === "paused" ? "Resume — next visit" : choosingFirstVisit ? "First visit" : "Next visit"}
         value={plan.next_due_on ?? plan.starts_on}
         minimumDate={todayEt()}
         onChange={(date) => {
           if (plan.status === "paused") void run(resume.mutateAsync(date), `Resumed. Next visit ${dateLabel(date)}.`);
-          else if (plan.status === "draft") void run(update.mutateAsync({ startsOn: date }), `First visit ${dateLabel(date)}.`);
+          else if (choosingFirstVisit) void run(update.mutateAsync({ startsOn: date }), `First visit ${dateLabel(date)}.`);
           else void run(update.mutateAsync({ nextDueOn: date }), `Next visit ${dateLabel(date)}.`);
         }}
         onClose={() => setNextOpen(false)}

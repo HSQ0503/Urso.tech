@@ -103,7 +103,7 @@ export default function NewCustomer(): React.ReactElement {
     }
 
     setSaved(true);
-    const contactId = typeof r.data.contactId === "string" ? r.data.contactId : null;
+    const contactId = typeof r.data.id === "string" ? r.data.id : null;
     if (contactId) {
       router.replace({ pathname: "/(owner)/customer/[id]", params: { id: contactId } });
       return;

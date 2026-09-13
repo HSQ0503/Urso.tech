@@ -101,7 +101,7 @@ export default function RecurringScreen(): React.ReactElement {
         sub={summary && summary.activeCount > 0 ? `${summary.activeCount} active ${summary.activeCount === 1 ? "plan" : "plans"}` : "Repeat customers and contracts"}
         onBack={() => router.back()}
         action="New plan"
-        onAction={() => router.push("/(owner)/plan/new")}
+        onAction={() => router.push({ pathname: "/(owner)/plan/new", params: { draftKey: String(Date.now()) } })}
       />
       {plansQuery.isPending ? (
         <View style={styles.centre}>

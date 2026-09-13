@@ -1202,10 +1202,10 @@ export default function ScheduleScreen(): React.ReactElement {
             <View style={styles.sectionHead}>
               <Text style={styles.sectionLabel} numberOfLines={1}>
                 {dayLabel(selectedKey)}
-                <Text style={styles.sectionDate}>
+                {([todayKey(), nextDayKey(todayKey())].includes(selectedKey)) ? <Text style={styles.sectionDate}>
                   {"  "}
                   {fmtEt(etLocalToIso(`${selectedKey}T12:00`), { month: "short", day: "numeric" })}
-                </Text>
+                </Text> : null}
               </Text>
               {dayCents > 0 ? <Text style={styles.sectionMeta}>{fmtMoney(dayCents)}</Text> : null}
             </View>

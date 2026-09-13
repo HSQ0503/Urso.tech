@@ -13,9 +13,7 @@
 import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  KeyboardAvoidingView,
   Modal,
-  Platform,
   Pressable,
   ScrollView,
   SectionList,
@@ -57,6 +55,11 @@ let lineSeq = 0;
 const newLine = (name = "", price = ""): DraftLine => ({ key: `line-${++lineSeq}`, name, quantityText: "1", priceText: price });
 
 export default function NewPlanScreen(): React.ReactElement {
+  const { draftKey } = useLocalSearchParams<{ draftKey?: string }>();
+  return <NewPlanForm key={draftKey ?? "new"} />;
+}
+
+function NewPlanForm(): React.ReactElement {
   const params = useLocalSearchParams<{ contactId?: string; name?: string; phone?: string; email?: string; address?: string }>();
   const insets = useSafeAreaInsets();
   const toast = useToast();
@@ -143,7 +146,7 @@ export default function NewPlanScreen(): React.ReactElement {
     setLines((current) => current.map((l) => (l.key === key ? { ...l, ...patch } : l)));
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.screen}>
+    <View style={styles.screen}>
       <View style={[styles.head, { paddingTop: insets.top + space.sm }]}>
         <Pressable accessibilityRole="button" accessibilityLabel="Cancel" onPress={() => router.back()} hitSlop={8}>
           <Text style={styles.cancel}>Cancel</Text>
@@ -154,7 +157,7 @@ export default function NewPlanScreen(): React.ReactElement {
         </Pressable>
       </View>
 
-      <ScrollView contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + space.xxl }]} keyboardShouldPersistTaps="handled">
+      <ScrollView automaticallyAdjustKeyboardInsets contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + space.xxl }]} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
         <Notice text={notice} />
 
         <Text style={styles.label}>Customer</Text>
@@ -310,7 +313,7 @@ export default function NewPlanScreen(): React.ReactElement {
       </Modal>
 
       <DatePicker visible={dateOpen} title="First visit" value={startsOn} minimumDate={todayEt()} onChange={setStartsOn} onClose={() => setDateOpen(false)} />
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 

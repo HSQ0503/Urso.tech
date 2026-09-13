@@ -188,13 +188,14 @@ export default function EstimatePreviewScreen(): React.ReactElement {
             setNotice(result.notice);
             return;
           }
-          // Approving CREATES a job, and the next thing to do with a job is
-          // put it on the calendar — so land on it rather than announcing it
-          // and leaving him to find it in the tray. The sentence rides the
-          // toast, which is mounted at the root precisely so it survives this
-          // navigation; several of these are QUALIFIED successes ("the deposit
-          // could NOT be recorded"), so it is shown verbatim, not replaced.
-          toast.show(successNotice(result.data) ?? "Accepted — job created.");
+          // Only the old, unqualified success names the web schedule tray.
+          // Keep deposit warnings and every other server notice verbatim.
+          const approvalNotice = successNotice(result.data);
+          toast.show(
+            approvalNotice === "Approved — the job is in the schedule tray."
+              ? "Approved — the work order is under Unscheduled."
+              : approvalNotice ?? "Accepted — job created.",
+          );
           const jobId = result.data.jobId;
           if (typeof jobId === "string") {
             router.push({ pathname: "/(owner)/job/[id]", params: { id: jobId } });
@@ -448,7 +449,7 @@ export default function EstimatePreviewScreen(): React.ReactElement {
 
       {recurringOpen ? (
         <RecurringSheet
-          source={{ kind: "estimate", id }}
+          source={{ kind: "estimate", id, jobId: job?.id }}
           pricePerVisitCents={estimate.total_cents}
           customerName={estimate.customer_name}
           onClose={() => setRecurringOpen(false)}

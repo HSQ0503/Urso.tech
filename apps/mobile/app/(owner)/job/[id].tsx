@@ -730,7 +730,12 @@ export default function JobScreen(): React.ReactElement {
                   <Text style={styles.fieldLabel}>Deposit requested</Text>
                   <Text style={styles.money}>{fmtMoney(job.deposit_cents)}</Text>
                 </View>
-              ) : null}
+              ) : (
+                <View style={styles.moneyRow}>
+                  <Text style={styles.fieldLabel}>Deposit</Text>
+                  <Text style={styles.money}>{fmtMoney(0)}</Text>
+                </View>
+              )}
               <View style={styles.moneyRow}>
                 <Text style={styles.fieldLabel}>{invoice !== null && invoice.status === "paid" ? "Paid in full" : "Balance Due"}</Text>
                 <Text style={[styles.money, styles.balance]}>{fmtMoney(balanceDue)}</Text>

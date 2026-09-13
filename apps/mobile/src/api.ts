@@ -520,7 +520,7 @@ export const customerActions = {
     address?: string;
     notes?: string;
     source?: LeadSource;
-  }) => act<{ contactId?: string }>("/canes/customers", { action: "create", ...input }),
+  }) => act<{ id?: string }>("/canes/customers", { action: "create", ...input }),
   update: (id: string, fields: CustomerPatch) =>
     act(`/canes/customers/${id}/actions`, { action: "update", fields }),
   addAddress: (id: string, line: string, siteNotes?: string) =>

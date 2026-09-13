@@ -146,8 +146,12 @@ export const useCrews = () =>
 export const useJobs = () =>
   useQuery({ queryKey: keys.jobs.all(), queryFn: () => owner.jobs().then(unwrap) });
 
-export const useJob = (id: string) =>
-  useQuery({ queryKey: keys.jobs.one(id), queryFn: () => owner.job(id).then(unwrap) });
+export const useJob = (id: string | null) =>
+  useQuery({
+    queryKey: keys.jobs.one(id ?? "none"),
+    queryFn: () => owner.job(id ?? "").then(unwrap),
+    enabled: id !== null,
+  });
 
 export const useEstimate = (id: string | null) =>
   useQuery({

@@ -137,6 +137,7 @@ function ChannelTabs({ current, onPick }: { current: Channel; onPick: (channel: 
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
+      style={styles.tabScroll}
       contentContainerStyle={styles.tabs}
       keyboardShouldPersistTaps="handled"
     >
@@ -347,6 +348,7 @@ const styles = StyleSheet.create({
   list: { paddingHorizontal: 14, paddingTop: 4 },
   listEmpty: { flexGrow: 1 },
 
+  tabScroll: { flexGrow: 0 },
   tabs: { paddingHorizontal: 14, paddingVertical: 8, gap: 6, flexDirection: "row" },
   tab: {
     minHeight: 38,

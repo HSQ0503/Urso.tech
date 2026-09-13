@@ -8,8 +8,8 @@ import { DatePicker } from "@/components/date-picker";
 import { Notice } from "@/components/notice";
 import { useToast } from "@/components/toast";
 import { addCalendarDays, dateLabel, todayEt } from "@/dates";
-import { keys } from "@/queries";
-import { useAction } from "@/query";
+import { keys, useJob } from "@/queries";
+import { noticeFrom, useAction } from "@/query";
 import { color, font, HIT, radius, space, type } from "@/theme";
 
 // "Convert to recurring" — the same sheet from an estimate, an invoice or a
@@ -24,8 +24,8 @@ import { color, font, HIT, radius, space, type } from "@/theme";
 const CADENCES: PlanCadence[] = ["monthly", "quarterly", "semiannual", "yearly"];
 
 export type RecurringSource =
-  | { kind: "estimate"; id: string }
-  | { kind: "invoice"; id: string }
+  | { kind: "estimate"; id: string; jobId?: string }
+  | { kind: "invoice"; id: string; jobId?: string }
   | { kind: "job"; id: string };
 
 export function RecurringSheet({
@@ -44,6 +44,12 @@ export function RecurringSheet({
   const [startsOn, setStartsOn] = useState<string>(() => addCalendarDays(todayEt(), 30));
   const [dateOpen, setDateOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const jobId = source.kind === "job" ? source.id : source.jobId ?? null;
+  const jobQuery = useJob(jobId);
+  const firstVisitOn = jobQuery.data?.scheduled_at && !jobQuery.data.plan_id
+    ? todayEt(new Date(jobQuery.data.scheduled_at))
+    : null;
+  const sourcePending = jobId !== null && (jobQuery.isPending || jobQuery.isError);
 
   const create = useAction(
     (vars: { cadence: PlanCadence; startsOn: string }) =>
@@ -59,7 +65,7 @@ export function RecurringSheet({
 
   const submit = async () => {
     setNotice(null);
-    const r = await create.mutateAsync({ cadence, startsOn });
+    const r = await create.mutateAsync({ cadence, startsOn: firstVisitOn ?? startsOn });
     if (!r.ok) {
       setNotice(r.notice);
       return;
@@ -82,15 +88,16 @@ export function RecurringSheet({
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Create recurring plan"
-            disabled={create.isPending}
+            disabled={create.isPending || sourcePending}
             onPress={() => void submit()}
             hitSlop={8}
           >
-            <Text style={[styles.save, create.isPending && styles.saveOff]}>{create.isPending ? "Creating…" : "Create"}</Text>
+            <Text style={[styles.save, (create.isPending || sourcePending) && styles.saveOff]}>{create.isPending ? "Creating…" : "Create"}</Text>
           </Pressable>
         </View>
         <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
           <Notice text={notice} />
+          <Notice text={noticeFrom(jobQuery.error)} />
           <View style={styles.group}>
             <Text style={styles.label}>Plan</Text>
             <Text style={styles.value}>{customerName ?? "Customer"}</Text>
@@ -124,7 +131,17 @@ export function RecurringSheet({
 
           <View style={styles.group}>
             <Text style={styles.label}>First visit</Text>
-            <Pressable
+            {firstVisitOn ? (
+              <View style={styles.dateButton}>
+                <Feather name="calendar" size={20} color={color.brandDeep} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.dateTitle}>{dateLabel(firstVisitOn)}</Text>
+                  <Text style={styles.muted}>The linked work order is visit one. Future visits follow the cadence you choose. You can move the next visit on the plan.</Text>
+                </View>
+              </View>
+            ) : sourcePending ? (
+              <Text style={styles.muted}>Loading the linked work order…</Text>
+            ) : <Pressable
               accessibilityRole="button"
               accessibilityLabel="Choose first visit date"
               onPress={() => setDateOpen(true)}
@@ -136,7 +153,7 @@ export function RecurringSheet({
                 <Text style={styles.muted}>Visits are created three weeks ahead so you can book them.</Text>
               </View>
               <Feather name="chevron-right" size={20} color={color.brandDeep} />
-            </Pressable>
+            </Pressable>}
           </View>
 
           <View style={styles.terms}>
