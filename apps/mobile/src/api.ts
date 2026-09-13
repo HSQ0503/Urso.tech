@@ -23,6 +23,7 @@ import type {
   Message,
   Overview,
   PayoutSummary,
+  RevenueSummary,
   TeamMember,
   TodayReport,
   TechnicianJob,
@@ -234,6 +235,9 @@ export const owner = {
   // the ET CALENDAR DAY, not overview's rolling seven — a "today" card fed a
   // week's number is the exact mistake one shared payload would invite.
   todayReport: () => request<TodayReport>("/canes/today-report"),
+  // The Dashboard (2026-09-13): collected today / week / month / year, plus
+  // recurring revenue by month and ARR. Owner-only on the server.
+  revenue: () => request<RevenueSummary>("/canes/revenue"),
 
   threads: () => request<Thread[]>("/canes/threads"),
   // The shop-wide call log, newest first — the Inbox's Call Logs tab.

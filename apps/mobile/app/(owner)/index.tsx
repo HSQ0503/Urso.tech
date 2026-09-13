@@ -70,8 +70,8 @@ export default function HomeScreen(): React.ReactElement {
   // the notice explains the missing counts and the tiles stay tappable.
   const notice = noticeFrom(overviewQuery.error);
 
-  // What the Dashboard tile and the bar's checklist both count: the four
-  // queues the action screen is built from.
+  // What the announcement strip counts when nothing is cold: the queues that
+  // used to make up the action screen, all of them lead-shaped.
   const needs =
     (overview?.coldNeedingCall.length ?? 0) +
     (overview?.unconfirmedToday.length ?? 0) +
@@ -85,12 +85,11 @@ export default function HomeScreen(): React.ReactElement {
   // Inbox already has a tab, so its tile became Recurring — the plans he is
   // moving onto the system. Everything else sits where his thumb expects it.
   const tiles: LauncherTile[] = [
+    // Dashboard is revenue only now (2026-09-13), so it carries no queue count.
     {
       key: "dashboard",
       label: "Dashboard",
       icon: "activity",
-      count: needs,
-      tone: cold > 0 ? "danger" : "brand",
       onPress: () => router.push("/(owner)/dashboard"),
     },
     {
@@ -203,8 +202,8 @@ export default function HomeScreen(): React.ReactElement {
             <Announcement
               icon="bell"
               title={`${needs} thing${needs === 1 ? "" : "s"} need you`}
-              detail="Tap to work the queue."
-              onPress={() => router.push("/(owner)/dashboard")}
+              detail="Unconfirmed or past-due visits and follow-ups, on their leads."
+              onPress={() => router.push("/(owner)/leads")}
             />
           ) : (
             <Announcement

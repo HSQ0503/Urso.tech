@@ -751,6 +751,33 @@ export type TodayReport = {
   leadsTodayCount: number;
 };
 
+// ── Revenue (the Dashboard, 2026-09-13) ──────────────────────────────────────
+//
+// Collected money — payments minus refunds — for the four ET calendar windows
+// Payouts already defines, plus recurring revenue by month and the year's ARR.
+// Collected, never invoiced: it is the number the owner can spend.
+export type RevenueWindow = {
+  key: PayoutRangeKey;
+  label: string; // "Today" / "This week" / "This month" / "This year"
+  collectedCents: number;
+};
+
+export type RevenueMonth = {
+  key: string; // ET YYYY-MM
+  label: string; // "Jan 26"
+  recurringCents: number; // collected on recurring work in that month
+};
+
+export type RevenueSummary = {
+  windows: RevenueWindow[]; // day, week, month, year — in that order
+  recurring: {
+    mrrCents: number; // normalized monthly recurring revenue across active plans
+    arrCents: number; // mrr × 12
+    activePlans: number;
+    months: RevenueMonth[]; // last 12 ET months, oldest first
+  };
+};
+
 export type Overview = {
   counts: { open: number; hot: number; cold: number; wonThisWeek: number };
   coldNeedingCall: Lead[]; // status new, type cold — the "call now" queue

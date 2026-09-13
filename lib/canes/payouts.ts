@@ -110,7 +110,9 @@ function addDays(y: number, m: number, d: number, days: number): { y: number; m:
   return { y: dt.getUTCFullYear(), m: dt.getUTCMonth() + 1, d: dt.getUTCDate() };
 }
 
-function rangeBounds(key: PayoutRangeKey): { startIso: string; endIso: string; label: string } {
+// Exported for lib/canes/revenue.ts, so the Dashboard's day/week/month/year
+// windows are the SAME instants Payouts uses — one definition of "this week".
+export function rangeBounds(key: PayoutRangeKey): { startIso: string; endIso: string; label: string } {
   const t = etParts(Date.now());
   if (key === "day") {
     const start = etMidnight(t.y, t.m, t.d);

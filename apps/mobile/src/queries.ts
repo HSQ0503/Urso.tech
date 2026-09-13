@@ -11,6 +11,7 @@ export const keys = {
   overview: () => ["owner", "overview"] as const,
   agenda: () => ["owner", "agenda"] as const,
   todayReport: () => ["owner", "today-report"] as const,
+  revenue: () => ["owner", "revenue"] as const,
   threads: {
     all: () => ["owner", "threads"] as const,
     messages: (phone: string) => ["owner", "threads", phone, "messages"] as const,
@@ -57,6 +58,9 @@ export const useAgenda = () =>
 
 export const useTodayReport = () =>
   useQuery({ queryKey: keys.todayReport(), queryFn: () => owner.todayReport().then(unwrap) });
+
+export const useRevenue = () =>
+  useQuery({ queryKey: keys.revenue(), queryFn: () => owner.revenue().then(unwrap) });
 
 export const useThreads = () =>
   useQuery({ queryKey: keys.threads.all(), queryFn: () => owner.threads().then(unwrap) });
