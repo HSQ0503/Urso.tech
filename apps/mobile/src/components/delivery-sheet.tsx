@@ -1,7 +1,9 @@
 import { useEffect, useState, type ComponentProps } from "react";
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -138,6 +140,10 @@ export function DeliverySheet({
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={styles.scrim}>
         <Pressable style={StyleSheet.absoluteFill} accessibilityLabel="Close delivery options" onPress={onClose} />
+        {/* The add-email/phone rows sit near the bottom; without this the
+            keyboard covers the field being typed into (the plan form had the
+            same defect on device). */}
+        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined}>
         <View style={[styles.sheet, { paddingBottom: insets.bottom + space.lg }]}>
           <View style={styles.handle} />
           <View style={styles.header}>
@@ -239,6 +245,7 @@ export function DeliverySheet({
             <Text style={styles.sendText}>{sending ? "SENDING…" : `SEND ${documentLabel.toUpperCase()}`}</Text>
           </Pressable>
         </View>
+        </KeyboardAvoidingView>
       </View>
     </Modal>
   );
