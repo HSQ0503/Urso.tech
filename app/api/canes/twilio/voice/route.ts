@@ -1,8 +1,8 @@
 import type { NextRequest } from "next/server";
 import { createHash } from "node:crypto";
 import { canesConfigured, canesDb } from "@/lib/canes/supabase";
-import { getSettings } from "@/lib/canes/data";
-import { fillTemplate, sendCanesSms } from "@/lib/canes/twilio";
+import { getLead, getSettings } from "@/lib/canes/data";
+import { canesVoiceNumber, fillTemplate, sendCanesSms } from "@/lib/canes/twilio";
 import { createOrganicLead, findLeadByPhone, verifyTwilioRequest } from "@/lib/canes/inbound";
 import { findCustomerByPhone } from "@/lib/canes/customers";
 import { toE164 } from "@/lib/canes/types";
@@ -47,6 +47,34 @@ async function finishCallClaim(
     p_error: error ?? null,
   });
   if (finishError) throw new Error(`voice claim completion failed: ${finishError.message}`);
+}
+
+// Write one calls row, idempotent on inbound_dedupe_key.
+//
+// This used to be `.upsert(row, { onConflict: "inbound_dedupe_key", ignoreDuplicates })`
+// and it FAILED ON EVERY INBOUND CALL from 2026-08-21 to 2026-09-13:
+// calls_inbound_dedupe_key_uidx (0019) is a PARTIAL unique index
+// (`where inbound_dedupe_key is not null`), and Postgres refuses to infer a
+// partial index from a bare `ON CONFLICT (column)` — the same 42P10 that hit
+// the payments ledger on the first live Square payment (995cdfe). Every
+// ?step=after threw, Twilio retried five times, the caller heard an error
+// instead of voicemail, no missed-call text went out, and no inbound call has
+// been logged since July 21. The partial index still ENFORCES uniqueness, so a
+// plain insert that treats 23505 as "already recorded" is the whole fix.
+async function recordCall(
+  row: {
+    lead_id: string | null;
+    peer_phone: string;
+    direction: "in" | "out";
+    status: string;
+    duration_seconds?: number | null;
+    twilio_sid: string | null;
+    inbound_dedupe_key: string;
+  },
+  what: string,
+): Promise<void> {
+  const { error } = await canesDb().from("calls").insert(row);
+  if (error && error.code !== "23505") throw new Error(`${what}: ${error.message}`);
 }
 
 async function runCallEffect(eventKey: string, effectKey: string, effect: () => Promise<void>): Promise<void> {
@@ -117,6 +145,8 @@ export async function POST(req: NextRequest) {
     let response: Response;
     if (step === "whisper") response = await whisper(params);
     else if (step === "after") response = await afterDial(params, eventKey);
+    else if (step === "callback") response = await ownerCallback(params, eventKey, req.nextUrl.searchParams.get("to"));
+    else if (step === "callback-after") response = await afterOwnerCallback(params);
     else response = await firstRing(params, eventKey);
     const body = await response.clone().text();
     await finishCallClaim(eventKey, payloadHash, { body, status: response.status });
@@ -147,6 +177,12 @@ async function firstRing(params: Record<string, string>, eventKey: string): Prom
   console.log(`[canes] inbound call from ${params.From ?? "unknown"} (${params.CallSid ?? "no sid"})`);
 
   const owner = process.env.CANES_OWNER_PHONE;
+  // Sebastian dialing his own business line. Forwarding it to himself is
+  // useless (busy signal or his own voicemail); what he actually wants — every
+  // time this has happened — is to reach whoever he just missed. Offer that.
+  if (owner && params.From && toE164(params.From) && toE164(params.From) === toE164(owner)) {
+    return ownerMenu();
+  }
   if (owner) {
     const settings = await getSettings();
     // Optional caller greeting, played to the caller before the phone rings.
@@ -174,15 +210,14 @@ async function firstRing(params: Record<string, string>, eventKey: string): Prom
   if (canesConfigured() && params.From) {
     const phone = toE164(params.From) ?? params.From;
     const { lead, created } = await missedCallLead(phone, params.CallSid);
-    const { error } = await canesDb().from("calls").upsert({
+    await recordCall({
       lead_id: lead?.id ?? null,
       peer_phone: phone,
       direction: "in",
       status: "no-answer",
       twilio_sid: params.CallSid ?? null,
       inbound_dedupe_key: `${eventKey}:call`,
-    }, { onConflict: "inbound_dedupe_key", ignoreDuplicates: true });
-    if (error) throw new Error(`inbound call insert failed: ${error.message}`);
+    }, "inbound call insert failed");
     if (lead && !created) {
       await pushNewLead(lead, "missed_call", params.CallSid);
     }
@@ -232,7 +267,7 @@ async function afterDial(params: Record<string, string>, eventKey: string): Prom
 
   if (answered) {
     if (configured && phone) {
-      const { error } = await canesDb().from("calls").upsert({
+      await recordCall({
         lead_id: lead?.id ?? null,
         peer_phone: phone,
         direction: "in",
@@ -240,8 +275,7 @@ async function afterDial(params: Record<string, string>, eventKey: string): Prom
         duration_seconds: Number(params.DialCallDuration) || null,
         twilio_sid: params.CallSid ?? null,
         inbound_dedupe_key: `${eventKey}:call`,
-      }, { onConflict: "inbound_dedupe_key", ignoreDuplicates: true });
-      if (error) throw new Error(`answered call insert failed: ${error.message}`);
+      }, "answered call insert failed");
     }
     return xmlResponse("<Response/>");
   }
@@ -255,7 +289,7 @@ async function afterDial(params: Record<string, string>, eventKey: string): Prom
       lead = resolved.lead;
       created = resolved.created;
     }
-    const { error } = await canesDb().from("calls").upsert({
+    await recordCall({
       lead_id: lead?.id ?? null,
       peer_phone: phone,
       direction: "in",
@@ -263,8 +297,7 @@ async function afterDial(params: Record<string, string>, eventKey: string): Prom
       duration_seconds: Number(params.DialCallDuration) || null,
       twilio_sid: params.CallSid ?? null,
       inbound_dedupe_key: `${eventKey}:call`,
-    }, { onConflict: "inbound_dedupe_key", ignoreDuplicates: true });
-    if (error) throw new Error(`missed call insert failed: ${error.message}`);
+    }, "missed call insert failed");
     if (lead && !created) {
       await pushNewLead(lead, "missed_call", params.CallSid);
     }
@@ -283,6 +316,111 @@ async function afterDial(params: Record<string, string>, eventKey: string): Prom
     }
   }
   return xmlResponse(VOICEMAIL_TWIML);
+}
+
+// ── Owner calling the business line ──────────────────────────────────────────
+//
+// Read the most recent call with anyone, say who it was, and offer to connect
+// from the business number with one key press. The callee is chosen by the
+// SERVER from the call log; nothing the caller sends picks a number, so a
+// spoofed owner caller ID could at most ring the last customer as Canes.
+// Reads and the TwiML are all that happen before the key press; the calls row
+// is written only when Sebastian presses 1.
+
+const NO_RECENT_CALLS = `<Response><Say voice="alice">Canes line. There is no recent call to return. Goodbye.</Say></Response>`;
+
+async function ownerMenu(): Promise<Response> {
+  if (!canesConfigured()) return xmlResponse(NO_RECENT_CALLS);
+  const { data: last, error } = await canesDb()
+    .from("calls")
+    .select("peer_phone, lead_id, direction, status, created_at")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(`owner menu lookup failed: ${error.message}`);
+  const to = last ? toE164(last.peer_phone) : null;
+  if (!last || !to) return xmlResponse(NO_RECENT_CALLS);
+
+  const name = await peerName(to, last.lead_id);
+  const what = last.direction === "in"
+    ? (last.status === "completed" ? "Your last call was from" : "You missed a call from")
+    : "You last called";
+  const action = `/api/canes/twilio/voice?step=callback&amp;to=${encodeURIComponent(to)}#rc=5&amp;rp=ct,rt,5xx`;
+  return xmlResponse(
+    `<Response>` +
+    `<Gather numDigits="1" timeout="8" action="${action}" method="POST">` +
+    `<Say voice="alice">Canes line. ${escapeXml(what)} ${escapeXml(name ?? "")}${name ? ", " : ""}${spokenPhone(to)}. ` +
+    `Press 1 to call them back from the business number.</Say>` +
+    `</Gather>` +
+    `<Say voice="alice">Okay. Goodbye.</Say>` +
+    `</Response>`,
+  );
+}
+
+async function ownerCallback(params: Record<string, string>, eventKey: string, rawTo: string | null): Promise<Response> {
+  const to = rawTo ? toE164(rawTo) : null;
+  if (params.Digits !== "1" || !to) {
+    return xmlResponse(`<Response><Say voice="alice">Okay. Goodbye.</Say></Response>`);
+  }
+  const businessNumber = canesVoiceNumber();
+  const lead = canesConfigured() ? await findLeadByPhone(to) : null;
+  if (canesConfigured()) {
+    // The same shape bridgeCall writes, keyed on THIS inbound call's SID so the
+    // <Dial> action below can settle it. The Call Logs then show it as an
+    // outbound call, which is what it is.
+    await recordCall({
+      lead_id: lead?.id ?? null,
+      peer_phone: to,
+      direction: "out",
+      status: "initiated",
+      twilio_sid: params.CallSid ?? null,
+      inbound_dedupe_key: `${eventKey}:call`,
+    }, "owner callback insert failed");
+  }
+  const name = await peerName(to, lead?.id ?? null);
+  const callerId = businessNumber ? ` callerId="${escapeXml(businessNumber)}"` : "";
+  return xmlResponse(
+    `<Response>` +
+    `<Say voice="alice">Connecting you to ${escapeXml(name ?? spokenPhone(to))}.</Say>` +
+    `<Dial${callerId} timeout="30" action="/api/canes/twilio/voice?step=callback-after#rc=5&amp;rp=ct,rt,5xx" method="POST">${escapeXml(to)}</Dial>` +
+    `</Response>`,
+  );
+}
+
+async function afterOwnerCallback(params: Record<string, string>): Promise<Response> {
+  const status = params.DialCallStatus;
+  if (canesConfigured() && params.CallSid && status) {
+    const duration = Number.parseInt(params.DialCallDuration ?? "", 10);
+    const { error } = await canesDb()
+      .from("calls")
+      .update({ status, ...(Number.isFinite(duration) ? { duration_seconds: duration } : {}) })
+      .eq("twilio_sid", params.CallSid)
+      .eq("direction", "out")
+      .eq("status", "initiated");
+    if (error) throw new Error(`owner callback outcome write failed: ${error.message}`);
+  }
+  return xmlResponse("<Response/>");
+}
+
+async function peerName(phone: string, leadId: string | null): Promise<string | null> {
+  try {
+    const contact = await findCustomerByPhone(phone);
+    if (contact?.name?.trim()) return contact.name.trim();
+    const lead = leadId ? await getLead(leadId) : await findLeadByPhone(phone);
+    return lead?.name?.trim() || null;
+  } catch (err) {
+    console.error("[canes] owner menu name lookup failed:", err);
+    return null;
+  }
+}
+
+// "+15614013522" → "5 6 1, 4 0 1, 3 5 2 2" so the voice reads it as a phone
+// number rather than five billion.
+function spokenPhone(e164: string): string {
+  const digits = e164.replace(/\D/g, "");
+  const ten = digits.length === 11 && digits.startsWith("1") ? digits.slice(1) : digits;
+  if (ten.length !== 10) return ten.split("").join(" ");
+  return [ten.slice(0, 3), ten.slice(3, 6), ten.slice(6)].map((part) => part.split("").join(" ")).join(", ");
 }
 
 async function missedCallLead(

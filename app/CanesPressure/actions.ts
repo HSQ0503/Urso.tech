@@ -845,6 +845,32 @@ export async function bridgeCall(
   if (!owner || !accountSid || !authToken || !voiceFrom) {
     return { ok: false, notice: "Twilio isn't configured yet." };
   }
+  // One bridge at a time. On 2026-09-13 Sebastian tapped Call, answered his
+  // phone, and while the customer's phone was still ringing (30s of silence on
+  // his end) tapped Call again. The second owner leg hit his busy handset, his
+  // iPhone logged "missed call from (561) 537-5674", and redialing that number
+  // forwarded to himself. A row still `initiated` means Twilio has not yet
+  // reported the first bridge over; the status callback closes it within a
+  // second of hang-up, and the 10-minute window bounds a lost callback.
+  const { data: live } = await canesDb()
+    .from("calls")
+    .select("id, lead_id, peer_phone")
+    .eq("direction", "out")
+    .eq("status", "initiated")
+    .gte("created_at", new Date(Date.now() - 10 * 60_000).toISOString())
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (live) {
+    const liveLead = live.lead_id ? await getLead(live.lead_id) : null;
+    const who = liveLead?.name?.trim() || fmtPhone(live.peer_phone);
+    return {
+      ok: false,
+      notice: live.peer_phone === to
+        ? `Your phone is already being connected to ${who} — answer that call.`
+        : `Your phone is still on the call with ${who}. Finish that one, then call again.`,
+    };
+  }
   const base = process.env.NEXT_PUBLIC_APP_URL ?? "https://urso.ws";
   const twimlUrl = `${base}/api/canes/twilio/bridge?to=${encodeURIComponent(to)}`;
   const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Calls.json`, {

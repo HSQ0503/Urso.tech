@@ -101,6 +101,31 @@ export async function pushNewLead(
   });
 }
 
+// A click-to-call whose owner leg never connected. Sebastian's iPhone shows
+// only "missed call from (561) 537-5674" — his own line — and redialing that
+// forwards to himself. This tells him who the callback was for and opens their
+// record, where Call is one tap away.
+export async function pushMissedCallback(input: {
+  callSid: string;
+  leadId: string | null;
+  peerPhone: string;
+  name: string | null;
+  reason: "owner_missed" | "failed";
+}) {
+  const person = displayName(input.name, input.peerPhone);
+  return ownerPush({
+    dedupeKey: `missed_callback:${input.callSid}`,
+    eventType: "owner_alert",
+    urgency: "time_sensitive",
+    title: input.reason === "failed" ? "Callback didn't connect" : "You missed your callback",
+    body: input.reason === "failed"
+      ? `The call to ${person} didn't go through. Tap to try again.`
+      : `We rang your phone to connect you to ${person} and it wasn't answered. Tap to call again.`,
+    href: input.leadId ? `/(owner)/lead/${input.leadId}` : `/(owner)/thread/${encodeURIComponent(input.peerPhone)}`,
+    entityId: input.leadId ?? undefined,
+  });
+}
+
 export function pushCustomerMessage(input: {
   messageId: string;
   peerPhone: string;

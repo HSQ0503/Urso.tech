@@ -19,6 +19,7 @@ import {
   fmtEt,
   fmtPhone,
   isMissedCall,
+  CALL_OWNER_MISSED_STATUS,
   type Call,
   type Lead,
   type Message,
@@ -45,14 +46,21 @@ function CallEvent({ call }: { call: Call }) {
   const duration = fmtCallDuration(call.duration_seconds);
 
   const Icon = voicemail ? Voicemail : missed ? PhoneMissed : out ? PhoneOutgoing : PhoneIncoming;
+  const ownerMissed = out && call.status === CALL_OWNER_MISSED_STATUS;
   const title = voicemail
     ? "Voicemail"
     : missed
       ? "Missed call"
-      : out && call.status !== "completed"
-        ? "No answer"
-        : "Call ended";
-  const detail = out
+      : ownerMissed
+        ? "Callback missed"
+        : out && call.status === "initiated"
+          ? "Connecting"
+          : out && call.status !== "completed"
+            ? "No answer"
+            : "Call ended";
+  const detail = ownerMissed
+    ? "Your phone rang to connect you and wasn't answered"
+    : out
     ? `You called${duration ? ` · ${duration}` : ""}`
     : missed
       ? voicemail

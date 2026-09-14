@@ -1,6 +1,10 @@
 import type { NextRequest } from "next/server";
 import { canesConfigured, canesDb } from "@/lib/canes/supabase";
-import { verifyTwilioRequest } from "@/lib/canes/inbound";
+import { findLeadByPhone, verifyTwilioRequest } from "@/lib/canes/inbound";
+import { getLead } from "@/lib/canes/data";
+import { findCustomerByPhone } from "@/lib/canes/customers";
+import { pushMissedCallback } from "@/lib/canes/push-events";
+import { CALL_OWNER_MISSED_STATUS, toE164 } from "@/lib/canes/types";
 import { xmlResponse } from "@/lib/twilio";
 
 // Twilio status callbacks. ?type=recording attaches a voicemail recording to
@@ -34,26 +38,7 @@ export async function POST(req: NextRequest) {
           .update({ delivery_status: params.MessageStatus })
           .eq("twilio_sid", params.MessageSid);
       } else if (params.CallSid && params.CallStatus) {
-        // A bridged outbound call finishing. Only calls that ASKED for a status
-        // callback arrive here (bridgeCall does; the inbound <Dial> does not,
-        // and writes its own row from ?step=after), so this cannot overwrite an
-        // inbound call's outcome.
-        //
-        // Twilio's CallStatus vocabulary — completed / busy / no-answer /
-        // failed / canceled — is already the vocabulary the calls.status column
-        // documents, so it is stored verbatim rather than remapped. The inbox
-        // treats anything other than "completed" on an outbound row as an
-        // unanswered call, which is exactly right.
-        const duration = Number.parseInt(params.CallDuration ?? "", 10);
-        await db
-          .from("calls")
-          .update({
-            status: params.CallStatus,
-            // Absent on every event but the last one; never write a null over a
-            // duration Twilio already reported.
-            ...(Number.isFinite(duration) ? { duration_seconds: duration } : {}),
-          })
-          .eq("twilio_sid", params.CallSid);
+        await settleOwnerLeg(params.CallSid, params.CallStatus, params.CallDuration);
       }
     }
   } catch (err) {
@@ -61,4 +46,57 @@ export async function POST(req: NextRequest) {
   }
 
   return xmlResponse("<Response/>");
+}
+
+// The bridged click-to-call's OWNER leg finishing. Only calls that asked for a
+// status callback arrive here (bridgeCall does; the inbound <Dial> does not, and
+// writes its own row from ?step=after), so this cannot touch an inbound call.
+//
+// By the time this fires, the bridge's own <Dial> action has normally already
+// written the customer leg's outcome and the row is terminal — nothing to do.
+// A row STILL `initiated` means the bridge TwiML never ran: Sebastian did not
+// answer his own phone (no-answer / busy / canceled), or the leg connected and
+// died before dialing (completed with ~0s, failed). That is the case he could
+// not read from his iPhone — it showed a missed call from his own business
+// number, and redialing it forwarded to himself. So it gets its own status
+// value for the Call Logs, and a push that names who the callback was for and
+// opens their record.
+async function settleOwnerLeg(callSid: string, callStatus: string, callDuration: string | undefined): Promise<void> {
+  const db = canesDb();
+  const { data: row, error } = await db
+    .from("calls")
+    .select("id, lead_id, peer_phone, status")
+    .eq("twilio_sid", callSid)
+    .eq("direction", "out")
+    .maybeSingle();
+  if (error) throw new Error(`owner leg lookup failed: ${error.message}`);
+  if (!row || row.status !== "initiated") return;
+
+  const duration = Number.parseInt(callDuration ?? "", 10);
+  const connected = callStatus === "completed" && Number.isFinite(duration) && duration > 1;
+  const status = connected
+    ? "completed" // answered, but the bridge action never posted — record what Twilio said
+    : callStatus === "failed" || callStatus === "completed"
+      ? "failed"
+      : CALL_OWNER_MISSED_STATUS;
+  const { data: claimed, error: writeError } = await db
+    .from("calls")
+    .update({ status, ...(Number.isFinite(duration) ? { duration_seconds: duration } : {}) })
+    .eq("id", row.id)
+    .eq("status", "initiated")
+    .select("id");
+  if (writeError) throw new Error(`owner leg write failed: ${writeError.message}`);
+  // Lost the race to the bridge action — it knows more than we do.
+  if (!claimed || claimed.length === 0 || connected) return;
+
+  const phone = toE164(row.peer_phone) ?? row.peer_phone;
+  const lead = row.lead_id ? await getLead(row.lead_id) : await findLeadByPhone(phone);
+  const contact = lead?.name ? null : await findCustomerByPhone(phone);
+  await pushMissedCallback({
+    callSid,
+    leadId: lead?.id ?? row.lead_id ?? null,
+    peerPhone: phone,
+    name: lead?.name ?? contact?.name ?? null,
+    reason: status === "failed" ? "failed" : "owner_missed",
+  });
 }

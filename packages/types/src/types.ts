@@ -64,12 +64,19 @@ export type Call = {
   lead_id: string | null;
   peer_phone: string;
   direction: "in" | "out";
+  // Twilio's vocabulary (completed / no-answer / busy / failed / canceled),
+  // "initiated" while a bridged click-to-call is live, or CALL_OWNER_MISSED_STATUS.
   status: string | null;
   duration_seconds: number | null;
   recording_url: string | null;
   transcript: string | null;
   twilio_sid: string | null;
 };
+
+// A bridged click-to-call whose OWNER leg never connected: Sebastian did not
+// pick up his own phone when Twilio rang it to connect him. Distinct from
+// "no-answer", which on an outbound row means the customer did not answer.
+export const CALL_OWNER_MISSED_STATUS = "owner-no-answer";
 
 export type TaskKind =
   | "hold_text"

@@ -14,6 +14,7 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import {
+  CALL_OWNER_MISSED_STATUS,
   fmtCallDuration,
   fmtEt,
   fmtPhone,
@@ -182,8 +183,10 @@ function textRows(threads: Thread[], query: string, dayKeys: string[]): TextRow[
 }
 
 // What one call was, in the owner's words. A bridged click-to-call is written
-// as "initiated" and never updated (a known gap), so an outbound row with no
-// duration reads as "You called" rather than inventing an outcome.
+// as "initiated" while Twilio is still ringing (reads "Connecting…"), then the
+// bridge records the customer leg's outcome. An owner leg that was never
+// answered gets its own line — Sebastian's iPhone shows that case as a missed
+// call from his own business number, which is unreadable.
 function callLine(call: Call): { line: string; tone: CallTone } {
   const duration = fmtCallDuration(call.duration_seconds);
   if (call.direction === "in") {
@@ -192,6 +195,12 @@ function callLine(call: Call): { line: string; tone: CallTone } {
       return { line: voicemail ? "Missed call · Voicemail" : "Missed call", tone: "missed" };
     }
     return { line: duration ? `Incoming call · ${duration}` : "Incoming call", tone: "answered" };
+  }
+  if (call.status === CALL_OWNER_MISSED_STATUS) {
+    return { line: "Callback missed · you didn't pick up", tone: "missed" };
+  }
+  if (call.status === "initiated") {
+    return { line: "Connecting your phone…", tone: "unanswered" };
   }
   if (call.status === "completed" && duration) {
     return { line: `You called · ${duration}`, tone: "answered" };
