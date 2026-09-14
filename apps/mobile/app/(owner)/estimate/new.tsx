@@ -30,7 +30,7 @@ import { DatePicker } from "@/components/date-picker";
 import { addCalendarDays, expiryForDate, todayEt } from "@/dates";
 import { AddressInput } from "@/components/address-input";
 import { Notice } from "@/components/notice";
-import { keys, useCatalog, useCustomers, useEstimate } from "@/queries";
+import { keys, useCatalog, useCustomers, useEstimate, useSettings } from "@/queries";
 import { noticeFrom, useAction } from "@/query";
 import { color, font, HIT, radius, space, type } from "@/theme";
 
@@ -237,7 +237,9 @@ function EstimateEditor({ editId, requestedType }: { editId: string | null; requ
   const estimateQuery = useEstimate(editId);
   const customersQuery = useCustomers();
   const catalogQuery = useCatalog();
+  const settingsQuery = useSettings();
   const estimate = estimateQuery.data ?? null;
+  const depositPresets = settingsQuery.data?.deposit_presets ?? [0, 25, 50];
 
   const [estimateType, setEstimateType] = useState<EstimateType>(requestedType);
   const [contactId, setContactId] = useState<string | null>(null);
@@ -248,6 +250,11 @@ function EstimateEditor({ editId, requestedType }: { editId: string | null; requ
   const [jobName, setJobName] = useState("");
   const [expiresAtIso, setExpiresAtIso] = useState(() => futureIso(28));
   const [expiryOpen, setExpiryOpen] = useState(false);
+  // A whole-number percent of the total; the server clamps 0–100 and computes
+  // deposit_cents on every save. The form never turns it into money itself.
+  const [depositPercent, setDepositPercent] = useState(0);
+  const [customDeposit, setCustomDeposit] = useState(false);
+  const [depositText, setDepositText] = useState("");
   const [quantityType, setQuantityType] = useState<"Qty" | "Sq Ft">("Qty");
   const [lines, setLines] = useState<DraftLine[]>([]);
   const [seeded, setSeeded] = useState(false);
@@ -268,10 +275,13 @@ function EstimateEditor({ editId, requestedType }: { editId: string | null; requ
     setJobAddress(estimate.job_address ?? "");
     setJobName(estimate.job_name ?? "");
     setExpiresAtIso(estimate.expires_at ?? futureIso(28));
+    setDepositPercent(estimate.deposit_percent);
+    setCustomDeposit(!depositPresets.includes(estimate.deposit_percent));
+    setDepositText(String(estimate.deposit_percent));
     setLines(estimate.items.map(fromEstimateItem));
     setContactId(estimate.contact_id);
     setSeeded(true);
-  }, [estimate, seeded]);
+  }, [depositPresets, estimate, seeded]);
 
   const create = useAction(
     (input: Parameters<typeof estimateActions.create>[0]) => estimateActions.create(input),
@@ -380,6 +390,7 @@ function EstimateEditor({ editId, requestedType }: { editId: string | null; requ
         jobAddress: jobAddress.trim(),
         jobName: jobName.trim(),
         expiresAtIso,
+        depositPercent,
       },
     });
     if (!details.ok) {
@@ -505,6 +516,58 @@ function EstimateEditor({ editId, requestedType }: { editId: string | null; requ
               style={styles.jobNameInput}
             />
           </View>
+          <View style={styles.depositField}>
+            <Text style={styles.detailLabel}>Request a deposit</Text>
+            <View style={styles.depositChips}>
+              {depositPresets.map((preset) => {
+                const selected = !customDeposit && depositPercent === preset;
+                return (
+                  <Pressable
+                    key={preset}
+                    accessibilityRole="radio"
+                    accessibilityState={{ checked: selected }}
+                    accessibilityLabel={preset === 0 ? "No deposit" : `${preset} percent deposit`}
+                    onPress={() => { setCustomDeposit(false); setDepositPercent(preset); }}
+                    style={[styles.depositChip, selected && styles.depositChipOn]}
+                  >
+                    <Text style={[styles.depositChipText, selected && styles.depositChipTextOn]}>{preset === 0 ? "None" : `${preset}%`}</Text>
+                  </Pressable>
+                );
+              })}
+              <Pressable
+                accessibilityRole="radio"
+                accessibilityState={{ checked: customDeposit }}
+                accessibilityLabel="Custom deposit percent"
+                onPress={() => { setCustomDeposit(true); setDepositText(depositPercent > 0 ? String(depositPercent) : ""); }}
+                style={[styles.depositChip, customDeposit && styles.depositChipOn]}
+              >
+                <Text style={[styles.depositChipText, customDeposit && styles.depositChipTextOn]}>Custom</Text>
+              </Pressable>
+              {customDeposit ? (
+                <View style={styles.depositCustom}>
+                  <TextInput
+                    value={depositText}
+                    onChangeText={(text) => {
+                      const digits = text.replace(/[^0-9]/g, "").slice(0, 3);
+                      setDepositText(digits);
+                      setDepositPercent(Math.min(100, Number(digits) || 0));
+                    }}
+                    keyboardType="number-pad"
+                    placeholder="0"
+                    placeholderTextColor={color.faint}
+                    accessibilityLabel="Deposit percent"
+                    style={styles.depositInput}
+                  />
+                  <Text style={styles.depositUnit}>%</Text>
+                </View>
+              ) : null}
+            </View>
+            <Text style={styles.depositHint}>
+              {depositPercent > 0
+                ? `The approval page asks for ${depositPercent}% of the total through Square.`
+                : "No deposit is requested when the customer approves."}
+            </Text>
+          </View>
         </View>
 
         <CategoryBar label="Service" onAdd={() => openCatalog("service")} />
@@ -626,6 +689,16 @@ const styles = StyleSheet.create({
   detailValue: { fontFamily: font.body, fontSize: 20, color: color.ink },
   quantityRow: { minHeight: 78, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   jobNameInput: { fontFamily: font.body, fontSize: 19, color: color.ink, paddingVertical: 0 },
+  depositField: { paddingTop: 4, gap: 10 },
+  depositChips: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8 },
+  depositChip: { minHeight: 40, paddingHorizontal: 14, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: color.lineStrong, borderRadius: radius.sm },
+  depositChipOn: { backgroundColor: color.brandWash, borderColor: color.brandEdge },
+  depositChipText: { fontFamily: font.bodyMedium, fontSize: 15, color: color.muted },
+  depositChipTextOn: { color: color.brandDeep },
+  depositCustom: { minHeight: 40, paddingHorizontal: 10, flexDirection: "row", alignItems: "center", gap: 4, borderWidth: 1, borderColor: color.brandEdge, borderRadius: radius.sm },
+  depositInput: { minWidth: 36, fontFamily: font.body, fontSize: 16, color: color.ink, paddingVertical: 0, textAlign: "right" },
+  depositUnit: { fontFamily: font.bodyMedium, fontSize: 15, color: color.muted },
+  depositHint: { fontFamily: font.body, fontSize: 13, lineHeight: 18, color: color.muted },
   categoryBar: { minHeight: 78, paddingHorizontal: 18, flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: color.hover, borderBottomWidth: 10, borderBottomColor: color.surface },
   categoryPressed: { backgroundColor: color.brandWash },
   categoryLabel: { fontFamily: font.bodySemi, fontSize: 23, color: color.ink },

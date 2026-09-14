@@ -43,6 +43,7 @@ import { Avatar } from "@/components/avatar";
 import { NavigateButton } from "@/components/navigate";
 import { Notice } from "@/components/notice";
 import { PhoneInput, toPhoneDisplay } from "@/components/phone-input";
+import { useToast } from "@/components/toast";
 import { keys, useCustomer } from "@/queries";
 import { noticeFrom, useAction, usePullToRefresh, useRefetchOnFocus } from "@/query";
 import { color, font, HIT, radius, space, type } from "@/theme";
@@ -148,9 +149,12 @@ export default function CustomerScreen(): React.ReactElement {
   // Every mutation here changes what both the profile and the customer book
   // show, so both keys refresh on every settled envelope.
   const invalidates = [keys.customers.one(id), keys.customers.all()];
+  // A phone/email edit also flows onto this customer's open estimates, draft
+  // invoices and draft plans server-side, so those lists refresh too.
   const runUpdate = useAction((fields: CustomerPatch) => customerActions.update(id, fields), {
-    invalidates,
+    invalidates: [...invalidates, keys.estimates(), keys.invoices(), keys.recurring.all()],
   });
+  const toast = useToast();
   const runAddAddress = useAction(
     (vars: { line: string; siteNotes?: string }) =>
       customerActions.addAddress(id, vars.line, vars.siteNotes),
@@ -293,6 +297,10 @@ export default function CustomerScreen(): React.ReactElement {
       return;
     }
     setEditOpen(false);
+    // Qualified success: the server says how many open documents picked up the
+    // new details. The sheet is closing, so the root toast carries it.
+    const propagated = successNotice(r.data);
+    if (propagated) toast.show(propagated);
   };
 
   // The money path for an existing customer. The quote is created EMPTY, so

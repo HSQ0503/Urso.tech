@@ -25,7 +25,7 @@ import {
   type InvoiceStatus,
 } from "@urso/types";
 import { API_BASE, invoiceActions } from "@/api";
-import { DeliverySheet, type DeliveryChannels } from "@/components/delivery-sheet";
+import { DeliverySheet, type DeliveryChannels, type DeliveryOverrides } from "@/components/delivery-sheet";
 import { RecurringSheet } from "@/components/recurring-sheet";
 import { Mark, NextStep } from "@/components/ledger";
 import { Notice } from "@/components/notice";
@@ -134,8 +134,8 @@ export default function InvoicePreviewScreen(): React.ReactElement {
   }, [payments]);
 
   const invoiceKeys: QueryKey[] = [keys.invoiceOne(id), keys.invoices(), keys.overview()];
-  const send = useAction<DeliveryChannels, Record<string, unknown>>(
-    (channels) => invoiceActions.send(id, { channels }),
+  const send = useAction<{ channels: DeliveryChannels } & DeliveryOverrides, Record<string, unknown>>(
+    (opts) => invoiceActions.send(id, opts),
     { invalidates: invoiceKeys },
   );
   const recordCash = useAction((amountCents: number) => invoiceActions.recordCashPayment(id, amountCents), { invalidates: invoiceKeys });
@@ -161,10 +161,10 @@ export default function InvoicePreviewScreen(): React.ReactElement {
   const statusBad = invoice.status === "void";
   const customerUrl = `${API_BASE}/CanesPressure/i/${invoice.public_token}`;
 
-  const sendNow = async (channels: DeliveryChannels) => {
+  const sendNow = async (channels: DeliveryChannels, overrides: DeliveryOverrides) => {
     setNotice(null);
     setGood(null);
-    const result = await send.mutateAsync(channels);
+    const result = await send.mutateAsync({ channels, ...overrides });
     if (!result.ok) setNotice(result.notice);
     else setGood(successNotice(result.data) ?? (invoice.status === "draft" ? "Invoice sent." : "Invoice re-sent."));
     setDeliveryOpen(false);
@@ -389,8 +389,9 @@ export default function InvoicePreviewScreen(): React.ReactElement {
         phone={invoice.customer_phone}
         email={invoice.customer_email}
         sending={send.isPending}
+        allowAdding
         onClose={() => { if (!send.isPending) setDeliveryOpen(false); }}
-        onSend={(channels) => void sendNow(channels)}
+        onSend={(channels, overrides) => void sendNow(channels, overrides)}
       />
 
       <Modal visible={paymentsOpen} transparent animationType="slide" onRequestClose={() => setPaymentsOpen(false)}>

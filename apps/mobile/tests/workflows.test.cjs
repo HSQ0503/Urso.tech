@@ -34,6 +34,7 @@ function harness() {
     useInvoices: () => ({ data: [] }),
     useCustomers: () => ({ data: [] }),
     useCatalog: () => ({ data: [] }),
+    useSettings: () => ({ data: { deposit_presets: [0, 25, 50] } }),
   };
   const api = new Proxy({}, { get: (_, action) => async (...args) => {
     state.writes.push({ action, args });
@@ -56,6 +57,7 @@ function harness() {
       if (name === "@/components/ledger") return { Mark: host("Mark"), NextStep: host("NextStep") };
       if (name === "@/components/delivery-sheet") return { DeliverySheet: host("DeliverySheet") };
       if (name === "@/components/address-input") return { AddressInput: host("AddressInput") };
+      if (name === "@/components/phone-input") return { PhoneInput: host("PhoneInput"), toPhoneDisplay: (value) => value };
       if (name === "@/components/notice") return { Notice: host("Notice") };
       if (name === "@urso/types") return load(path.resolve(root, "../../packages/types/src/types.ts"));
       const base = name.startsWith("@/") ? path.join(root, "src", name.slice(2)) : path.resolve(path.dirname(file), name);
@@ -71,7 +73,7 @@ function harness() {
 }
 
 function estimate(name, expiry = "2028-07-26T20:00:00.000Z") {
-  return { id: name, estimate_type: "standard", status: "draft", customer_name: name, customer_phone: "+15555550123", customer_email: `${name}@example.com`, job_address: `${name} address`, job_name: `${name} job`, expires_at: expiry, created_at: "2026-09-09T12:00:00Z", contact_id: name, items: [] };
+  return { id: name, estimate_type: "standard", status: "draft", customer_name: name, customer_phone: "+15555550123", customer_email: `${name}@example.com`, job_address: `${name} address`, job_name: `${name} job`, expires_at: expiry, created_at: "2026-09-09T12:00:00Z", contact_id: name, deposit_percent: 0, deposit_cents: 0, items: [] };
 }
 async function mount(Component, props) {
   let renderer;
@@ -342,5 +344,44 @@ test("changing estimates clears the previous document's cancellation notice", as
   await act(async () => renderer.update(React.createElement(Screen)));
   assert.doesNotMatch(text(renderer.toJSON()), /Estimate canceled\./);
   assert.match(text(renderer.toJSON()), /Second/);
+  await act(async () => renderer.unmount());
+});
+
+test("a deposit percent chosen on the estimate form is saved with the estimate", async () => {
+  const { state, load } = harness();
+  state.estimates.first = estimate("Angela");
+  const Screen = load("app/(owner)/estimate/new.tsx").default;
+  const renderer = await mount(Screen);
+  await act(async () => button(renderer, "50 percent deposit").props.onPress());
+  assert.match(text(renderer.toJSON()), /asks for 50% of the total/);
+  await act(async () => button(renderer, "Custom deposit percent").props.onPress());
+  await act(async () => renderer.root.findByProps({ accessibilityLabel: "Deposit percent" }).props.onChangeText("3o5"));
+  await act(async () => button(renderer, "Save estimate").props.onPress());
+  const write = state.writes.find((item) => item.action === "update");
+  assert.equal(write.args[1].depositPercent, 35);
+  await act(async () => renderer.unmount());
+});
+
+test("an estimate with no email on file can be sent to an email typed on the sheet", async () => {
+  const { load } = harness();
+  const { DeliverySheet } = load("src/components/delivery-sheet.tsx");
+  const sent = [];
+  const renderer = await mount(DeliverySheet, { visible: true, documentLabel: "estimate", phone: "+19546369923", email: null, sending: false, allowAdding: true, onClose() {}, onSend: (channels, overrides) => sent.push({ channels, overrides }) });
+  assert.match(text(renderer.toJSON()), /Add an email below/);
+  await act(async () => renderer.root.findByProps({ accessibilityLabel: "Customer email" }).props.onChangeText("osseseugene@gmail.com"));
+  await act(async () => renderer.root.findAllByType("Pressable").find((item) => item.props.accessibilityLabel === "Send estimate").props.onPress());
+  assert.deepEqual(sent, [{ channels: { text: true, email: false }, overrides: { toEmail: "osseseugene@gmail.com" } }]);
+  await act(async () => renderer.root.findAllByType("Pressable").find((item) => item.props.accessibilityRole === "radio" && text(item).startsWith("Both")).props.onPress());
+  await act(async () => renderer.root.findAllByType("Pressable").find((item) => item.props.accessibilityLabel === "Send estimate").props.onPress());
+  assert.deepEqual(sent[1], { channels: { text: true, email: true }, overrides: { toEmail: "osseseugene@gmail.com" } });
+  await act(async () => renderer.unmount());
+});
+
+test("without the override the sheet still refuses a document with no destination", async () => {
+  const { load } = harness();
+  const { DeliverySheet } = load("src/components/delivery-sheet.tsx");
+  const renderer = await mount(DeliverySheet, { visible: true, documentLabel: "agreement", phone: null, email: null, sending: false, onClose() {}, onSend() {} });
+  assert.match(text(renderer.toJSON()), /Add a phone number or email before sending this agreement/);
+  assert.equal(renderer.root.findAllByProps({ accessibilityLabel: "Customer email" }).length, 0);
   await act(async () => renderer.unmount());
 });

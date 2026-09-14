@@ -4800,8 +4800,46 @@ export async function updateCustomer(
   if (!claimed || claimed.length === 0) {
     return { ok: false, notice: "This customer just changed — refresh and try again." };
   }
+  const touched = await propagateContactDetails(id, patch);
   refresh();
-  return { ok: true };
+  return touched > 0
+    ? { ok: true, notice: `Saved. ${touched} open ${touched === 1 ? "document" : "documents"} now ${touched === 1 ? "uses" : "use"} the new contact details.` }
+    : { ok: true };
+}
+
+// The customer record is the truth for how to reach them; the documents carry a
+// snapshot taken at creation. Sebastian added Eugene's email to the customer
+// AFTER building three estimates, then found "No email on file" on every send
+// sheet. So a corrected or added phone/email flows onto the documents that are
+// still open — never a cleared one (removing a destination from a quote the
+// customer may already hold is a different, deliberate act), and never onto a
+// document whose recipient lives somewhere we do not control:
+//   estimates draft|sent|viewed — the send-of-record is our snapshot
+//   invoices draft only        — once sent, the recipient is on Square's hosted invoice
+//   recurring plans draft      — same reasoning as estimates; active plans are signed
+// Fan-out writes are not claimed: zero rows means "no open documents", which is
+// the normal case, not a defect (Phase 6 §7e verdict table).
+async function propagateContactDetails(contactId: string, patch: Record<string, unknown>): Promise<number> {
+  const details: Record<string, string> = {};
+  if (typeof patch.phone === "string") details.customer_phone = patch.phone;
+  if (typeof patch.email === "string") details.customer_email = patch.email;
+  if (Object.keys(details).length === 0) return 0;
+  const db = canesDb();
+  const now = new Date().toISOString();
+  const targets = [
+    db.from("estimates").update({ ...details, updated_at: now }).eq("contact_id", contactId).in("status", ["draft", "sent", "viewed"]).select("id"),
+    db.from("invoices").update({ ...details, updated_at: now }).eq("contact_id", contactId).eq("status", "draft").select("id"),
+    db.from("recurring_plans").update({ ...details, updated_at: now }).eq("contact_id", contactId).eq("status", "draft").select("id"),
+  ];
+  let touched = 0;
+  for (const result of await Promise.all(targets)) {
+    if (result.error) {
+      console.error(`[canes] contact detail propagation failed for ${contactId}:`, result.error.message);
+      continue;
+    }
+    touched += result.data?.length ?? 0;
+  }
+  return touched;
 }
 
 export async function addCustomerAddress(

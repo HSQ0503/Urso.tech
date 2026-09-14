@@ -22,7 +22,7 @@ import {
   type EstimateStatus,
 } from "@urso/types";
 import { API_BASE, estimateActions } from "@/api";
-import { DeliverySheet, type DeliveryChannels } from "@/components/delivery-sheet";
+import { DeliverySheet, type DeliveryChannels, type DeliveryOverrides } from "@/components/delivery-sheet";
 import { RecurringSheet } from "@/components/recurring-sheet";
 import { Mark, NextStep } from "@/components/ledger";
 import { Notice } from "@/components/notice";
@@ -142,9 +142,9 @@ function EstimatePreview({ id }: { id: string }): React.ReactElement {
   const toast = useToast();
 
   const quoteKeys: QueryKey[] = [keys.estimateOne(id), keys.estimates()];
-  const send = useAction<DeliveryChannels, Record<string, unknown>>(
-    (channels) => estimateActions.send(id, { channels }),
-    { invalidates: quoteKeys },
+  const send = useAction<{ channels: DeliveryChannels } & DeliveryOverrides, Record<string, unknown>>(
+    (opts) => estimateActions.send(id, opts),
+    { invalidates: [...quoteKeys, keys.customers.all()] },
   );
   const approve = useAction<void, { jobId?: string | null; notice?: string }>(
     () => estimateActions.approveInPerson(id),
@@ -173,9 +173,9 @@ function EstimatePreview({ id }: { id: string }): React.ReactElement {
   }
 
   const customerUrl = `${API_BASE}/CanesPressure/e/${estimate.public_token}`;
-  const sendNow = async (channels: DeliveryChannels) => {
+  const sendNow = async (channels: DeliveryChannels, overrides: DeliveryOverrides) => {
     setNotice(null); setGood(null);
-    const result = await send.mutateAsync(channels);
+    const result = await send.mutateAsync({ channels, ...overrides });
     if (!result.ok) setNotice(result.notice);
     else setGood(successNotice(result.data) ?? "Estimate sent.");
     setDeliveryOpen(false);
@@ -401,6 +401,14 @@ function EstimatePreview({ id }: { id: string }): React.ReactElement {
             <View style={styles.totalRow}><Text style={styles.totalRowLabel}>Taxes</Text><Text style={styles.totalRowValue}>{fmtMoney(estimate.tax_cents)}</Text></View>
           </View>
           <View style={styles.grandTotal}><Text style={styles.grandTotalLabel}>Grand Total</Text><Text style={styles.grandTotalValue}>{fmtMoney(estimate.total_cents)}</Text></View>
+          {estimate.deposit_cents > 0 ? (
+            // The server's figure (deposit_percent of the total, recomputed on
+            // every save); the approval page offers exactly this via Square.
+            <View style={styles.depositRow}>
+              <Text style={styles.depositLabel}>Deposit due on approval · {estimate.deposit_percent}%</Text>
+              <Text style={styles.depositValue}>{fmtMoney(estimate.deposit_cents)}</Text>
+            </View>
+          ) : null}
         </View>
 
         <Accordion title="Accepted Payment Methods" open={paymentOpen} onPress={() => setPaymentOpen((value) => !value)}>
@@ -466,8 +474,9 @@ function EstimatePreview({ id }: { id: string }): React.ReactElement {
         phone={estimate.customer_phone}
         email={estimate.customer_email}
         sending={send.isPending}
+        allowAdding
         onClose={() => { if (!send.isPending) setDeliveryOpen(false); }}
-        onSend={(channels) => void sendNow(channels)}
+        onSend={(channels, overrides) => void sendNow(channels, overrides)}
       />
     </View>
   );
@@ -528,6 +537,9 @@ const styles = StyleSheet.create({
   grandTotal: { minHeight: 76, paddingHorizontal: 18, flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: color.hover },
   grandTotalLabel: { fontFamily: font.bodySemi, fontSize: 22, color: color.ink },
   grandTotalValue: { fontFamily: font.bodySemi, fontSize: 25, color: color.ink },
+  depositRow: { minHeight: 56, paddingHorizontal: 18, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 14, backgroundColor: color.brandWash },
+  depositLabel: { flex: 1, fontFamily: font.bodyMedium, fontSize: 15, color: color.brandDeep },
+  depositValue: { fontFamily: font.bodySemi, fontSize: 18, color: color.brandDeep, fontVariant: ["tabular-nums"] },
   accordion: { borderBottomWidth: 12, borderBottomColor: color.hover },
   accordionHead: { minHeight: 96, paddingHorizontal: 18, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
   accordionTitle: { flex: 1, fontFamily: font.bodySemi, fontSize: 21, color: color.ink },
