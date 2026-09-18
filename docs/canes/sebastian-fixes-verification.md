@@ -1,6 +1,8 @@
 # Sebastian's fixes: local implementation and verification
 
-The approved changes are implemented in the working tree. They have not been committed, deployed, or installed on a device. The four new Canes migrations have run only in an isolated PostgreSQL-compatible test database. Existing customer terms remain in place until Sebastian supplies the exact Markate text, as agreed in Q13.
+**Production status, 2026-09-18:** application commit `c36bd385c0fc8611a19e43b86f9ab2f9ae57bed7` is pushed to `main` and deployed to [urso.ws](https://urso.ws). All four Canes migrations are applied. Signed iOS build **0.1.0 (15)** is downloaded and verified for manual Transporter upload. It has not been submitted to App Store Connect.
+
+Existing customer terms remain unchanged until Sebastian supplies his exact Markate text, as agreed in Q13.
 
 The [decision log](./sebastian-fixes-decisions.md) records Q1–Q22. The [implementation plan](./sebastian-fixes-plan.md) describes each change and its acceptance checks.
 
@@ -36,11 +38,11 @@ The [decision log](./sebastian-fixes-decisions.md) records Q1–Q22. The [implem
 
 The build emitted Node deprecation and chart-size warnings during prerendering, but completed successfully. The React test renderer also emits its upstream deprecation warning.
 
-## Release boundaries
+## Scope of local verification
 
-These are local results. No customer texts/emails/pushes were sent, no cards were charged/refunded, and no production cron, migration, or deployment ran. The local API endpoints returned their unconfigured-service refusal (503); that is not evidence of an authenticated staging workflow.
+The checks above were performed locally before production authorization. No customer texts/emails/pushes or card charges/refunds were initiated for testing. Production deployment evidence is recorded below. The local API endpoints returned their unconfigured-service refusal (503); that is not evidence of an authenticated staging workflow.
 
-Before release:
+Additional staging/device coverage and rollout considerations:
 
 1. Apply the four `20260918…` migrations from `supabase/canes/` to the intended Canes staging database, then deploy the matching server. These are Canes-specific files, not migrations for Woof Gang or the root project database.
 2. Verify authenticated owner, ops, and assigned-crew journeys against staging, including actual Square sandbox cancellation/webhooks, quiet-hour message retries, notification navigation, and public job/signature pages backed by migrated data.
@@ -53,3 +55,19 @@ Retired Square invoice/order identifiers remain in history tables so delayed pay
 ## Production release preparation — 2026-09-18
 
 Han authorized production deployment and a signed iOS package for manual Transporter upload. Production uses the Canes project `jeznnlveaymtrhisqckq`; Woof Gang is separate. Live preflight found explicit client-role EXECUTE grants on internal privileged functions. The additional permissions migration removes those grants and grants only `service_role`; all mobile business operations use the server API. Local database tests now reproduce Supabase's explicit default grants before applying the migrations.
+
+## Production release evidence
+
+- Code: `c36bd385c0fc8611a19e43b86f9ab2f9ae57bed7`, pushed to `origin/main`.
+- Vercel: `dpl_AktRBEAQnZkXJ88kqRCpVZTfVecW`, state `READY`, promoted to `urso.ws`. [Deployment](https://urso-tech-ozuefo95r-hsq0503s-projects.vercel.app).
+- Database: four source migrations applied together as `canes_sebastian_fixes_release_20260918`; each filename and checksum also recorded in Canes' existing `public.schema_migrations` ledger.
+- Counts after migration: 44 estimates, 37 jobs, 18 invoices, 18 payments, and 3 recurring plans. Existing payment/refund rows matched the pre-deployment backup. Twenty accepted-estimate snapshots were preserved.
+- Permissions: zero public privileged functions executable by `anon` or `authenticated`; `service_role` retains access. A direct public RPC request returned permission denied (`42501`). New private tables have RLS enabled.
+- Production smoke checks: an existing scheduled job's public page returned HTTP 200 and rendered appointment/balance information; unauthenticated document, archive, and expense APIs returned 401; owner Work Orders redirected to sign-in.
+- Expense occurrence cutover: **2026-09-18**. Existing three recurring plans remain disabled for automatic scheduling until the owner confirms their dates/times.
+- EAS: [build bb16ad6f-b58a-431b-9c7e-61f5f5bf78d4](https://expo.dev/accounts/hsq0503/projects/urso/builds/bb16ad6f-b58a-431b-9c7e-61f5f5bf78d4), status `FINISHED`, distribution `STORE`, version `0.1.0`, build `15`, source commit `c36bd38`.
+- Package: `/Users/han/Downloads/Urso-0.1.0-build-15.ipa`, 23,592,256 bytes. Bundle `ws.urso.app`; minimum iOS 16.4. ZIP integrity and strict deep code-signature checks passed. App Store provisioning has debugging disabled and no device list.
+- SHA-256: `f752193259d49f53fdefcfa232e6669e14e68b599d96dbe2c2f5d55ccd58c59f`.
+- Expo Doctor passed 20/21 checks; the remaining check reports newer SDK patch releases. The production native build completed successfully using the project's existing dependency lockfile. No unrelated SDK upgrade was introduced for this release.
+
+The post-migration advisor reports only the intentional deny-all RLS configuration and the pre-existing [leaked-password protection setting](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection). No payment or customer communication was triggered as a smoke test. Normal production automations continue on the existing schedule.

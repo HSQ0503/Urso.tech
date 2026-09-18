@@ -151,6 +151,7 @@ Implements R03 and integrates every feature above.
 - [x] Dated expenses and employee payments.
 - [x] Reminder and public-job experience.
 - [x] Browser/mobile implementation, local build checks, isolated database tests, and browser smoke checks.
-- [ ] Staging provider integration and native-device acceptance before release.
+- [x] User-authorized production migrations, server deployment, and signed iOS package delivery.
+- [ ] Additional provider sandbox and native-device acceptance coverage; not claimed by this release.
 
 See [the verification handoff](./sebastian-fixes-verification.md) for the exact evidence and release boundaries.
