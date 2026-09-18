@@ -1,3 +1,4 @@
+import type { EstimateAcceptance } from "@urso/types";
 import { canesConfigured, canesDb } from "@/lib/canes/supabase";
 import { getSettings, isDemo } from "@/lib/canes/data";
 import {
@@ -37,7 +38,7 @@ const HIDDEN_SCHEDULE_JOB_STATUSES: JobStatus[] = ["canceled"];
 export async function listEstimates(filter?: {
   leadId?: string;
   status?: EstimateStatus;
-}): Promise<Estimate[]> {
+}, includeArchived = false): Promise<Estimate[]> {
   let rows: Estimate[];
   if (isDemo()) {
     rows = [...DEMO_ESTIMATES];
@@ -45,6 +46,7 @@ export async function listEstimates(filter?: {
     const { data, error } = await canesDb()
       .from("estimates")
       .select("*")
+      .or(includeArchived ? "archived_at.is.null,archived_at.not.is.null" : "archived_at.is.null")
       .order("created_at", { ascending: false })
       .limit(500);
     if (error) throw new Error(`listEstimates: ${error.message}`);
@@ -91,7 +93,7 @@ export async function getEstimateWithItems(id: string): Promise<EstimateWithItem
   const estimate = await getEstimate(id);
   if (!estimate) return null;
   const items = await getEstimateItems(id);
-  return { ...estimate, items };
+  return { ...estimate, items, acceptances: await getEstimateAcceptances(id) };
 }
 
 export async function listCatalog(activeOnly = false): Promise<CatalogItem[]> {
@@ -111,7 +113,7 @@ export async function listCatalog(activeOnly = false): Promise<CatalogItem[]> {
   return rows;
 }
 
-export async function listJobs(status?: JobStatus): Promise<Job[]> {
+export async function listJobs(status?: JobStatus, includeArchived = false): Promise<Job[]> {
   let rows: Job[];
   if (isDemo()) {
     rows = [...DEMO_JOBS];
@@ -119,9 +121,9 @@ export async function listJobs(status?: JobStatus): Promise<Job[]> {
     const { data, error } = await canesDb()
       .from("jobs")
       .select("*")
+      .or(includeArchived ? "archived_at.is.null,archived_at.not.is.null" : "archived_at.is.null")
       // Scheduled first in time order (nulls last), then newest unscheduled —
       // the calendar/tray reads want time order, not just insertion order.
-      .order("scheduled_at", { ascending: true, nullsFirst: false })
       .order("created_at", { ascending: false })
       .limit(500);
     if (error) throw new Error(`listJobs: ${error.message}`);
@@ -188,6 +190,7 @@ export async function getScheduleBoard(rangeStartIso: string, days = 7): Promise
     const { data, error } = await canesDb()
       .from("jobs")
       .select("*")
+      .is("archived_at", null)
       .not("scheduled_at", "is", null)
       .gte("scheduled_at", start.toISOString())
       .lt("scheduled_at", endIso)
@@ -211,6 +214,7 @@ export async function getUnscheduledJobs(): Promise<JobWithItems[]> {
     const { data, error } = await canesDb()
       .from("jobs")
       .select("*")
+      .is("archived_at", null)
       .eq("status", "unscheduled")
       .order("created_at", { ascending: false })
       .limit(200);
@@ -376,4 +380,23 @@ export async function enqueueEstimateReminders(estimate: Estimate): Promise<void
       console.error(`[canes] estimate_reminder enqueue failed for ${estimate.id}: ${error.message}`);
     }
   }
+}
+
+export async function getEstimateAcceptances(id: string): Promise<EstimateAcceptance[]> {
+  if (isDemo()) return [];
+  const {data,error} = await canesDb().from("document_revisions").select("id,revision,snapshot").eq("document_kind","estimate").eq("document_id",id).order("revision",{ascending:false});
+  if(error) throw new Error("Signed estimate history could not be loaded.");
+  return (data ?? []).filter(row=>row.snapshot?.status==="approved").map(row=>({
+    id:row.id, revision:row.revision, signatureName:row.snapshot.signature_name ?? "Recorded acceptance",
+    approvedAt:row.snapshot.approved_at, source:row.snapshot.approval_source ?? "customer",
+    drawing:row.snapshot.signature_data ?? null, totalCents:row.snapshot.total_cents, terms:row.snapshot.terms,
+    items:(row.snapshot.items ?? []).filter((item:{is_option?:boolean;is_mandatory?:boolean;is_selected?:boolean})=>!item.is_option||item.is_mandatory||item.is_selected).map((item:{name:string;quantity:number;line_total_cents:number})=>({name:item.name,quantity:item.quantity,line_total_cents:item.line_total_cents})),
+  }));
+}
+
+export async function getAcceptedEstimateSnapshot(id: string): Promise<(Estimate & { items: EstimateItem[] }) | null> {
+  if (isDemo()) return null;
+  const {data,error} = await canesDb().from("document_revisions").select("snapshot").eq("document_kind","estimate").eq("document_id",id).eq("snapshot->>status","approved").order("revision",{ascending:false}).limit(1).maybeSingle();
+  if (error) throw new Error("The accepted estimate could not be loaded.");
+  return data?.snapshot ?? null;
 }

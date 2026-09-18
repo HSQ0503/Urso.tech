@@ -1,3 +1,4 @@
+import { configureRepeatSchedule } from "@/app/CanesPressure/repeat-actions";
 import { apiFail, apiResult, apiRoute } from "@/lib/api/v1";
 import {
   agreeRecurringPlanInPerson,
@@ -21,6 +22,7 @@ export const dynamic = "force-dynamic";
 
 type Body = {
   action?: unknown;
+  startsOn?: unknown; repeatTime?: unknown; cadence?: unknown; durationMinutes?: unknown; crewId?: unknown;
   patch?: unknown;
   channels?: unknown;
   reason?: unknown;
@@ -54,11 +56,19 @@ export const POST = apiRoute<{ id: string }>(async ({ req, params }) => {
   const id = params.id;
 
   switch (body.action) {
+    case "configure": {
+      if (!isDateKey(body.startsOn) || typeof body.repeatTime !== "string" || !isPlanCadence(body.cadence) || typeof body.durationMinutes !== "number" || (body.crewId !== null && typeof body.crewId !== "string")) return apiFail("Choose repeat date, time, cadence, duration, and crew.", 422);
+      return apiResult(await configureRepeatSchedule(id, {startsOn:body.startsOn,repeatTime:body.repeatTime,cadence:body.cadence,durationMinutes:body.durationMinutes,crewId:body.crewId}));
+    }
     case "update": {
       const raw = body.patch;
       if (typeof raw !== "object" || raw === null) return apiFail("`patch` must be an object.", 422);
       const v = raw as Record<string, unknown>;
       const patch: PlanPatch = {};
+      if (v.repeatTime !== undefined) {
+        if (typeof v.repeatTime !== "string") return apiFail("Choose a repeat time.", 422);
+        patch.repeatTime = v.repeatTime;
+      }
       for (const key of STRING_KEYS) {
         if (v[key] === undefined) continue;
         if (v[key] !== null && typeof v[key] !== "string") return apiFail(`\`patch.${key}\` must be a string.`, 422);

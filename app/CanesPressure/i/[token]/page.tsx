@@ -121,6 +121,7 @@ export default async function PublicInvoicePage({
                   )}
                 </div>
                 <p className="shrink-0 text-[14px] tabular-nums font-semibold">
+                  {(item.discount_cents??0)>0?<><span className="block text-xs font-normal line-through text-[var(--cp-muted)]">{fmtMoney(item.line_total_cents+(item.discount_cents??0))}</span><span className="block text-xs font-normal">Discount −{fmtMoney(item.discount_cents)}</span></>:null}
                   {fmtMoney(item.line_total_cents)}
                 </p>
               </li>

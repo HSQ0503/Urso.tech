@@ -51,6 +51,8 @@ type DraftLine = {
   quantity: number;
   unitPriceCents: number;
   discountCents: number;
+  discountMode?: "amount" | "percent";
+  discountValue?: number;
   taxable: boolean;
   isOption: boolean;
   isMandatory: boolean;
@@ -58,7 +60,8 @@ type DraftLine = {
 
 // Mirrors lineTotalCents in actions.ts: round(qty * unit) - discount.
 function lineTotal(l: DraftLine): number {
-  return Math.round(l.quantity * l.unitPriceCents) - l.discountCents;
+  const gross=Math.round(l.quantity*l.unitPriceCents);
+  return gross-(l.discountMode==="percent"?Math.round(gross*(l.discountValue??0)/10000):(l.discountValue??l.discountCents));
 }
 
 // A line counts toward the subtotal when it's mandatory, a standard (non-option)
@@ -93,7 +96,7 @@ function itemToDraft(it: EstimateItem): DraftLine {
     kind: it.kind,
     quantity: it.quantity,
     unitPriceCents: it.unit_price_cents,
-    discountCents: it.discount_cents,
+    discountCents: it.discount_cents, discountMode: it.discount_mode, discountValue: it.discount_value ?? it.discount_cents,
     taxable: it.taxable,
     isOption: it.is_option,
     isMandatory: it.is_mandatory,
@@ -349,7 +352,7 @@ export function EstimateBuilder({
         kind: l.kind,
         quantity: l.quantity,
         unitPriceCents: l.unitPriceCents,
-        discountCents: l.discountCents,
+        discountCents: Math.round(l.quantity*l.unitPriceCents)-lineTotal(l), discountMode:l.discountMode??"amount", discountValue:l.discountValue??l.discountCents,
         taxable: l.taxable,
         isOption: type === "options" ? l.isOption : false,
         isMandatory: l.isMandatory,
@@ -736,6 +739,7 @@ export function EstimateBuilder({
                       </div>
                     )}
                     {/* Custom line (no catalog match) → offer to save it for reuse. */}
+                    {!readOnly?<div className="grid grid-cols-2 gap-3"><label className="cp-label">Line discount<select className="cp-select" value={l.discountMode??"amount"} onChange={e=>patchLine(l.key,{discountMode:e.target.value==="percent"?"percent":"amount"})}><option value="amount">Dollar amount</option><option value="percent">Percent</option></select></label><label className="cp-label">Discount value<input className="cp-input" type="number" min="0" step="0.01" defaultValue={(l.discountValue??l.discountCents)/100} onChange={e=>patchLine(l.key,{discountValue:Math.round(Number(e.target.value)*100)})}/></label></div>:null}
                     {!readOnly && l.catalogId === null && l.name.trim() && l.unitPriceCents > 0 && (
                       <div className="pt-0.5">
                         {savedToCatalog[l.key] ? (

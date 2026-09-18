@@ -1,3 +1,5 @@
+import { DocumentRevisionSheet } from "@/components/document-revision";
+import { EstimateAcceptanceHistory } from "@/components/estimate-acceptance";
 import { useState, type ComponentProps } from "react";
 import {
   ActivityIndicator,
@@ -21,7 +23,7 @@ import {
   fmtMoney,
   type EstimateStatus,
 } from "@urso/types";
-import { API_BASE, estimateActions } from "@/api";
+import { API_BASE, documentActions, estimateActions } from "@/api";
 import { DeliverySheet, type DeliveryChannels, type DeliveryOverrides } from "@/components/delivery-sheet";
 import { RecurringSheet } from "@/components/recurring-sheet";
 import { Mark, NextStep } from "@/components/ledger";
@@ -130,6 +132,7 @@ function EstimatePreview({ id }: { id: string }): React.ReactElement {
   );
   const estimate = estimateQuery.data ?? null;
 
+  const [revisionOpen, setRevisionOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [deliveryOpen, setDeliveryOpen] = useState(false);
   const [recurringOpen, setRecurringOpen] = useState(false);
@@ -141,7 +144,7 @@ function EstimatePreview({ id }: { id: string }): React.ReactElement {
   const [good, setGood] = useState<string | null>(null);
   const toast = useToast();
 
-  const quoteKeys: QueryKey[] = [keys.estimateOne(id), keys.estimates()];
+  const quoteKeys: QueryKey[] = [...keys.workflow(), keys.estimateOne(id), keys.estimates()];
   const send = useAction<{ channels: DeliveryChannels } & DeliveryOverrides, Record<string, unknown>>(
     (opts) => estimateActions.send(id, opts),
     { invalidates: [...quoteKeys, keys.customers.all()] },
@@ -150,6 +153,7 @@ function EstimatePreview({ id }: { id: string }): React.ReactElement {
     () => estimateActions.approveInPerson(id),
     { invalidates: [...quoteKeys, keys.jobs.all(), ["owner", "schedule"], keys.schedule.unscheduled(), keys.overview()] },
   );
+  const decline = useAction(() => documentActions.decline(id), { invalidates: [...keys.workflow()] });
   const duplicate = useAction<void, { estimateId?: string }>(() => estimateActions.duplicate(id), { invalidates: [keys.estimates()] });
   const convert = useAction<void, { invoiceId?: string; jobId?: string | null; notice?: string }>(
     () => estimateActions.convertToInvoice(id),
@@ -272,7 +276,7 @@ function EstimatePreview({ id }: { id: string }): React.ReactElement {
   };
   const deleteNow = () => {
     setMenuOpen(false);
-    Alert.alert("Delete estimate?", "This cannot be undone.", [
+    Alert.alert("Delete estimate?", "Unused drafts are deleted. Other records leave active lists while their history is preserved. Open linked work and unpaid payment links will be canceled.", [
       { text: "Keep it", style: "cancel" },
       {
         text: "Delete",
@@ -293,7 +297,7 @@ function EstimatePreview({ id }: { id: string }): React.ReactElement {
   const canApprove = canSend;
   // Mirrors deleteEstimate: drafts outright, canceled (stored as `expired`)
   // after the fact. Approved and declined refuse server-side — hide, don't grey.
-  const canDelete = estimate.status === "draft" || estimate.status === "expired";
+  const canDelete = true;
 
   // The work order this quote became, and the bill that job minted.
   const job = statusGood ? (jobsQuery.data ?? []).find((j) => j.estimate_id === estimate.id) ?? null : null;
@@ -322,6 +326,7 @@ function EstimatePreview({ id }: { id: string }): React.ReactElement {
 
   return (
     <View style={styles.screen}>
+      {revisionOpen ? <DocumentRevisionSheet kind="estimate" id={id} onClose={() => setRevisionOpen(false)} /> : null}
       <View style={{ height: insets.top, backgroundColor: color.chrome }} />
       <View style={styles.header}>
         <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => router.back()} style={styles.headerBack}>
@@ -340,6 +345,8 @@ function EstimatePreview({ id }: { id: string }): React.ReactElement {
       >
         {notice !== null ? <Notice text={notice} /> : null}
         <GoodNotice text={good} />
+        <Pressable accessibilityRole="button" accessibilityLabel="Edit prices and discounts" onPress={() => setRevisionOpen(true)} style={{padding:16,minHeight:48}}><Text style={{color:color.brandDeep}}>Edit prices & discounts</Text></Pressable>
+        <EstimateAcceptanceHistory records={estimate.acceptances} />
         {forward ? <NextStep label={forward.label} hint={forward.hint} icon={forward.icon} onPress={forward.onPress} /> : null}
 
         <View style={styles.identity}>
@@ -453,6 +460,7 @@ function EstimatePreview({ id }: { id: string }): React.ReactElement {
               <ActionTile label="Clone Estimate" icon="copy" disabled={busy} onPress={() => void duplicateNow()} />
               <ActionTile label="Share Estimate Link" icon="link" disabled={busy} onPress={() => void shareNow()} />
               {canSend ? <ActionTile label="Cancel Estimate" icon="slash" danger disabled={busy} onPress={voidNow} /> : null}
+              <ActionTile label="Mark Declined" icon="x-circle" danger disabled={busy} onPress={() => Alert.alert("Decline this estimate?", "Any open linked work and unpaid payment links will be canceled. Completed work and payments are preserved.", [{text:"Keep estimate",style:"cancel"},{text:"Decline",style:"destructive",onPress:()=>void decline.mutateAsync(undefined).then(result=>{if(!result.ok)setNotice(result.notice);else {setGood(result.data.notice??"Estimate declined.");setMenuOpen(false);}})}])} />
               {canDelete ? <ActionTile label="Delete Estimate" icon="trash-2" danger disabled={busy} onPress={deleteNow} /> : null}
             </View>
           </View>

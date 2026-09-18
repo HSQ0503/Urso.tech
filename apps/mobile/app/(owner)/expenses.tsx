@@ -1,3 +1,4 @@
+import { ExpenseLedgerControls } from "@/components/expense-ledger";
 // My expenses — the Markate-shaped ledger.
 //
 // Markate's expense screen is a searchable, month-grouped list: a search strip
@@ -39,8 +40,8 @@ import { fmtMoney, type BusinessExpense, type ExpenseFrequency } from "@urso/typ
 import { expenseActions } from "@/api";
 import { ChromeBar, SearchStrip, searchInputStyle } from "@/components/ledger";
 import { Notice } from "@/components/notice";
-import { keys, useExpenses } from "@/queries";
-import { noticeFrom, useAction, usePullToRefresh } from "@/query";
+import { keys, useExpenseLedger, useExpenses } from "@/queries";
+import { noticeFrom, useAction, usePullToRefresh, useRefetchOnFocus } from "@/query";
 import { color, font, HIT, radius, space, type } from "@/theme";
 
 const FREQUENCIES: { value: ExpenseFrequency; label: string }[] = [
@@ -114,23 +115,28 @@ export default function ExpensesScreen(): React.ReactElement {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const expensesQuery = useExpenses();
+  const ledgerQuery = useExpenseLedger();
   const { refreshing, onRefresh } = usePullToRefresh(expensesQuery.refetch);
+  useRefetchOnFocus(expensesQuery.refetch);
   const addExpense = useAction(
     (input: Parameters<typeof expenseActions.addBusiness>[0]) => expenseActions.addBusiness(input),
-    { invalidates: [keys.expenses()] },
+    { invalidates: [keys.expenses(), ...keys.financial()] },
   );
   const deleteExpense = useAction((id: string) => expenseActions.deleteBusiness(id), {
-    invalidates: [keys.expenses()],
+    invalidates: [keys.expenses(), ...keys.financial()],
   });
 
   const [query, setQuery] = useState("");
   const [period, setPeriod] = useState<Period>("all");
   const [segment, setSegment] = useState<Segment>("total");
+  const [ledgerOpen, setLedgerOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
 
   const [name, setName] = useState("");
   const [amount, setAmount] = useState("");
+  const [incurredOn,setIncurredOn]=useState(ET_TODAY);
+  const [endsOn,setEndsOn]=useState("");
   const [category, setCategory] = useState("Software");
   const [frequency, setFrequency] = useState<ExpenseFrequency>("one_time");
   const [actionNotice, setActionNotice] = useState<string | null>(null);
@@ -152,12 +158,10 @@ export default function ExpensesScreen(): React.ReactElement {
       recurring: recurring.reduce((sum, e) => sum + e.amount_cents, 0),
       // Kept from the previous screen: normalized monthly overhead, which is a
       // different question from "what did recurring cost inside this window".
-      monthlyOverhead: rows
-        .filter((e) => e.active && e.recurring)
-        .reduce((sum, e) => sum + monthlyCostOf(e), 0),
-      activeSubscriptions: rows.filter((e) => e.active && e.recurring).length,
+      monthlyOverhead: (ledgerQuery.data?.rules ?? []).filter(rule => rule.active && (!rule.ends_on || rule.ends_on >= ET_TODAY)).reduce((sum, rule) => sum + (rule.frequency === "yearly" ? Math.round(rule.amount_cents / 12) : rule.amount_cents), 0),
+      activeSubscriptions: (ledgerQuery.data?.rules ?? []).filter(rule => rule.active && (!rule.ends_on || rule.ends_on >= ET_TODAY)).length,
     };
-  }, [inWindow, rows]);
+  }, [inWindow, ledgerQuery.data]);
 
   // Search, segment, then group by ET month, newest month first and newest row
   // first inside it.
@@ -194,7 +198,7 @@ export default function ExpensesScreen(): React.ReactElement {
       amountCents: inputToCents(amount),
       category,
       recurring: frequency !== "one_time",
-      frequency,
+      frequency, incurredOn, endsOn: endsOn || null,
     });
     if (!result.ok) {
       setActionNotice(result.notice);
@@ -207,9 +211,9 @@ export default function ExpensesScreen(): React.ReactElement {
   };
 
   const confirmDelete = (id: string, label: string) => {
-    Alert.alert("Delete expense?", label, [
+    Alert.alert("Skip expense entry?", `${label}. Earlier and future entries stay unchanged.`, [
       { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: () => void deleteExpense.mutateAsync(id) },
+      { text: "Delete", style: "destructive", onPress: () => void deleteExpense.mutateAsync(id).then(result=>setActionNotice(result.ok?"Entry skipped.":result.notice)) },
     ]);
   };
 
@@ -237,7 +241,9 @@ export default function ExpensesScreen(): React.ReactElement {
           keyboardShouldPersistTaps="handled"
           automaticallyAdjustKeyboardInsets
         >
-          <Notice text={noticeFrom(expensesQuery.error)} />
+          <Notice text={actionNotice ?? noticeFrom(expensesQuery.error)} />
+          <Pressable accessibilityRole="button" accessibilityLabel="Employee payments and recurring rules" onPress={() => setLedgerOpen(!ledgerOpen)} style={{ minHeight: HIT, justifyContent: "center" }}><Text style={{ ...type.title, color: color.brandDeep }}>Employee payments & recurring rules {ledgerOpen ? "−" : "+"}</Text></Pressable>
+          {ledgerOpen ? <ExpenseLedgerControls /> : null}
 
           {/* Search, with the filter toggle sitting where Markate puts it. */}
           <View style={styles.searchRow}>
@@ -356,6 +362,8 @@ export default function ExpensesScreen(): React.ReactElement {
                 keyboardType="decimal-pad"
                 style={styles.input}
               />
+              <Text style={styles.label}>Expense date / first occurrence (YYYY-MM-DD)</Text><TextInput accessibilityLabel="Expense date YYYY-MM-DD" value={incurredOn} onChangeText={setIncurredOn} style={styles.input}/>
+              {frequency!=="one_time"?<><Text style={styles.label}>Last occurrence date (optional)</Text><TextInput accessibilityLabel="Expense end date YYYY-MM-DD" value={endsOn} onChangeText={setEndsOn} style={styles.input}/></>:null}
               <Text style={styles.label}>Category</Text>
               <TextInput
                 value={category}
@@ -443,7 +451,8 @@ export default function ExpensesScreen(): React.ReactElement {
                       <Text style={styles.money}>{fmtMoney(expense.amount_cents)}</Text>
                       <Pressable
                         accessibilityRole="button"
-                        accessibilityLabel={`Delete ${expense.name}`}
+                        disabled={!!expense.employee_id}
+                        accessibilityLabel={`Skip ${expense.name}`}
                         onPress={() => confirmDelete(expense.id, expense.name)}
                         style={styles.iconButton}
                       >

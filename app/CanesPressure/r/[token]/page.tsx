@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { CheckCircle2 } from "lucide-react";
-import { getPlanByToken, listPlanItems } from "@/lib/canes/recurring";
+import { getPlanByToken, getSignedPlanVersion, listPlanItems } from "@/lib/canes/recurring";
 import { markRecurringPlanViewed } from "@/app/CanesPressure/actions";
 import { PLAN_CADENCE_LABEL, etLocalToIso, fmtEt, fmtMoney, planCancellationFeeCents } from "@/lib/canes/types";
 import { PublicPlanSign } from "@/app/CanesPressure/components/recurring/public-sign";
@@ -29,17 +29,20 @@ function Shell({ children }: { children: React.ReactNode }) {
 
 export default async function PublicPlanPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
-  const plan = await getPlanByToken(token);
+  const current = await getPlanByToken(token);
+  if (!current || (!current.sent_at && !current.signed_at)) notFound();
+  const signedVersion = current.signed_at ? await getSignedPlanVersion(current.id) : null;
+  const plan = signedVersion ? {...signedVersion, status:current.status} : current;
   // A plan that was never sent has no business being public; a canceled one
   // has nothing left to sign.
   if (!plan || (plan.status === "draft" && !plan.sent_at)) notFound();
-  const items = await listPlanItems(plan.id);
+  const items = signedVersion?.items ?? await listPlanItems(plan.id);
 
   if (!plan.viewed_at) void markRecurringPlanViewed(token).catch(() => {});
 
   const firstVisit = plan.next_due_on ?? plan.starts_on;
   const fee = planCancellationFeeCents(plan);
-  const signed = plan.status !== "draft";
+  const signed = Boolean(plan.signed_at);
 
   return (
     <Shell>
@@ -128,8 +131,8 @@ export default async function PublicPlanPage({ params }: { params: Promise<{ tok
               </div>
             </div>
           </div>
-        ) : (
-          <PublicPlanSign token={token} pricePerVisit={fmtMoney(plan.price_per_visit_cents)} cadence={PLAN_CADENCE_LABEL[plan.cadence]} />
+        ) : plan.status === "canceled" || plan.status === "paused" ? <p>This agreement is not open for signature.</p> : (
+          <PublicPlanSign updatedAt={plan.updated_at} token={token} pricePerVisit={fmtMoney(plan.price_per_visit_cents)} cadence={PLAN_CADENCE_LABEL[plan.cadence]} />
         )}
       </div>
     </Shell>

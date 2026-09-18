@@ -72,6 +72,7 @@ function NewPlanForm(): React.ReactElement {
   const [customerEmail, setCustomerEmail] = useState(typeof params.email === "string" ? params.email : "");
   const [jobAddress, setJobAddress] = useState(typeof params.address === "string" ? params.address : "");
   const [jobName, setJobName] = useState("");
+  const [repeatTime, setRepeatTime] = useState("08:00");
   const [cadence, setCadence] = useState<PlanCadence>("quarterly");
   const [startsOn, setStartsOn] = useState(() => addCalendarDays(todayEt(), 14));
   const [lines, setLines] = useState<DraftLine[]>([newLine()]);
@@ -127,6 +128,7 @@ function NewPlanForm(): React.ReactElement {
       jobName: jobName.trim() || null,
       cadence,
       startsOn,
+      repeatTime,
       items,
     });
     if (!r.ok) {
@@ -190,7 +192,7 @@ function NewPlanForm(): React.ReactElement {
           <Feather name="calendar" size={20} color={color.brandDeep} />
           <View style={{ flex: 1 }}>
             <Text style={styles.dateTitle}>First visit · {dateLabel(startsOn)}</Text>
-            <Text style={styles.muted}>Created as a work order three weeks ahead, for you to book.</Text>
+            <Text style={styles.muted}>The next visit is created on the calendar at your chosen date and time.</Text>
           </View>
           <Feather name="chevron-right" size={20} color={color.brandDeep} />
         </Pressable>
@@ -239,6 +241,7 @@ function NewPlanForm(): React.ReactElement {
             <Text style={styles.muted}>{fmtMoney(perVisit * PLAN_VISITS_PER_YEAR[cadence])} a year</Text>
           </View>
         </View>
+      <View style={{ padding: space.lg }}><Text style={{color: color.ink}}>Repeat time (Eastern, HH:mm)</Text><TextInput accessibilityLabel="Repeat time Eastern HH:mm" value={repeatTime} onChangeText={setRepeatTime} style={{ minHeight: HIT, color: color.ink, padding: space.sm, backgroundColor: color.surface }} /></View>
       </ScrollView>
 
       <Modal visible={customerOpen} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setCustomerOpen(false)}>
@@ -311,6 +314,7 @@ function NewPlanForm(): React.ReactElement {
           </ScrollView>
         </View>
       </Modal>
+
 
       <DatePicker visible={dateOpen} title="First visit" value={startsOn} minimumDate={todayEt()} onChange={setStartsOn} onClose={() => setDateOpen(false)} />
     </View>

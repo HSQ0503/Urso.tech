@@ -1,4 +1,5 @@
 import { canesDb } from "@/lib/canes/supabase";
+import { etLocalToIso } from "@urso/types";
 import { isDemo } from "@/lib/canes/data";
 import { DEMO_BUSINESS_EXPENSES } from "@/lib/canes/fixtures";
 import type { BusinessExpense, ExpenseFrequency } from "@/lib/canes/types";
@@ -25,6 +26,8 @@ export async function listBusinessExpenses(): Promise<BusinessExpense[]> {
     .from("business_expenses")
     .select("*")
     .eq("active", true)
+    .eq("legacy_template", false)
+    .eq("skipped", false)
     .order("incurred_on", { ascending: false })
     .limit(500);
   if (error) throw new Error(`listBusinessExpenses: ${error.message}`);
@@ -43,7 +46,11 @@ function overlapDays(exp: BusinessExpense, startMs: number, endMs: number): numb
 
 // The cost a single expense contributes to [startMs,endMs).
 export function expenseCentsForRange(exp: BusinessExpense, startMs: number, endMs: number): number {
-  if (!exp.active) return 0;
+  if (!exp.active || exp.skipped) return 0;
+  if (exp.occurrence_on) {
+    const at = Date.parse(etLocalToIso(`${exp.occurrence_on}T12:00`));
+    return at >= startMs && at < endMs ? exp.amount_cents : 0;
+  }
   if (!exp.recurring || exp.frequency === "one_time") {
     const on = Date.parse(`${exp.incurred_on}T12:00:00Z`);
     return on >= startMs && on < endMs ? exp.amount_cents : 0;
@@ -58,7 +65,16 @@ export function expenseCentsForRange(exp: BusinessExpense, startMs: number, endM
 export async function overheadCentsForRange(startIso: string, endIso: string): Promise<number> {
   const startMs = Date.parse(startIso);
   const endMs = Date.parse(endIso);
-  const rows = await listBusinessExpenses();
+  const rows: BusinessExpense[] = [];
+  if (isDemo()) rows.push(...DEMO_BUSINESS_EXPENSES);
+  else {
+    for (let offset = 0; ; offset += 1000) {
+      const { data, error } = await canesDb().from("business_expenses").select("*").eq("active", true).order("id").range(offset, offset + 999);
+      if (error) throw new Error("Expense totals could not be loaded.");
+      rows.push(...(data ?? []) as BusinessExpense[]);
+      if ((data?.length ?? 0) < 1000) break;
+    }
+  }
   return rows.reduce((sum, e) => sum + expenseCentsForRange(e, startMs, endMs), 0);
 }
 
@@ -83,6 +99,16 @@ export async function addBusinessExpenseRow(input: {
   endsOn?: string | null;
   note?: string | null;
 }): Promise<string | null> {
+  if (input.recurring && input.frequency !== "one_time") {
+    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
+    const { data, error } = await canesDb().rpc("create_canes_expense_rule", { p_input: {
+      name: input.name, amount_cents: input.amountCents, category: input.category,
+      frequency: input.frequency, starts_on: input.incurredOn, next_due_on: input.incurredOn,
+      ends_on: input.endsOn ?? null, anchor_day: Number(input.incurredOn.slice(-2)),
+      cutover_on: input.incurredOn > today ? input.incurredOn : today, note: input.note ?? null,
+    } });
+    return error ? null : data as string;
+  }
   const { data, error } = await canesDb()
     .from("business_expenses")
     .insert({
@@ -92,6 +118,7 @@ export async function addBusinessExpenseRow(input: {
       recurring: input.recurring,
       frequency: input.frequency,
       incurred_on: input.incurredOn,
+      occurrence_on: input.incurredOn,
       ends_on: input.endsOn ?? null,
       note: input.note ?? null,
     })
@@ -110,8 +137,10 @@ export async function addBusinessExpenseRow(input: {
 export async function deleteBusinessExpenseRow(id: string): Promise<boolean> {
   const { data, error } = await canesDb()
     .from("business_expenses")
-    .delete()
+    .update({ skipped: true })
     .eq("id", id)
+    .eq("legacy_template", false)
+    .is("employee_id", null)
     .select("id");
   if (error) {
     console.error(`[canes] deleteBusinessExpenseRow: ${error.message}`);

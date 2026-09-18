@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { BadgeCheck, CalendarCheck2, Eye, Send, Trash2 } from "lucide-react";
 import {
   approveEstimateInPerson,
@@ -84,6 +85,7 @@ export function EstimateActions({
   sentAt: string | null;
   viewedAt?: string | null;
 }) {
+  const router=useRouter();
   const { isPending, feedback, run } = useAction();
   const [voidOpen, setVoidOpen] = useState(false);
   const [approveOpen, setApproveOpen] = useState(false);
@@ -162,7 +164,7 @@ export function EstimateActions({
                 type="button"
                 className="cp-btn cp-btn-sm cp-btn-danger flex-1"
                 disabled={isPending}
-                onClick={() => run(() => deleteEstimate(estimateId))}
+                onClick={() => run(async () => { const result=await deleteEstimate(estimateId); if(result.ok)router.push("/CanesPressure/estimates"); return result; })}
               >
                 {isPending ? "Deleting..." : "Confirm delete"}
               </button>
@@ -345,7 +347,7 @@ export function EstimateActions({
               type="button"
               className="cp-btn cp-btn-sm cp-btn-danger flex-1"
               disabled={isPending}
-              onClick={() => run(() => deleteEstimate(estimateId))}
+              onClick={() => run(async () => { const result=await deleteEstimate(estimateId); if(result.ok)router.push("/CanesPressure/estimates"); return result; })}
             >
               {isPending ? "Deleting..." : "Confirm delete"}
             </button>

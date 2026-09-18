@@ -8,7 +8,7 @@ import { catalogActions } from "@/api";
 import { ChromeBar } from "@/components/ledger";
 import { Notice } from "@/components/notice";
 import { keys, useCatalog } from "@/queries";
-import { noticeFrom, useAction, usePullToRefresh } from "@/query";
+import { noticeFrom, useAction, usePullToRefresh, useRefetchOnFocus } from "@/query";
 import { color, font, HIT, radius, space, type } from "@/theme";
 
 type Draft = { id?: string; name: string; description: string; kind: CatalogKind; price: string; unit: string };
@@ -19,6 +19,7 @@ function fromItem(item: CatalogItem): Draft { return { id: item.id, name: item.n
 export default function CatalogScreen(): React.ReactElement {
   const router = useRouter(); const insets = useSafeAreaInsets();
   const catalogQuery = useCatalog(); const { refreshing, onRefresh } = usePullToRefresh(catalogQuery.refetch);
+  useRefetchOnFocus(catalogQuery.refetch);
   const saveItem = useAction((draft: Draft) => catalogActions.upsert({ id: draft.id, name: draft.name, kind: draft.kind, defaultPriceCents: inputToCents(draft.price), description: draft.description || null, unit: draft.unit, active: true }), { invalidates: [keys.catalog()] });
   const deleteItem = useAction((id: string) => catalogActions.delete(id), { invalidates: [keys.catalog()] });
   const [draft, setDraft] = useState<Draft | null>(null); const [actionNotice, setActionNotice] = useState<string | null>(null);

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { estimateText, jobReminderText } from "@/lib/canes/customer-messages";
 import { canesConfigured, canesDb } from "@/lib/canes/supabase";
 import { getAgenda, getLead, getOverview, getSettings } from "@/lib/canes/data";
 import { getEstimate, getJob, getScheduleBoard } from "@/lib/canes/estimates";
@@ -33,8 +34,8 @@ import {
   type CanesPush,
 } from "@/lib/canes/push";
 import { drainPaymentEmailTasks } from "@/lib/canes/payment-notifications";
-import { reconcileLegacySquarePaymentHistory } from "@/lib/canes/square";
-import { generateDueVisits } from "@/lib/canes/recurring";
+import { retireCreditAdjustedPaymentLinks, reconcileLegacySquarePaymentHistory } from "@/lib/canes/square";
+import { getPlan, generateDueVisits } from "@/lib/canes/recurring";
 import type { AutomationTask, Estimate, Lead } from "@/lib/canes/types";
 
 // The Canes automation heartbeat, hit by Vercel cron every 5 minutes
@@ -113,11 +114,17 @@ export async function GET(req: NextRequest) {
     drainPaymentEmailTasks({ deadlineAt: businessDeadlineAt }));
   await section("legacy_square_history", businessDeadlineAt, () =>
     reconcileLegacySquarePaymentHistory(3));
+  await section("credit_payment_links", businessDeadlineAt, () => retireCreditAdjustedPaymentLinks(businessDeadlineAt));
   await section("expire_estimates", businessDeadlineAt, expireEstimates);
   // Recurring plans: mint the next visit as an unscheduled work order once it
   // is inside the plan's lead window. Idempotent (plan clock + unique index),
   // so a retry after a half-run cannot double a visit.
   await section("recurring_visits", businessDeadlineAt, generateDueVisits);
+  await section("recurring_expenses", businessDeadlineAt, async () => {
+    const { data, error } = await canesDb().rpc("generate_expense_occurrences");
+    if (error) throw new Error("Recurring expense generation failed.");
+    return { created: data };
+  });
   await section("safety_net", businessDeadlineAt, () => confirmationSafetyNet(businessDeadlineAt));
   await section("no_reply", businessDeadlineAt, () => noReplyEscalations(businessDeadlineAt));
   await section("auto_release", businessDeadlineAt, () => autoReleaseUnconfirmed(businessDeadlineAt));
@@ -242,6 +249,17 @@ async function drainDueTasks(deadlineAt: number) {
     // Estimate texts key off the estimate, not the lead: cancel the moment the
     // quote leaves the sent/viewed window (approved, declined, expired), the
     // estimate is gone, the customer opted out, or there's no number to text.
+    if (task.kind === "estimate_send" && typeof task.payload?.plan_id === "string") {
+      const plan = await getPlan(task.payload.plan_id);
+      if (!plan || plan.signed_at || !["draft", "active"].includes(plan.status) || !plan.customer_phone) {
+        await db.from("tasks").update({status:"canceled"}).eq("id",task.id); canceled++; continue;
+      }
+      const result = await sendCanesSms({to:plan.customer_phone,body:`Hey ${plan.customer_name?.split(" ")[0] ?? "there"}, this is Canes Pressure Washing! Here is your recurring service agreement: ${APP_URL}/CanesPressure/r/${plan.public_token}`,automated:true});
+      if (result.ok) { await db.from("tasks").update({status:"sent",sent_at:new Date().toISOString()}).eq("id",task.id); sent++; }
+      else if (result.skipped === "quiet_hours") { await db.from("tasks").update({status:"pending",scheduled_for:(nextAllowedSendTime(settings)??new Date(Date.now()+3600000)).toISOString()}).eq("id",task.id); deferred++; }
+      else { await db.from("tasks").update({status:"failed",payload:{...task.payload,error:result.skipped??result.error??"Delivery failed"}}).eq("id",task.id); failed++; }
+      continue;
+    }
     const isEstimateTask = task.kind === "estimate_send" || task.kind === "estimate_reminder";
     if (isEstimateTask) {
       const estimateId =
@@ -264,9 +282,7 @@ async function drainDueTasks(deadlineAt: number) {
 
       const link = `${APP_URL}/CanesPressure/e/${estimate.public_token}`;
       const body =
-        task.kind === "estimate_send"
-          ? `Here is your estimate: ${link}`
-          : `Just following up on your estimate: ${link}`;
+        estimateText(estimate.customer_name, link, task.kind === "estimate_reminder");
       const res = await sendCanesSms({
         to: estimate.customer_phone,
         body,
@@ -387,6 +403,8 @@ async function drainDueTasks(deadlineAt: number) {
       const job = jobId ? await getJob(jobId) : null;
       if (
         !job ||
+        job.archived_at ||
+        new Date(job.scheduled_at ?? 0).getTime() <= Date.now() ||
         (job.status !== "scheduled" && job.status !== "confirmed") ||
         !scheduledAt ||
         // Epoch compare, never string: PostgREST serializes timestamptz with
@@ -409,11 +427,10 @@ async function drainDueTasks(deadlineAt: number) {
         failed++;
         continue;
       }
-      const body = fillTemplate(settings.job_confirmation_template, {
-        name: job.customer_name,
-        when: fmtEt(job.scheduled_at),
-        address: job.job_address,
-      });
+      if (!job.public_token) {
+        throw new Error("The job reminder needs the customer-job migration before sending.");
+      }
+      const body = jobReminderText(job.customer_name, scheduledAt, `${APP_URL}/CanesPressure/j/${job.public_token}`);
       const res = await sendCanesSms({
         to: job.customer_phone,
         body,
@@ -425,7 +442,7 @@ async function drainDueTasks(deadlineAt: number) {
           .from("tasks")
           .update({ status: "sent", sent_at: new Date().toISOString() })
           .eq("id", task.id);
-        if (job.lead_id) await logLeadEvent(job.lead_id, "automation", "Job confirmation text sent");
+        if (job.lead_id) await logLeadEvent(job.lead_id, "automation", "Appointment reminder sent");
         sent++;
       } else if (res.skipped === "quiet_hours") {
         const at = nextAllowedSendTime(settings) ?? new Date(Date.now() + 3_600_000);

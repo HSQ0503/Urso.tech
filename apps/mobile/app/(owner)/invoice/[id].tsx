@@ -1,3 +1,5 @@
+import { PaymentCorrections } from "@/components/payment-corrections";
+import { DocumentRevisionSheet } from "@/components/document-revision";
 import { useEffect, useState, type ComponentProps } from "react";
 import {
   ActivityIndicator,
@@ -108,6 +110,11 @@ function ActionTile({
 }
 
 export default function InvoicePreviewScreen(): React.ReactElement {
+  const { id } = useLocalSearchParams<{ id: string }>();
+  return <InvoicePreview key={id} />;
+}
+
+function InvoicePreview(): React.ReactElement {
   const { id, payments } = useLocalSearchParams<{ id: string; payments?: string }>();
   const insets = useSafeAreaInsets();
   const invoiceQuery = useInvoice(id);
@@ -115,6 +122,7 @@ export default function InvoicePreviewScreen(): React.ReactElement {
   const invoice = invoiceQuery.data ?? null;
 
   const [tab, setTab] = useState<PreviewTab>("job");
+  const [revisionOpen, setRevisionOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [deliveryOpen, setDeliveryOpen] = useState(false);
   const [recurringOpen, setRecurringOpen] = useState(false);
@@ -133,14 +141,14 @@ export default function InvoicePreviewScreen(): React.ReactElement {
     if (payments === "1") setPaymentsOpen(true);
   }, [payments]);
 
-  const invoiceKeys: QueryKey[] = [keys.invoiceOne(id), keys.invoices(), keys.overview()];
+  const invoiceKeys: QueryKey[] = [...keys.workflow()];
   const send = useAction<{ channels: DeliveryChannels } & DeliveryOverrides, Record<string, unknown>>(
     (opts) => invoiceActions.send(id, opts),
     { invalidates: invoiceKeys },
   );
   const recordCash = useAction((amountCents: number) => invoiceActions.recordCashPayment(id, amountCents), { invalidates: invoiceKeys });
   const voidInvoice = useAction<void, Record<string, never>>(() => invoiceActions.void(id), { invalidates: invoiceKeys });
-  const deleteInvoice = useAction<void, Record<string, never>>(() => invoiceActions.delete(id), { invalidates: [keys.invoices(), keys.overview()] });
+  const deleteInvoice = useAction<void, Record<string, never>>(() => invoiceActions.delete(id), { invalidates: [...keys.workflow()] });
   const busy = send.isPending || recordCash.isPending || voidInvoice.isPending || deleteInvoice.isPending;
 
   if (invoiceQuery.isPending) {
@@ -188,7 +196,7 @@ export default function InvoicePreviewScreen(): React.ReactElement {
     const result = await recordCash.mutateAsync(amount);
     if (!result.ok) setNotice(result.notice);
     else {
-      setGood(`${fmtMoney(amount)} payment recorded.`);
+      setGood(successNotice(result.data) ?? `${fmtMoney(amount)} payment recorded.`);
       setRecordOpen(false);
       setCashText("");
     }
@@ -208,7 +216,7 @@ export default function InvoicePreviewScreen(): React.ReactElement {
 
   const deleteNow = () => {
     setMenuOpen(false);
-    Alert.alert("Delete invoice?", "This cannot be undone.", [
+    Alert.alert("Delete invoice?", "Unused drafts are deleted. Other invoices leave active lists while payment history is preserved. Any unpaid payment link will be disabled.", [
       { text: "Keep invoice", style: "cancel" },
       { text: "Delete", style: "destructive", onPress: () => void (async () => {
         const result = await deleteInvoice.mutateAsync();
@@ -220,6 +228,7 @@ export default function InvoicePreviewScreen(): React.ReactElement {
 
   return (
     <View style={styles.screen}>
+      {revisionOpen ? <DocumentRevisionSheet kind="invoice" id={id} onClose={() => setRevisionOpen(false)} /> : null}
       <View style={{ height: insets.top, backgroundColor: color.chrome }} />
       <View style={styles.header}>
         <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => router.back()} style={styles.headerBack}>
@@ -238,6 +247,8 @@ export default function InvoicePreviewScreen(): React.ReactElement {
       >
         {notice ? <Notice text={notice} /> : null}
         <GoodNotice text={good} />
+        <PaymentCorrections invoice={invoice} />
+        <Pressable accessibilityRole="button" accessibilityLabel="Edit prices and discounts" onPress={() => setRevisionOpen(true)} style={{padding:16,minHeight:48}}><Text style={{color:color.brandDeep}}>Edit prices & discounts</Text></Pressable>
 
         {/* The one action that moves this bill forward, on the surface rather
             than three taps into the menu. An unsent invoice needs sending; a
@@ -309,8 +320,8 @@ export default function InvoicePreviewScreen(): React.ReactElement {
               <View style={styles.serviceFigures}>
                 <Text style={styles.colQty}>{item.quantity.toFixed(2)}</Text>
                 <Text style={styles.colPrice}>{fmtMoney(item.unit_price_cents)}</Text>
-                <Text style={styles.colDsc}>$0.00</Text>
-                <Text style={styles.colTax}>$0.00</Text>
+                <Text style={styles.colDsc}>{fmtMoney(item.discount_cents??0)}</Text>
+                <Text style={styles.colTax}>{item.taxable?"Tax":"$0.00"}</Text>
                 <Text style={styles.colTotal}>{fmtMoney(item.line_total_cents)}</Text>
               </View>
             </View>
@@ -368,7 +379,7 @@ export default function InvoicePreviewScreen(): React.ReactElement {
               {invoice.job_id ? <ActionTile label="Open Work Order" icon="briefcase" disabled={busy} onPress={() => { setMenuOpen(false); router.push({ pathname: "/(owner)/job/[id]", params: { id: invoice.job_id as string } }); }} /> : null}
               {invoice.contact_id ? <ActionTile label="View Customer" icon="user" disabled={busy} onPress={() => { setMenuOpen(false); router.push({ pathname: "/(owner)/customer/[id]", params: { id: invoice.contact_id as string } }); }} /> : null}
               {invoice.status !== "paid" && invoice.status !== "void" ? <ActionTile label="Void Invoice" icon="slash" danger disabled={busy} onPress={voidNow} /> : null}
-              {invoice.status === "draft" || invoice.status === "void" ? <ActionTile label="Delete Invoice" icon="trash-2" danger disabled={busy} onPress={deleteNow} /> : null}
+              <ActionTile label="Delete Invoice" icon="trash-2" danger disabled={busy} onPress={deleteNow} />
             </View>
           </View>
         </View>
@@ -413,6 +424,7 @@ export default function InvoicePreviewScreen(): React.ReactElement {
         <View style={styles.centerScrim}>
           <View style={styles.recordCard}>
             <Text style={styles.modalTitle}>RECORD CASH PAYMENT</Text>
+            <Notice text={notice} />
             <Text style={styles.recordCopy}>Balance due {fmtMoney(balance)}</Text>
             <TextInput value={cashText} onChangeText={setCashText} keyboardType="decimal-pad" autoFocus accessibilityLabel="Payment amount" style={styles.cashInput} />
             <View style={styles.recordActions}><Pressable accessibilityRole="button" onPress={() => setRecordOpen(false)} style={styles.secondaryButton}><Text style={styles.secondaryButtonText}>Cancel</Text></Pressable><Pressable accessibilityRole="button" disabled={recordCash.isPending} onPress={() => void recordNow()} style={styles.recordButton}><Text style={styles.recordButtonText}>{recordCash.isPending ? "Saving…" : "Record"}</Text></Pressable></View>

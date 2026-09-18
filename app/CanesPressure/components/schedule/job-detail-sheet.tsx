@@ -1,20 +1,19 @@
 "use client";
 
+import { DocumentRevisionControls } from "../document-revision";
+
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { CallButton } from "../call-button";
 import {
   Banknote,
   CalendarClock,
-  Check,
   CircleSlash,
   FileText,
   MapPin,
   MessageSquare,
   Pencil,
-  Plus,
   Receipt,
-  Repeat,
   Trash2,
   Undo2,
   UserRound,
@@ -26,16 +25,12 @@ import {
   recordJobDeposit,
   scheduleJob,
   reopenJob,
-  setJobRecurrence,
   setJobStatus,
   unscheduleJob,
   updateJobDetails,
   type ActionResult,
 } from "@/app/CanesPressure/actions";
-import {
-  addJobChecklistItem,
-  removeJobChecklistItem,
-} from "@/app/CanesPressure/crew-owner-actions";
+
 import {
   etLocalToIso,
   fmtEt,
@@ -43,16 +38,14 @@ import {
   fmtPhone,
   JOB_STATUS_LABEL,
   PAYMENT_METHOD_LABEL,
-  RECURRENCE_LABEL,
   type Crew,
   type JobInvoiceSummary,
-  type JobRecurrence,
   type JobStatus,
   type JobWithItems,
   type PaymentMethod,
 } from "@/lib/canes/types";
 import { isCompleteWhen, SchedulePicker } from "../leads/schedule-picker";
-import { JobMediaSection } from "../media/job-media-section";
+
 import { JobBilling } from "./job-billing";
 import { SheetShell } from "./sheet-shell";
 
@@ -146,20 +139,13 @@ export function JobDetailSheet({
   const [editNotes, setEditNotes] = useState("");
   const [editGateCode, setEditGateCode] = useState("");
   const [editSiteNotes, setEditSiteNotes] = useState("");
-  const [newChecklistStep, setNewChecklistStep] = useState("");
-  const [newChecklistRequired, setNewChecklistRequired] = useState(true);
 
   const placed = job.scheduled_at !== null;
-  const recurrence: JobRecurrence = job.recurrence ?? "none";
   const terminal =
     job.status === "completed" ||
     job.status === "invoiced" ||
     job.status === "paid" ||
     job.status === "canceled";
-  // An invoice can exist before the appointment. Keep the checklist editable
-  // until the work itself is finished, paid, or canceled.
-  const checklistLocked =
-    job.status === "completed" || job.status === "paid" || job.status === "canceled";
 
   const mapsHref = job.job_address
     ? `https://maps.google.com/?q=${encodeURIComponent(job.job_address)}`
@@ -176,6 +162,7 @@ export function JobDetailSheet({
       bodyClassName="cp-job-editor"
       onClose={onClose}
     >
+      <DocumentRevisionControls kind="job" id={job.id} />
       {/* A compact summary surface keeps identity, value, status, and the three
           common field actions together before the denser editing sections. */}
       <section className="rounded-lg border border-[var(--cp-line)] bg-[var(--cp-bg)] p-4 md:p-5">
@@ -222,11 +209,7 @@ export function JobDetailSheet({
           <span className="cp-chip bg-[var(--cp-surface)] text-[var(--cp-muted)]">
             {scheduleSummary(job)}
           </span>
-          {recurrence !== "none" && (
-            <span className="cp-chip bg-[var(--cp-good-bg)] text-[var(--cp-good)]">
-              <Repeat size={11} strokeWidth={2} /> {RECURRENCE_LABEL[recurrence]}
-            </span>
-          )}
+          {job.plan_id ? <Link className="cp-chip" href={`/CanesPressure/recurring?plan=${job.plan_id}`}>Repeat schedule</Link> : null}
         </div>
 
         {/* Quick actions */}
@@ -360,6 +343,7 @@ export function JobDetailSheet({
                   {item.name}
                 </span>
                 <span className="shrink-0 text-[13px] tabular-nums text-[var(--cp-muted)]">
+                  {(item.discount_cents??0)>0?<span className="block text-xs">{fmtMoney(item.line_total_cents+(item.discount_cents??0))} less {fmtMoney(item.discount_cents)}</span>:null}
                   {fmtMoney(item.line_total_cents)}
                 </span>
               </li>
@@ -453,128 +437,10 @@ export function JobDetailSheet({
 
       {/* Crew checklist: sold service items are the base steps; the owner can
           append procedural steps without putting them on the customer invoice. */}
-      <section className="cp-card mt-4 p-4 md:p-5">
-        <div className="flex items-baseline justify-between gap-3">
-          <p className="cp-group-label">Crew checklist</p>
-          <span className="cp-mono">
-            {job.items.filter((item) => item.done).length}/{job.items.length} complete
-          </span>
-        </div>
 
-        {job.items.length > 0 ? (
-          <ul className="mt-2 space-y-2">
-            {job.items.map((item) => {
-              const required = item.required ?? true;
-              return (
-                <li
-                  key={item.id}
-                  className="flex min-h-11 items-start gap-2.5 rounded-md border border-[var(--cp-line)] px-3 py-2.5"
-                >
-                  <span
-                    className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded border"
-                    style={
-                      item.done
-                        ? {
-                            background: "var(--cp-good-bg)",
-                            borderColor: "var(--cp-good)",
-                            color: "var(--cp-good)",
-                          }
-                        : { borderColor: "var(--cp-line-strong)" }
-                    }
-                    aria-label={item.done ? "Complete" : "Incomplete"}
-                  >
-                    {item.done && <Check aria-hidden size={13} strokeWidth={2.5} />}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-[13px] font-medium leading-snug">{item.name}</span>
-                    <span className="mt-0.5 block text-[11px] text-[var(--cp-faint)]">
-                      {required ? "Required" : "Optional"}
-                      {item.blocked ? " · Blocked by technician" : ""}
-                      {!item.checklist_only ? " · Service item" : ""}
-                    </span>
-                  </span>
-                  {item.checklist_only && !checklistLocked && (
-                    <button
-                      type="button"
-                      className="flex min-h-11 min-w-11 cursor-pointer items-center justify-center rounded-md text-[var(--cp-faint)] transition-colors hover:bg-[var(--cp-danger-bg)] hover:text-[var(--cp-danger)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--cp-brand)]"
-                      disabled={isPending}
-                      aria-label={`Remove ${item.name}`}
-                      onClick={() => run(() => removeJobChecklistItem(item.id))}
-                    >
-                      <Trash2 aria-hidden size={15} />
-                    </button>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        ) : (
-          <p className="mt-2 text-[12.5px] text-[var(--cp-faint)]">
-            No checklist steps yet. Add the first step below.
-          </p>
-        )}
-
-        {!checklistLocked && (
-          <form
-            className="mt-3 space-y-2.5 rounded-md bg-[var(--cp-bg)] p-3"
-            onSubmit={(event) => {
-              event.preventDefault();
-              if (!newChecklistStep.trim()) return;
-              run(
-                () =>
-                  addJobChecklistItem({
-                    jobId: job.id,
-                    name: newChecklistStep,
-                    required: newChecklistRequired,
-                  }),
-                () => {
-                  setNewChecklistStep("");
-                  setNewChecklistRequired(true);
-                },
-              );
-            }}
-          >
-            <div>
-              <label className="cp-label" htmlFor={`checklist-step-${job.id}`}>Add step</label>
-              <input
-                id={`checklist-step-${job.id}`}
-                className="cp-input min-h-11"
-                value={newChecklistStep}
-                onChange={(event) => setNewChecklistStep(event.target.value)}
-                placeholder="Connect water supply"
-              />
-            </div>
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <label className="flex min-h-11 cursor-pointer items-center gap-2 text-[12.5px] font-medium">
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 accent-[var(--cp-brand-fill)]"
-                  checked={newChecklistRequired}
-                  onChange={(event) => setNewChecklistRequired(event.target.checked)}
-                />
-                Required before completion
-              </label>
-              <button
-                type="submit"
-                className="cp-btn cp-btn-primary min-h-11 cursor-pointer"
-                disabled={isPending || !newChecklistStep.trim()}
-              >
-                <Plus aria-hidden size={15} />
-                {isPending ? "Adding…" : "Add step"}
-              </button>
-            </div>
-          </form>
-        )}
-      </section>
 
       {/* Job photos — field documentation now, customer gallery later. */}
-      <section className="cp-card mt-4 p-4 md:p-5">
-        <JobMediaSection
-          jobId={job.id}
-          variant="owner"
-          canUpload={job.status !== "canceled"}
-        />
-      </section>
+
 
       {/* Links into the paper trail */}
       {hasLinks && (
@@ -798,30 +664,6 @@ export function JobDetailSheet({
         </section>
       )}
 
-      {/* Repeats — maintenance-plan cadence. Editable even after billing so a
-          paid first visit can start the plan; insights derive MRR and next-due
-          from it, and nothing is ever booked automatically. */}
-      {job.status !== "canceled" && (
-        <section className="cp-card mt-4 space-y-2 p-4 md:p-5">
-          <p className="cp-group-label">Repeats</p>
-          <select
-            className="cp-select"
-            value={recurrence}
-            disabled={isPending}
-            onChange={(e) => run(() => setJobRecurrence(job.id, e.target.value as JobRecurrence))}
-          >
-            {(Object.keys(RECURRENCE_LABEL) as JobRecurrence[]).map((r) => (
-              <option key={r} value={r}>{RECURRENCE_LABEL[r]}</option>
-            ))}
-          </select>
-          <p className="text-[12px] leading-snug text-[var(--cp-faint)]">
-            {recurrence === "none"
-              ? "Mark a maintenance plan here — it rolls into recurring revenue on Customers."
-              : "Counted as an active recurring plan. Visits are never booked automatically."}
-          </p>
-        </section>
-      )}
-
       {/* Deposit — money collected up front, before the invoice exists. Once
           the bill has gone out, payments are recorded on the invoice itself. */}
       {job.status !== "canceled" && job.status !== "paid" && (!invoice || invoice.status === "draft") && (
@@ -997,8 +839,8 @@ export function JobDetailSheet({
           ) : (
             <div className="space-y-2">
               <p className="text-[12.5px] leading-snug text-[var(--cp-muted)]">
-                This permanently deletes the job, its checklist, expenses, hours,
-                and photos. This can&apos;t be undone.
+                Unused drafts are deleted. Other work is removed from active lists;
+                history is retained and unpaid payment links are disabled.
               </p>
               <div className="flex gap-2">
                 <button

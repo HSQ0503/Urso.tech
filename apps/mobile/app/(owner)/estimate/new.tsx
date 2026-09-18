@@ -44,6 +44,7 @@ type DraftLine = {
   description: string | null;
   quantityText: string;
   priceText: string;
+  discountText?: string; discountMode?: "amount" | "percent";
   taxable: boolean;
   discountCents: number;
   isOption: boolean;
@@ -77,8 +78,12 @@ function futureIso(days: number): string {
   return expiryForDate(addCalendarDays(todayEt(), days));
 }
 
+function lineDiscount(line: DraftLine): number {
+  const value = line.discountText === undefined ? line.discountCents : dollarsToCents(line.discountText);
+  return line.discountMode === "percent" ? Math.round(Math.round(quantity(line.quantityText) * dollarsToCents(line.priceText)) * value / 10000) : value;
+}
 function lineTotal(line: DraftLine): number {
-  return Math.round(quantity(line.quantityText) * dollarsToCents(line.priceText)) - line.discountCents;
+  return Math.round(quantity(line.quantityText) * dollarsToCents(line.priceText)) - lineDiscount(line);
 }
 
 function categoryFor(item: EstimateItem): ItemCategory {
@@ -94,6 +99,8 @@ function fromEstimateItem(item: EstimateItem): DraftLine {
     description: item.description,
     quantityText: String(item.quantity),
     priceText: centsToDollars(item.unit_price_cents),
+    discountMode: item.discount_mode ?? "amount",
+    discountText: centsToDollars(item.discount_value ?? item.discount_cents ?? 0),
     taxable: item.taxable,
     discountCents: item.discount_cents,
     isOption: item.is_option,
@@ -217,6 +224,7 @@ function LineEditor({
         </Pressable>
         <Text style={styles.lineTotal}>{fmtMoney(lineTotal(line))}</Text>
       </View>
+      <View style={{flexDirection:"row",alignItems:"center",gap:8,paddingTop:8}}><Pressable accessibilityRole="button" accessibilityLabel="Discount type" onPress={()=>onChange({discountMode:line.discountMode==="percent"?"amount":"percent"})} style={{minHeight:48,minWidth:60,justifyContent:"center"}}><Text style={{color:color.brandDeep}}>Discount {line.discountMode==="percent"?"%":"$"}</Text></Pressable><TextInput accessibilityLabel="Line discount" keyboardType="decimal-pad" value={line.discountText??"0"} onChangeText={discountText=>onChange({discountText})} style={{minHeight:48,flex:1,color:color.ink,borderWidth:1,borderColor:color.lineStrong,padding:8}}/></View>
     </View>
   );
 }
@@ -407,7 +415,8 @@ function EstimateEditor({ editId, requestedType }: { editId: string | null; requ
         kind: line.category === "service" ? "service" : "product",
         quantity: quantity(line.quantityText),
         unitPriceCents: dollarsToCents(line.priceText),
-        discountCents: line.discountCents,
+        discountCents: lineDiscount(line),
+        discountMode: line.discountMode ?? "amount", discountValue: dollarsToCents(line.discountText ?? centsToDollars(line.discountCents)),
         taxable: line.taxable,
         isOption: estimateType === "standard" ? false : line.isOption,
         isMandatory: line.isMandatory,

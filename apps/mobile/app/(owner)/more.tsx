@@ -1,3 +1,4 @@
+import { ArchivedRecords } from "@/components/archived-records";
 // The owner's door to everything that isn't the daily loop.
 //
 // The web sidebar has eleven destinations. Reproducing that as a scrolling tab
@@ -130,12 +131,6 @@ export default function MoreScreen(): React.ReactElement {
       go: () => router.push("/(owner)/insights"),
     },
     {
-      key: "payouts",
-      label: "Payouts",
-      icon: "pie-chart",
-      go: () => router.push("/(owner)/payouts"),
-    },
-    {
       key: "expenses",
       label: "Expenses",
       icon: "trending-down",
@@ -176,7 +171,8 @@ export default function MoreScreen(): React.ReactElement {
           }
         >
           <View>
-            <SectionRule label="Everything else" />
+            <ArchivedRecords />
+        <SectionRule label="Everything else" />
             <LedgerBlock>
               {destinations.map((destination, index) => (
                 <DestinationRow

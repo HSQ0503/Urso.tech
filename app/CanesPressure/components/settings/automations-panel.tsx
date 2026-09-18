@@ -157,9 +157,9 @@ export function AutomationsPanel({ settings }: { settings: CanesSettings }) {
           channel="Text"
         />
         <AutomationRow
-          name="Day-before job confirmation"
-          description="Reminds the customer their scheduled job is coming up."
-          config={`${settings.job_confirmation_offset_hours}h before`}
+          name="Day-before job reminder"
+          description="Includes the job details link and Canes contact number. No reply is required."
+          config="24h before"
           channel="Text"
         />
         <div className="cp-divider" />

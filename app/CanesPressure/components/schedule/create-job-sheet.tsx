@@ -1,14 +1,12 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
-import { createManualJob, setJobRecurrence } from "@/app/CanesPressure/actions";
+import { createManualJob } from "@/app/CanesPressure/actions";
 import {
   etLocalToIso,
   fmtMoney,
   PAYMENT_METHOD_LABEL,
-  RECURRENCE_LABEL,
   type Crew,
-  type JobRecurrence,
   type PaymentMethod,
 } from "@/lib/canes/types";
 import type { CustomerHit } from "@/lib/canes/customers";
@@ -52,7 +50,6 @@ export function CreateJobSheet({
   const [deposit, setDeposit] = useState("");
   const [depositMethod, setDepositMethod] = useState<PaymentMethod>("cash");
   const [jobAddress, setJobAddress] = useState("");
-  const [recurrence, setRecurrence] = useState<JobRecurrence>("none");
   const [scheduleNow, setScheduleNow] = useState(false);
   const [when, setWhen] = useState("");
   const [duration, setDuration] = useState(120);
@@ -114,9 +111,6 @@ export function CreateJobSheet({
       });
       // Cadence is a follow-up write — if it fails the job still exists and
       // the job editor's Repeats control can set it again.
-      if (res.ok && res.jobId && recurrence !== "none") {
-        await setJobRecurrence(res.jobId, recurrence);
-      }
       setFeedback(res.notice ? { ok: res.ok, text: res.notice } : null);
       if (res.ok) onClose();
     });
@@ -232,19 +226,7 @@ export function CreateJobSheet({
           />
         </div>
 
-        <div>
-          <label className="cp-label" htmlFor="job-repeats">Repeats</label>
-          <select
-            id="job-repeats"
-            className="cp-select"
-            value={recurrence}
-            onChange={(e) => setRecurrence(e.target.value as JobRecurrence)}
-          >
-            {(Object.keys(RECURRENCE_LABEL) as JobRecurrence[]).map((r) => (
-              <option key={r} value={r}>{RECURRENCE_LABEL[r]}</option>
-            ))}
-          </select>
-        </div>
+        <p className="text-sm">After saving, use Make recurring on the work order to choose its repeat date and time.</p>
 
         <label className="flex cursor-pointer items-center gap-2 text-[13px]">
           <input

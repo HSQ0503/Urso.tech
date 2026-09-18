@@ -2,7 +2,7 @@ import { cache } from "react";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
-import { canesDb } from "@/lib/canes/supabase";
+import { canesConfigured, canesDb } from "@/lib/canes/supabase";
 import { createCanesAuthClient, getCanesAuthServerEnv } from "@/lib/canes/crew-auth-client";
 import { resolvePermissions } from "@/lib/canes/crew-types";
 import type { CrewAccountRole, CrewPermissions, TechnicianActor } from "@/lib/canes/crew-types";
@@ -66,6 +66,7 @@ function bearerToken(raw: string | null): string | null {
 }
 
 export const getTechnicianActor = cache(async (): Promise<TechnicianActor | null> => {
+  if (!canesConfigured()) return null;
   const auth = await createCanesAuthClient();
   const {
     data: { user },

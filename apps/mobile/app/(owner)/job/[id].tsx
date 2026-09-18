@@ -1,3 +1,4 @@
+import { DocumentRevisionSheet } from "@/components/document-revision";
 // The job sheet — everything about one job on one screen.
 //
 // Sebastian opens this from the schedule with wet gloves on. The customer card
@@ -113,6 +114,11 @@ function Field({ label, value }: { label: string; value: string }) {
 }
 
 export default function JobScreen(): React.ReactElement {
+  const { id } = useLocalSearchParams<{ id: string }>();
+  return <JobDetail key={id} />;
+}
+
+function JobDetail(): React.ReactElement {
   const { id, focus } = useLocalSearchParams<{ id: string; focus?: string }>();
   const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollView>(null);
@@ -133,6 +139,7 @@ export default function JobScreen(): React.ReactElement {
   // that covers every board window, but the tray key is ["owner","unscheduled"]
   // — its own root, NOT under the schedule prefix — so it is named explicitly.
   const everywhere: QueryKey[] = [
+    ...keys.workflow(),
     keys.jobs.one(id),
     keys.jobs.all(),
     ["owner", "schedule"],
@@ -164,9 +171,12 @@ export default function JobScreen(): React.ReactElement {
   // current crew means booking never silently unassigns (crew changes belong
   // to the Assign picker). A SCHEDULED job goes through `move` with crewId
   // omitted entirely, which is that action's "keep the crew" value.
+  const [moveFuture, setMoveFuture] = useState(false);
   const book = useAction(
     (vars: { iso: string; durationMinutes: number; scheduled: boolean; crewId: string | null }) =>
-      vars.scheduled
+      moveFuture
+        ? jobActions.moveFuture(id, vars.iso, vars.durationMinutes, vars.crewId)
+        : vars.scheduled
         ? jobActions.move(id, vars.iso, { durationMinutes: vars.durationMinutes })
         : jobActions.schedule(id, vars.iso, vars.durationMinutes, vars.crewId),
     { invalidates: everywhere },
@@ -178,15 +188,6 @@ export default function JobScreen(): React.ReactElement {
   );
   const updateDetails = useAction(
     (fields: JobDetailsPatch) => jobActions.updateDetails(id, fields),
-    { invalidates: everywhere },
-  );
-  const addChecklistItem = useAction(
-    (input: { name: string; required: boolean }) =>
-      jobActions.addChecklistItem(id, input.name, input.required),
-    { invalidates: everywhere },
-  );
-  const removeChecklistItem = useAction(
-    (itemId: string) => jobActions.removeChecklistItem(id, itemId),
     { invalidates: everywhere },
   );
   // Canceling must reach the Work orders list too — it used to skip
@@ -209,11 +210,9 @@ export default function JobScreen(): React.ReactElement {
   const toast = useToast();
   const [moneyNotice, setMoneyNotice] = useState<string | null>(null);
   const [siteNotice, setSiteNotice] = useState<string | null>(null);
-  const [checklistNotice, setChecklistNotice] = useState<string | null>(null);
-  const [newChecklistStep, setNewChecklistStep] = useState("");
-  const [newChecklistRequired, setNewChecklistRequired] = useState(true);
   const [dangerNotice, setDangerNotice] = useState<string | null>(null);
 
+  const [revisionOpen, setRevisionOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [recurringOpen, setRecurringOpen] = useState(false);
   // Where the Job section sits in the scroll, so More → Schedule / Assign can
@@ -444,25 +443,6 @@ export default function JobScreen(): React.ReactElement {
     }
   };
 
-  const onAddChecklistItem = async () => {
-    const name = newChecklistStep.trim();
-    if (!name || addChecklistItem.isPending) return;
-    setChecklistNotice(null);
-    const result = await addChecklistItem.mutateAsync({ name, required: newChecklistRequired });
-    if (!result.ok) {
-      setChecklistNotice(result.notice);
-      return;
-    }
-    setNewChecklistStep("");
-    setNewChecklistRequired(true);
-  };
-
-  const onRemoveChecklistItem = async (itemId: string) => {
-    setChecklistNotice(null);
-    const result = await removeChecklistItem.mutateAsync(itemId);
-    if (!result.ok) setChecklistNotice(result.notice);
-  };
-
   const openEdit = () => {
     setGateDraft(job.gate_code ?? "");
     setSiteDraft(job.site_notes ?? "");
@@ -542,16 +522,14 @@ export default function JobScreen(): React.ReactElement {
   // status past `scheduled`, and a confirmed job with no way to start would be
   // a dead end. The action still owns the actual rule.
   const canStart = job.status === "scheduled" || job.status === "confirmed";
-  // Invoices are often prepared before the appointment. Billing the customer
-  // must not hide the operational checklist from an upcoming job.
-  const checklistLocked = ["completed", "paid", "canceled"].includes(job.status);
-  const canDelete =
-    job.estimate_id === null &&
-    ["unscheduled", "scheduled", "confirmed", "canceled"].includes(job.status);
+  const canDelete = true;
 
   return (
     <View style={styles.screen}>
+      {revisionOpen ? <DocumentRevisionSheet kind="job" id={id} onClose={() => setRevisionOpen(false)} /> : null}
       {header(canDelete ? onDelete : undefined)}
+      {job.scheduling_conflict ? <Notice text="This visit overlaps another job for its crew. Review the schedule." /> : null}
+      <Pressable accessibilityRole="button" accessibilityLabel="Edit prices and discounts" onPress={() => setRevisionOpen(true)} style={{padding:16,minHeight:48}}><Text style={{color:color.brandDeep}}>Edit prices & discounts</Text></Pressable>
       <ScrollView
         ref={scrollRef}
         contentContainerStyle={[styles.scrollBody, { paddingBottom: insets.bottom + space.xxl }]}
@@ -705,11 +683,12 @@ export default function JobScreen(): React.ReactElement {
                 <View key={item.id} style={styles.servicesRow}>
                   <View style={styles.servicesName}>
                     <Text style={styles.body} numberOfLines={2}>{item.name}</Text>
+                    {(item.discount_cents??0)>0?<Text style={styles.muted}>Discount −{fmtMoney(item.discount_cents)}</Text>:null}
                     {item.description ? <Text style={styles.muted} numberOfLines={2}>{item.description}</Text> : null}
                   </View>
                   <Text style={[styles.servicesFigure, styles.servicesQty]}>{Number.isInteger(item.quantity) ? item.quantity : item.quantity.toFixed(2)}</Text>
                   <Text style={[styles.servicesFigure, styles.servicesPrice]}>
-                    {fmtMoney(item.quantity > 0 ? Math.round(item.line_total_cents / item.quantity) : item.line_total_cents)}
+                    {fmtMoney(item.unit_price_cents ?? (item.quantity > 0 ? Math.round(item.line_total_cents / item.quantity) : item.line_total_cents))}
                   </Text>
                   <Text style={[styles.servicesFigure, styles.servicesTotal]}>{fmtMoney(item.line_total_cents)}</Text>
                 </View>
@@ -850,6 +829,7 @@ export default function JobScreen(): React.ReactElement {
                 <View style={styles.slotCard}>
                   {/* allowPast: Sebastian back-dates work he forgot to log —
                       the same reason the web job flows pass it. */}
+                  {job.plan_id ? <Pressable accessibilityRole="checkbox" accessibilityState={{checked:moveFuture}} onPress={() => setMoveFuture(!moveFuture)} style={{padding:12,minHeight:48}}><Text style={{color:color.ink}}>{moveFuture ? "☑ This and future visits" : "☐ This visit only (tap to include future visits)"}</Text></Pressable> : null}
                   <SlotPicker value={slotValue} onChange={setSlotValue} allowPast />
                   <View style={styles.durationRow}>
                     {[60, 90, 120, 180, 240].map((m) => (
@@ -914,124 +894,9 @@ export default function JobScreen(): React.ReactElement {
           </View>
         </Section>
 
-        <Section
-          label="Crew checklist"
-          onLayout={(event) => {
-            const focusKey = focus === "checklist" ? id : null;
-            if (!focusKey || focusedSectionKeyRef.current === `checklist:${focusKey}`) return;
-            focusedSectionKeyRef.current = `checklist:${focusKey}`;
-            const y = event.nativeEvent.layout.y;
-            requestAnimationFrame(() => {
-              scrollRef.current?.scrollTo({ y: Math.max(0, y - space.sm), animated: true });
-            });
-          }}
-        >
-          <View style={[styles.card, styles.checklistCard]}>
-            <View style={styles.checklistHead}>
-              <Text style={styles.sectionTitle}>Crew checklist</Text>
-              <Text style={styles.sectionLabel}>
-                {job.items.filter((item) => item.done).length}/{job.items.length} complete
-              </Text>
-            </View>
-            <Notice text={checklistNotice} />
-            {job.items.length > 0 ? (
-              <View style={styles.checklistRows}>
-                {job.items.map((item) => (
-                  <View key={item.id} style={styles.checklistRow}>
-                    <View style={[styles.checkBox, item.done && styles.checkBoxDone]}>
-                      {item.done ? <Feather name="check" size={13} color={color.good} /> : null}
-                    </View>
-                    <View style={styles.itemMain}>
-                      <Text style={styles.body}>{item.name}</Text>
-                      <Text style={styles.itemQty}>
-                        {item.required === false ? "Optional" : "Required"}
-                        {item.blocked ? " · Blocked by technician" : ""}
-                        {!item.checklist_only ? " · Service item" : ""}
-                      </Text>
-                    </View>
-                    {item.checklist_only && !checklistLocked ? (
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel={`Remove ${item.name}`}
-                        disabled={removeChecklistItem.isPending}
-                        onPress={() => void onRemoveChecklistItem(item.id)}
-                        style={({ pressed }) => [
-                          styles.removeStep,
-                          removeChecklistItem.isPending && styles.disabled,
-                          pressed && styles.dangerPressed,
-                        ]}
-                      >
-                        <Feather name="trash-2" size={16} color={color.danger} />
-                      </Pressable>
-                    ) : null}
-                  </View>
-                ))}
-              </View>
-            ) : (
-              <Text style={styles.muted}>No checklist steps yet. Add the first step below.</Text>
-            )}
 
-            {!checklistLocked ? (
-              <View style={styles.addStepCard}>
-                <Text style={styles.fieldLabel}>Add step</Text>
-                <TextInput
-                  accessibilityLabel="Checklist step"
-                  value={newChecklistStep}
-                  onChangeText={setNewChecklistStep}
-                  onSubmitEditing={() => void onAddChecklistItem()}
-                  placeholder="Connect water supply"
-                  placeholderTextColor={color.faint}
-                  returnKeyType="done"
-                  maxLength={160}
-                  style={styles.input}
-                />
-                <View style={styles.addStepFoot}>
-                  <Pressable
-                    accessibilityRole="checkbox"
-                    accessibilityState={{ checked: newChecklistRequired }}
-                    onPress={() => setNewChecklistRequired((required) => !required)}
-                    style={styles.requiredToggle}
-                  >
-                    <View style={[styles.smallCheck, newChecklistRequired && styles.smallCheckOn]}>
-                      {newChecklistRequired ? (
-                        <Feather name="check" size={12} color={color.chromeInk} />
-                      ) : null}
-                    </View>
-                    <Text style={styles.muted}>Required before completion</Text>
-                  </Pressable>
-                  <Pressable
-                    accessibilityRole="button"
-                    disabled={!newChecklistStep.trim() || addChecklistItem.isPending}
-                    onPress={() => void onAddChecklistItem()}
-                    style={({ pressed }) => [
-                      styles.primary,
-                      styles.addStepButton,
-                      (!newChecklistStep.trim() || addChecklistItem.isPending) && styles.disabled,
-                      pressed && styles.primaryPressed,
-                    ]}
-                  >
-                    <Feather name="plus" size={15} color={color.chromeInk} />
-                    <Text style={styles.primaryText}>
-                      {addChecklistItem.isPending ? "Adding…" : "Add step"}
-                    </Text>
-                  </Pressable>
-                </View>
-              </View>
-            ) : null}
-          </View>
-        </Section>
 
-        <Section label="Job photos">
-          <View style={[styles.card, styles.photosCard]}>
-            <View style={styles.photosIcon}>
-              <Feather name="camera" size={20} color={color.muted} />
-            </View>
-            <View style={styles.grow}>
-              <Text style={styles.sectionTitle}>Job photos</Text>
-              <Text style={styles.muted}>Before, progress, and after photos stay with this job.</Text>
-            </View>
-          </View>
-        </Section>
+
 
         {job.status !== "canceled" ? (
           <Section label="Recurring">

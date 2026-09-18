@@ -1,3 +1,4 @@
+import { priceServiceLine, type ServiceLineInput } from "@urso/types";
 import { randomBytes } from "crypto";
 import { canesConfigured, canesDb } from "@/lib/canes/supabase";
 import { getSettings, isDemo } from "@/lib/canes/data";
@@ -62,23 +63,7 @@ export function addCadence(dateKey: string, cadence: PlanCadence, times = 1): st
   return target.toISOString().slice(0, 10);
 }
 
-function addDays(dateKey: string, days: number): string {
-  const d = new Date(`${dateKey}T12:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().slice(0, 10);
-}
-
 const genToken = () => randomBytes(16).toString("base64url");
-
-async function nextPlanNumber(): Promise<string> {
-  const db = canesDb();
-  const { data, error } = await db.from("estimate_counters").select("next_value").eq("id", "plan").maybeSingle();
-  if (error || !data) throw new Error(`nextPlanNumber: ${error?.message ?? "counter missing — run 0027"}`);
-  const n = Number(data.next_value);
-  const { error: advance } = await db.from("estimate_counters").update({ next_value: n + 1 }).eq("id", "plan");
-  if (advance) throw new Error(`nextPlanNumber advance: ${advance.message}`);
-  return `PLAN-${String(n).padStart(6, "0")}`;
-}
 
 // ── Reads ────────────────────────────────────────────────────────────────────
 
@@ -135,7 +120,8 @@ export async function listPlanVisits(planId: string): Promise<RecurringPlanVisit
 export async function getPlanDetail(id: string): Promise<RecurringPlanDetail | null> {
   const plan = await getPlanWithItems(id);
   if (!plan) return null;
-  return { ...plan, visits: await listPlanVisits(id) };
+  const signed=plan.signed_at?await getSignedPlanVersion(id):null;
+  return { ...plan, visits: await listPlanVisits(id), signed_cancellation_fee_cents:signed?planCancellationFeeCents(signed):0, signed_notice_days:signed?.notice_days??0, read_at:new Date().toISOString() };
 }
 
 // Collected money that belongs to plans, by ET month, for the Dashboard's
@@ -201,38 +187,39 @@ export function mrrCentsOf(plans: RecurringPlan[]): number {
 
 // ── Creation ─────────────────────────────────────────────────────────────────
 
-export type PlanLineInput = { name: string; description?: string | null; quantity: number; unitPriceCents: number };
+export type PlanLineInput = ServiceLineInput;
 
 export type CreatePlanInput = {
   contactId?: string | null;
   customerName: string;
+  requestKey?: string;
+  sourceTotalCents?: number;
+  sourceTaxRateBps?: number;
   customerPhone?: string | null;
   customerEmail?: string | null;
   jobAddress?: string | null;
   jobName?: string | null;
   cadence: PlanCadence;
+  repeatTime?: string;
+  durationMinutes?: number;
+  crewId?: string | null;
+  agreementRequired?: boolean;
   startsOn: string; // YYYY-MM-DD
   items: PlanLineInput[];
   source?: { estimateId?: string | null; invoiceId?: string | null; jobId?: string | null };
 };
 
 function normalizeLines(items: PlanLineInput[]): Omit<RecurringPlanItem, "id" | "plan_id">[] | null {
-  const out: Omit<RecurringPlanItem, "id" | "plan_id">[] = [];
-  items.forEach((it, index) => {
-    const name = it.name.trim();
-    const quantity = Number(it.quantity);
-    const unit = Math.round(Number(it.unitPriceCents));
-    if (!name || !Number.isFinite(quantity) || quantity <= 0 || !Number.isSafeInteger(unit) || unit < 0) return;
-    out.push({
-      position: index,
-      name,
-      description: it.description?.trim() || null,
-      quantity,
-      unit_price_cents: unit,
-      line_total_cents: Math.round(quantity * unit),
+  if (!items.length || items.length > 200) return null;
+  try {
+    return items.map((line, position) => {
+      const price = priceServiceLine(line);
+      return { position, name: line.name.trim(), description: line.description?.trim() || null,
+        quantity: line.quantity, unit_price_cents: line.unitPriceCents, line_total_cents: price.lineTotalCents,
+        discount_mode: line.discountMode ?? "amount", discount_value: line.discountValue ?? 0,
+        discount_cents: price.discountCents, taxable: line.taxable ?? false };
     });
-  });
-  return out.length > 0 ? out : null;
+  } catch { return null; }
 }
 
 export async function createPlan(input: CreatePlanInput): Promise<PlanResult & { planId?: string }> {
@@ -252,75 +239,49 @@ export async function createPlan(input: CreatePlanInput): Promise<PlanResult & {
     (await ensureContact({ name: customerName, phone, email, address: input.jobAddress ?? null }))?.id ??
     null;
 
+  const repeatTime = input.repeatTime;
+  if (repeatTime !== undefined && !/^([01]\d|2[0-3]):[0-5]\d$/.test(repeatTime)) return { ok: false, notice: "Choose a repeat time in HH:mm Eastern." };
+  const sourceJob = input.source?.jobId ? await getJob(input.source.jobId) : null;
+  if (sourceJob?.plan_id) return { ok: false, notice: "This work order already belongs to a repeat schedule." };
   const settings = await getSettings();
   const db = canesDb();
-  const number = await nextPlanNumber();
-  const price = lines.reduce((s, l) => s + l.line_total_cents, 0);
-  const { data, error } = await db
-    .from("recurring_plans")
-    .insert({
-      number,
-      contact_id: contactId,
-      source_estimate_id: input.source?.estimateId ?? null,
-      source_invoice_id: input.source?.invoiceId ?? null,
-      source_job_id: input.source?.jobId ?? null,
-      customer_name: customerName,
-      customer_phone: phone,
-      customer_email: email,
-      job_address: input.jobAddress?.trim() || null,
-      job_name: input.jobName?.trim() || `${PLAN_CADENCE_LABEL[input.cadence]} service`,
-      cadence: input.cadence,
-      price_per_visit_cents: price,
-      status: "draft",
-      starts_on: input.startsOn,
-      next_due_on: input.startsOn,
-      terms: settings.recurring_terms,
-      message_to_customer: null,
-      public_token: genToken(),
-    })
-    .select("id")
-    .single();
-  if (error) return { ok: false, notice: error.message };
-  const planId = data.id as string;
-  const { error: itemsError } = await db
-    .from("recurring_plan_items")
-    .insert(lines.map((l) => ({ ...l, plan_id: planId })));
-  if (itemsError) return { ok: false, notice: `Plan saved without its services: ${itemsError.message}` };
-
-  // The source job becomes visit #1 and the plan's clock starts from it.
-  if (input.source?.jobId) {
-    const job = await getJob(input.source.jobId);
-    if (job && !job.plan_id) {
-      const firstDue = job.scheduled_at ? dateKeyOf(job.scheduled_at) : input.startsOn;
-      await db.from("jobs").update({ plan_id: planId, plan_visit_due_on: firstDue }).eq("id", job.id).is("plan_id", null);
-      await db
-        .from("recurring_plans")
-        .update({ last_generated_for: firstDue, next_due_on: addCadence(firstDue, input.cadence), starts_on: firstDue })
-        .eq("id", planId);
-    }
-  }
-  return { ok: true, planId };
+  const price = input.sourceTotalCents ?? lines.reduce((sum, line) => sum + line.line_total_cents, 0);
+  const { data, error } = await db.rpc("create_canes_repeat_plan", { p_input: {
+    contact_id: contactId, customer_name: customerName, customer_phone: phone, customer_email: email,
+    job_address: input.jobAddress?.trim() || null, job_name: input.jobName?.trim() || `${PLAN_CADENCE_LABEL[input.cadence]} service`,
+    tax_rate_bps: input.sourceTaxRateBps ?? 0,
+    adjustment_cents: price-lines.reduce((sum,line)=>sum+line.line_total_cents,0)-Math.round(lines.filter(line=>line.taxable).reduce((sum,line)=>sum+line.line_total_cents,0)*(input.sourceTaxRateBps??0)/10000),
+    cadence: input.cadence, price_per_visit_cents: price, starts_on: input.startsOn, repeat_time: repeatTime ?? null,
+    duration_minutes: input.durationMinutes ?? sourceJob?.duration_minutes ?? 120, crew_id: input.crewId ?? sourceJob?.crew_id ?? null,
+    source_job_id: input.source?.jobId ?? null, source_estimate_id: input.source?.estimateId ?? null, source_invoice_id: input.source?.invoiceId ?? null,
+    terms: settings.recurring_terms, public_token: genToken(), items: lines, request_key: input.requestKey ?? null,
+    agreement_required: input.agreementRequired ?? !repeatTime,
+  } });
+  if (error || !data?.planId) return { ok: false, notice: "The repeat schedule could not be saved. No partial visit was created." };
+  return { ok: true, planId: data.planId, notice: data.duplicate ? "This source already has a repeat schedule. Opening it." : repeatTime ? "Repeat schedule saved. Its next visit is on the calendar." : "Plan saved. Set a repeat time to enable automatic scheduling." };
 }
 
 // Lines and customer copied off the source document; the caller supplies the
 // cadence and first date. Approved estimates bring their job along as visit #1.
 export async function createPlanFromEstimate(
   estimateId: string,
-  opts: { cadence: PlanCadence; startsOn: string },
+  opts: { cadence: PlanCadence; startsOn: string; repeatTime?: string },
 ): Promise<PlanResult & { planId?: string }> {
   const estimate = await getEstimateWithItems(estimateId);
   if (!estimate) return { ok: false, notice: "Estimate not found." };
   const { data: job } = await canesDb().from("jobs").select("id").eq("estimate_id", estimate.id).maybeSingle();
   const lines = estimate.items
     .filter((it) => it.is_mandatory || !it.is_option || it.is_selected)
-    .map((it) => ({ name: it.name, description: it.description, quantity: it.quantity, unitPriceCents: it.unit_price_cents }));
+    .map((it) => ({ name: it.name, description: it.description, quantity: it.quantity, unitPriceCents: it.unit_price_cents ?? (it.quantity > 0 ? Math.round(it.line_total_cents / it.quantity) : it.line_total_cents), discountMode: it.discount_mode, discountValue: it.discount_value ?? it.discount_cents ?? 0, taxable: it.taxable }));
   return createPlan({
+    sourceTotalCents: estimate.total_cents, sourceTaxRateBps:estimate.tax_rate_bps,
     contactId: estimate.contact_id,
     customerName: estimate.customer_name ?? "Customer",
     customerPhone: estimate.customer_phone,
     customerEmail: estimate.customer_email,
     jobAddress: estimate.job_address,
     jobName: estimate.job_name,
+    repeatTime: opts.repeatTime,
     cadence: opts.cadence,
     startsOn: opts.startsOn,
     items: lines,
@@ -330,7 +291,7 @@ export async function createPlanFromEstimate(
 
 export async function createPlanFromInvoice(
   invoiceId: string,
-  opts: { cadence: PlanCadence; startsOn: string },
+  opts: { cadence: PlanCadence; startsOn: string; repeatTime?: string },
 ): Promise<PlanResult & { planId?: string }> {
   const invoice = await getInvoiceWithItems(invoiceId);
   if (!invoice) return { ok: false, notice: "Invoice not found." };
@@ -338,15 +299,17 @@ export async function createPlanFromInvoice(
     name: it.name,
     description: it.description,
     quantity: it.quantity,
-    unitPriceCents: it.unit_price_cents,
+    unitPriceCents: it.unit_price_cents ?? (it.quantity > 0 ? Math.round(it.line_total_cents / it.quantity) : it.line_total_cents), discountMode: it.discount_mode, discountValue: it.discount_value ?? it.discount_cents ?? 0, taxable: it.taxable,
   }));
   return createPlan({
+    sourceTotalCents: invoice.total_cents, sourceTaxRateBps:invoice.tax_rate_bps,
     contactId: invoice.contact_id,
     customerName: invoice.customer_name ?? "Customer",
     customerPhone: invoice.customer_phone,
     customerEmail: invoice.customer_email,
     jobAddress: invoice.job_address,
     jobName: invoice.job_name,
+    repeatTime: opts.repeatTime,
     cadence: opts.cadence,
     startsOn: opts.startsOn,
     items: lines,
@@ -356,7 +319,7 @@ export async function createPlanFromInvoice(
 
 export async function createPlanFromJob(
   jobId: string,
-  opts: { cadence: PlanCadence; startsOn: string },
+  opts: { cadence: PlanCadence; startsOn: string; repeatTime?: string },
 ): Promise<PlanResult & { planId?: string }> {
   const job = await getJob(jobId);
   if (!job) return { ok: false, notice: "Work order not found." };
@@ -368,16 +331,18 @@ export async function createPlanFromJob(
           name: it.name,
           description: it.description,
           quantity: it.quantity,
-          unitPriceCents: it.quantity > 0 ? Math.round(it.line_total_cents / it.quantity) : it.line_total_cents,
+          unitPriceCents: it.unit_price_cents ?? (it.quantity > 0 ? Math.round(it.line_total_cents / it.quantity) : it.line_total_cents), discountMode: it.discount_mode, discountValue: it.discount_value ?? it.discount_cents ?? 0, taxable: it.taxable,
         }))
       : [{ name: job.job_name ?? "Service", quantity: 1, unitPriceCents: job.total_cents }];
   return createPlan({
+    sourceTotalCents: job.total_cents, sourceTaxRateBps:job.tax_rate_bps??0,
     contactId: job.contact_id,
     customerName: job.customer_name ?? "Customer",
     customerPhone: job.customer_phone,
     customerEmail: job.customer_email,
     jobAddress: job.job_address,
     jobName: job.job_name,
+    repeatTime: opts.repeatTime,
     cadence: opts.cadence,
     startsOn: opts.startsOn,
     items: lines,
@@ -396,6 +361,7 @@ export type PlanPatch = {
   cadence?: PlanCadence;
   startsOn?: string; // draft only
   nextDueOn?: string; // active/paused: move the next visit
+  repeatTime?: string;
   leadDays?: number;
   noticeDays?: number;
   messageToCustomer?: string | null;
@@ -407,6 +373,11 @@ export async function updatePlan(planId: string, patch: PlanPatch): Promise<Plan
   if (!plan) return { ok: false, notice: "Plan not found." };
   if (plan.status === "canceled") return { ok: false, notice: "This plan is canceled. Start a new one to change the terms." };
   const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (patch.repeatTime !== undefined) {
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(patch.repeatTime)) return { ok: false, notice: "Choose a valid Eastern repeat time." };
+    update.repeat_time = patch.repeatTime; update.scheduling_enabled = true;
+    update.anchor_day = plan.anchor_day ?? Number(plan.starts_on.slice(-2));
+  }
   if (patch.jobName !== undefined) update.job_name = patch.jobName.trim() || null;
   if (patch.customerName !== undefined) {
     const name = patch.customerName.trim();
@@ -451,19 +422,11 @@ export async function updatePlan(planId: string, patch: PlanPatch): Promise<Plan
   }
   if (patch.messageToCustomer !== undefined) update.message_to_customer = patch.messageToCustomer?.trim() || null;
 
-  const db = canesDb();
-  if (patch.items !== undefined) {
-    const lines = normalizeLines(patch.items);
-    if (!lines) return { ok: false, notice: "A plan needs at least one priced service." };
-    const { error: del } = await db.from("recurring_plan_items").delete().eq("plan_id", planId);
-    if (del) return { ok: false, notice: del.message };
-    const { error: ins } = await db.from("recurring_plan_items").insert(lines.map((l) => ({ ...l, plan_id: planId })));
-    if (ins) return { ok: false, notice: ins.message };
-    update.price_per_visit_cents = lines.reduce((s, l) => s + l.line_total_cents, 0);
-  }
-  const { data, error } = await db.from("recurring_plans").update(update).eq("id", planId).select("id");
-  if (error) return { ok: false, notice: error.message };
-  if (!data?.length) return { ok: false, notice: "This plan just changed — refresh and try again." };
+  const lines = patch.items === undefined ? null : normalizeLines(patch.items);
+  if (patch.items !== undefined && !lines) return {ok:false,notice:"A plan needs valid priced services."};
+  if (lines) update.price_per_visit_cents = lines.reduce((sum,line)=>sum+line.line_total_cents,0);
+  const {data,error}=await canesDb().rpc("edit_canes_repeat_plan",{p_id:planId,p_updated:plan.updated_at,p_patch:update,p_items:lines});
+  if (error || data !== "saved") return {ok:false,notice:"The plan changed or its services could not be saved. Refresh and try again."};
   return { ok: true };
 }
 
@@ -483,6 +446,7 @@ async function activate(plan: RecurringPlan, signature: string, source: "custome
     })
     .eq("id", plan.id)
     .eq("status", plan.status)
+    .eq("updated_at", plan.updated_at)
     .select("id");
   if (error) return { ok: false, notice: error.message };
   if (!data?.length) return { ok: false, notice: "This plan just changed — refresh and try again." };
@@ -492,20 +456,21 @@ async function activate(plan: RecurringPlan, signature: string, source: "custome
 export async function agreePlanInPerson(planId: string): Promise<PlanResult> {
   const plan = await getPlan(planId);
   if (!plan) return { ok: false, notice: "Plan not found." };
-  if (plan.status === "active") return { ok: true, notice: "This plan is already active." };
-  if (plan.status !== "draft") return { ok: false, notice: `A ${plan.status} plan can't be agreed again.` };
+  if (plan.status === "active" && plan.signed_at) return { ok: true, notice: "This agreement is already signed." };
+  if (!["draft", "active"].includes(plan.status)) return { ok: false, notice: `A ${plan.status} plan cannot be agreed again.` };
   if (plan.price_per_visit_cents <= 0) return { ok: false, notice: "Add a priced service before activating the plan." };
   return activate(plan, `${plan.customer_name ?? "Customer"} (agreed in person)`, "in_person");
 }
 
 // Public, token-scoped — called from /CanesPressure/r/[token] with no session.
-export async function signPlan(token: string, signatureName: string): Promise<PlanResult> {
+export async function signPlan(token: string, signatureName: string, expectedUpdatedAt: string): Promise<PlanResult> {
   const plan = await getPlanByToken(token);
   if (!plan) return { ok: false, notice: "This agreement link isn't valid." };
+  if (plan.updated_at !== expectedUpdatedAt) return {ok:false,notice:"This agreement changed. Refresh and review it before signing."};
   const signature = signatureName.trim();
   if (signature.length < 2) return { ok: false, notice: "Type your full name to sign." };
-  if (plan.status === "active") return { ok: true, notice: "This agreement is already signed." };
-  if (plan.status !== "draft") return { ok: false, notice: "This agreement is no longer open." };
+  if (plan.status === "active" && plan.signed_at) return { ok: true, notice: "This agreement is already signed." };
+  if (!["draft", "active"].includes(plan.status)) return { ok: false, notice: "This agreement is no longer open." };
   return activate(plan, signature, "customer");
 }
 
@@ -553,7 +518,8 @@ export async function resumePlan(planId: string, nextDueOn?: string): Promise<Pl
     .select("id");
   if (error) return { ok: false, notice: error.message };
   if (!data?.length) return { ok: false, notice: "This plan just changed — refresh and try again." };
-  return { ok: true, notice: `Resumed. Next visit due ${next}.` };
+  const scheduled = await canesDb().rpc("mint_scheduled_plan_visit", { p_plan_id: planId });
+  return { ok: true, notice: scheduled.error ? "Resumed. The next visit needs scheduling recovery; refresh the calendar before booking." : `Resumed. Next visit due ${next}.` };
 }
 
 // The next visit already minted but not yet done: what the cancellation fee is
@@ -563,6 +529,8 @@ export async function nextOpenVisit(planId: string): Promise<Job | null> {
     .from("jobs")
     .select("*")
     .eq("plan_id", planId)
+    .is("archived_at",null)
+    .or(`scheduled_at.is.null,scheduled_at.gt.${new Date().toISOString()}`)
     .in("status", ["unscheduled", "scheduled", "confirmed"])
     .order("plan_visit_due_on", { ascending: true })
     .limit(1)
@@ -581,14 +549,15 @@ export async function cancelPlan(
   if (!plan) return { ok: false, notice: "Plan not found." };
   if (plan.status === "canceled") return { ok: true, notice: "This plan is already canceled.", feeCents: 0, feeApplies: false };
   const open = await nextOpenVisit(planId);
-  const feeCents = planCancellationFeeCents(plan);
+  const signed=plan.signed_at?await getSignedPlanVersion(planId):null;
+  const feeCents = signed?planCancellationFeeCents(signed):0;
   // The contract term: a fee when the next visit is already on the books
   // (scheduled). notice_days = 0 means it applies to any such cancel; a
   // positive value waives it when the cancel comes that many days ahead.
   let feeApplies = false;
   if (open?.scheduled_at && feeCents > 0) {
     const daysOut = Math.floor((Date.parse(open.scheduled_at) - Date.now()) / 86_400_000);
-    feeApplies = plan.notice_days === 0 || daysOut < plan.notice_days;
+    feeApplies = !!signed && (signed.notice_days === 0 || daysOut < signed.notice_days);
   }
   const now = new Date().toISOString();
   const db = canesDb();
@@ -617,101 +586,28 @@ export async function recordPlanFeeInvoice(planId: string, invoiceId: string): P
 
 // ── The generator (cron) ─────────────────────────────────────────────────────
 //
-// For every active plan whose next visit falls within lead_days of today (ET),
-// mint that visit as an unscheduled job — the owner books the actual slot from
-// Work orders — and advance the plan's clock. Idempotent two ways: the plan's
-// last_generated_for is checked, and jobs_plan_visit_idx refuses a duplicate
-// (plan_id, plan_visit_due_on) outright, so a cron retry after a half-run
-// cannot create a second visit.
+// The database advances each schedule and creates its next future visit atomically.
 export async function generateDueVisits(): Promise<{ minted: number; skipped: number; errors: string[] }> {
   if (!canesConfigured()) return { minted: 0, skipped: 0, errors: [] };
   const db = canesDb();
-  const today = todayEtKey();
-  const { data, error } = await db
-    .from("recurring_plans")
-    .select("*")
-    .eq("status", "active")
-    .not("next_due_on", "is", null)
-    .limit(500);
-  if (error) return { minted: 0, skipped: 0, errors: [`plans: ${error.message}`] };
-  let minted = 0;
-  let skipped = 0;
-  const errors: string[] = [];
-  for (const plan of (data ?? []) as RecurringPlan[]) {
-    const due = plan.next_due_on as string;
-    if (addDays(due, -plan.lead_days) > today) continue; // not yet inside the window
-    if (plan.last_generated_for && plan.last_generated_for >= due) {
-      // Clock never advanced after a mint — repair it rather than re-mint.
-      await db.from("recurring_plans").update({ next_due_on: addCadence(due, plan.cadence) }).eq("id", plan.id);
-      skipped += 1;
-      continue;
-    }
-    const items = await listPlanItems(plan.id);
-    const { data: job, error: insert } = await db
-      .from("jobs")
-      .insert({
-        estimate_id: null,
-        lead_id: null,
-        contact_id: plan.contact_id,
-        plan_id: plan.id,
-        plan_visit_due_on: due,
-        status: "unscheduled",
-        customer_name: plan.customer_name,
-        customer_phone: plan.customer_phone,
-        customer_email: plan.customer_email,
-        job_name: plan.job_name ?? `${PLAN_CADENCE_LABEL[plan.cadence]} service`,
-        job_address: plan.job_address,
-        total_cents: plan.price_per_visit_cents,
-        deposit_cents: 0,
-        scheduled_at: null,
-        ends_at: null,
-        duration_minutes: 120,
-        recurrence: "none",
-        notes: `Visit due ${due} · ${plan.number} (${PLAN_CADENCE_LABEL[plan.cadence].toLowerCase()})`,
-      })
-      .select("id")
-      .single();
-    if (insert) {
-      // 23505 = the partial unique index: the visit exists already. Advance and move on.
-      if (insert.code === "23505") {
-        await db
-          .from("recurring_plans")
-          .update({ last_generated_for: due, next_due_on: addCadence(due, plan.cadence), updated_at: new Date().toISOString() })
-          .eq("id", plan.id);
-        skipped += 1;
-        continue;
-      }
-      errors.push(`${plan.number}: ${insert.message}`);
-      continue;
-    }
-    if (items.length > 0) {
-      await db.from("job_items").insert(
-        items.map((it, index) => ({
-          job_id: job.id,
-          position: index,
-          name: it.name,
-          description: it.description,
-          quantity: it.quantity,
-          line_total_cents: it.line_total_cents,
-        })),
-      );
-    } else {
-      await db.from("job_items").insert({
-        job_id: job.id,
-        position: 0,
-        name: plan.job_name ?? "Service",
-        quantity: 1,
-        line_total_cents: plan.price_per_visit_cents,
-      });
-    }
-    await db
-      .from("recurring_plans")
-      .update({ last_generated_for: due, next_due_on: addCadence(due, plan.cadence), updated_at: new Date().toISOString() })
-      .eq("id", plan.id);
-    minted += 1;
+  const { data, error } = await db.from("recurring_plans").select("id").eq("status", "active").eq("scheduling_enabled", true).limit(500);
+  if (error) return { minted: 0, skipped: 0, errors: ["Repeat schedules could not be loaded."] };
+  const result = { minted: 0, skipped: 0, errors: [] as string[] };
+  for (const plan of data ?? []) {
+    const response = await db.rpc("mint_scheduled_plan_visit", { p_plan_id: plan.id });
+    if (response.error) result.errors.push(`The next visit for ${plan.id} could not be scheduled.`);
+    else if (response.data?.[0]?.job_id) result.minted++;
+    else result.skipped++;
   }
-  return { minted, skipped, errors };
+  return result;
 }
 
 // A visit's due date as an ET instant (noon), for anything that needs one.
 export const dueInstant = (dateKey: string): string => etLocalToIso(`${dateKey}T12:00`);
+
+export async function getSignedPlanVersion(planId: string): Promise<RecurringPlanWithItems | null> {
+  if (isDemo()) return null;
+  const {data,error}=await canesDb().from("recurring_agreement_versions").select("snapshot").eq("plan_id",planId).order("signed_at",{ascending:false}).limit(1).maybeSingle();
+  if(error) throw new Error("The signed agreement could not be loaded.");
+  return data?.snapshot as RecurringPlanWithItems | null ?? null;
+}

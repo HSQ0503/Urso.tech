@@ -1,8 +1,13 @@
 import type {
   Agenda,
+  DocumentEdit,
+  DocumentChange,
+  DocumentKind,
   BusinessExpense,
+  ExpenseLedger,
   Call,
   CalendarEventKind,
+  CalendarEvent,
   CanesSettings,
   Crew,
   CrewAccountRole,
@@ -218,6 +223,8 @@ export type OwnerInsights = {
   methodShare: { cash: number; card: number; other: number };
   expensesCents: number;
   marginCents: number;
+  operatingExpensesCents?: number;
+  netProfitCents?: number;
   topServices: { name: string; cents: number; count: number }[];
   funnel: { label: string; count: number }[];
   revenueByCrew: {
@@ -274,6 +281,7 @@ export const owner = {
   // The route takes (from, days) — it used to be sent a `to` it ignored, so
   // every window silently came back as seven days regardless of what the
   // screen asked for. The month grid asks for 42.
+  calendarEvents: (fromIso: string, days: number) => request<CalendarEvent[]>(`/canes/calendar-events?from=${encodeURIComponent(fromIso)}&days=${days}`),
   scheduleBoard: (fromIso: string, days: number) =>
     request<unknown>(
       `/canes/schedule/board?from=${encodeURIComponent(fromIso)}&days=${encodeURIComponent(String(days))}`,
@@ -296,6 +304,7 @@ export const owner = {
   // price from memory.
   catalog: () => request<CatalogItem[]>("/canes/catalog"),
   expenses: () => request<BusinessExpense[]>("/canes/expenses"),
+  expenseLedger: () => request<ExpenseLedger>("/canes/expenses/ledger"),
   payouts: (range: "day" | "week" | "month" | "year") =>
     request<PayoutSummary>(`/canes/payouts?range=${range}`),
   insights: (range: InsightsRange) =>
@@ -414,6 +423,7 @@ export const calendarEventActions = {
 };
 
 export const expenseActions = {
+  ledger: (input: Record<string, unknown>) => act<{notice?: string}>("/canes/expenses/ledger", input),
   addBusiness: (input: {
     name: string;
     amountCents: number;
@@ -421,6 +431,8 @@ export const expenseActions = {
     recurring: boolean;
     frequency: string;
     note?: string;
+    incurredOn?: string;
+    endsOn?: string | null;
   }) => act("/canes/expenses", { action: "addBusiness", ...input }),
   deleteBusiness: (id: string) => act("/canes/expenses", { action: "deleteBusiness", id }),
 };
@@ -531,6 +543,7 @@ export const customerActions = {
 };
 
 export const jobActions = {
+  moveFuture: (id: string, scheduledIso: string, durationMinutes: number, crewId: string | null) => act(`/canes/jobs/${id}/actions`, {action:"moveFuture",scheduledIso,durationMinutes,crewId}),
   // crewId is REQUIRED and explicitly nullable on schedule: the action has no
   // "keep the crew" value here, so an absent key would quietly unassign. `move`
   // is the one that can leave the crew alone by omitting it.
@@ -580,6 +593,7 @@ export const jobActions = {
 };
 
 export type InvoiceLineInput = {
+  discountMode?: "amount" | "percent"; discountValue?: number; taxable?: boolean;
   name: string;
   description?: string | null;
   quantity: number;
@@ -643,6 +657,7 @@ export const invoiceActions = {
 };
 
 export type EstimateLineInput = {
+  discountMode?: "amount" | "percent"; discountValue?: number;
   catalogId?: string | null;
   name: string;
   description?: string | null;
@@ -746,6 +761,7 @@ export type PlanPatchInput = {
   cadence?: PlanCadence;
   startsOn?: string;
   nextDueOn?: string;
+  repeatTime?: string;
   leadDays?: number;
   noticeDays?: number;
   messageToCustomer?: string | null;
@@ -754,12 +770,13 @@ export type PlanPatchInput = {
 type PlanCreated = { planId?: string; notice?: string };
 
 export const recurringActions = {
-  createFromEstimate: (estimateId: string, cadence: PlanCadence, startsOn: string) =>
-    act<PlanCreated>("/canes/recurring", { action: "createFromEstimate", estimateId, cadence, startsOn }),
-  createFromInvoice: (invoiceId: string, cadence: PlanCadence, startsOn: string) =>
-    act<PlanCreated>("/canes/recurring", { action: "createFromInvoice", invoiceId, cadence, startsOn }),
-  createFromJob: (jobId: string, cadence: PlanCadence, startsOn: string) =>
-    act<PlanCreated>("/canes/recurring", { action: "createFromJob", jobId, cadence, startsOn }),
+  configure: (id: string,input: {startsOn:string;repeatTime:string;cadence:PlanCadence;durationMinutes:number;crewId:string|null}) => act<{notice?:string}>(`/canes/recurring/${id}/actions`,{action:"configure",...input}),
+  createFromEstimate: (estimateId: string, cadence: PlanCadence, startsOn: string, repeatTime?: string) =>
+    act<PlanCreated>("/canes/recurring", { action: "createFromEstimate", estimateId, cadence, startsOn, repeatTime }),
+  createFromInvoice: (invoiceId: string, cadence: PlanCadence, startsOn: string, repeatTime?: string) =>
+    act<PlanCreated>("/canes/recurring", { action: "createFromInvoice", invoiceId, cadence, startsOn, repeatTime }),
+  createFromJob: (jobId: string, cadence: PlanCadence, startsOn: string, repeatTime?: string) =>
+    act<PlanCreated>("/canes/recurring", { action: "createFromJob", jobId, cadence, startsOn, repeatTime }),
   create: (input: {
     contactId?: string | null;
     customerName: string;
@@ -769,6 +786,7 @@ export const recurringActions = {
     jobName?: string | null;
     cadence: PlanCadence;
     startsOn: string;
+    repeatTime?: string;
     items: PlanLineInput[];
   }) => act<PlanCreated>("/canes/recurring", { action: "create", input }),
   update: (id: string, patch: PlanPatchInput) =>
@@ -784,4 +802,15 @@ export const recurringActions = {
       `/canes/recurring/${id}/actions`,
       { action: "cancel", ...opts },
     ),
+};
+
+export const documentActions = {
+  archives: () => request<{kind: DocumentKind;id:string;label:string;archivedAt:string}[]>("/canes/archives"),
+  restore: (kind:DocumentKind,id:string) => act<{notice?:string}>("/canes/archives",{kind,id}),
+  credits: (id: string) => request<{id: string; number: string; availableCents: number}[]>(`/canes/documents/invoice/${id}?view=credits`),
+  load: (kind: DocumentKind, id: string) => request<DocumentEdit>(`/canes/documents/${kind}/${id}`),
+  revise: (kind: DocumentKind,id: string,change: DocumentChange) => act<{notice: string}>(`/canes/documents/${kind}/${id}`,{action:"revise",change}),
+  decline: (id: string) => act<{notice?: string}>(`/canes/documents/estimate/${id}`,{action:"decline"}),
+  refund: (invoiceId: string,paymentId: string,amountCents: number,requestKey: string) => act<{notice?: string}>(`/canes/documents/invoice/${invoiceId}`,{action:"refund",paymentId,amountCents,requestKey}),
+  credit: (invoiceId: string,sourceId: string,amountCents: number,requestKey: string) => act<{notice?: string}>(`/canes/documents/invoice/${invoiceId}`,{action:"credit",sourceId,amountCents,requestKey}),
 };

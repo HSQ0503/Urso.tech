@@ -13,8 +13,7 @@
 //
 // Three objects share the board: JOBS (sold work), QUOTE VISITS (a lead with
 // an appointment — tappable, offering what the web's VisitSheet offers), and
-// CALENDAR EVENTS (time off, blocks, holidays), which this screen can create
-// but does not yet draw — see the note over calendarEventCreate.
+// CALENDAR EVENTS (time off, blocks, holidays).
 //
 // EVERY timestamp is America/New_York. Days are derived with fmtEt and ET wall
 // times with etLocalToIso; no local calendar method is ever read, or a phone
@@ -47,6 +46,7 @@ import {
   JOB_STATUS_LABEL,
   STATUS_LABEL,
   type CalendarEventKind,
+  type CalendarEvent,
   type Crew,
   type JobStatus,
   type Lead,
@@ -56,7 +56,7 @@ import { calendarEventActions, callActions, estimateActions } from "@/api";
 import { NavigateButton } from "@/components/navigate";
 import { Notice } from "@/components/notice";
 import { isCompleteWhen, SlotPicker } from "@/components/slot-picker";
-import { keys, useCrews, useLeads, useScheduleBoard } from "@/queries";
+import { keys, useCalendarEvents, useCrews, useLeads, useScheduleBoard } from "@/queries";
 import { noticeFrom, useAction, usePullToRefresh, useRefetchOnFocus } from "@/query";
 import { color, font, HIT, radius, space, type } from "@/theme";
 
@@ -87,6 +87,7 @@ type BoardJob = {
   ends_at: string | null;
   crew_id: string | null;
   total_cents: number;
+  scheduling_conflict?: boolean;
 };
 
 // A lead narrowed to the shape a visit row can rely on.
@@ -110,6 +111,7 @@ type MonthWindow = {
 type Row =
   | { kind: "job"; key: string; job: BoardJob; crewName: string | null }
   | { kind: "visit"; key: string; visit: Visit }
+  | { kind: "event"; key: string; event: CalendarEvent }
   | { kind: "calm"; key: string; text: string };
 
 // fmtEt formats en-US, so 2-digit parts arrive as MM/DD/YYYY. Reordered here
@@ -308,14 +310,7 @@ function CreateEventSheet({
       setNotice(r.notice);
       return;
     }
-    // The sheet deliberately stays open. This board reads JOBS — there is no
-    // calendar-events read on the phone yet — so closing on success would leave
-    // him staring at a week that looks exactly as it did before, with nothing to
-    // show the block exists. The sentence is the only evidence there is.
-    setGood(
-      successNotice(r.data) ??
-        "Event created. It won't appear on this board yet — the phone reads jobs, not blocks.",
-    );
+    setGood(successNotice(r.data) ?? "Event created. It is now on the calendar.");
     setTitle("");
     setNotes("");
   };
@@ -732,6 +727,7 @@ function JobRow({
       <Text style={styles.address} numberOfLines={1}>
         {job.job_address ?? "Address pending"}
       </Text>
+      {job.scheduling_conflict?<Text style={{color:color.danger}}>Crew overlap — review this time</Text>:null}
       <View style={styles.rowMeta}>
         {/* Green only where green MEANS something. Rendering every status in the
             sold-job colour made the chip pure decoration: a job in progress and
@@ -798,7 +794,7 @@ function VisitRow({ visit, onPress }: { visit: Visit; onPress: () => void }) {
 
 // ── Month grid ───────────────────────────────────────────────────────────────
 
-type DayMarks = { jobs: number; visits: number; cents: number };
+type DayMarks = { jobs: number; visits: number; events: number; cents: number };
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -867,6 +863,7 @@ function MonthGrid({
                 </Text>
                 <View style={styles.dots}>
                   {mark && mark.jobs > 0 ? <View style={[styles.dot, styles.dotJob, selected && styles.dotOn]} /> : null}
+                  {mark && mark.events > 0 ? <View style={[styles.dot,{backgroundColor:color.muted}]} /> : null}
                   {mark && mark.visits > 0 ? <View style={[styles.dot, styles.dotVisit, selected && styles.dotOn]} /> : null}
                 </View>
                 <Text style={[styles.cellMoney, selected && styles.cellInkOn]} numberOfLines={1}>
@@ -935,6 +932,8 @@ export default function ScheduleScreen(): React.ReactElement {
   // One read covers the whole grid (42 days — inside the route's 92-day cap), so
   // tapping around the month is instant and offline-friendly.
   const boardQuery = useScheduleBoard(win.fromIso, win.days);
+  const eventsQuery = useCalendarEvents(win.fromIso,win.days);
+  useRefetchOnFocus(eventsQuery.refetch);
   const crewsQuery = useCrews();
   // Quote visits are leads with an appointment. Gated on `leads`, NOT on
   // `schedule` — an account with the board but not the pipeline gets a refusal
@@ -947,7 +946,7 @@ export default function ScheduleScreen(): React.ReactElement {
 
   const { refreshing, onRefresh } = usePullToRefresh(() => {
     rollWindow();
-    return Promise.all([boardQuery.refetch(), crewsQuery.refetch(), leadsQuery.refetch()]);
+    return Promise.all([boardQuery.refetch(), crewsQuery.refetch(), leadsQuery.refetch(), eventsQuery.refetch()]);
   });
 
   const board = useMemo(
@@ -961,11 +960,11 @@ export default function ScheduleScreen(): React.ReactElement {
   );
   const crewsNotice = noticeFrom(crewsQuery.error);
   const notices = useMemo(() => {
-    const failures = [boardQuery.error, crewsQuery.error, leadsQuery.error]
+    const failures = [boardQuery.error, crewsQuery.error, leadsQuery.error, eventsQuery.error]
       .map(noticeFrom)
       .filter((notice): notice is string => notice !== null);
     return [...new Set(failures)];
-  }, [boardQuery.error, crewsQuery.error, leadsQuery.error]);
+  }, [boardQuery.error, crewsQuery.error, leadsQuery.error, eventsQuery.error]);
 
   const gridKeys = useMemo(() => new Set(win.cells.map((c) => c.key)), [win.cells]);
 
@@ -986,7 +985,7 @@ export default function ScheduleScreen(): React.ReactElement {
     const at = (key: string) => {
       const existing = map.get(key);
       if (existing) return existing;
-      const fresh = { jobs: 0, visits: 0, cents: 0 };
+      const fresh = { jobs: 0, visits: 0, events: 0, cents: 0 };
       map.set(key, fresh);
       return fresh;
     };
@@ -997,8 +996,9 @@ export default function ScheduleScreen(): React.ReactElement {
       mark.cents += job.total_cents;
     }
     for (const visit of visits) at(etDateKey(visit.appointment_at)).visits += 1;
+    for (const cell of win.cells) for (const event of eventsQuery.data??[]) if (event.starts_at<etLocalToIso(`${nextDayKey(cell.key)}T00:00`) && event.ends_at>etLocalToIso(`${cell.key}T00:00`)) at(cell.key).events+=1;
     return map;
-  }, [board, visits]);
+  }, [board, visits, eventsQuery.data, win.cells]);
 
   // The selected day, interleaved by clock time — the order he will physically
   // drive it, which is the only order that helps from a truck.
@@ -1017,14 +1017,15 @@ export default function ScheduleScreen(): React.ReactElement {
     const dayVisits = visits
       .filter((visit) => etDateKey(visit.appointment_at) === selectedKey)
       .map((visit) => ({ at: visit.appointment_at, row: { kind: "visit" as const, key: `visit-${visit.id}`, visit } }));
-    const entries = [...dayJobs, ...dayVisits]
+    const dayEvents=(eventsQuery.data??[]).filter(event=>event.starts_at<etLocalToIso(`${nextDayKey(selectedKey)}T00:00`) && event.ends_at>etLocalToIso(`${selectedKey}T00:00`)).map(event=>({at:event.starts_at,row:{kind:"event" as const,key:`event-${event.id}`,event}}));
+    const entries = [...dayJobs, ...dayVisits, ...dayEvents]
       .sort((a, b) => Date.parse(a.at) - Date.parse(b.at))
       .map((entry) => entry.row);
     if (entries.length === 0) {
       return [{ kind: "calm", key: "calm-day", text: "Nothing booked for this day." }];
     }
     return entries;
-  }, [board, visits, selectedKey, crewNames]);
+  }, [board, visits, selectedKey, crewNames, eventsQuery.data]);
 
   const dayCents = marks.get(selectedKey)?.cents ?? 0;
 
@@ -1212,6 +1213,7 @@ export default function ScheduleScreen(): React.ReactElement {
           </View>
         }
         renderItem={({ item }) => {
+          if (item.kind === "event") return <View style={styles.row}><Text style={styles.time}>{item.event.all_day?"All day":fmtEtTimeRange(item.event.starts_at,item.event.ends_at)}</Text><Text style={styles.customerLead}>{item.event.title}</Text><Text style={styles.address}>{item.event.kind.replace("_"," ")}{item.event.notes?` · ${item.event.notes}`:""}</Text></View>;
           if (item.kind === "calm") return <Text style={styles.calm}>{item.text}</Text>;
           if (item.kind === "visit") return <VisitRow visit={item.visit} onPress={() => setVisitId(item.visit.id)} />;
           return <JobRow job={item.job} crewName={item.crewName} onPress={() => openJob(item.job.id)} />;

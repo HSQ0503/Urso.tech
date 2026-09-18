@@ -31,7 +31,6 @@ import { noticeFrom, useAction } from "@/query";
 import { color, font, HIT, radius, space } from "@/theme";
 
 type ItemCategory = "service" | "material" | "product";
-type MoneyMode = "percent" | "amount";
 type CustomerSection = { title: string; data: CustomerSummary[] };
 type DraftLine = {
   key: string;
@@ -40,6 +39,7 @@ type DraftLine = {
   description: string | null;
   quantityText: string;
   priceText: string;
+  discountText?: string; discountMode?: "amount" | "percent";
 };
 
 function dollarsToCents(value: string): number {
@@ -56,8 +56,12 @@ function quantity(value: string): number {
   return Number.isFinite(amount) && amount > 0 ? amount : 1;
 }
 
+function lineDiscount(line: DraftLine): number {
+  const value = line.discountText === undefined ? 0 : dollarsToCents(line.discountText);
+  return line.discountMode === "percent" ? Math.round(Math.round(quantity(line.quantityText) * dollarsToCents(line.priceText)) * value / 10000) : value;
+}
 function lineTotal(line: DraftLine): number {
-  return Math.round(quantity(line.quantityText) * dollarsToCents(line.priceText));
+  return Math.round(quantity(line.quantityText) * dollarsToCents(line.priceText)) - lineDiscount(line);
 }
 
 function newKey(): string {
@@ -72,6 +76,8 @@ function fromInvoiceItem(item: InvoiceItem): DraftLine {
     description: item.description,
     quantityText: String(item.quantity),
     priceText: centsToDollars(item.unit_price_cents),
+    discountMode: item.discount_mode ?? "amount",
+    discountText: centsToDollars(item.discount_value ?? item.discount_cents ?? 0),
   };
 }
 
@@ -152,46 +158,17 @@ function LineEditor({
           <Text style={styles.lineAmount}>{fmtMoney(lineTotal(line))}</Text>
         </View>
       </View>
-    </View>
-  );
-}
-
-function ModeControl({
-  title,
-  mode,
-  value,
-  onMode,
-  onValue,
-  addLabel,
-}: {
-  title: string;
-  mode: MoneyMode;
-  value: string;
-  onMode: (mode: MoneyMode) => void;
-  onValue: (value: string) => void;
-  addLabel?: string;
-}) {
-  return (
-    <View style={styles.modeSection}>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      <View style={styles.modeRow}>
-        <Pressable accessibilityRole="button" accessibilityState={{ selected: mode === "percent" }} onPress={() => onMode("percent")} style={[styles.modeButton, mode === "percent" && styles.modeButtonOn]}>
-          <Text style={[styles.modeText, mode === "percent" && styles.modeTextOn]}>%</Text>
-        </Pressable>
-        <Pressable accessibilityRole="button" accessibilityState={{ selected: mode === "amount" }} onPress={() => onMode("amount")} style={[styles.modeButton, mode === "amount" && styles.modeButtonOn]}>
-          <Text style={[styles.modeText, mode === "amount" && styles.modeTextOn]}>$</Text>
-        </Pressable>
-        {addLabel ? (
-          <Pressable accessibilityRole="button" onPress={() => undefined} style={[styles.modeButton, styles.modeButtonOn]}><Text style={styles.modeAdd}>{addLabel}</Text></Pressable>
-        ) : (
-          <TextInput value={value} onChangeText={onValue} keyboardType="decimal-pad" accessibilityLabel={`${title} value`} style={styles.modeInput} />
-        )}
-      </View>
+      <View style={{flexDirection:"row",alignItems:"center",gap:8,paddingTop:8}}><Pressable accessibilityRole="button" accessibilityLabel="Discount type" onPress={()=>onChange({discountMode:line.discountMode==="percent"?"amount":"percent"})} style={{minHeight:48,minWidth:60,justifyContent:"center"}}><Text style={{color:color.brandDeep}}>Discount {line.discountMode==="percent"?"%":"$"}</Text></Pressable><TextInput accessibilityLabel="Line discount" keyboardType="decimal-pad" value={line.discountText??"0"} onChangeText={discountText=>onChange({discountText})} style={{minHeight:48,flex:1,color:color.ink,borderWidth:1,borderColor:color.lineStrong,padding:8}}/></View>
     </View>
   );
 }
 
 export default function InvoiceComposerScreen(): React.ReactElement {
+  const params = useLocalSearchParams<{ id?: string; draftKey?: string; contactId?: string }>();
+  return <InvoiceComposer key={params.id ?? `${params.draftKey ?? "new"}:${params.contactId ?? ""}`} />;
+}
+
+function InvoiceComposer(): React.ReactElement {
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ id?: string; contactId?: string; name?: string; phone?: string }>();
   const editId = typeof params.id === "string" ? params.id : null;
@@ -212,9 +189,6 @@ export default function InvoiceComposerScreen(): React.ReactElement {
   const [adjustmentText, setAdjustmentText] = useState("0.00");
   const [message, setMessage] = useState("");
   const [terms, setTerms] = useState("");
-  const [depositMode, setDepositMode] = useState<MoneyMode>("amount");
-  const [depositValue, setDepositValue] = useState("");
-  const [scheduleMode, setScheduleMode] = useState<MoneyMode>("amount");
   const [notice, setNotice] = useState<string | null>(null);
   const [seeded, setSeeded] = useState(false);
   const [createdId, setCreatedId] = useState<string | null>(null);
@@ -278,6 +252,7 @@ export default function InvoiceComposerScreen(): React.ReactElement {
       description: line.description,
       quantity: quantity(line.quantityText),
       unitPriceCents: Math.max(0, dollarsToCents(line.priceText)),
+      discountMode: line.discountMode ?? "amount", discountValue: dollarsToCents(line.discountText ?? "0"),
     }));
 
   const create = useAction((input: Parameters<typeof invoiceActions.createManual>[0]) => invoiceActions.createManual(input), { invalidates: [keys.invoices(), keys.customers.all()] });
@@ -426,11 +401,8 @@ export default function InvoiceComposerScreen(): React.ReactElement {
           <View style={styles.totalRow}><Text style={styles.grandLabel}>Grand Total:</Text><Text style={styles.grandValue}>{fmtMoney(grandTotal)}</Text></View>
         </View>
 
-        <ModeControl title="Request a Deposit" mode={depositMode} value={depositValue} onMode={setDepositMode} onValue={setDepositValue} />
-        <ModeControl title="Payment Schedule" mode={scheduleMode} value="" onMode={setScheduleMode} onValue={() => undefined} addLabel="ADD" />
 
         <View style={styles.textFields}>
-          <TextInput value={invoice?.job_id ?? ""} editable={false} placeholder="Work Order #" placeholderTextColor={color.muted} accessibilityLabel="Work order number" style={styles.underlinedInput} />
           <TextInput value={jobName} onChangeText={setJobName} placeholder="Job Name" placeholderTextColor={color.muted} accessibilityLabel="Job name" style={styles.underlinedInput} />
         </View>
 
@@ -441,12 +413,6 @@ export default function InvoiceComposerScreen(): React.ReactElement {
           <TextInput value={terms} onChangeText={setTerms} multiline accessibilityLabel="Terms and conditions" style={styles.copyInput} />
         </View>
 
-        <View style={styles.attachBlock}>
-          <Text style={styles.sectionTitle}>Attach Photos</Text>
-          <Pressable accessibilityRole="button" accessibilityLabel="Upload invoice photos" onPress={() => Alert.alert("Attach photos", "Photos stay with the work order in Urso. Create the invoice, then add photos from its linked job.")} style={styles.uploadButton}>
-            <Feather name="upload" size={24} color={color.surface} /><Text style={styles.uploadText}>UPLOAD</Text>
-          </Pressable>
-        </View>
       </ScrollView>
 
       <Modal visible={customerOpen} animationType="slide" onRequestClose={() => setCustomerOpen(false)}>

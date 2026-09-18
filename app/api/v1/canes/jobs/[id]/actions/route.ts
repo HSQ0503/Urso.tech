@@ -1,3 +1,4 @@
+import { moveThisAndFuture } from "@/app/CanesPressure/repeat-actions";
 import { apiFail, apiResult, apiRoute, isCents, isIsoInstant, isPaymentMethod } from "@/lib/api/v1";
 import {
   scheduleJob,
@@ -77,6 +78,10 @@ export const POST = apiRoute<{ id: string }>(async ({ req, params }) => {
   const id = params.id;
 
   switch (body.action) {
+    case "moveFuture": {
+      if (!isIsoInstant(body.scheduledIso) || typeof body.durationMinutes !== "number" || (body.crewId !== null && typeof body.crewId !== "string")) return apiFail("Choose a valid time, duration, and crew.",422);
+      return apiResult(await moveThisAndFuture(id,body.scheduledIso,body.durationMinutes,body.crewId));
+    }
     case "schedule": {
       // scheduleJob parses this itself and refuses NaN with "Invalid date.", but
       // `new Date()` accepts far more than an instant: "3" and "tomorrow at 3"

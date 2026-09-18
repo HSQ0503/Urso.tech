@@ -162,18 +162,18 @@ export async function pushEstimateApproved(input: {
 }) {
   const { data: estimate, error } = await canesDb()
     .from("estimates")
-    .select("status, approved_at")
+    .select("status, approved_at, revision")
     .eq("id", input.estimateId)
     .maybeSingle();
   if (error) throw new Error(`pushEstimateApproved state: ${error.message}`);
   if (!estimate) throw new Error(`pushEstimateApproved state: estimate ${input.estimateId} not found`);
   return ownerPush({
-    dedupeKey: `estimate_approved:${input.estimateId}`,
+    dedupeKey: `estimate_approved:${input.estimateId}${estimate.revision > 1 ? `:r${estimate.revision}` : ""}`,
     eventType: "estimate_approved",
     urgency: "active",
     title: "Estimate approved",
     body: `${displayName(input.customerName)} approved ${input.estimateNumber}.`,
-    href: input.jobId ? `/(owner)/job/${input.jobId}` : `/(owner)/estimate/${input.estimateId}`,
+    href: `/(owner)/estimate/${input.estimateId}`,
     entityId: input.jobId ?? input.estimateId,
     state: {
       estimateId: input.estimateId,

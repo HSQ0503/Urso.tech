@@ -1,7 +1,9 @@
+import { PaymentLedger } from "@/app/CanesPressure/components/expenses/payment-ledger";
+import { getExpenseLedger } from "@/lib/canes/expense-ledger";
 import Link from "next/link";
 import { Receipt } from "lucide-react";
 import { requireOwnerPage } from "@/lib/canes/access";
-import { listBusinessExpenses, monthlyEquivalentCents } from "@/lib/canes/overhead";
+import { listBusinessExpenses } from "@/lib/canes/overhead";
 import { listJobExpensesInRange } from "@/lib/canes/expenses";
 import { listJobs } from "@/lib/canes/estimates";
 import { fmtEt, fmtMoney, type Job, type JobExpense } from "@/lib/canes/types";
@@ -62,6 +64,7 @@ function StatTile({ label, value, sub }: { label: string; value: string; sub: st
 
 export default async function ExpensesPage() {
   await requireOwnerPage();
+  const ledger = await getExpenseLedger();
   const now = new Date();
   const endIso = now.toISOString();
   const startIso = new Date(now.getTime() - JOB_WINDOW_DAYS * 86_400_000).toISOString();
@@ -72,8 +75,9 @@ export default async function ExpensesPage() {
     listJobs(),
   ]);
 
-  const monthlyOverheadCents = businessExpenses.reduce((sum, e) => sum + monthlyEquivalentCents(e), 0);
-  const recurringCount = businessExpenses.filter((e) => e.recurring).length;
+  const todayEt = new Intl.DateTimeFormat("en-CA",{timeZone:"America/New_York"}).format(now);
+  const monthlyOverheadCents = ledger.rules.filter(rule => rule.active && (!rule.ends_on || rule.ends_on >= todayEt)).reduce((sum, rule) => sum + (rule.frequency === "yearly" ? Math.round(rule.amount_cents / 12) : rule.amount_cents), 0);
+  const recurringCount = ledger.rules.filter(rule => rule.active && (!rule.ends_on || rule.ends_on >= todayEt)).length;
 
   const jobGroups = groupByJob(jobExpenses, jobs);
   const totalJobCents = jobExpenses.reduce((sum, e) => sum + e.amount_cents, 0);
@@ -89,6 +93,8 @@ export default async function ExpensesPage() {
           What the business costs to run — overhead you carry, plus what each job spends.
         </p>
       </header>
+
+      <PaymentLedger ledger={ledger} />
 
       {/* Headline: true monthly overhead */}
       <section className="cp-card overflow-hidden rounded-xl md:rounded-md">
@@ -108,7 +114,7 @@ export default async function ExpensesPage() {
 
       {/* Section 1 — my expenses (overhead) */}
       <section className="flex flex-col gap-4">
-        <SectionHead label="My expenses" title="Overhead & subscriptions" />
+        <SectionHead label="My expenses" title="Dated expenses" />
         <OverheadManager expenses={businessExpenses} />
       </section>
 

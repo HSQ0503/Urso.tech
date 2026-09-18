@@ -1,3 +1,5 @@
+import { PaymentCorrections } from "@/app/CanesPressure/components/invoices/payment-corrections";
+import { DocumentRevisionControls } from "@/app/CanesPressure/components/document-revision";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, ChevronLeft, ExternalLink } from "lucide-react";
@@ -57,6 +59,8 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
 
   return (
     <div>
+      <DocumentRevisionControls kind="invoice" id={id} />
+      <PaymentCorrections invoice={invoice} />
       {/* ── Mobile: iOS back row + large title header. ── */}
       <div className="md:hidden">
         <Link

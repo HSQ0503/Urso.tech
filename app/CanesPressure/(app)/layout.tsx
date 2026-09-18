@@ -61,11 +61,11 @@ export default async function CanesAppLayout({ children }: { children: React.Rea
   // Settings) stay owner-only.
   const allowedNav = ops
     ? [
-        "Today",
+        "Home",
         ...(ops.permissions.leads ? ["Inbox", "Leads"] : []),
         ...(ops.permissions.customers ? ["Customers"] : []),
-        ...(ops.permissions.estimates ? ["Estimates"] : []),
-        ...(ops.permissions.schedule ? ["Schedule"] : []),
+        ...(ops.permissions.estimates ? ["Estimates", "Recurring"] : []),
+        ...(ops.permissions.schedule ? ["Schedule", "Work orders"] : []),
         ...(ops.permissions.invoices ? ["Invoices"] : []),
       ]
     : undefined;

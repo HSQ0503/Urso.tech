@@ -230,6 +230,7 @@ function WorkOrderRow({
 
         {crewName !== null ? <IconLine icon="users" text={crewName} /> : null}
         {when !== null ? <IconLine icon="calendar" text={when} /> : null}
+        {job.scheduling_conflict?<Text style={{color:color.danger}}>Crew overlap — review scheduled time</Text>:null}
         {job.status === "canceled" && job.canceled_reason ? (
           <IconLine icon="slash" text={job.canceled_reason} />
         ) : null}
@@ -267,15 +268,15 @@ export default function JobsScreen(): React.ReactElement {
   );
 
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<Filter>("unscheduled");
+  const filter: Filter = "all";
   // Held by value: the row it came from re-reads the moment the booking lands.
   const [bookJob, setBookJob] = useState<Job | null>(null);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
 
   const cancel = useAction(
-    (vars: { id: string }) => jobActions.setStatus(vars.id, "canceled"),
+    (vars: { id: string }) => jobActions.delete(vars.id),
     {
-      invalidates: [keys.jobs.all(), ["owner", "schedule"], keys.schedule.unscheduled(), keys.agenda(), keys.overview()],
+      invalidates: [...keys.workflow()],
     },
   );
 
@@ -287,16 +288,11 @@ export default function JobsScreen(): React.ReactElement {
 
   const jobs = jobsQuery.data ?? [];
 
-  const counts = useMemo(() => {
-    const out = {} as Record<Filter, number>;
-    for (const option of FILTERS) out[option.value] = jobs.filter((job) => matchesFilter(job, option.value)).length;
-    return out;
-  }, [jobs]);
-
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return jobs
-      .filter((job) => matchesFilter(job, filter))
+      .filter((job) => !job.archived_at)
+      .sort((a, b) => b.created_at.localeCompare(a.created_at))
       .filter(
         (job) =>
           needle === "" ||
@@ -312,12 +308,12 @@ export default function JobsScreen(): React.ReactElement {
 
   const confirmCancel = (job: Job) => {
     Alert.alert(
-      "Cancel this work order?",
-      `${job.customer_name ?? "This job"} comes off the calendar and moves to Canceled. It stays for the record.`,
+      "Delete this work order?",
+      `${job.customer_name ?? "This job"} will leave the list and calendar. Unused drafts are deleted; document and payment history is retained. Unpaid payment links are disabled.`,
       [
         { text: "Keep it", style: "cancel" },
         {
-          text: "Cancel work order",
+          text: "Delete work order",
           style: "destructive",
           onPress: () => {
             void (async () => {
@@ -327,7 +323,7 @@ export default function JobsScreen(): React.ReactElement {
                 setActionNotice(r.notice);
                 return;
               }
-              toast.show("Work order canceled.");
+              toast.show("Work order removed. Any business history was preserved.");
             })();
           },
         },
@@ -379,30 +375,9 @@ export default function JobsScreen(): React.ReactElement {
                   accessibilityLabel="Search work orders"
                 />
               </SearchStrip>
-              <View style={styles.filters}>
-                {FILTERS.map((option) => {
-                  const on = filter === option.value;
-                  return (
-                    <Pressable
-                      key={option.value}
-                      accessibilityRole="tab"
-                      accessibilityState={{ selected: on }}
-                      accessibilityLabel={`${option.label}, ${counts[option.value]}`}
-                      onPress={() => setFilter(option.value)}
-                      style={({ pressed }) => [styles.filter, on && styles.filterOn, pressed && !on && styles.rowPressed]}
-                    >
-                      <Text style={[styles.filterText, on && styles.filterTextOn]} numberOfLines={1}>
-                        {option.label}
-                      </Text>
-                      {counts[option.value] > 0 ? (
-                        <Text style={[styles.filterCount, on && styles.filterTextOn]}>{counts[option.value]}</Text>
-                      ) : null}
-                    </Pressable>
-                  );
-                })}
-              </View>
-              {filter === "unscheduled" && visible.length > 0 ? (
-                <Text style={styles.hint}>Tap Schedule to pick a day. Swipe a row left to cancel it.</Text>
+
+              {visible.length > 0 ? (
+                <Text style={styles.hint}>Tap Schedule to pick a day. Swipe left to delete or archive.</Text>
               ) : null}
             </View>
           }
@@ -410,7 +385,7 @@ export default function JobsScreen(): React.ReactElement {
             <Text style={styles.empty}>{query.trim() ? "Nothing matches that search." : emptyCopy[filter]}</Text>
           }
           renderItem={({ item }) => (
-            <SwipeRow enabled={canCancel(item)} actionLabel="Cancel" onAction={() => confirmCancel(item)}>
+            <SwipeRow enabled={true} actionLabel="Delete" onAction={() => confirmCancel(item)}>
               <WorkOrderRow
                 job={item}
                 crewName={item.crew_id === null ? null : (crewNames.get(item.crew_id) ?? null)}
@@ -426,7 +401,7 @@ export default function JobsScreen(): React.ReactElement {
         <BookSheet
           job={bookJob}
           onClose={() => setBookJob(null)}
-          onBooked={(job) => toast.show(`${job.customer_name ?? "Job"} is on the calendar.`)}
+          onBooked={(job, notice) => toast.show(notice ?? `${job.customer_name ?? "Job"} is on the calendar.`)}
         />
       ) : null}
     </View>

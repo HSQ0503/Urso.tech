@@ -193,7 +193,7 @@ export default function InvoicesScreen(): React.ReactElement {
           <Feather name="chevron-left" size={31} color={color.brand} />
           <Text style={styles.headerTitle}>MY INVOICES</Text>
         </Pressable>
-        <Pressable accessibilityRole="button" accessibilityLabel="Create invoice" onPress={() => router.push("/(owner)/invoice/new")} style={styles.addButton}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Create invoice" onPress={() => router.push({ pathname: "/(owner)/invoice/new", params: { draftKey: String(Date.now()) } })} style={styles.addButton}>
           <Text style={styles.addText}>+</Text>
         </Pressable>
       </View>

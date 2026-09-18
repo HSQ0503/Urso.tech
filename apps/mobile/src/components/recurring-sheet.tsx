@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { fmtMoney, PLAN_CADENCE_LABEL, PLAN_VISITS_PER_YEAR, type PlanCadence } from "@urso/types";
+import { fmtEt, fmtMoney, PLAN_CADENCE_LABEL, PLAN_VISITS_PER_YEAR, type PlanCadence } from "@urso/types";
 import { recurringActions } from "@/api";
 import { DatePicker } from "@/components/date-picker";
 import { Notice } from "@/components/notice";
@@ -43,6 +43,7 @@ export function RecurringSheet({
   const [cadence, setCadence] = useState<PlanCadence>("quarterly");
   const [startsOn, setStartsOn] = useState<string>(() => addCalendarDays(todayEt(), 30));
   const [dateOpen, setDateOpen] = useState(false);
+  const [repeatTime, setRepeatTime] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const jobId = source.kind === "job" ? source.id : source.jobId ?? null;
   const jobQuery = useJob(jobId);
@@ -51,14 +52,15 @@ export function RecurringSheet({
     : null;
   const sourcePending = jobId !== null && (jobQuery.isPending || jobQuery.isError);
 
+  const effectiveTime = repeatTime ?? (jobQuery.data?.scheduled_at ? fmtEt(jobQuery.data.scheduled_at, { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }) : "08:00");
   const create = useAction(
     (vars: { cadence: PlanCadence; startsOn: string }) =>
       source.kind === "estimate"
-        ? recurringActions.createFromEstimate(source.id, vars.cadence, vars.startsOn)
+        ? recurringActions.createFromEstimate(source.id, vars.cadence, vars.startsOn, effectiveTime)
         : source.kind === "invoice"
-          ? recurringActions.createFromInvoice(source.id, vars.cadence, vars.startsOn)
-          : recurringActions.createFromJob(source.id, vars.cadence, vars.startsOn),
-    { invalidates: [keys.recurring.all(), keys.jobs.all(), keys.revenue(), keys.overview()] },
+          ? recurringActions.createFromInvoice(source.id, vars.cadence, vars.startsOn, effectiveTime)
+          : recurringActions.createFromJob(source.id, vars.cadence, vars.startsOn, effectiveTime),
+    { invalidates: [...keys.workflow()] },
   );
 
   const annual = pricePerVisitCents * PLAN_VISITS_PER_YEAR[cadence];
@@ -150,17 +152,17 @@ export function RecurringSheet({
               <Feather name="calendar" size={20} color={color.brandDeep} />
               <View style={{ flex: 1 }}>
                 <Text style={styles.dateTitle}>{dateLabel(startsOn)}</Text>
-                <Text style={styles.muted}>Visits are created three weeks ahead so you can book them.</Text>
+                <Text style={styles.muted}>The next visit is scheduled automatically at the selected Eastern time.</Text>
               </View>
               <Feather name="chevron-right" size={20} color={color.brandDeep} />
             </Pressable>}
           </View>
 
+          <View style={styles.group}><Text style={styles.label}>Repeat time (Eastern, HH:mm)</Text><TextInput accessibilityLabel="Repeat time Eastern HH:mm" value={effectiveTime} onChangeText={setRepeatTime} style={[styles.dateButton, {color: color.ink}]} /></View>
           <View style={styles.terms}>
             <Feather name="file-text" size={16} color={color.muted} />
             <Text style={styles.termsText}>
-              The agreement carries a cancellation fee of 50% of a visit if the customer cancels after the next visit is
-              scheduled. You send it for signature — or mark it agreed in person — from the plan.
+              The next visit is booked automatically at this Eastern time. A service agreement is optional. Payments are never copied to a new visit.
             </Text>
           </View>
         </ScrollView>

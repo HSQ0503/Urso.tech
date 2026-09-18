@@ -365,6 +365,9 @@ export type CatalogItem = {
 };
 
 export type Estimate = {
+  archived_at?: string | null;
+  revision?: number;
+  signature_data?: { strokes: number[][][]; width: number; height: number } | null;
   id: string; created_at: string; updated_at: string;
   lead_id: string | null; contact_id: string | null; address_id: string | null;
   number: string; estimate_type: EstimateType; status: EstimateStatus;
@@ -380,6 +383,7 @@ export type Estimate = {
 };
 
 export type EstimateItem = {
+  discount_mode?: "amount" | "percent"; discount_value?: number;
   id: string; estimate_id: string; catalog_id: string | null; position: number;
   name: string; description: string | null; kind: CatalogKind; quantity: number;
   unit_price_cents: number; discount_cents: number; taxable: boolean; line_total_cents: number;
@@ -417,6 +421,14 @@ export const RECURRENCE_PER_MONTH: Record<JobRecurrence, number> = {
 };
 
 export type Job = {
+  subtotal_cents?: number;
+  adjustment_cents?: number;
+  tax_rate_bps?: number;
+  tax_cents?: number;
+  public_token?: string;
+  scheduling_conflict?: boolean;
+  archived_at?: string | null;
+  revision?: number;
   id: string; created_at: string; estimate_id: string | null; lead_id: string | null;
   contact_id: string | null; status: JobStatus; customer_name: string | null;
   job_address: string | null; total_cents: number; deposit_cents: number;
@@ -480,6 +492,12 @@ export const PLAN_STATUS_LABEL: Record<PlanStatus, string> = {
 };
 
 export type RecurringPlan = {
+  scheduling_enabled?: boolean;
+  repeat_time?: string | null;
+  anchor_day?: number | null;
+  duration_minutes?: number;
+  crew_id?: string | null;
+  agreement_required?: boolean;
   id: string;
   created_at: string;
   updated_at: string;
@@ -517,6 +535,7 @@ export type RecurringPlan = {
 };
 
 export type RecurringPlanItem = {
+  discount_mode?: "amount" | "percent"; discount_value?: number; discount_cents?: number; taxable?: boolean;
   id: string;
   plan_id: string;
   position: number;
@@ -536,7 +555,7 @@ export type RecurringPlanVisit = Pick<
   "id" | "status" | "scheduled_at" | "ends_at" | "total_cents" | "plan_visit_due_on" | "crew_id"
 >;
 
-export type RecurringPlanDetail = RecurringPlanWithItems & { visits: RecurringPlanVisit[] };
+export type RecurringPlanDetail = RecurringPlanWithItems & { visits: RecurringPlanVisit[]; signed_cancellation_fee_cents?: number; signed_notice_days?: number; read_at?: string };
 
 // Normalized recurring revenue of one plan: price per visit × visits per year.
 export function planAnnualCents(plan: Pick<RecurringPlan, "cadence" | "price_per_visit_cents">): number {
@@ -555,6 +574,7 @@ export type Crew = {
 };
 
 export type JobItem = {
+  unit_price_cents?: number; discount_mode?: "amount" | "percent"; discount_value?: number; discount_cents?: number; taxable?: boolean;
   id: string; job_id: string; estimate_item_id: string | null;
   position: number; name: string; description: string | null;
   quantity: number; line_total_cents: number; done: boolean;
@@ -587,6 +607,12 @@ export type ExpenseFrequency = "one_time" | "monthly" | "yearly";
 // recurring row (monthly/yearly) counts every period it is active between
 // incurred_on and ends_on; a one_time row counts once, on incurred_on.
 export type BusinessExpense = {
+  rule_id?: string | null;
+  occurrence_on?: string | null;
+  legacy_template?: boolean;
+  employee_id?: string | null;
+  payment_method?: string | null;
+  skipped?: boolean;
   id: string; created_at: string; name: string;
   amount_cents: number; category: string;
   recurring: boolean; frequency: ExpenseFrequency;
@@ -688,7 +714,12 @@ export const MEDIA_CATEGORY_LABEL: Record<JobMediaCategory, string> = {
   issue: "Issue",
 };
 
-export type EstimateWithItems = Estimate & { items: EstimateItem[] };
+export type EstimateAcceptance = {
+ id: string; revision: number; signatureName: string; approvedAt: string; source: string;
+ drawing: { strokes: number[][][]; width: number; height: number } | null;
+ totalCents: number; terms: string | null; items: {name: string; quantity: number; line_total_cents: number}[];
+};
+export type EstimateWithItems = Estimate & { items: EstimateItem[]; acceptances?: EstimateAcceptance[] };
 
 export const JOB_STATUS_LABEL: Record<JobStatus, string> = {
   unscheduled: "Unscheduled", scheduled: "Scheduled", confirmed: "Confirmed",
@@ -721,6 +752,9 @@ export type PaymentSource = "manual" | "square_webhook";
 export type PaymentKind = "deposit" | "balance";
 
 export type Invoice = {
+  credit_link_pending?: boolean;
+  archived_at?: string | null;
+  revision?: number;
   id: string; created_at: string; updated_at: string;
   job_id: string | null; estimate_id: string | null; lead_id: string | null; contact_id: string | null;
   number: string; status: InvoiceStatus;
@@ -736,6 +770,7 @@ export type Invoice = {
 };
 
 export type InvoiceItem = {
+  discount_mode?: "amount" | "percent"; discount_value?: number; discount_cents?: number; taxable?: boolean;
   id: string; invoice_id: string; job_item_id: string | null; position: number;
   name: string; description: string | null; quantity: number;
   unit_price_cents: number; line_total_cents: number;
@@ -763,7 +798,8 @@ export function paymentNetCents(
   return Math.max(0, payment.amount_cents - (payment.refunded_cents ?? 0));
 }
 
-export type InvoiceWithItems = Invoice & { items: InvoiceItem[]; payments: Payment[] };
+export type InvoiceCreditEntry = { id: string; createdAt: string; direction: "in" | "out"; otherNumber: string; amountCents: number; reversedCents: number };
+export type InvoiceWithItems = Invoice & { items: InvoiceItem[]; payments: Payment[]; credits?: InvoiceCreditEntry[] };
 
 // A slim, token-free invoice view safe to pass into client components (the
 // schedule board, the job sheet). Never carries public_token or Square ids.
@@ -917,3 +953,10 @@ export type Overview = {
     detail: string | null;
   }[];
 };
+
+export type ExpenseRule = {
+  id: string; name: string; category: string; amount_cents: number; frequency: "monthly" | "yearly";
+  starts_on: string; ends_on: string | null; next_due_on: string; active: boolean;
+};
+export type EmployeePaymentSummary = { id: string; name: string; monthCents: number; allTimeCents: number };
+export type ExpenseLedger = { entries: BusinessExpense[]; rules: ExpenseRule[]; employees: EmployeePaymentSummary[] };

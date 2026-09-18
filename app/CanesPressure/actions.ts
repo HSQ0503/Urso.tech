@@ -1,5 +1,10 @@
 "use server";
 
+import { priceServiceLine } from "@urso/types";
+import { validSignature, type SignatureDrawing } from "@/lib/canes/signatures";
+import { archiveDocument } from "@/lib/canes/document-archive";
+import { estimateText } from "@/lib/canes/customer-messages";
+
 import { createHash, randomBytes, randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -1293,8 +1298,8 @@ export async function updateEstimate(
   if (patch.expiresAtIso !== undefined) row.expires_at = patch.expiresAtIso;
   if (patch.employee !== undefined) row.employee = patch.employee || null;
 
-  const { error } = await canesDb().from("estimates").update(row).eq("id", estimateId);
-  if (error) return { ok: false, notice: error.message };
+  const { data: changed, error } = await canesDb().from("estimates").update(row).eq("id", estimateId).eq("status", estimate.status).eq("revision", estimate.revision ?? 1).select("id");
+  if (error || !changed?.length) return { ok: false, notice: "This estimate changed. Refresh before editing it." };
   // Adjustment or deposit percent changed → totals must be recomputed.
   await recomputeEstimateTotals(estimateId);
   if (estimate.lead_id) await touch(estimate.lead_id);
@@ -1312,6 +1317,7 @@ export async function saveEstimateItems(
     quantity: number;
     unitPriceCents: number;
     discountCents?: number;
+    discountMode?: "amount" | "percent"; discountValue?: number;
     taxable?: boolean;
     isOption?: boolean;
     isMandatory?: boolean;
@@ -1325,14 +1331,15 @@ export async function saveEstimateItems(
   if (!estimate) return { ok: false, notice: "Estimate not found." };
   if (estimate.status !== "draft") return { ok: false, notice: "Only draft estimates can be edited." };
 
-  const db = canesDb();
-  // Replace-all: wipe the old lines, insert the fresh set with recomputed line
-  // totals, then recompute the estimate totals from what was actually written.
-  const { error: delErr } = await db.from("estimate_items").delete().eq("estimate_id", estimateId);
-  if (delErr) return { ok: false, notice: delErr.message };
-
-  if (items.length > 0) {
-    const rows = items.map((it, i) => {
+  for (const item of items) {
+    if (item.unitPriceCents >= 0) {
+      try {
+        const priced = priceServiceLine({ name: item.name, quantity: item.quantity, unitPriceCents: item.unitPriceCents, discountMode: item.discountMode ?? "amount", discountValue: item.discountValue ?? item.discountCents ?? 0 });
+        item.discountCents = priced.discountCents;
+      } catch { return { ok: false, notice: "Check each line's quantity, price, and discount. A discount cannot exceed its line subtotal." }; }
+    } else if ((item.discountCents ?? 0) !== 0 || (item.discountValue ?? 0) !== 0) return { ok: false, notice: "A credit line cannot have another discount." };
+  }
+  const rows = items.map((it, i) => {
       const quantity = Number(it.quantity) || 0;
       const unit = Math.round(it.unitPriceCents);
       const discount = Math.round(it.discountCents ?? 0);
@@ -1348,6 +1355,8 @@ export async function saveEstimateItems(
         quantity,
         unit_price_cents: unit,
         discount_cents: discount,
+        discount_mode: it.discountMode ?? "amount",
+        discount_value: it.discountValue ?? discount,
         taxable: it.taxable ?? false,
         line_total_cents: lineTotalCents({ quantity, unit_price_cents: unit, discount_cents: discount }),
         is_option: isOption,
@@ -1357,11 +1366,8 @@ export async function saveEstimateItems(
         package_group: it.packageGroup ?? null,
       };
     });
-    const { error: insErr } = await db.from("estimate_items").insert(rows);
-    if (insErr) return { ok: false, notice: insErr.message };
-  }
-
-  await recomputeEstimateTotals(estimateId);
+  const {data,error}=await canesDb().rpc("replace_canes_estimate_items",{p_id:estimateId,p_revision:estimate.revision??1,p_items:rows});
+  if(error||data!=="saved")return {ok:false,notice:"The estimate changed or could not be saved. Refresh before trying again."};
   if (estimate.lead_id) await touch(estimate.lead_id);
   refresh();
   return { ok: true };
@@ -1458,7 +1464,7 @@ export async function sendEstimate(
     const base = (process.env.NEXT_PUBLIC_APP_URL ?? "https://urso.ws").replace(/\/$/, "");
     const res = await sendCanesSms({
       to: sent.customer_phone as string,
-      body: `Here is your estimate: ${base}/CanesPressure/e/${sent.public_token}`,
+      body: estimateText(sent.customer_name, `${base}/CanesPressure/e/${sent.public_token}`),
       leadId: estimate.lead_id,
       automated: true,
     });
@@ -1579,157 +1585,18 @@ export async function voidEstimate(estimateId: string): Promise<ActionResult> {
 // link open), declined stays (it IS the win-rate record), and anything that
 // spawned a job or invoice is business history. Items cascade; the sender
 // tasks are canceled explicitly rather than left for the cron to reap.
-export async function deleteEstimate(estimateId: string): Promise<ActionResult> {
+async function removeDocument(kind: "estimate" | "job" | "invoice", id: string): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
-  const denied = await denyUnlessPermitted();
-  if (denied) return denied;
-  const estimate = await getEstimate(estimateId);
-  if (!estimate) return { ok: false, notice: "Estimate not found." };
-  if (!["draft", "expired"].includes(estimate.status)) {
-    if (estimate.status === "approved") {
-      return { ok: false, notice: "This estimate was approved and has a job — it can't be deleted." };
-    }
-    if (estimate.status === "declined") {
-      return { ok: false, notice: "Declined estimates are part of your win-rate record — keep this one." };
-    }
-    return { ok: false, notice: "Void the estimate first, then delete it." };
-  }
-
-  const db = canesDb();
-  const [jobRef, invRef] = await Promise.all([
-    db.from("jobs").select("id").eq("estimate_id", estimateId).limit(1),
-    db.from("invoices").select("id").eq("estimate_id", estimateId).limit(1),
-  ]);
-  if (jobRef.error) return { ok: false, notice: jobRef.error.message };
-  if (invRef.error) return { ok: false, notice: invRef.error.message };
-  if ((jobRef.data ?? []).length > 0 || (invRef.data ?? []).length > 0) {
-    return { ok: false, notice: "This estimate has a job or invoice attached — keep it for the record." };
-  }
-
-  await db
-    .from("tasks")
-    .update({ status: "canceled" })
-    .eq("status", "pending")
-    .in("dedupe_key", [
-      `estimate_send:${estimateId}`,
-      `estimate_reminder:${estimateId}:d2`,
-      `estimate_reminder:${estimateId}:d5`,
-    ]);
-  const { error } = await db.from("estimates").delete().eq("id", estimateId);
-  if (error) return { ok: false, notice: error.message };
-  if (estimate.lead_id) {
-    await logEvent(estimate.lead_id, "estimate", `Estimate ${estimate.number} deleted`);
-  }
-  refresh();
-  // The detail page no longer exists — redirect from the action so navigation
-  // and revalidation land together (no not-found flash).
-  redirect("/CanesPressure/estimates");
+  const denied=await denyUnlessPermitted(); if(denied)return denied;
+  const {data,error}=await canesDb().rpc("delete_canes_unused_document",{p_kind:kind,p_id:id});
+  if(error)return {ok:false,notice:"This record could not be removed. Refresh and try again."};
+  if(data==="history"){const result=await archiveDocument(kind,id);refresh();return result;}
+  if(data!=="deleted")return {ok:false,notice:"The record is changing or no longer exists. Refresh before retrying."};
+  refresh();return {ok:true,notice:"Unused draft deleted."};
 }
-
-// Permanently remove a dead invoice — drafts and voids only, and never one
-// money has touched. A sent/viewed/paid invoice is the customer-facing money
-// record; Square history (ids on the row) also keeps it. Deposit rows detach
-// automatically (SET NULL, job-anchored) and re-point onto the next bill.
-export async function deleteInvoice(invoiceId: string): Promise<ActionResult> {
-  if (!canesConfigured()) return DEMO;
-  const denied = await denyUnlessPermitted();
-  if (denied) return denied;
-  const invoice = await getInvoice(invoiceId);
-  if (!invoice) return { ok: false, notice: "Invoice not found." };
-  if (invoice.status !== "draft" && invoice.status !== "void") {
-    return { ok: false, notice: "Only a draft or voided invoice can be deleted — void it first if it was sent." };
-  }
-  if (invoice.square_invoice_id) {
-    return { ok: false, notice: "This invoice has Square history — keep it for reconciliation." };
-  }
-  const db = canesDb();
-  const { data: payRows, error: payErr } = await db
-    .from("payments")
-    .select("id")
-    .eq("invoice_id", invoiceId)
-    .neq("kind", "deposit")
-    .limit(1);
-  if (payErr) return { ok: false, notice: payErr.message };
-  if ((payRows ?? []).length > 0) {
-    return { ok: false, notice: "This invoice has a payment recorded — it can't be deleted." };
-  }
-  // Same optimistic discipline as reopenJob: only a still-draft/void row at
-  // the amount we read deletes — a racing send keeps its invoice, and a
-  // racing partial cash payment (which bumps amount_paid_cents while status
-  // stays draft) aborts instead of orphaning its ledger row.
-  const { data: deleted, error } = await db
-    .from("invoices")
-    .delete()
-    .eq("id", invoiceId)
-    .in("status", ["draft", "void"])
-    .eq("amount_paid_cents", invoice.amount_paid_cents)
-    .select("id");
-  if (error) return { ok: false, notice: error.message };
-  if (!deleted || deleted.length === 0) {
-    return { ok: false, notice: "This invoice just changed — refresh and check it." };
-  }
-  // Cancel the sender tasks only AFTER the delete claim wins — canceling
-  // first would strip a racing send's queued text/reminders from an invoice
-  // that survives.
-  await db
-    .from("tasks")
-    .update({ status: "canceled" })
-    .eq("status", "pending")
-    .like("dedupe_key", `invoice_%:${invoiceId}%`);
-  if (invoice.lead_id) await logInvoiceEvent(invoice.lead_id, `Invoice ${invoice.number} deleted`);
-  refresh();
-  redirect("/CanesPressure/invoices");
-}
-
-// Permanently remove a junk job. Manual jobs only (an estimate-backed job is
-// the approval's record — cancel it instead), and never one with an invoice
-// or money attached. Items, expenses, time entries, and media rows cascade.
-export async function deleteJob(jobId: string): Promise<ActionResult> {
-  if (!canesConfigured()) return DEMO;
-  const denied = await denyUnlessPermitted();
-  if (denied) return denied;
-  const job = await getJob(jobId);
-  if (!job) return { ok: false, notice: "Job not found." };
-  if (job.estimate_id) {
-    return { ok: false, notice: "This job came from an approved estimate — cancel it instead so the record stays." };
-  }
-  const db = canesDb();
-  const [invRef, payRef, timeRef] = await Promise.all([
-    db.from("invoices").select("id").eq("job_id", jobId).limit(1),
-    db.from("payments").select("id").eq("job_id", jobId).limit(1),
-    db.from("job_time_entries").select("id").eq("job_id", jobId).limit(1),
-  ]);
-  if (invRef.error) return { ok: false, notice: invRef.error.message };
-  if (payRef.error) return { ok: false, notice: payRef.error.message };
-  if (timeRef.error) return { ok: false, notice: timeRef.error.message };
-  if ((invRef.data ?? []).length > 0) {
-    return { ok: false, notice: "This job has an invoice — delete or void the invoice first." };
-  }
-  if ((payRef.data ?? []).length > 0) {
-    return { ok: false, notice: "This job has money in the ledger (a deposit or payment) — it can't be deleted." };
-  }
-  if ((timeRef.data ?? []).length > 0) {
-    return { ok: false, notice: "Crew hours are logged on this job — the timesheet keeps it. Cancel it instead." };
-  }
-  await cancelJobConfirmation(jobId);
-  // Claimed delete: only a still-idle job goes — a racing Complete (which
-  // flips status and mints the invoice) wins and this aborts. The ms-scale
-  // window against a concurrent deposit insert is accepted for a one-owner
-  // shop; the payments precheck above covers every human-speed path.
-  const { data: deleted, error } = await db
-    .from("jobs")
-    .delete()
-    .eq("id", jobId)
-    .in("status", ["unscheduled", "scheduled", "confirmed", "canceled"])
-    .select("id");
-  if (error) return { ok: false, notice: error.message };
-  if (!deleted || deleted.length === 0) {
-    return { ok: false, notice: "This job just changed (it may be in progress or billed) — refresh and check it." };
-  }
-  await logJobEvent(job.lead_id, `Job deleted — ${job.job_name ?? "job"}`);
-  refresh();
-  return { ok: true, notice: "Job deleted." };
-}
+export async function deleteEstimate(id:string):Promise<ActionResult>{return removeDocument("estimate",id);}
+export async function deleteInvoice(id:string):Promise<ActionResult>{return removeDocument("invoice",id);}
+export async function deleteJob(id:string):Promise<ActionResult>{return removeDocument("job",id);}
 
 // Permanently remove a junk or duplicate customer. Anyone with an estimate,
 // job, or invoice on file is business history and stays; addresses cascade,
@@ -1783,10 +1650,12 @@ export async function approveEstimate(
   token: string,
   signatureName: string,
   selectedItemIds?: string[],
+  acceptance?: { revision: number; drawing: SignatureDrawing; agreed: boolean },
 ): Promise<ActionResult & { depositUrl?: string | null }> {
   if (!canesConfigured()) return DEMO;
   const signature = signatureName.trim();
   if (!signature) return { ok: false, notice: "Please type your name to sign." };
+  if (!acceptance?.agreed || !validSignature(acceptance.drawing)) return { ok: false, notice: "Draw your signature and agree to the terms before approving." };
   const estimate = await getEstimateByToken(token);
   if (!estimate) return { ok: false, notice: "Estimate not found." };
   if (estimate.status === "approved") return { ok: false, notice: "This estimate is already approved." };
@@ -1796,7 +1665,9 @@ export async function approveEstimate(
   if (estimate.expires_at && new Date(estimate.expires_at).getTime() < Date.now()) {
     return { ok: false, notice: "This estimate has expired. Please contact us for a new one." };
   }
-  return finalizeEstimateApproval(estimate, signature, { selectedItemIds });
+  if ((estimate.revision ?? 1) !== acceptance.revision) return { ok: false, notice: "This estimate was revised. Refresh and review the new version before signing." };
+  const result = await finalizeEstimateApproval(estimate, signature, { selectedItemIds, drawing: acceptance.drawing });
+  return { ok: result.ok, notice: result.notice, depositUrl: result.depositUrl };
 }
 
 // Owner-side approval for a client who said yes in person or on the phone —
@@ -1901,62 +1772,23 @@ async function finalizeEstimateApproval(
   signature: string,
   opts: {
     selectedItemIds?: string[];
+    drawing?: SignatureDrawing;
     inPerson?: boolean;
     depositCollected?: boolean;
     depositMethod?: PaymentMethod;
   } = {},
 ): Promise<ActionResult & { depositUrl?: string | null; jobId?: string | null }> {
-  const { selectedItemIds } = opts;
   const db = canesDb();
-  // Options estimates: persist the customer's selection before recomputing so
-  // the approved totals reflect exactly what they chose.
-  if (estimate.estimate_type === "options" && selectedItemIds) {
-    const items = await getEstimateItems(estimate.id);
-    const chosen = new Set(selectedItemIds);
-    for (const item of items) {
-      if (item.is_mandatory) continue; // mandatory lines are never toggled off
-      const selected = chosen.has(item.id);
-      if (selected !== item.is_selected) {
-        await db.from("estimate_items").update({ is_selected: selected }).eq("id", item.id);
-      }
-    }
-  }
-  const totals = await recomputeEstimateTotals(estimate.id);
-  const now = new Date().toISOString();
-  // Conditional claim on the exact status we read: if a concurrent approve (a
-  // second tab, a replayed POST) already flipped it, we match zero rows and bail
-  // before firing the owner alert or creating a second job.
-  const { data: claimed, error } = await db
-    .from("estimates")
-    .update({
-      status: "approved",
-      approved_at: now,
-      approval_source: opts.inPerson ? "in_person" : "customer",
-      signature_name: signature,
-      updated_at: now,
-    })
-    .eq("id", estimate.id)
-    .eq("status", estimate.status)
-    .select("id");
-  if (error) return { ok: false, notice: error.message };
-  if (!claimed || claimed.length === 0) {
-    // The status moved between the caller's read and our claim. A double-tap
-    // or replayed approve really is approved — but a markViewed race is not,
-    // and must not masquerade as success.
-    const current = await getEstimate(estimate.id);
-    if (current?.status === "approved") {
-      return { ok: true, notice: "This estimate is already approved." };
-    }
-    return { ok: false, notice: "This estimate just changed — please try again." };
-  }
-
-  const approved: Estimate = {
-    ...estimate,
-    status: "approved",
-    approved_at: now,
-    signature_name: signature,
-    ...(totals ?? {}),
-  };
+  const { data, error } = await db.rpc("accept_canes_estimate", {
+    p_id: estimate.id, p_revision: estimate.revision ?? 1, p_name: signature,
+    p_source: opts.inPerson ? "in_person" : "customer", p_drawing: opts.drawing ?? null,
+    p_selected: opts.selectedItemIds ?? null,
+  });
+  if (error) return { ok: false, notice: "The acceptance could not be saved. Refresh and try again." };
+  const result = data as { outcome: string; estimate?: Estimate } | null;
+  if (result?.outcome === "already_approved") return { ok: true, notice: "This estimate is already approved." };
+  if (result?.outcome !== "approved" || !result.estimate) return { ok: false, notice: "This estimate changed or is no longer open. Refresh and review it before approving." };
+  const approved = result.estimate;
 
   if (estimate.lead_id) {
     const lead = await getLead(estimate.lead_id);
@@ -2113,7 +1945,7 @@ export async function declineEstimate(token: string, reason: string): Promise<Ac
 // Internal: create the job that backs an approved estimate. Insert-only dedupe
 // on estimate_id so a double-approve (or a retried approve) never spawns a
 // second job. Not exported as an action surface; called by approveEstimate.
-export async function createJobFromEstimate(estimate: EstimateWithItems): Promise<string | null> {
+async function createJobFromEstimate(estimate: EstimateWithItems): Promise<string | null> {
   if (!canesConfigured()) return null;
   const db = canesDb();
   // Guard: a job already tied to this estimate means we're done.
@@ -2152,6 +1984,7 @@ export async function createJobFromEstimate(estimate: EstimateWithItems): Promis
       job_name: estimate.job_name,
       job_address: estimate.job_address,
       total_cents: estimate.total_cents,
+      subtotal_cents:estimate.subtotal_cents, adjustment_cents:estimate.adjustment_cents, tax_rate_bps:estimate.tax_rate_bps, tax_cents:estimate.tax_cents,
       deposit_cents: estimate.deposit_cents,
     })
     .select("id")
@@ -2176,6 +2009,7 @@ export async function createJobFromEstimate(estimate: EstimateWithItems): Promis
       description: it.description,
       quantity: it.quantity,
       line_total_cents: it.line_total_cents,
+      unit_price_cents: it.unit_price_cents, discount_mode: it.discount_mode ?? "amount", discount_value: it.discount_value ?? it.discount_cents, discount_cents: it.discount_cents, taxable: it.taxable,
     }));
     const { error: itemsErr } = await db.from("job_items").insert(rows);
     if (itemsErr) {
@@ -2381,8 +2215,7 @@ async function findConflictNotice(
 // confirmation exactly, keyed off the snapshotted jobs.customer_phone.
 async function armJobConfirmation(job: Job, scheduledIso: string): Promise<void> {
   const db = canesDb();
-  const settings = await getSettings();
-  const offsetHours = settings.job_confirmation_offset_hours;
+  const offsetHours = 24;
   const sendAt = new Date(new Date(scheduledIso).getTime() - offsetHours * 3_600_000);
   const dedupeKey = `job_confirmation:${job.id}:${scheduledIso}`;
   // Cancel stale pending confirmations for this job whose key differs (an old slot).
@@ -3036,7 +2869,7 @@ async function recomputeInvoiceTotals(invoiceId: string): Promise<boolean> {
     listInvoiceRewards(invoiceId),
   ]);
   const subtotal = items.reduce((sum, it) => sum + it.line_total_cents, 0);
-  const tax = Math.round((subtotal * invoice.tax_rate_bps) / 10000);
+  const tax = Math.round((items.filter(item=>item.taxable).reduce((sum,item)=>sum+item.line_total_cents,0) * invoice.tax_rate_bps) / 10000);
   const rewardCents = rewards
     .filter((r) => r.status === "approved")
     .reduce((sum, r) => sum + r.amount_cents, 0);
@@ -3106,7 +2939,7 @@ export async function completeJob(jobId: string): Promise<ActionResult & { invoi
     return { ok: false, notice: "This job just changed — refresh and try again." };
   }
   await logJobEvent(job.lead_id, "Job completed");
-  const inv = await createInvoiceFromJob(jobId);
+  const inv = await initializeJobInvoice(jobId);
   refresh();
   // Surface a failed invoice creation instead of returning ok with no id — the
   // billing panel keys off invoiceId, so a silent undefined would strand the job.
@@ -3236,6 +3069,10 @@ export async function createInvoiceFromJob(
   if (!canesConfigured()) return DEMO;
   const denied = await denyUnlessPermitted("invoices");
   if (denied) return denied;
+  return initializeJobInvoice(jobId);
+}
+
+async function initializeJobInvoice(jobId: string): Promise<ActionResult & { invoiceId?: string }> {
   const job = await getJob(jobId);
   if (!job) return { ok: false, notice: "Job not found." };
 
@@ -3312,6 +3149,7 @@ export async function saveInvoiceItems(
     description?: string | null;
     quantity: number;
     unitPriceCents: number;
+    discountMode?: "amount" | "percent"; discountValue?: number; taxable?: boolean;
   }>,
 ): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
@@ -3324,7 +3162,11 @@ export async function saveInvoiceItems(
     const quantity = Number(it.quantity) || 0;
     const unit = Math.round(it.unitPriceCents);
     if (!Number.isFinite(quantity) || quantity <= 0 || !Number.isSafeInteger(unit) || unit < 0) return null;
+    let priced: ReturnType<typeof priceServiceLine>;
+    try { priced = priceServiceLine({ ...it, name: it.name.trim() || "Service", quantity, unitPriceCents: unit }); } catch { return null; }
     return {
+      discount_mode: it.discountMode ?? "amount", discount_value: it.discountValue ?? 0,
+      discount_cents: priced.discountCents, line_total_cents: priced.lineTotalCents, taxable: it.taxable ?? false,
       name: it.name.trim() || "Service",
       description: it.description?.trim() || null,
       quantity,
@@ -3543,6 +3385,7 @@ export async function sendInvoice(
       return { ok: false, notice: `Couldn't verify the invoice: ${error instanceof Error ? error.message : "unknown error"}` };
     }
     if (!fresh) return { ok: false, notice: "Invoice not found." };
+    if (fresh.credit_link_pending) return { ok: false, notice: "Customer credit is being reconciled. Wait for the old payment link to be retired before sending." };
     if (fresh.status === "paid") return { ok: false, notice: "This invoice is already paid." };
     if (fresh.status === "void") return { ok: false, notice: "This invoice was voided." };
     if (fresh.hosted_payment_url && !fresh.square_invoice_id) {
@@ -4618,6 +4461,8 @@ export async function addBusinessExpense(input: {
   if (!name) return { ok: false, notice: "Name the expense." };
   const amount = Math.round(input.amountCents);
   if (!Number.isFinite(amount) || amount <= 0) return { ok: false, notice: "Enter the expense amount." };
+  const incurred = input.incurredOn || todayEtYmd();
+  if (!recurring.isDateKey(incurred) || (input.endsOn && (!recurring.isDateKey(input.endsOn) || input.endsOn < incurred)) || !["one_time","monthly","yearly"].includes(input.frequency)) return {ok:false,notice:"Choose valid dates and an expense frequency."};
   const id = await addBusinessExpenseRow({
     name,
     amountCents: amount,
@@ -5259,7 +5104,7 @@ export async function duplicateEstimate(
       kind: item.kind,
       quantity: Number(item.quantity),
       unitPriceCents: item.unit_price_cents,
-      discountCents: item.discount_cents,
+      discountCents: item.discount_cents, discountMode:item.discount_mode, discountValue:item.discount_value??item.discount_cents,
       taxable: item.taxable,
       isOption: item.is_option,
       isMandatory: item.is_mandatory,
@@ -5312,6 +5157,7 @@ export async function createRecurringPlan(input: recurring.CreatePlanInput): Pro
   if (!canesConfigured()) return DEMO;
   const denied = await denyUnlessPermitted("estimates");
   if (denied) return denied;
+  const schedulingDenied = await denyUnlessPermitted("schedule"); if (schedulingDenied) return schedulingDenied;
   const result = await recurring.createPlan(input);
   if (result.ok) refresh();
   return result;
@@ -5319,11 +5165,12 @@ export async function createRecurringPlan(input: recurring.CreatePlanInput): Pro
 
 export async function createRecurringPlanFromEstimate(
   estimateId: string,
-  opts: { cadence: PlanCadence; startsOn: string },
+  opts: { cadence: PlanCadence; startsOn: string; repeatTime?: string },
 ): Promise<ActionResult & { planId?: string }> {
   if (!canesConfigured()) return DEMO;
   const denied = await denyUnlessPermitted("estimates");
   if (denied) return denied;
+  const schedulingDenied = await denyUnlessPermitted("schedule"); if (schedulingDenied) return schedulingDenied;
   const result = await recurring.createPlanFromEstimate(estimateId, opts);
   if (result.ok) refresh();
   return result;
@@ -5331,11 +5178,12 @@ export async function createRecurringPlanFromEstimate(
 
 export async function createRecurringPlanFromInvoice(
   invoiceId: string,
-  opts: { cadence: PlanCadence; startsOn: string },
+  opts: { cadence: PlanCadence; startsOn: string; repeatTime?: string },
 ): Promise<ActionResult & { planId?: string }> {
   if (!canesConfigured()) return DEMO;
   const denied = await denyUnlessPermitted("estimates");
   if (denied) return denied;
+  const schedulingDenied = await denyUnlessPermitted("schedule"); if (schedulingDenied) return schedulingDenied;
   const result = await recurring.createPlanFromInvoice(invoiceId, opts);
   if (result.ok) refresh();
   return result;
@@ -5343,11 +5191,12 @@ export async function createRecurringPlanFromInvoice(
 
 export async function createRecurringPlanFromJob(
   jobId: string,
-  opts: { cadence: PlanCadence; startsOn: string },
+  opts: { cadence: PlanCadence; startsOn: string; repeatTime?: string },
 ): Promise<ActionResult & { planId?: string }> {
   if (!canesConfigured()) return DEMO;
   const denied = await denyUnlessPermitted("estimates");
   if (denied) return denied;
+  const schedulingDenied = await denyUnlessPermitted("schedule"); if (schedulingDenied) return schedulingDenied;
   const result = await recurring.createPlanFromJob(jobId, opts);
   if (result.ok) refresh();
   return result;
@@ -5373,7 +5222,7 @@ export async function sendRecurringPlanContract(
   if (denied) return denied;
   const plan = await recurring.getPlan(planId);
   if (!plan) return { ok: false, notice: "Plan not found." };
-  if (plan.status !== "draft") return { ok: false, notice: `This plan is already ${plan.status}. Only a draft can be sent for signature.` };
+  if (!["draft", "active"].includes(plan.status) || plan.signed_at) return { ok: false, notice: `This plan is already ${plan.status}. Only a draft can be sent for signature.` };
   if (plan.price_per_visit_cents <= 0) return { ok: false, notice: "Add a priced service before sending the agreement." };
   const wantText = opts?.channels?.text ?? true;
   const wantEmail = opts?.channels?.email ?? true;
@@ -5384,19 +5233,32 @@ export async function sendRecurringPlanContract(
   }
   const url = `${process.env.NEXT_PUBLIC_APP_URL ?? "https://urso.ws"}/CanesPressure/r/${plan.public_token}`;
   const outcomes: string[] = [];
+  let accepted = false;
   if (canText && plan.customer_phone) {
     const name = plan.customer_name ? ` ${plan.customer_name.split(" ")[0]}` : "";
     const body = `Hi${name}, here is your recurring service agreement from Canes Pressure Washing (${PLAN_CADENCE_LABEL[plan.cadence].toLowerCase()}, ${fmtMoney(plan.price_per_visit_cents)} per visit). Review and sign here: ${url} Reply STOP to opt out.`;
     const sms = await sendCanesSms({ to: plan.customer_phone, body, automated: true });
-    outcomes.push(sms.ok ? "Texted." : sms.skipped === "quiet_hours" ? "Text queued until texting hours." : `Text not sent: ${sms.skipped ?? sms.error ?? "unknown"}.`);
+    if (sms.ok) { accepted = true; outcomes.push("Text submitted for delivery."); }
+    else if (sms.skipped === "quiet_hours") {
+      const key = `recurring_agreement:${plan.id}:${plan.updated_at}`;
+      const queued = await canesDb().from("tasks").upsert({kind:"estimate_send",dedupe_key:key,status:"pending",scheduled_for:new Date().toISOString(),payload:{plan_id:plan.id}},{onConflict:"dedupe_key",ignoreDuplicates:true});
+      if (queued.error) outcomes.push("Text could not be queued. Try again.");
+      else {
+        const existing=await canesDb().from("tasks").select("status").eq("dedupe_key",key).maybeSingle();
+        if(existing.data?.status==="pending"){accepted=true;outcomes.push("Text queued until texting hours.");}
+        else if(existing.data?.status==="sent"){accepted=true;outcomes.push("This agreement text was already submitted.");}
+        else outcomes.push("The earlier text attempt needs retrying from its message history.");
+      }
+    } else outcomes.push(`Text not sent: ${sms.skipped ?? sms.error ?? "unknown"}.`);
   }
   if (canEmail) {
     const email = await notifyPlanSent(plan, new Date().toISOString());
+    if (email.ok) accepted = true;
     outcomes.push(email.ok ? "Emailed." : `Email not sent: ${email.skipped ?? email.error ?? "unknown"}.`);
   }
-  await recurring.markPlanSent(planId);
+  if (accepted) await recurring.markPlanSent(planId);
   refresh();
-  return { ok: true, notice: `Agreement sent. ${outcomes.join(" ")}`.trim() };
+  return { ok: accepted, notice: outcomes.join(" ") || "The agreement was not sent." };
 }
 
 export async function agreeRecurringPlanInPerson(planId: string): Promise<ActionResult> {
@@ -5447,7 +5309,7 @@ export async function cancelRecurringPlan(
     else notes.push("Its next visit was canceled too.");
   }
   let feeInvoiceId: string | undefined;
-  if (opts?.billFee && (result.feeCents ?? 0) > 0) {
+  if (opts?.billFee && result.feeApplies && (result.feeCents ?? 0) > 0) {
     const fee = await createManualInvoice({
       contactId: plan.contact_id ?? undefined,
       customerName: plan.customer_name ?? "Customer",
@@ -5471,9 +5333,9 @@ export async function cancelRecurringPlan(
 
 // Public, token-scoped — the /CanesPressure/r/[token] page. NEVER exposed on
 // /api/v1 (same rule as approveEstimate / claimInvoiceReward).
-export async function signRecurringPlan(token: string, signatureName: string): Promise<ActionResult> {
+export async function signRecurringPlan(token: string, signatureName: string, expectedUpdatedAt: string): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
-  const result = await recurring.signPlan(token, signatureName);
+  const result = await recurring.signPlan(token, signatureName, expectedUpdatedAt);
   if (result.ok) {
     const plan = await recurring.getPlanByToken(token);
     if (plan && plan.agreement_source === "customer" && plan.signed_at) {

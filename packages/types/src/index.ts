@@ -9,3 +9,4 @@
 export * from "./types";
 export * from "./crew-types";
 export * from "./wg-mobile";
+export * from "./pricing";

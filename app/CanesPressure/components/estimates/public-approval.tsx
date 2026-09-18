@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import { SignaturePad, type SignatureDrawing } from "./signature-pad";
 import { Check, CheckCircle2, CreditCard, ThumbsDown } from "lucide-react";
 import { approveEstimate, declineEstimate } from "@/app/CanesPressure/actions";
 import { fmtMoney, type EstimateItem } from "@/lib/canes/types";
@@ -44,6 +45,7 @@ function computeTotals(
 
 export function PublicApproval({
   token,
+  revision,
   estimateType,
   items,
   adjustmentCents,
@@ -51,6 +53,7 @@ export function PublicApproval({
   depositPercent,
 }: {
   token: string;
+  revision: number;
   estimateType: "standard" | "options" | "packages";
   items: EstimateItem[];
   adjustmentCents: number;
@@ -70,6 +73,8 @@ export function PublicApproval({
 
   const [panel, setPanel] = useState<"approve" | "decline" | null>(null);
   const [signature, setSignature] = useState("");
+  const [drawing, setDrawing] = useState<SignatureDrawing>({ strokes: [], width: 600, height: 180 });
+  const [agreed, setAgreed] = useState(false);
   const [reason, setReason] = useState("");
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -92,14 +97,14 @@ export function PublicApproval({
 
   function submitApprove() {
     const name = signature.trim();
-    if (!name) return;
+    if (!name || !agreed || drawing.strokes.flat().length < 5) return;
     setError(null);
     // Only optional selections matter to the server; mandatory lines are forced.
     const chosen = isOptions
       ? [...selected].filter((id) => optionalIds.includes(id))
       : undefined;
     startTransition(async () => {
-      const res = await approveEstimate(token, name, chosen);
+      const res = await approveEstimate(token, name, chosen, { revision, drawing, agreed });
       if (res.ok) {
         setDone("approved");
         setDepositUrl(res.depositUrl ?? null);
@@ -271,13 +276,15 @@ export function PublicApproval({
                   onChange={(e) => setSignature(e.target.value)}
                 />
                 <p className="mt-1.5 text-[12px] leading-snug text-[var(--cp-faint)]">
-                  Typing your name here counts as your signature approving this estimate.
+                  Your name, signature, and the exact estimate and terms are saved together.
                 </p>
               </div>
+              <SignaturePad value={drawing} onChange={setDrawing} />
+              <label className="flex min-h-12 items-center gap-3"><input type="checkbox" checked={agreed} onChange={(event)=>setAgreed(event.target.checked)}/>I have read and agree to the terms of service and authorize this work.</label>
               <button
                 type="button"
                 className="cp-btn cp-btn-primary cp-btn-block sm:min-h-9 sm:rounded-[5px] sm:text-[13px]"
-                disabled={!signature.trim() || isPending}
+                disabled={signature.trim().length < 2 || !agreed || drawing.strokes.reduce((sum,stroke)=>sum+stroke.length,0)<5 || isPending}
                 onClick={submitApprove}
               >
                 {isPending ? "Approving..." : `Approve ${fmtMoney(totals.total)}`}

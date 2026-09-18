@@ -7,7 +7,7 @@ import { signRecurringPlan } from "@/app/CanesPressure/actions";
 // The one interactive island on the public /r/[token] page: type-your-name
 // e-signature, same inline pattern as the estimate approval panel. After a
 // signature the whole thing collapses to a confirmation.
-export function PublicPlanSign({ token, pricePerVisit, cadence }: { token: string; pricePerVisit: string; cadence: string }) {
+export function PublicPlanSign({ token, pricePerVisit, cadence, updatedAt }: { token: string; updatedAt: string; pricePerVisit: string; cadence: string }) {
   const [signature, setSignature] = useState("");
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -16,7 +16,7 @@ export function PublicPlanSign({ token, pricePerVisit, cadence }: { token: strin
   const submit = () => {
     setError(null);
     startTransition(async () => {
-      const result = await signRecurringPlan(token, signature.trim());
+      const result = await signRecurringPlan(token, signature.trim(), updatedAt);
       if (!result.ok) {
         setError(result.notice ?? "That didn't go through. Please try again.");
         return;
@@ -33,7 +33,7 @@ export function PublicPlanSign({ token, pricePerVisit, cadence }: { token: strin
           <div>
             <p className="text-[16px] font-semibold">You&apos;re all set.</p>
             <p className="mt-1 text-[13.5px] leading-relaxed text-[var(--cp-muted)]">
-              Your {cadence.toLowerCase()} service agreement is signed. Canes will text you before each visit to book a time.
+              Your {cadence.toLowerCase()} service agreement is signed. Canes will remind you before each scheduled visit.
               A copy of these terms stays at this link.
             </p>
           </div>

@@ -1,3 +1,4 @@
+import { overheadCentsForRange } from "@/lib/canes/overhead";
 import { canesDb } from "@/lib/canes/supabase";
 import { isDemo, listLeads } from "@/lib/canes/data";
 import { listCrews, listEstimates, listJobs } from "@/lib/canes/estimates";
@@ -73,6 +74,8 @@ export type Insights = {
     expenseCents: number;
     marginCents: number;
   }[];
+  operatingExpensesCents: number;
+  netProfitCents: number;
   expensesCents: number; // total costs on jobs paid in range
   marginCents: number; // collectedCents - expensesCents
   topServices: { name: string; cents: number; count: number }[];
@@ -319,9 +322,9 @@ export async function getInsights(key: RangeKey): Promise<Insights> {
   const [leads, estimates, jobs, invoices, crews, payments, refunds, calls, manualMsgs] =
     await Promise.all([
       listLeads(),
-      listEstimates(),
-      listJobs(),
-      listInvoices(),
+      listEstimates(undefined, true),
+      listJobs(undefined, true),
+      listInvoices(undefined, true),
       listCrews(),
       listPaymentsSince(prevStartIso), // one fetch covers range + prior window
       listRefundMovementsSince(prevStartIso),
@@ -434,6 +437,8 @@ export async function getInsights(key: RangeKey): Promise<Insights> {
     expensesCents += e.amount_cents;
   }
   const marginCents = collectedCents - expensesCents;
+  const operatingExpensesCents = await overheadCentsForRange(startIso, new Date(nowMs).toISOString());
+  const netProfitCents = marginCents - operatingExpensesCents;
 
   const revenueByCrew = [...crewAgg.values()]
     .map((c) => ({
@@ -598,6 +603,8 @@ export async function getInsights(key: RangeKey): Promise<Insights> {
     revenueByCrew,
     expensesCents,
     marginCents,
+    operatingExpensesCents,
+    netProfitCents,
     topServices,
     funnel,
     estimates: estimateStats,

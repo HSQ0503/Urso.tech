@@ -7,7 +7,7 @@ import type { InsightsRange } from "@/api";
 import { ChromeBar } from "@/components/ledger";
 import { Notice } from "@/components/notice";
 import { useInsights } from "@/queries";
-import { noticeFrom, usePullToRefresh } from "@/query";
+import { noticeFrom, usePullToRefresh, useRefetchOnFocus } from "@/query";
 import { color, font, radius, space, type } from "@/theme";
 
 const RANGES: { value: InsightsRange; label: string }[] = [
@@ -23,6 +23,7 @@ export default function InsightsScreen(): React.ReactElement {
   const [range, setRange] = useState<InsightsRange>("30d");
   const insightsQuery = useInsights(range);
   const { refreshing, onRefresh } = usePullToRefresh(insightsQuery.refetch);
+  useRefetchOnFocus(insightsQuery.refetch);
   const insights = insightsQuery.data ?? null;
 
   return (
@@ -45,7 +46,8 @@ export default function InsightsScreen(): React.ReactElement {
               <Text style={styles.cardTitle}>Profit snapshot</Text>
               <MetricRow label="Collected" value={fmtMoney(insights.kpis.collectedCents)} />
               <MetricRow label="Job expenses" value={`−${fmtMoney(insights.expensesCents)}`} />
-              <View style={styles.totalRow}><Text style={styles.cardTitle}>Margin</Text><Text style={styles.margin}>{fmtMoney(insights.marginCents)}</Text></View>
+              <MetricRow label="Operating expenses including employee payments" value={`−${fmtMoney(insights.operatingExpensesCents ?? 0)}`} />
+              <View style={styles.totalRow}><Text style={styles.cardTitle}>Net after expenses</Text><Text style={styles.margin}>{fmtMoney(insights.netProfitCents ?? insights.marginCents)}</Text></View>
             </View>
             <View style={styles.section}><Text style={styles.rule}>Top services</Text><View style={styles.list}>{insights.topServices.length === 0 ? <Text style={styles.empty}>No paid services in this period.</Text> : insights.topServices.map((service, index) => <View key={`${service.name}-${index}`} style={[styles.listRow, index > 0 && styles.divided]}><View style={styles.listBody}><Text style={styles.listTitle}>{service.name}</Text><Text style={styles.muted}>{service.count} jobs</Text></View><Text style={styles.money}>{fmtMoney(service.cents)}</Text></View>)}</View></View>
             <View style={styles.section}><Text style={styles.rule}>Lead funnel</Text><View style={styles.card}>{insights.funnel.map((step) => <MetricRow key={step.label} label={step.label} value={String(step.count)} />)}</View></View>

@@ -25,7 +25,7 @@ export function BookSheet({
 }: {
   job: Job;
   onClose: () => void;
-  onBooked?: (job: Job) => void;
+  onBooked?: (job: Job, notice?: string) => void;
 }) {
   const [slot, setSlot] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
@@ -35,6 +35,7 @@ export function BookSheet({
       jobActions.schedule(job.id, vars.iso, job.duration_minutes ?? 120, job.crew_id ?? null),
     {
       invalidates: [
+        ...keys.workflow(),
         keys.jobs.all(),
         keys.jobs.one(job.id),
         ["owner", "schedule"],
@@ -55,7 +56,8 @@ export function BookSheet({
       setNotice(r.notice);
       return;
     }
-    onBooked?.(job);
+    const data = r.data as { notice?: string };
+    onBooked?.(job, data.notice);
     onClose();
   };
 

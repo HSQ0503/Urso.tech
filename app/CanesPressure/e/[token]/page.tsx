@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { CheckCircle2, ChevronDown, CreditCard } from "lucide-react";
-import { getEstimateByToken, getEstimateItems, getJobByEstimateId } from "@/lib/canes/estimates";
+import { getAcceptedEstimateSnapshot, getEstimateByToken, getEstimateItems, getJobByEstimateId } from "@/lib/canes/estimates";
 import { markViewed } from "@/app/CanesPressure/actions";
 import { ESTIMATE_TYPE_LABEL, fmtMoney, type EstimateItem } from "@/lib/canes/types";
 import { PublicApproval } from "@/app/CanesPressure/components/estimates/public-approval";
@@ -48,12 +48,15 @@ export default async function PublicEstimatePage({
   searchParams: Promise<{ deposit?: string }>;
 }) {
   const { token } = await params;
-  const estimate = await getEstimateByToken(token);
+  const current = await getEstimateByToken(token);
+  if (!current || current.status === "draft" || current.archived_at) notFound();
+  const accepted = current.status === "approved" ? await getAcceptedEstimateSnapshot(current.id) : null;
+  const estimate = accepted ?? current;
   // Unknown token, or a draft that was never sent, is a 404 — draft estimates
   // are not public (plan §11.7).
   if (!estimate || estimate.status === "draft") notFound();
 
-  const items = await getEstimateItems(estimate.id);
+  const items = accepted?.items ?? await getEstimateItems(estimate.id);
 
   // Deposit state for an approved estimate (0013): the job row carries the
   // Payment Link + paid flag. `?deposit=paid` is Square's post-payment redirect
@@ -61,7 +64,7 @@ export default async function PublicEstimatePage({
   // seconds later); the ledger stays the record.
   const { deposit: depositParam } = await searchParams;
   const job = estimate.status === "approved" ? await getJobByEstimateId(estimate.id) : null;
-  const depositPaid = Boolean(job?.deposit_paid_at) || depositParam === "paid";
+  const depositPaid = (job?.deposit_collected_cents ?? 0) >= (job?.deposit_cents ?? 1) && (job?.deposit_cents ?? 0) > 0;
   const depositUrl =
     !depositPaid && (job?.deposit_cents ?? 0) > 0 ? (job?.deposit_link_url ?? null) : null;
 
@@ -101,6 +104,7 @@ export default async function PublicEstimatePage({
         </div>
       )}
 
+      {depositParam === "paid" && !depositPaid ? <p className="cp-card mt-4 p-4">Your payment is processing. This page will show the receipt after confirmation.</p> : null}
       {/* Line items */}
       <div className="cp-card mt-4">
         <div className="p-4">
@@ -120,6 +124,7 @@ export default async function PublicEstimatePage({
                       </span>
                     )}
                   </p>
+                  {(item.discount_cents ?? 0) > 0 ? <p className="text-sm text-[var(--cp-muted)]">Line discount: {fmtMoney(item.discount_cents)}</p> : null}
                   {item.description && (
                     <p className="mt-0.5 text-[12.5px] leading-snug text-[var(--cp-muted)]">
                       {item.description}
@@ -127,6 +132,7 @@ export default async function PublicEstimatePage({
                   )}
                 </div>
                 <p className="shrink-0 text-[14px] tabular-nums font-semibold">
+                  {(item.discount_cents??0)>0?<><span className="block text-xs font-normal line-through text-[var(--cp-muted)]">{fmtMoney(item.line_total_cents+(item.discount_cents??0))}</span><span className="block text-xs font-normal">Discount −{fmtMoney(item.discount_cents)}</span></>:null}
                   {fmtMoney(item.line_total_cents)}
                 </p>
               </li>
@@ -193,6 +199,7 @@ export default async function PublicEstimatePage({
                       </p>
                     </div>
                   </div>
+                  {estimate.signature_data ? <svg role="img" aria-label="Your signature" viewBox="0 0 600 180" className="max-w-md bg-white text-black">{estimate.signature_data.strokes.map((stroke,index)=><polyline key={index} points={stroke.map(point=>point.join(",")).join(" ")} fill="none" stroke="currentColor" strokeWidth="2.5"/>)}</svg> : null}
                   {depositPaid ? (
                     <div className="cp-divider pt-3">
                       <p className="text-[13px] text-[var(--cp-muted)]">
@@ -239,6 +246,7 @@ export default async function PublicEstimatePage({
           </div>
         ) : (
           <PublicApproval
+            revision={estimate.revision ?? 1}
             token={token}
             estimateType={estimate.estimate_type}
             items={items}

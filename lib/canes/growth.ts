@@ -1,7 +1,6 @@
 import { canesDb } from "@/lib/canes/supabase";
 import { isDemo } from "@/lib/canes/data";
 import { overheadCentsForRange } from "@/lib/canes/overhead";
-import { listTeamMembers } from "@/lib/canes/payouts";
 import {
   DEMO_EXPENSES,
   DEMO_INVOICES,
@@ -105,16 +104,14 @@ export type AllTimeProfit = {
   truncated: boolean; // payment history exceeded the fetch cap — totals undercount
 };
 
-const DONE_JOB: Job["status"][] = ["completed", "invoiced", "paid"];
+
 
 export async function getAllTimeProfit(): Promise<AllTimeProfit> {
   const nowIso = new Date().toISOString();
-  const [{ payments, truncated }, jobExpenses, overheadCents, jobs, team] = await Promise.all([
+  const [{ payments, truncated }, jobExpenses, overheadCents] = await Promise.all([
     listAllPayments(),
     listAllJobExpenses(),
     overheadCentsForRange(EPOCH_ISO, nowIso),
-    listAllJobs(),
-    listTeamMembers(),
   ]);
 
   const collectedCents = payments.reduce(
@@ -123,17 +120,8 @@ export async function getAllTimeProfit(): Promise<AllTimeProfit> {
   );
   const jobExpensesCents = jobExpenses.reduce((s, e) => s + e.amount_cents, 0);
 
-  const crewMinutes = new Map<string, number>();
-  for (const j of jobs) {
-    if (!DONE_JOB.includes(j.status) || !j.crew_id) continue;
-    crewMinutes.set(j.crew_id, (crewMinutes.get(j.crew_id) ?? 0) + (j.duration_minutes || 0));
-  }
-  let laborCents = 0;
-  for (const m of team) {
-    if (m.comp_type !== "hourly") continue;
-    const minutes = m.crew_id ? crewMinutes.get(m.crew_id) ?? 0 : 0;
-    laborCents += Math.round((minutes / 60) * m.hourly_cents);
-  }
+  // Labor payments are dated expense entries and are included in overhead once.
+  const laborCents = 0;
 
   return {
     collectedCents,

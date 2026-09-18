@@ -628,7 +628,7 @@ export default function CustomerScreen(): React.ReactElement {
                 accessibilityLabel="Bill this customer"
                 onPress={() =>
                   router.push(
-                    `/(owner)/invoice/new?contactId=${encodeURIComponent(contact.id)}&name=${encodeURIComponent(contact.name ?? "")}&phone=${encodeURIComponent(contact.phone ?? "")}`,
+                    `/(owner)/invoice/new?draftKey=${Date.now()}&contactId=${encodeURIComponent(contact.id)}&name=${encodeURIComponent(contact.name ?? "")}&phone=${encodeURIComponent(contact.phone ?? "")}`,
                   )
                 }
                 style={({ pressed }) => [styles.neutralBtn, pressed && styles.rowPressed]}

@@ -8,6 +8,12 @@ import { unwrap } from "./query";
 // keys.leads.all() also refreshes every lead detail under it.
 
 export const keys = {
+  financial: () => [["owner", "revenue"], ["owner", "payouts"], ["owner", "insights"], ["owner", "expenses"]] as const,
+  workflow: () => [
+    ["owner", "jobs"], ["owner", "invoices"], ["owner", "estimates"], ["owner", "customers"],
+    ["owner", "schedule"], ["owner", "unscheduled"], ["owner", "recurring"], ["owner", "overview"],
+    ["owner", "agenda"], ["owner", "revenue"], ["owner", "payouts"], ["owner", "insights"],
+  ] as const,
   overview: () => ["owner", "overview"] as const,
   agenda: () => ["owner", "agenda"] as const,
   todayReport: () => ["owner", "today-report"] as const,
@@ -45,6 +51,7 @@ export const keys = {
   crews: () => ["owner", "crews"] as const,
   catalog: () => ["owner", "catalog"] as const,
   expenses: () => ["owner", "expenses"] as const,
+  expenseLedger: () => ["owner", "expenses", "ledger"] as const,
   payouts: (range: string) => ["owner", "payouts", range] as const,
   insights: (range: string) => ["owner", "insights", range] as const,
   settings: () => ["owner", "settings"] as const,
@@ -187,3 +194,7 @@ export const useInsights = (range: "7d" | "30d" | "90d" | "12m") =>
 
 export const useSettings = () =>
   useQuery({ queryKey: keys.settings(), queryFn: () => owner.settings().then(unwrap) });
+
+export const useExpenseLedger = () => useQuery({ queryKey: keys.expenseLedger(), queryFn: () => owner.expenseLedger().then(unwrap) });
+
+export const useCalendarEvents = (fromIso: string, days: number) => useQuery({queryKey:[...keys.schedule.all(),"events",fromIso,days],queryFn:()=>owner.calendarEvents(fromIso,days).then(unwrap)});

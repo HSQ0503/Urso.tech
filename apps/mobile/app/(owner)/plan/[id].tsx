@@ -1,3 +1,4 @@
+import { RepeatSettings } from "@/components/repeat-settings";
 // One recurring plan: the contract, its services, its next visit, and every
 // visit it has produced. The forward action is always the single most useful
 // thing for the plan's state — send the agreement, mark it agreed, book the
@@ -71,19 +72,25 @@ function visitLine(visit: RecurringPlanVisit): string {
 
 export default function PlanScreen(): React.ReactElement {
   const { id } = useLocalSearchParams<{ id: string }>();
+  return <PlanDetail key={id} />;
+}
+
+function PlanDetail(): React.ReactElement {
+  const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const toast = useToast();
   const planQuery = useRecurringPlan(id);
   const { refreshing, onRefresh } = usePullToRefresh(planQuery.refetch);
   const plan = planQuery.data ?? null;
 
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [deliveryOpen, setDeliveryOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [nextOpen, setNextOpen] = useState(false);
   const [cadenceOpen, setCadenceOpen] = useState(false);
 
-  const invalidates = [keys.recurring.all(), keys.recurring.one(id), keys.jobs.all(), keys.revenue(), keys.overview()];
+  const invalidates = [...keys.workflow()];
   const send = useAction((channels: DeliveryChannels) => recurringActions.send(id, channels), { invalidates });
   const agree = useAction<void, { notice?: string }>(() => recurringActions.agreeInPerson(id), { invalidates });
   const pause = useAction<void, { notice?: string }>(() => recurringActions.pause(id), { invalidates });
@@ -114,8 +121,8 @@ export default function PlanScreen(): React.ReactElement {
   }
 
   const agreementUrl = `${API_BASE}/CanesPressure/r/${plan.public_token}`;
-  const openVisit = plan.visits.find((v) => ["unscheduled", "scheduled", "confirmed", "in_progress"].includes(v.status)) ?? null;
-  const fee = planCancellationFeeCents(plan);
+  const openVisit = plan.visits.find((v) => ["unscheduled", "scheduled", "confirmed"].includes(v.status) && (!v.scheduled_at || Date.parse(v.scheduled_at)>Date.now())) ?? null;
+  const fee = plan.signed_cancellation_fee_cents ?? (plan.signed_at ? planCancellationFeeCents(plan) : 0);
   const choosingFirstVisit = plan.status === "draft" && !plan.last_generated_for;
 
   const run = async (result: Promise<{ ok: true; data: unknown } | { ok: false; notice: string }>, fallback: string) => {
@@ -135,7 +142,7 @@ export default function PlanScreen(): React.ReactElement {
   };
 
   const agreeNow = () => {
-    Alert.alert("Mark as agreed in person?", "This activates the plan today. The first visit is created three weeks before it's due.", [
+    Alert.alert("Mark as agreed in person?", "Records the customer's agreement. Automatic booking follows the confirmed repeat date and time.", [
       { text: "Not yet", style: "cancel" },
       { text: "Mark agreed", onPress: () => void run(agree.mutateAsync(), "Plan is active.") },
     ]);
@@ -149,7 +156,7 @@ export default function PlanScreen(): React.ReactElement {
   };
 
   const cancelNow = () => {
-    const feeApplies = openVisit !== null && openVisit.scheduled_at !== null && fee > 0;
+    const feeApplies = openVisit !== null && openVisit.scheduled_at !== null && fee > 0 && ((plan.signed_notice_days??plan.notice_days)===0 || Math.floor((Date.parse(openVisit.scheduled_at)-Date.now())/86_400_000)<(plan.signed_notice_days??plan.notice_days));
     const buttons: Parameters<typeof Alert.alert>[2] = [{ text: "Keep the plan", style: "cancel" }];
     if (feeApplies) {
       buttons.push({
@@ -216,6 +223,8 @@ export default function PlanScreen(): React.ReactElement {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={color.brand} colors={[color.brand]} />}
       >
         <Notice text={notice} />
+        {settingsOpen ? <RepeatSettings plan={plan} onClose={() => setSettingsOpen(false)} /> : null}
+        {plan.status !== "canceled" ? <Pressable accessibilityRole="button" style={{padding:16,minHeight:48,backgroundColor:color.surface}} onPress={() => setSettingsOpen(true)}><Text style={{color:color.brandDeep}}>{plan.scheduling_enabled ? "Edit upcoming and future scheduling" : "Set date and time to enable automatic booking"}</Text></Pressable> : null}
         {forward ? <NextStep label={forward.label} hint={forward.hint} icon={forward.icon} onPress={forward.onPress} /> : null}
 
         <View style={styles.card}>
@@ -251,7 +260,7 @@ export default function PlanScreen(): React.ReactElement {
             label={choosingFirstVisit ? "First visit" : "Next visit due"}
             value={plan.next_due_on ? dateLabel(plan.next_due_on) : plan.status === "canceled" ? "—" : dateLabel(plan.starts_on)}
           />
-          <Field label="Visits are created" value={`${plan.lead_days} days before they're due, as unscheduled work orders`} />
+          <Field label="Visits are created" value={plan.scheduling_enabled ? "The next future visit is scheduled automatically" : "Confirm the date and time to enable automatic booking"} />
           {plan.last_generated_for ? <Field label="Last visit created for" value={dateLabel(plan.last_generated_for)} /> : null}
           {plan.status !== "canceled" ? (
             <View style={styles.rowButtons}>
@@ -315,7 +324,7 @@ export default function PlanScreen(): React.ReactElement {
           {plan.visits.length === 0 ? (
             <Text style={styles.muted}>
               {plan.status === "active"
-                ? "No visits yet. Automatic checks create work orders due within three weeks."
+                ? "No visits yet. Confirm the repeat date and time to schedule the next visit."
                 : "No visits yet."}
             </Text>
           ) : (
@@ -339,7 +348,7 @@ export default function PlanScreen(): React.ReactElement {
       </ScrollView>
 
       <View style={[styles.bar, { paddingBottom: insets.bottom + space.sm }]}>
-        {plan.status === "draft" ? (
+        {!plan.signed_at && ["draft", "active"].includes(plan.status) ? (
           <>
             <BarButton icon="send" label={plan.sent_at ? "Re-send" : "Send"} disabled={busy} onPress={() => setDeliveryOpen(true)} />
             <BarButton icon="check" label="Agreed" disabled={busy} onPress={agreeNow} />
@@ -358,7 +367,7 @@ export default function PlanScreen(): React.ReactElement {
             <View style={styles.handle} />
             <View style={styles.moreGrid}>
               <MoreTile icon="link" label="Share agreement link" onPress={() => void shareNow()} />
-              {plan.status === "draft" ? <MoreTile icon="check" label="Mark agreed in person" onPress={() => { setMoreOpen(false); agreeNow(); }} /> : null}
+              {!plan.signed_at && ["draft", "active"].includes(plan.status) ? <MoreTile icon="check" label="Mark agreed in person" onPress={() => { setMoreOpen(false); agreeNow(); }} /> : null}
               {plan.contact_id ? <MoreTile icon="user" label="View customer" onPress={() => { setMoreOpen(false); router.push({ pathname: "/(owner)/customer/[id]", params: { id: plan.contact_id as string } }); }} /> : null}
               {plan.source_estimate_id ? <MoreTile icon="clipboard" label="View estimate" onPress={() => { setMoreOpen(false); router.push({ pathname: "/(owner)/estimate/[id]", params: { id: plan.source_estimate_id as string } }); }} /> : null}
               {plan.source_invoice_id ? <MoreTile icon="file-text" label="View invoice" onPress={() => { setMoreOpen(false); router.push({ pathname: "/(owner)/invoice/[id]", params: { id: plan.source_invoice_id as string } }); }} /> : null}

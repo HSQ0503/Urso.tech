@@ -23,12 +23,13 @@ const native = {
 // Exercise the real React screens and handlers, replacing only native hosts,
 // navigation and network boundaries so tests never touch customer data.
 function harness() {
-  const state = { params: { id: "first" }, estimates: {}, jobs: {}, writes: [], navigation: [], alerts: [], actionData: { estimateId: "created" } };
+  const state = { params: { id: "first" }, estimates: {}, invoices: {}, jobs: {}, writes: [], navigation: [], alerts: [], actionData: { estimateId: "created" } };
   const cache = new Map();
   const key = new Proxy(() => [], { get: () => key });
   const queries = {
     keys: key,
     useEstimate: (id) => ({ data: state.estimates[id] ?? null, isPending: false }),
+    useInvoice: (id) => ({ data: state.invoices[id] ?? null, isPending: false }),
     useJob: (id) => ({ data: state.jobs[id] ?? null, isPending: false, isError: false }),
     useJobs: () => ({ data: [] }),
     useInvoices: () => ({ data: [] }),
@@ -49,9 +50,12 @@ function harness() {
       if (name === "react" || name.startsWith("react/")) return require(name);
       if (name === "expo-router") return { useLocalSearchParams: () => state.params, useFocusEffect: (effect) => React.useEffect(effect, [effect]), router: { back() {}, replace: (href) => state.navigation.push(href), push: (href) => state.navigation.push(href) } };
       if (name === "react-native-safe-area-context") return { useSafeAreaInsets: () => ({ top: 0, bottom: 0 }) };
+      if (name === "react-native-svg") return { __esModule: true, default: host("Svg"), Polyline: host("Polyline") };
       if (name === "@expo/vector-icons") return { Feather: host("Icon") };
       if (name === "@/queries") return queries;
-      if (name === "@/api") return { estimateActions: api, recurringActions: api, customerActions: api };
+      if (name === "@/api") return { documentActions: api, estimateActions: api, invoiceActions: api, recurringActions: api, customerActions: api };
+      if (name === "@/components/payment-corrections") return { PaymentCorrections: host("PaymentCorrections") };
+      if (name === "@/components/document-revision") return { DocumentRevisionSheet: host("DocumentRevisionSheet") };
       if (name === "@/components/toast") return { useToast: () => ({ show() {} }) };
       if (name === "@/query") return { noticeFrom: () => null, usePullToRefresh: () => ({ refreshing: false, onRefresh() {} }), useAction: (fn) => ({ mutateAsync: fn, isPending: false }) };
       if (name === "@/components/ledger") return { Mark: host("Mark"), NextStep: host("NextStep") };
@@ -269,7 +273,7 @@ test("recurring conversion uses the linked job's Eastern date instead of an igno
   assert.match(text(renderer.toJSON()), /Mon, Sep 14, 2026/);
   assert.match(text(renderer.toJSON()), /linked work order is visit one/);
   await act(async () => button(renderer, "Create recurring plan").props.onPress());
-  assert.deepEqual(state.writes[0].args, ["invoice", "quarterly", "2026-09-14"]);
+  assert.deepEqual(state.writes[0].args, ["invoice", "quarterly", "2026-09-14", "21:00"]);
   await act(async () => renderer.unmount());
 });
 
@@ -286,7 +290,7 @@ test("recurring conversion without a scheduled source keeps the chosen first vis
   await act(async () => date.props.onPress());
   await act(async () => button(renderer, "Use selected date").props.onPress());
   await act(async () => button(renderer, "Create recurring plan").props.onPress());
-  assert.deepEqual(state.writes[0].args, ["draft", "quarterly", "2026-09-20"]);
+  assert.deepEqual(state.writes[0].args, ["draft", "quarterly", "2026-09-20", "08:00"]);
   await act(async () => renderer.unmount());
 });
 
@@ -383,5 +387,28 @@ test("without the override the sheet still refuses a document with no destinatio
   const renderer = await mount(DeliverySheet, { visible: true, documentLabel: "agreement", phone: null, email: null, sending: false, onClose() {}, onSend() {} });
   assert.match(text(renderer.toJSON()), /Add a phone number or email before sending this agreement/);
   assert.equal(renderer.root.findAllByProps({ accessibilityLabel: "Customer email" }).length, 0);
+  await act(async () => renderer.unmount());
+});
+
+test("switching invoices changes both the editor and the submitted customer", async () => {
+  const { state, load } = harness();
+  const invoice = (name) => ({
+    id: name, status: "draft", customer_name: name, customer_phone: "+15555550123",
+    customer_email: `${name}@example.com`, contact_id: name, job_address: `${name} address`,
+    job_name: `${name} job`, adjustment_cents: 0,
+    items: [{ id: name, name: `${name} service`, quantity: 1, unit_price_cents: 10000, line_total_cents: 10000 }],
+  });
+  state.invoices.first = invoice("First");
+  state.invoices.second = invoice("Second");
+  const Screen = load("app/(owner)/invoice/new.tsx").default;
+  const renderer = await mount(Screen);
+  state.params = { id: "second" };
+  await act(async () => renderer.update(React.createElement(Screen)));
+  assert.match(text(button(renderer, "Select customer")), /Second/);
+  await act(async () => button(renderer, "Save invoice").props.onPress());
+  const update = state.writes.find((write) => write.action === "update");
+  assert.equal(update.args[0], "second");
+  assert.equal(update.args[1].customerName, "Second");
+  assert.equal(state.writes.find((write) => write.action === "saveItems").args[1][0].name, "Second service");
   await act(async () => renderer.unmount());
 });

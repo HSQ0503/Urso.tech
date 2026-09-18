@@ -1,3 +1,6 @@
+import { DocumentRevisionControls } from "@/app/CanesPressure/components/document-revision";
+import { AcceptanceHistory } from "@/app/CanesPressure/components/estimates/acceptance-history";
+import { getEstimateAcceptances } from "@/lib/canes/estimates";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, ChevronLeft, ExternalLink } from "lucide-react";
@@ -34,6 +37,7 @@ export default async function EstimatePage({ params }: { params: Promise<{ id: s
     listCustomerDirectory(),
   ]);
   if (!estimate) notFound();
+  const acceptances = await getEstimateAcceptances(id);
 
   // The linked lead's opt-out gates the Text channel in the send picker.
   const lead = estimate.lead_id ? await getLead(estimate.lead_id) : null;
@@ -53,6 +57,7 @@ export default async function EstimatePage({ params }: { params: Promise<{ id: s
 
   return (
     <div>
+      <DocumentRevisionControls kind="estimate" id={id} />
       {/* ── Mobile: iOS back row + large title header. ── */}
       <div className="md:hidden">
         <Link
@@ -101,6 +106,8 @@ export default async function EstimatePage({ params }: { params: Promise<{ id: s
         {estimate.approved_at && <> · Approved {fmtEt(estimate.approved_at)}</>}
       </p>
       </div>
+
+      <AcceptanceHistory records={acceptances} />
 
       {/* Client journey — shared by both trees; drafts have nothing to track. */}
       {estimate.status !== "draft" && (

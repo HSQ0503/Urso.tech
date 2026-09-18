@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { Fragment, useState, useTransition } from "react";
 import { Plus, Repeat, Trash2 } from "lucide-react";
 import { addBusinessExpense, deleteBusinessExpense } from "@/app/CanesPressure/actions";
 import { fmtEt, fmtMoney, type BusinessExpense, type ExpenseFrequency } from "@/lib/canes/types";
@@ -37,7 +37,7 @@ function isOneTime(e: BusinessExpense): boolean {
 }
 
 function amountSuffix(e: BusinessExpense): string {
-  if (isOneTime(e)) return "";
+  if (isOneTime(e) || e.occurrence_on) return "";
   return e.frequency === "yearly" ? "/yr" : "/mo";
 }
 
@@ -71,6 +71,8 @@ export function OverheadManager({ expenses }: { expenses: BusinessExpense[] }) {
   const [recurring, setRecurring] = useState(true);
   const [frequency, setFrequency] = useState<Exclude<ExpenseFrequency, "one_time">>("monthly");
   const [note, setNote] = useState("");
+  const [incurredOn,setIncurredOn]=useState("");
+  const [endsOn,setEndsOn]=useState("");
 
   const amountCents = toCents(amount);
   const canAdd = name.trim().length > 0 && amountCents > 0;
@@ -85,7 +87,7 @@ export function OverheadManager({ expenses }: { expenses: BusinessExpense[] }) {
         category,
         recurring,
         frequency: recurring ? frequency : "one_time",
-        note: note.trim() || undefined,
+        note: note.trim() || undefined, incurredOn: incurredOn || undefined, endsOn: endsOn || null,
       });
       setFeedback(res.notice ? { ok: res.ok, text: res.notice } : null);
       if (res.ok) {
@@ -120,7 +122,8 @@ export function OverheadManager({ expenses }: { expenses: BusinessExpense[] }) {
           </div>
         ) : (
           <ul className="divide-y divide-[var(--cp-line)]">
-            {expenses.map((e) => (
+            {expenses.map((e,index) => (
+              <Fragment key={e.id}>{index===0 || expenses[index-1].incurred_on.slice(0,7)!==e.incurred_on.slice(0,7)?<li className="flex justify-between bg-[var(--cp-bg)] px-4 py-3 text-sm font-semibold"><span>{fmtEt(`${e.incurred_on}T12:00:00Z`,{month:"long",year:"numeric"})}</span><span>{fmtMoney(expenses.filter(row=>row.incurred_on.slice(0,7)===e.incurred_on.slice(0,7)).reduce((sum,row)=>sum+row.amount_cents,0))}</span></li>:null}
               <li key={e.id} className="flex items-start justify-between gap-3 px-4 py-3">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
@@ -129,7 +132,7 @@ export function OverheadManager({ expenses }: { expenses: BusinessExpense[] }) {
                   </div>
                   <p className="mt-0.5 text-[12.5px] text-[var(--cp-muted)]">
                     {e.category}
-                    {isOneTime(e) && (
+                    {(isOneTime(e) || e.occurrence_on) && (
                       <span className="text-[var(--cp-faint)]">
                         {" · "}
                         {fmtEt(`${e.incurred_on}T12:00:00Z`, { month: "short", day: "numeric", year: "numeric" })}
@@ -152,14 +155,14 @@ export function OverheadManager({ expenses }: { expenses: BusinessExpense[] }) {
                   <button
                     type="button"
                     className="cp-btn cp-btn-ghost cp-btn-danger cp-btn-sm"
-                    disabled={isPending}
+                    disabled={isPending || !!e.employee_id}
                     onClick={() => remove(e.id)}
                     aria-label={`Remove ${e.name}`}
                   >
                     <Trash2 size={14} strokeWidth={2} />
                   </button>
                 </div>
-              </li>
+              </li></Fragment>
             ))}
           </ul>
         )}
@@ -236,6 +239,8 @@ export function OverheadManager({ expenses }: { expenses: BusinessExpense[] }) {
             </label>
           </div>
 
+          <label className="cp-label">Expense date / first occurrence<input type="date" className="cp-input" value={incurredOn} onChange={e=>setIncurredOn(e.target.value)}/></label>
+          {recurring?<label className="cp-label">Last occurrence date (optional)<input type="date" className="cp-input" value={endsOn} onChange={e=>setEndsOn(e.target.value)}/></label>:null}
           {recurring && (
             <div>
               <label className="cp-label" htmlFor="oe-frequency">

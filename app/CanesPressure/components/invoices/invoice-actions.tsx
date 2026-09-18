@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Banknote, CalendarCheck2, CreditCard, Pencil, Send, Trash2 } from "lucide-react";
 import {
   deleteInvoice,
@@ -84,6 +85,7 @@ export function InvoiceActions({
   hasSquareUrl: boolean;
   sentAt: string | null;
 }) {
+  const router=useRouter();
   const { isPending, feedback, run } = useAction();
   const [channelChoice, setChannelChoice] = useState<ChannelChoice>("both");
   const [voidOpen, setVoidOpen] = useState(false);
@@ -152,7 +154,7 @@ export function InvoiceActions({
                 type="button"
                 className="cp-btn cp-btn-sm cp-btn-danger flex-1"
                 disabled={isPending}
-                onClick={() => run(() => deleteInvoice(invoiceId))}
+                onClick={() => run(async () => { const result=await deleteInvoice(invoiceId); if(result.ok)router.push("/CanesPressure/invoices"); return result; })}
               >
                 {isPending ? "Deleting..." : "Confirm delete"}
               </button>
@@ -369,7 +371,7 @@ export function InvoiceActions({
                   type="button"
                   className="cp-btn cp-btn-sm cp-btn-danger flex-1"
                   disabled={isPending}
-                  onClick={() => run(() => deleteInvoice(invoiceId))}
+                  onClick={() => run(async () => { const result=await deleteInvoice(invoiceId); if(result.ok)router.push("/CanesPressure/invoices"); return result; })}
                 >
                   {isPending ? "Deleting..." : "Confirm delete"}
                 </button>

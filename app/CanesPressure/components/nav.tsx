@@ -14,7 +14,8 @@ import {
   CalendarDays,
   Receipt,
   Wallet,
-  HandCoins,
+  Repeat,
+  ClipboardList,
   BarChart3,
   Settings,
   MoreHorizontal,
@@ -31,7 +32,11 @@ type NavItem = {
 
 // Funnel order: people first (leads → customers), then the work, then money.
 const LINKS: NavItem[] = [
-  { href: "/CanesPressure", label: "Today", icon: LayoutDashboard, exact: true },
+  { href: "/CanesPressure/dashboard", label: "Dashboard", icon: BarChart3, exact: false },
+  { href: "/CanesPressure/archives", label: "Archive", icon: FileText, exact: false },
+  { href: "/CanesPressure/jobs", label: "Work orders", icon: ClipboardList, exact: false },
+  { href: "/CanesPressure/recurring", label: "Recurring", icon: Repeat, exact: false },
+  { href: "/CanesPressure", label: "Home", icon: LayoutDashboard, exact: true },
   { href: "/CanesPressure/inbox", label: "Inbox", icon: MessageSquare, exact: false },
   { href: "/CanesPressure/leads", label: "Leads", icon: Filter, exact: false },
   { href: "/CanesPressure/customers", label: "Customers", icon: Users, exact: false },
@@ -39,7 +44,6 @@ const LINKS: NavItem[] = [
   { href: "/CanesPressure/schedule", label: "Schedule", icon: CalendarDays, exact: false },
   { href: "/CanesPressure/invoices", label: "Invoices", icon: Receipt, exact: false },
   { href: "/CanesPressure/expenses", label: "Expenses", icon: Wallet, exact: false },
-  { href: "/CanesPressure/payouts", label: "Payouts", icon: HandCoins, exact: false },
   { href: "/CanesPressure/insights", label: "Insights", icon: BarChart3, exact: false },
   { href: "/CanesPressure/settings", label: "Settings", icon: Settings, exact: false },
 ];
@@ -56,7 +60,7 @@ export function CanesNav({ mobile = false, allowed }: { mobile?: boolean; allowe
   // Mobile: Sebastian's daily loop gets a tab; everything else lives in More
   // (Jobber's pattern) — five targets beat nine microscopic ones.
   const MOBILE_TABS = links.filter((l) =>
-    ["Today", "Inbox", "Leads", "Schedule"].includes(l.label),
+    ["Home", "Inbox", "Leads", "Schedule"].includes(l.label),
   );
   const MOBILE_MORE = links.filter((l) => !MOBILE_TABS.includes(l));
 
@@ -64,9 +68,9 @@ export function CanesNav({ mobile = false, allowed }: { mobile?: boolean; allowe
   // daily loop, then the work, then the money — instead of a flat wall, and the
   // grouping fills the sidebar's dead space. Settings pins to the bottom.
   const NAV_GROUPS: { label?: string; items: NavItem[] }[] = [
-    { items: links.filter((l) => ["Today", "Inbox", "Leads", "Customers"].includes(l.label)) },
-    { label: "Work", items: links.filter((l) => ["Estimates", "Schedule"].includes(l.label)) },
-    { label: "Money", items: links.filter((l) => ["Invoices", "Expenses", "Payouts", "Insights"].includes(l.label)) },
+    { items: links.filter((l) => ["Home", "Dashboard", "Inbox", "Leads", "Customers"].includes(l.label)) },
+    { label: "Work", items: links.filter((l) => ["Estimates", "Schedule", "Work orders", "Recurring"].includes(l.label)) },
+    { label: "Money", items: links.filter((l) => ["Invoices", "Expenses", "Insights", "Archive"].includes(l.label)) },
   ].filter((g) => g.items.length > 0);
   const SETTINGS_LINK = links.find((l) => l.label === "Settings") ?? null;
 

@@ -22,7 +22,7 @@ export async function listInvoices(filter?: {
   jobId?: string;
   leadId?: string;
   status?: InvoiceStatus;
-}): Promise<Invoice[]> {
+}, includeArchived = false): Promise<Invoice[]> {
   let rows: Invoice[];
   if (isDemo()) {
     rows = [...DEMO_INVOICES];
@@ -30,6 +30,7 @@ export async function listInvoices(filter?: {
     const { data, error } = await canesDb()
       .from("invoices")
       .select("*")
+      .or(includeArchived ? "archived_at.is.null,archived_at.not.is.null" : "archived_at.is.null")
       .order("created_at", { ascending: false })
       .limit(500);
     if (error) throw new Error(`listInvoices: ${error.message}`);
@@ -79,7 +80,10 @@ export async function getInvoiceBySquareId(squareInvoiceId: string): Promise<Inv
     .select("*")
     .eq("square_invoice_id", squareInvoiceId)
     .maybeSingle();
-  return (data as Invoice | null) ?? null;
+  if (data) return data as Invoice;
+  const { data: historical } = await canesDb().from("invoice_provider_history").select("invoice_id,square_order_id").eq("square_invoice_id", squareInvoiceId).maybeSingle();
+  const current = historical ? await getInvoice(historical.invoice_id) : null;
+  return current && historical ? { ...current, square_invoice_id: squareInvoiceId, square_order_id: historical.square_order_id } : null;
 }
 
 export async function getInvoiceItems(invoiceId: string): Promise<InvoiceItem[]> {
@@ -118,7 +122,15 @@ export async function getInvoiceWithItems(id: string): Promise<InvoiceWithItems 
   const invoice = await getInvoice(id);
   if (!invoice) return null;
   const [items, payments] = await Promise.all([getInvoiceItems(id), getInvoicePayments(id)]);
-  return { ...invoice, items, payments };
+  if (isDemo()) return { ...invoice, items, payments, credits: [] };
+  const { data: transfers, error } = await canesDb().from("customer_credit_transfers").select("id,created_at,source_invoice_id,target_invoice_id,amount_cents,reversed_cents").or(`source_invoice_id.eq.${id},target_invoice_id.eq.${id}`).order("created_at",{ascending:false});
+  if(error) throw new Error("Customer credit history could not be loaded.");
+  const otherIds=[...new Set((transfers??[]).map(row=>row.source_invoice_id===id?row.target_invoice_id:row.source_invoice_id))];
+  const related = otherIds.length ? await canesDb().from("invoices").select("id,number").in("id",otherIds) : {data:[],error:null};
+  if(related.error) throw new Error("Linked credit invoices could not be loaded.");
+  const numbers=new Map((related.data??[]).map(row=>[row.id,row.number]));
+  const credits=(transfers??[]).map(row=>({id:row.id,createdAt:row.created_at,direction:row.source_invoice_id===id?"out" as const:"in" as const,otherNumber:numbers.get(row.source_invoice_id===id?row.target_invoice_id:row.source_invoice_id)??"Invoice",amountCents:row.amount_cents,reversedCents:row.reversed_cents}));
+  return { ...invoice, items, payments, credits };
 }
 
 // Atomic-ish invoice numbering via the shared estimate_counters row ('invoice').

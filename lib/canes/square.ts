@@ -1017,6 +1017,11 @@ export async function handleSquarePaymentEvent(
       .maybeSingle();
     if (invoiceRefError) return { handled: "retryable_error" };
     if (typeof invoiceRef?.id === "string") invoice = await getInvoice(invoiceRef.id);
+    else {
+      const history = await db.from("invoice_provider_history").select("invoice_id").eq("square_order_id", event.squareOrderId).maybeSingle();
+      if (history.error) return { handled: "retryable_error" };
+      if (history.data) invoice = await getInvoice(history.data.invoice_id);
+    }
   }
   if (!invoice) {
     await markEventProcessed(event.eventId);
@@ -2044,13 +2049,21 @@ async function recordRefund(event: NormalizedPaymentEvent): Promise<ReconcileOut
 // falls through and the event is ignored (e.g. a POS sale).
 async function recordDepositPayment(event: NormalizedPaymentEvent): Promise<ReconcileOutcome | null> {
   const db = canesDb();
-  const { data: jobRow, error: jobLookupError } = await db
+  let { data: jobRow, error: jobLookupError } = await db
     .from("jobs")
     .select(
       "id, estimate_id, lead_id, status, job_name, customer_name, deposit_cents, deposit_link_id, deposit_paid_at, deposit_square_payment_id",
     )
     .eq("deposit_order_id", event.squareOrderId as string)
     .maybeSingle();
+  if (!jobRow && !jobLookupError) {
+    const history = await db.from("job_provider_history").select("job_id").eq("square_order_id", event.squareOrderId as string).maybeSingle();
+    if (history.error) return { handled: "retryable_error" };
+    if (history.data) {
+      const current = await db.from("jobs").select("id, estimate_id, lead_id, status, job_name, customer_name, deposit_cents, deposit_link_id, deposit_paid_at, deposit_square_payment_id").eq("id", history.data.job_id).maybeSingle();
+      jobRow = current.data; jobLookupError = current.error;
+    }
+  }
   if (jobLookupError) {
     console.error(
       `[canes] deposit job lookup failed for order ${event.squareOrderId}: ${jobLookupError.message}`,
@@ -2590,4 +2603,50 @@ export async function recomputeInvoicePaid(
     }
   }
   return result;
+}
+
+export async function squareRevisionLedgerMatches(invoice: Invoice, requiresPayment = false): Promise<boolean> {
+  if (!invoice.square_order_id) return !invoice.square_invoice_id;
+  const remote = await retrieveSquareOrderPayments(invoice.square_order_id);
+  if (remote.error || (requiresPayment && !remote.payments.length)) return false;
+  const payments = await getInvoicePayments(invoice.id);
+  for (const entry of remote.payments) {
+    const local = payments.find(payment => payment.square_payment_id === entry.paymentId);
+    if (!local || local.amount_cents !== entry.amountCents) return false;
+    try {
+      const response = await fetch(`${SQUARE_API_BASE}/v2/payments/${encodeURIComponent(entry.paymentId)}`, {headers:{Authorization:`Bearer ${process.env.CANES_SQUARE_ACCESS_TOKEN}`,"Square-Version":SQUARE_VERSION},signal:AbortSignal.timeout(8000)});
+      if (!response.ok) return false;
+      const payload = await response.json() as {payment?:{amount_money?:{amount?:number};refunded_money?:{amount?:number};status?:string}};
+      const payment = payload.payment;
+      if(payment?.status!=="COMPLETED" || payment.amount_money?.amount!==local.amount_cents || (payment.refunded_money?.amount??0)!==(local.refunded_cents??0)) return false;
+    } catch { return false; }
+  }
+  return true;
+}
+
+export async function retireCreditAdjustedPaymentLinks(deadlineAt = Date.now() + 20_000): Promise<{ retired: number }> {
+  const db = canesDb();
+  const {data,error} = await db.from("invoices").select("id").eq("credit_link_pending",true).limit(10);
+  if(error) throw new Error("Credit adjustment recovery could not load invoices.");
+  let retired=0;
+  for(const row of data??[]) {
+    if (Date.now() + 12_000 >= deadlineAt) break;
+    const lease=randomUUID();
+    const claim=await db.rpc("claim_canes_invoice_revision",{p_invoice_id:row.id,p_operation_id:lease});
+    if(claim.error||claim.data!==true) continue;
+    try {
+      const invoice=await getInvoice(row.id);if(!invoice)continue;
+      if(invoice.square_invoice_id) {
+        const state=await retireSquareInvoice(invoice.square_invoice_id,{reconcileMoney:true});
+        if(!["canceled","failed","paid","refunded","canceled_money_bearing"].includes(state)||!await squareRevisionLedgerMatches(invoice,state==="paid"||state==="refunded"))continue;
+        const history=await db.from("invoice_provider_history").upsert({square_invoice_id:invoice.square_invoice_id,square_order_id:invoice.square_order_id,invoice_id:invoice.id},{onConflict:"square_invoice_id",ignoreDuplicates:true});
+        if(history.error)continue;
+      }
+      const changed=await db.from("invoices").update({square_invoice_id:null,square_order_id:null,hosted_payment_url:null,credit_link_pending:false}).eq("id",invoice.id).eq("billing_operation_id",lease).select("id");
+      if(changed.error||!changed.data?.length)continue;
+      await pushPaymentIssue({eventId:`credit-adjustment:${invoice.id}:${invoice.amount_paid_cents}`,invoiceId:invoice.id,title:"Customer credit adjusted",detail:`Credit on ${invoice.number} changed after a refund or revision. Review its balance and resend if money is due.`});
+      retired++;
+    } finally { await db.rpc("release_invoice_billing_operation",{p_invoice_id:row.id,p_operation_id:lease}); }
+  }
+  return {retired};
 }

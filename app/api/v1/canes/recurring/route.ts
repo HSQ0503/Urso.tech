@@ -42,6 +42,7 @@ type Body = {
   jobId?: unknown;
   cadence?: unknown;
   startsOn?: unknown;
+  repeatTime?: unknown;
   input?: unknown;
 };
 
@@ -73,6 +74,7 @@ export const POST = apiRoute(async ({ req }) => {
   const needsCadence = () => {
     if (!isPlanCadence(body.cadence)) return apiFail("`cadence` must be monthly, quarterly, semiannual or yearly.", 422);
     if (!isDateKey(body.startsOn)) return apiFail("`startsOn` must be a calendar date, YYYY-MM-DD.", 422);
+    if (body.repeatTime !== undefined && (typeof body.repeatTime !== "string" || !/^([01]\d|2[0-3]):[0-5]\d$/.test(body.repeatTime))) return apiFail("Choose a valid repeat time.", 422);
     return null;
   };
 
@@ -82,7 +84,7 @@ export const POST = apiRoute(async ({ req }) => {
       const bad = needsCadence();
       if (bad) return bad;
       return apiResult(
-        await createRecurringPlanFromEstimate(body.estimateId, { cadence: body.cadence as never, startsOn: body.startsOn as string }),
+        await createRecurringPlanFromEstimate(body.estimateId, { cadence: body.cadence as never, startsOn: body.startsOn as string, repeatTime: body.repeatTime as string | undefined }),
       );
     }
     case "createFromInvoice": {
@@ -90,7 +92,7 @@ export const POST = apiRoute(async ({ req }) => {
       const bad = needsCadence();
       if (bad) return bad;
       return apiResult(
-        await createRecurringPlanFromInvoice(body.invoiceId, { cadence: body.cadence as never, startsOn: body.startsOn as string }),
+        await createRecurringPlanFromInvoice(body.invoiceId, { cadence: body.cadence as never, startsOn: body.startsOn as string, repeatTime: body.repeatTime as string | undefined }),
       );
     }
     case "createFromJob": {
@@ -98,7 +100,7 @@ export const POST = apiRoute(async ({ req }) => {
       const bad = needsCadence();
       if (bad) return bad;
       return apiResult(
-        await createRecurringPlanFromJob(body.jobId, { cadence: body.cadence as never, startsOn: body.startsOn as string }),
+        await createRecurringPlanFromJob(body.jobId, { cadence: body.cadence as never, startsOn: body.startsOn as string, repeatTime: body.repeatTime as string | undefined }),
       );
     }
     case "create": {
@@ -108,6 +110,7 @@ export const POST = apiRoute(async ({ req }) => {
       if (typeof v.customerName !== "string") return apiFail("`input.customerName` must be a string.", 422);
       if (!isPlanCadence(v.cadence)) return apiFail("`input.cadence` must be monthly, quarterly, semiannual or yearly.", 422);
       if (!isDateKey(v.startsOn)) return apiFail("`input.startsOn` must be a calendar date, YYYY-MM-DD.", 422);
+      if (v.repeatTime !== undefined && (typeof v.repeatTime !== "string" || !/^([01]\d|2[0-3]):[0-5]\d$/.test(v.repeatTime))) return apiFail("Choose a valid repeat time.", 422);
       if (!Array.isArray(v.items) || !v.items.every(isLineInput)) {
         return apiFail("`input.items` must be a list of { name, quantity, unitPriceCents }.", 422);
       }
@@ -126,6 +129,7 @@ export const POST = apiRoute(async ({ req }) => {
           jobName: (v.jobName as string | null | undefined) ?? null,
           cadence: v.cadence,
           startsOn: v.startsOn,
+          repeatTime: v.repeatTime as string | undefined,
           items: v.items,
         }),
       );
