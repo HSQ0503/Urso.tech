@@ -65,7 +65,7 @@ async function queuedOwnerPush(input: Omit<CanesPush, "audience">): Promise<Cane
 
 export async function pushNewLead(
   lead: LeadPushInput,
-  source: "new_lead" | "missed_call" | "website_request",
+  source: "new_lead" | "missed_call" | "website_request" | "meta_ads",
   sourceEventId?: string | null,
 ) {
   const { data: currentLead, error } = await canesDb()
@@ -87,6 +87,8 @@ export async function pushNewLead(
       ? "Missed call — call now"
       : source === "website_request"
       ? "Website request — call now"
+      : source === "meta_ads"
+      ? "Meta ads lead — call now"
       : "New lead — call now",
     body: `${person} is waiting for a response.`,
     href: `/(owner)/lead/${lead.id}`,
@@ -98,6 +100,22 @@ export async function pushNewLead(
         lastActivityAt: currentLead.last_activity_at,
       },
     },
+  });
+}
+
+export async function pushMetaLeadNoPhone(input: {
+  leadgenId: string;
+  name: string | null;
+  email: string | null;
+}) {
+  const who = input.name?.trim() || input.email?.trim() || "A Meta Instant Form";
+  return ownerPush({
+    dedupeKey: `meta_nophone:${input.leadgenId}`,
+    eventType: "owner_alert",
+    urgency: "time_sensitive",
+    title: "Meta lead has no phone",
+    body: `${who} is not in Urso — there is no number to call or text.`,
+    href: "/(owner)/leads",
   });
 }
 

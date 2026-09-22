@@ -32,5 +32,10 @@ These definitions describe the accepted product decisions for Sebastian's reques
 | Business time            | America/New_York, independent of the phone's timezone.                                                                                                         |
 | Calendar date            | A date without a time or UTC offset, such as a recurring expense date.                                                                                         |
 | Appointment instant      | A scheduled point in time, stored with an offset/UTC representation and presented in Eastern time.                                                             |
+| Calendar block           | A non-job hold on the schedule (time off, blocked time, holiday, or note). Distinct from a work order and from a quote visit.                                  |
+| Uncontacted              | A `meta_ads` lead Sebastian has not yet called or texted from Urso, including ones he typed by hand. Not the same as a missed inbound call or a customer who texted last. |
+| Unanswered inbound       | A missed call or a customer text waiting on a reply. Inbox orange. Distinct from uncontacted.                                                                  |
+| Meta lead ingest         | Creating a Canes lead from a Facebook Instant Form with source `meta_ads`, instead of typing the Ads Manager row by hand.                                      |
+| Contacted from Urso      | Sebastian sent an SMS or started a click-to-call (or logged a call outcome) from the app. That is what turns an uncontacted Meta row white.                    |
 
 See [the decision record](./sebastian-fixes-decisions.md) for accepted choices and unsettled questions.

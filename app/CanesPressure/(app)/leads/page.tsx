@@ -5,6 +5,7 @@ import { listLeads } from "@/lib/canes/data";
 import {
   fmtEt,
   fmtPhone,
+  isUncontactedMetaLead,
   SOURCE_LABEL,
   STATUS_CLASS,
   STATUS_LABEL,
@@ -75,8 +76,12 @@ function TypeBadge({ type }: { type: LeadType }) {
 }
 
 function LeadRow({ lead }: { lead: Lead }) {
+  const uncontacted = isUncontactedMetaLead(lead);
   return (
-    <Link href={`/CanesPressure/leads/${lead.id}`} className="cp-card cp-card-hover block p-4">
+    <Link
+      href={`/CanesPressure/leads/${lead.id}`}
+      className={`cp-card cp-card-hover block p-4 ${uncontacted ? "cp-lead-uncontacted" : ""}`}
+    >
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-semibold">{lead.name ?? fmtPhone(lead.phone)}</span>
         <TypeBadge type={lead.type} />
@@ -108,8 +113,9 @@ function LeadRow({ lead }: { lead: Lead }) {
 function MobileLeadRow({ lead }: { lead: Lead }) {
   const sub = [lead.service, SOURCE_LABEL[lead.source]].filter(Boolean).join(" · ");
   const waiting = lead.type === "cold" && lead.status === "new";
+  const uncontacted = isUncontactedMetaLead(lead);
   return (
-    <Link href={`/CanesPressure/leads/${lead.id}`} className="cp-list-row">
+    <Link href={`/CanesPressure/leads/${lead.id}`} className={`cp-list-row ${uncontacted ? "cp-lead-uncontacted" : ""}`}>
       <LeadAvatar name={lead.name ?? fmtPhone(lead.phone)} />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
@@ -203,10 +209,8 @@ export default async function LeadsPage({
             <div className="space-y-5">
               {groups.map((g) => (
                 <div key={g.label}>
-                  <p
-                    className={`cp-list-header ${g.label === "__urgent" ? "text-[var(--cp-danger)]" : ""}`}
-                  >
-                    {g.label === "__urgent" ? "Call these now" : g.label} · {g.leads.length}
+                  <p className="cp-list-header">
+                    {g.label === "__urgent" ? "New" : g.label}
                   </p>
                   <div className="cp-list">
                     {g.leads.map((lead) => (
@@ -266,9 +270,9 @@ export default async function LeadsPage({
             {groups.map((g, i) => (
               <div key={g.label} className="contents">
                 <p
-                  className={`cp-group-label ${g.label === "__urgent" ? "cp-group-danger" : ""} ${i === 0 ? "pt-1" : "pt-3"}`}
+                  className={`cp-group-label ${i === 0 ? "pt-1" : "pt-3"}`}
                 >
-                  {g.label === "__urgent" ? "Call these now" : g.label} — {g.leads.length}
+                  {g.label === "__urgent" ? "New" : g.label}
                 </p>
                 {g.leads.map((lead) => (
                   <LeadRow key={lead.id} lead={lead} />

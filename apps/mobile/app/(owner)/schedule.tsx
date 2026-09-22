@@ -22,6 +22,7 @@
 import { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   KeyboardAvoidingView,
   Modal,
@@ -43,6 +44,7 @@ import {
   fmtEtTimeRange,
   fmtMoney,
   fmtPhone,
+  isoToEtLocal,
   JOB_STATUS_LABEL,
   STATUS_LABEL,
   type CalendarEventKind,
@@ -245,26 +247,38 @@ const KINDS: { value: CalendarEventKind; label: string }[] = [
 function CreateEventSheet({
   crews,
   crewsNotice,
+  event,
   onClose,
 }: {
   crews: Crew[];
   crewsNotice: string | null;
+  event?: CalendarEvent | null;
   onClose: () => void;
 }) {
-  const [title, setTitle] = useState("");
-  const [kind, setKind] = useState<CalendarEventKind>("block");
-  const [allDay, setAllDay] = useState(false);
-  const [start, setStart] = useState("");
-  const [end, setEnd] = useState("");
-  const [crewId, setCrewId] = useState<string | null>(null);
-  const [notes, setNotes] = useState("");
+  const editing = event ?? null;
+  const [title, setTitle] = useState(editing?.title ?? "");
+  const [kind, setKind] = useState<CalendarEventKind>(editing?.kind ?? "block");
+  const [allDay, setAllDay] = useState(editing?.all_day ?? false);
+  const [start, setStart] = useState(() => {
+    if (!editing) return "";
+    const naive = isoToEtLocal(editing.starts_at);
+    return editing.all_day ? naive.slice(0, 10) : naive;
+  });
+  const [end, setEnd] = useState(() =>
+    editing && !editing.all_day ? isoToEtLocal(editing.ends_at) : "",
+  );
+  const [crewId, setCrewId] = useState<string | null>(editing?.crew_id ?? null);
+  const [notes, setNotes] = useState(editing?.notes ?? "");
   const [notice, setNotice] = useState<string | null>(null);
   const [good, setGood] = useState<string | null>(null);
 
-  // ["owner","schedule"] is the board prefix covering every fetched window — the
-  // same literal job/[id] invalidates with, for the same reason: the window is
-  // part of the key, so no single factory call names them all.
   const create = useAction(calendarEventActions.create, {
+    invalidates: [["owner", "schedule"]],
+  });
+  const update = useAction(calendarEventActions.update, {
+    invalidates: [["owner", "schedule"]],
+  });
+  const remove = useAction(calendarEventActions.remove, {
     invalidates: [["owner", "schedule"]],
   });
 
@@ -272,7 +286,7 @@ function CreateEventSheet({
   // block only ever needs the day.
   const day = start.slice(0, 10);
   const ready = allDay ? day.length === 10 : isCompleteWhen(start) && isCompleteWhen(end);
-  const busy = create.isPending;
+  const busy = create.isPending || update.isPending || remove.isPending;
 
   const onStartChange = (v: string) => {
     setStart(v);
@@ -293,11 +307,7 @@ function CreateEventSheet({
     const startIso = allDay ? etLocalToIso(`${day}T00:00`) : etLocalToIso(start);
     const endIso = allDay ? etLocalToIso(`${nextDayKey(day)}T00:00`) : etLocalToIso(end);
 
-    const r = await create.mutateAsync({
-      // Untrimmed on purpose: the action trims and answers "A title is
-      // required." in its own words, and it owns "End must be after start." too.
-      // Refusing either here would be a second copy of a rule that already has a
-      // sentence written for the reader.
+    const payload = {
       title,
       startIso,
       endIso,
@@ -305,14 +315,42 @@ function CreateEventSheet({
       crewId,
       kind,
       notes: notes.trim().length > 0 ? notes : undefined,
-    });
+    };
+    const r = editing
+      ? await update.mutateAsync({ id: editing.id, ...payload })
+      : await create.mutateAsync(payload);
     if (!r.ok) {
       setNotice(r.notice);
       return;
     }
-    setGood(successNotice(r.data) ?? "Event created. It is now on the calendar.");
-    setTitle("");
-    setNotes("");
+    setGood(
+      successNotice(r.data) ??
+        (editing ? "Event saved." : "Event created. It is now on the calendar."),
+    );
+    if (!editing) {
+      setTitle("");
+      setNotes("");
+    }
+  };
+
+  const confirmDelete = () => {
+    if (!editing) return;
+    Alert.alert("Delete this event?", "It will leave the calendar.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: () => {
+          void remove.mutateAsync(editing.id).then((r) => {
+            if (!r.ok) {
+              setNotice(r.notice);
+              return;
+            }
+            onClose();
+          });
+        },
+      },
+    ]);
   };
 
   return (
@@ -329,10 +367,10 @@ function CreateEventSheet({
           >
             <Text style={styles.sheetCancel}>Close</Text>
           </Pressable>
-          <Text style={styles.sheetTitle}>Create event</Text>
+          <Text style={styles.sheetTitle}>{editing ? "Edit event" : "Create event"}</Text>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Create event"
+            accessibilityLabel={editing ? "Save event" : "Create event"}
             disabled={!ready || busy}
             onPress={() => void submit()}
             hitSlop={space.sm}
@@ -343,7 +381,9 @@ function CreateEventSheet({
               pressed && styles.dim,
             ]}
           >
-            <Text style={styles.sheetSave}>{busy ? "Creating…" : "Create"}</Text>
+            <Text style={styles.sheetSave}>
+              {busy ? (editing ? "Saving…" : "Creating…") : editing ? "Save" : "Create"}
+            </Text>
           </Pressable>
         </View>
 
@@ -478,6 +518,17 @@ function CreateEventSheet({
             </View>
 
             <Text style={styles.muted}>Times are Eastern (ET).</Text>
+            {editing ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Delete event"
+                disabled={busy}
+                onPress={confirmDelete}
+                style={({ pressed }) => [styles.checkRow, pressed && styles.pressedSurface]}
+              >
+                <Text style={[styles.body, { color: color.danger }]}>Delete event</Text>
+              </Pressable>
+            ) : null}
           </ScrollView>
         </KeyboardAvoidingView>
       </View>
@@ -897,6 +948,7 @@ export default function ScheduleScreen(): React.ReactElement {
   const [selectedKey, setSelectedKey] = useState<string>(todayKey);
   const [createOpen, setCreateOpen] = useState(false);
   const [eventOpen, setEventOpen] = useState(false);
+  const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
   const [visitId, setVisitId] = useState<string | null>(null);
 
   const rollWindow = useCallback(() => {
@@ -1124,6 +1176,7 @@ export default function ScheduleScreen(): React.ReactElement {
               accessibilityRole="button"
               onPress={() => {
                 setCreateOpen(false);
+                setEditingEvent(null);
                 setEventOpen(true);
               }}
               style={({ pressed }) => [styles.createChoice, pressed && styles.pressedSurface]}
@@ -1138,7 +1191,17 @@ export default function ScheduleScreen(): React.ReactElement {
           </View>
         </View>
       </Modal>
-      {eventOpen ? <CreateEventSheet crews={crews} crewsNotice={crewsNotice} onClose={() => setEventOpen(false)} /> : null}
+      {eventOpen ? (
+        <CreateEventSheet
+          crews={crews}
+          crewsNotice={crewsNotice}
+          event={editingEvent}
+          onClose={() => {
+            setEventOpen(false);
+            setEditingEvent(null);
+          }}
+        />
+      ) : null}
     </>
   );
 
@@ -1213,7 +1276,28 @@ export default function ScheduleScreen(): React.ReactElement {
           </View>
         }
         renderItem={({ item }) => {
-          if (item.kind === "event") return <View style={styles.row}><Text style={styles.time}>{item.event.all_day?"All day":fmtEtTimeRange(item.event.starts_at,item.event.ends_at)}</Text><Text style={styles.customerLead}>{item.event.title}</Text><Text style={styles.address}>{item.event.kind.replace("_"," ")}{item.event.notes?` · ${item.event.notes}`:""}</Text></View>;
+          if (item.kind === "event") {
+            return (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Edit ${item.event.title}`}
+                onPress={() => {
+                  setEditingEvent(item.event);
+                  setEventOpen(true);
+                }}
+                style={({ pressed }) => [styles.row, pressed && styles.pressedSurface]}
+              >
+                <Text style={styles.time}>
+                  {item.event.all_day ? "All day" : fmtEtTimeRange(item.event.starts_at, item.event.ends_at)}
+                </Text>
+                <Text style={styles.customerLead}>{item.event.title}</Text>
+                <Text style={styles.address}>
+                  {item.event.kind.replace("_", " ")}
+                  {item.event.notes ? ` · ${item.event.notes}` : ""}
+                </Text>
+              </Pressable>
+            );
+          }
           if (item.kind === "calm") return <Text style={styles.calm}>{item.text}</Text>;
           if (item.kind === "visit") return <VisitRow visit={item.visit} onPress={() => setVisitId(item.visit.id)} />;
           return <JobRow job={item.job} crewName={item.crewName} onPress={() => openJob(item.job.id)} />;

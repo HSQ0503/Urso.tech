@@ -420,6 +420,21 @@ export const calendarEventActions = {
     action: "create",
     ...input,
   }),
+  update: (input: {
+    id: string;
+    title: string;
+    startIso: string;
+    endIso: string;
+    allDay: boolean;
+    crewId: string | null;
+    kind: CalendarEventKind;
+    notes?: string;
+  }) => act<Record<string, unknown>>("/canes/calendar-events/actions", {
+    action: "update",
+    ...input,
+  }),
+  remove: (id: string) =>
+    act<Record<string, unknown>>("/canes/calendar-events/actions", { action: "delete", id }),
 };
 
 export const expenseActions = {

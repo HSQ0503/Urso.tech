@@ -1,8 +1,8 @@
 # Canes customer-request decisions
 
-Status: product decisions Q1-Q22 accepted by Han on 2026-09-17. The interview is complete and implementation is authorized. The exact Markate terms remain an external input.
+Status: Q1–Q22 accepted 2026-09-17 and implemented. Update 16 Q23–Q37 accepted 2026-09-20 and implemented. Exact Markate terms remain an external input. Meta Page/app credentials are an ops step, not a product fork.
 
-Source: [Sebastian's request and screenshots](</Users/han/Desktop/Urso fixes.pdf>). Repository reviewed at `866613f781120a5b1b8003ee71b7cc253eda6473`.
+Source: [Sebastian's request and screenshots](</Users/han/Desktop/Urso fixes.pdf>); Update 16 is Sebastian's 2026-09-20 message. Repository reviewed at `1c3f451a2dbc5b57adb9980caba1b65070d7c73d`.
 
 ## Request coverage
 
@@ -23,6 +23,11 @@ Source: [Sebastian's request and screenshots](</Users/han/Desktop/Urso fixes.pdf
 | R13 | Remove checklist and job-photo clutter                                   | Q9. Owner screens change, crew functionality and records remain.                                   |
 | R14 | Add line discounts to estimates, work orders, and invoices               | Q10. Preserve discounts when converting documents.                                                 |
 | R15 | One Work Orders list, newest first, with swipe-left deletion             | Q5, Q11. Remove the separate status filters.                                                       |
+| R16 | Edit block-off times                                                     | Q23, Q29, Q37. Calendar blocks: tap to edit or delete.                                             |
+| R17 | Recurring expense should post on its date                                | Q24, Q30. Dated occurrences through today; Next date on the main Expenses screen.                  |
+| R18 | Meta Ads Manager leads land in Urso as Meta ads                          | Q25, Q28, Q33–Q35. Instant Form webhook; no phone → no lead; one card per phone.                   |
+| R19 | Remove “Call these now”                                                  | Q26, Q31. Quiet **New** group, no shout, no count in the title.                                    |
+| R20 | Synced leads orange until called or texted, then white                   | Q27, Q32, Q36. Uncontacted `meta_ads` on Leads; white after Urso SMS or click-to-call.              |
 
 ## Accepted decisions
 
@@ -98,3 +103,86 @@ Use an informational reminder without a YES requirement or automatic cancellatio
 - Q22: Initiate card refunds in Square and import them through reconciliation. Record cash refunds already made. Track customer credit and require explicit application to a later invoice.
 
 The detailed execution and verification plan is in [sebastian-fixes-plan.md](./sebastian-fixes-plan.md).
+
+## Update 16 — accepted 2026-09-20 (Q23–Q27)
+
+Han accepted the recommended answers from the first Update 16 round.
+
+### Q23: Block-off times
+
+A **calendar block** is a Schedule Event (`calendar_events`: block / time off / holiday / note). It is not a work order or quote visit. Jobs already have Schedule and Move. There is currently create-only: the day list renders the event as dead text, and `/api/v1/canes/calendar-events/actions` has no update or delete.
+
+### Q24: Recurring expense “auto charge”
+
+On the recurring date, Urso writes an **expense occurrence** (bookkeeping). That is Q7, already shipped. Urso does not send money to a vendor and does not bill a customer. “Charge” is not a product term here.
+
+### Q25: Meta ads ingest
+
+Leads that Sebastian currently types from Ads Manager should be created automatically with `source = meta_ads`. That means **Facebook Instant Forms** (Lead Ads), not tagging the public website form. The website form remains `website`. Nothing in the repo currently writes `meta_ads`.
+
+### Q26: “Call these now”
+
+That string is the section title for every lead with `status = new`. Remove the call-to-action header. Do not hide the leads.
+
+### Q27: Orange on synced leads
+
+Orange on the **Leads list** means an uncontacted Meta lead. Inbox orange stays “they spoke last” / missed inbound call. Q36 widened this from webhook-only to every uncontacted `meta_ads` row.
+
+## Update 16 — accepted 2026-09-20 (Q28–Q33)
+
+Han answered A on the second round.
+
+### Q28: Instant Forms, not website UTMs
+
+The ads collect Instant Form / Leads Center submissions. Ingest is Meta’s leadgen webhook. The public quote form stays `website`.
+
+### Q29: Edit and delete calendar blocks
+
+Tap a calendar block to change time, title, kind, crew, notes, or all-day. Delete after confirm. No repeating blocks. A sold visit still reschedules with job Move. A block that overlaps a job is allowed and does not unschedule the job (Q19).
+
+### Q30: Recurring expenses through today
+
+Mint dated occurrences through today only. Show **Next: date** on the main Expenses screen. Do not pre-create future months. An empty this-month after saving with today’s date is a bug, not a missing charge pipeline.
+
+### Q31: Quiet New
+
+Keep new leads grouped at the top. Label the group **New**. Do not shout “Call these now” or a live count in the title.
+
+### Q32: Contacted from Urso
+
+A Meta row turns white after an Urso SMS or Urso click-to-call, including no-answer. Logging a call outcome also counts. Opening the lead does not. A personal-cell call that is never logged stays orange. Click-to-call must set `contacted` the way SMS already does.
+
+### Q33: Same phone, one lead
+
+Do not mint a second lead. Open/notify on the existing record. Do not overwrite `website`, `lead_vendor`, or `referral`. If the existing source is `other`, set `meta_ads`.
+
+## Update 16 — accepted 2026-09-20 (Q34–Q37)
+
+Han answered A on the third round. No further product forks remain.
+
+### Q34: Meta ingest automations
+
+Match website new-number intake: cold lead, `source = meta_ads`, owner push, email, hold SMS. Known phone: fill blanks only, page the owner, keep Q33 source rules. A2P may still leave the hold SMS undelivered; that is delivery, not a second product.
+
+### Q35: Instant Form with no phone
+
+Do not create a lead. Owner push with name/email if present: it is not in Urso because there is no number to call or text.
+
+### Q36: Who is orange
+
+Every uncontacted `meta_ads` lead, including ones typed before ingest. White after Urso contact (Q32). No ingest-versus-typed split.
+
+### Q37: Block editor
+
+Tap the day-list event. Reuse the create sheet loaded for edit. Delete lives on that sheet, behind confirm. Past blocks are editable. No swipe on the day list.
+
+### Recorded defaults (not separately grilled)
+
+- Map Instant Form `full_name` / `phone_number` / `email`. Address and service if those custom questions exist; otherwise leave blank. Extra answers go in notes.
+- Idempotency key is Meta’s leadgen id. Retries do not create a second card.
+- Do not backfill old Ads Manager rows.
+- Owner mobile and browser (Q1). Crew and Woof Gang unchanged.
+
+### Ops, not product
+
+Meta App, Canes Page subscription, webhook callback URL, and verify token. Required before Instant Form ingest can run in production.

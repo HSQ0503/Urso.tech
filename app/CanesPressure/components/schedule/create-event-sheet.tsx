@@ -3,21 +3,23 @@
 import { useState, useTransition } from "react";
 import {
   createCalendarEvent,
+  deleteCalendarEvent,
+  updateCalendarEvent,
   type ActionResult,
 } from "@/app/CanesPressure/actions";
 import {
   ET,
   etLocalToIso,
+  isoToEtLocal,
+  type CalendarEvent,
   type CalendarEventKind,
   type Crew,
 } from "@/lib/canes/types";
 import { SheetShell } from "./sheet-shell";
 
-// Create Event sheet (plan §4.1) — the lean answer to Markate's "Create Event":
-// title, date, start/end (or all-day), crew (or everyone), kind. Because jobs
-// are born from estimates, this is the only calendar-authoring form we need —
-// there is no 20-field work-order form. Times compose to ET wall time through
-// etLocalToIso, never raw epoch math on a day origin.
+// Create / edit Event sheet — title, date, start/end (or all-day), crew, kind,
+// notes. Jobs are born from estimates, so this is the only calendar-authoring
+// form. Times compose to ET wall time through etLocalToIso.
 
 type Feedback = { ok: boolean; text: string } | null;
 
@@ -28,8 +30,6 @@ const KINDS: { value: CalendarEventKind; label: string }[] = [
   { value: "note", label: "Note" },
 ];
 
-// Today's ET date as YYYY-MM-DD, so the date input defaults to today wherever
-// the device clock sits.
 function todayEt(): string {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: ET,
@@ -39,26 +39,35 @@ function todayEt(): string {
   }).format(new Date());
 }
 
+function splitEt(iso: string): { date: string; time: string } {
+  const naive = isoToEtLocal(iso);
+  return { date: naive.slice(0, 10), time: naive.slice(11, 16) };
+}
+
 export function CreateEventSheet({
   crews,
+  event,
   onClose,
 }: {
   crews: Crew[];
+  event?: CalendarEvent | null;
   onClose: () => void;
 }) {
+  const editing = event ?? null;
+  const initial = editing ? splitEt(editing.starts_at) : null;
+  const initialEnd = editing && !editing.all_day ? splitEt(editing.ends_at).time : "12:00";
   const [isPending, startTransition] = useTransition();
   const [feedback, setFeedback] = useState<Feedback>(null);
 
-  const [title, setTitle] = useState("");
-  const [date, setDate] = useState(todayEt());
-  const [start, setStart] = useState("09:00");
-  const [end, setEnd] = useState("12:00");
-  const [allDay, setAllDay] = useState(false);
-  const [crewId, setCrewId] = useState("");
-  const [kind, setKind] = useState<CalendarEventKind>("block");
+  const [title, setTitle] = useState(editing?.title ?? "");
+  const [date, setDate] = useState(initial?.date ?? todayEt());
+  const [start, setStart] = useState(initial?.time ?? "09:00");
+  const [end, setEnd] = useState(initialEnd);
+  const [allDay, setAllDay] = useState(editing?.all_day ?? false);
+  const [crewId, setCrewId] = useState(editing?.crew_id ?? "");
+  const [kind, setKind] = useState<CalendarEventKind>(editing?.kind ?? "block");
+  const [notes, setNotes] = useState(editing?.notes ?? "");
 
-  // "HH:mm" strings compare lexicographically, so end > start is a plain string
-  // check — no Date math needed for a same-day window.
   const timesInvalid = !allDay && !!start && !!end && end <= start;
   const canSubmit =
     title.trim().length > 0 &&
@@ -67,31 +76,44 @@ export function CreateEventSheet({
 
   function submit() {
     setFeedback(null);
-    // All-day spans the whole ET day (00:00 → next-day 00:00); a timed event
-    // uses the two time inputs. etLocalToIso resolves both as ET wall time.
     const startIso = allDay
       ? etLocalToIso(`${date}T00:00`)
       : etLocalToIso(`${date}T${start}`);
     const endIso = allDay
       ? etLocalToIso(`${nextDay(date)}T00:00`)
       : etLocalToIso(`${date}T${end}`);
+    const payload = {
+      title: title.trim(),
+      startIso,
+      endIso,
+      allDay,
+      crewId: crewId || null,
+      kind,
+      notes: notes.trim(),
+    };
 
     startTransition(async () => {
-      const res: ActionResult = await createCalendarEvent({
-        title: title.trim(),
-        startIso,
-        endIso,
-        allDay,
-        crewId: crewId || null,
-        kind,
-      });
+      const res: ActionResult = editing
+        ? await updateCalendarEvent(editing.id, payload)
+        : await createCalendarEvent(payload);
+      setFeedback(res.notice ? { ok: res.ok, text: res.notice } : null);
+      if (res.ok) onClose();
+    });
+  }
+
+  function remove() {
+    if (!editing) return;
+    if (!confirm("Delete this event? It will leave the calendar.")) return;
+    setFeedback(null);
+    startTransition(async () => {
+      const res: ActionResult = await deleteCalendarEvent(editing.id);
       setFeedback(res.notice ? { ok: res.ok, text: res.notice } : null);
       if (res.ok) onClose();
     });
   }
 
   return (
-    <SheetShell title="Create event" onClose={onClose}>
+    <SheetShell title={editing ? "Edit event" : "Create event"} onClose={onClose}>
       <div className="space-y-3">
         <div>
           <label className="cp-label" htmlFor="event-title">Title</label>
@@ -185,6 +207,17 @@ export function CreateEventSheet({
           </select>
         </div>
 
+        <div>
+          <label className="cp-label" htmlFor="event-notes">Notes</label>
+          <textarea
+            id="event-notes"
+            className="cp-input min-h-[72px]"
+            placeholder="Anything worth remembering"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+          />
+        </div>
+
         <p className="text-[12px] leading-snug text-[var(--cp-faint)]">Times are Eastern (ET).</p>
 
         {feedback && (
@@ -204,7 +237,7 @@ export function CreateEventSheet({
             disabled={!canSubmit || isPending}
             onClick={submit}
           >
-            {isPending ? "Creating..." : "Create event"}
+            {isPending ? (editing ? "Saving..." : "Creating...") : editing ? "Save event" : "Create event"}
           </button>
           <button
             type="button"
@@ -215,13 +248,21 @@ export function CreateEventSheet({
             Cancel
           </button>
         </div>
+        {editing ? (
+          <button
+            type="button"
+            className="cp-btn cp-btn-ghost cp-btn-danger cp-btn-sm w-full"
+            disabled={isPending}
+            onClick={remove}
+          >
+            Delete event
+          </button>
+        ) : null}
       </div>
     </SheetShell>
   );
 }
 
-// Next ET calendar day as YYYY-MM-DD for the all-day end bound. Anchoring at
-// UTC noon keeps the +1 stable across DST.
 function nextDay(ymd: string): string {
   const anchor = new Date(`${ymd}T12:00:00Z`);
   return new Date(anchor.getTime() + 86_400_000).toISOString().slice(0, 10);

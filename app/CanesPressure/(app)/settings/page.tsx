@@ -35,6 +35,7 @@ export default async function SettingsPage() {
     { label: "SMS", url: `${base}/api/canes/twilio/sms${retryPolicy}` },
     { label: "Voice", url: `${base}/api/canes/twilio/voice${retryPolicy}` },
     { label: "Status callback", url: `${base}/api/canes/twilio/status${retryPolicy}` },
+    { label: "Meta Instant Forms", url: `${base}/api/canes/meta/webhook` },
   ];
 
   return (
@@ -110,7 +111,7 @@ export default async function SettingsPage() {
       <section className="cp-card rounded-xl p-4 md:rounded-md md:p-5">
         <h2 className="text-[15px] font-semibold">Webhooks</h2>
         <p className="mt-1 text-[13px] text-[var(--cp-muted)]">
-          Paste these into the Twilio phone number configuration so incoming texts and calls reach the app.
+          Paste the Twilio URLs into the phone number configuration, and the Meta URL into the App leadgen webhook.
         </p>
         <div className="mt-4 flex flex-col gap-2.5">
           {webhooks.map(({ label, url }) => (

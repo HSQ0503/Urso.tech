@@ -1,5 +1,5 @@
 import { apiFail, apiResult, apiRoute, isIsoInstant } from "@/lib/api/v1";
-import { createCalendarEvent } from "@/app/CanesPressure/actions";
+import { createCalendarEvent, deleteCalendarEvent, updateCalendarEvent } from "@/app/CanesPressure/actions";
 import type { CalendarEventKind } from "@urso/types";
 
 // POST /api/v1/canes/calendar-events/actions — the non-job calendar blocks
@@ -23,6 +23,7 @@ export const dynamic = "force-dynamic";
 
 type Body = {
   action?: unknown;
+  id?: unknown;
   title?: unknown;
   startIso?: unknown;
   endIso?: unknown;
@@ -31,6 +32,33 @@ type Body = {
   kind?: unknown;
   notes?: unknown;
 };
+
+function eventFields(body: Body) {
+  if (typeof body.title !== "string") return apiFail("`title` must be a string.", 422);
+  if (!isIsoInstant(body.startIso)) return apiFail("`startIso` must be an ISO instant.", 422);
+  if (!isIsoInstant(body.endIso)) return apiFail("`endIso` must be an ISO instant.", 422);
+  if (body.allDay !== undefined && typeof body.allDay !== "boolean") {
+    return apiFail("`allDay` must be a boolean.", 422);
+  }
+  if (body.crewId !== undefined && body.crewId !== null && typeof body.crewId !== "string") {
+    return apiFail("`crewId` must be a string or null.", 422);
+  }
+  if (body.kind !== undefined && typeof body.kind !== "string") {
+    return apiFail("`kind` must be a string.", 422);
+  }
+  if (body.notes !== undefined && typeof body.notes !== "string") {
+    return apiFail("`notes` must be a string.", 422);
+  }
+  return {
+    title: body.title,
+    startIso: body.startIso,
+    endIso: body.endIso,
+    allDay: body.allDay as boolean | undefined,
+    crewId: body.crewId as string | null | undefined,
+    kind: body.kind as CalendarEventKind | undefined,
+    notes: body.notes as string | undefined,
+  };
+}
 
 export const POST = apiRoute(async ({ req }) => {
   let body: Body;
@@ -45,7 +73,6 @@ export const POST = apiRoute(async ({ req }) => {
 
   switch (body.action) {
     case "create": {
-      if (typeof body.title !== "string") return apiFail("`title` must be a string.", 422);
       // The action DOES parse both instants — `new Date()` then isNaN, answering
       // "Invalid date." — plus "End must be after start.", and those sentences
       // are written for the reader. What it cannot catch is a string that is not
@@ -57,35 +84,21 @@ export const POST = apiRoute(async ({ req }) => {
       //
       // The offset is required for the same reason as the range reads: these are
       // ET wall-clock blocks, and a naive string resolves in the server's zone.
-      if (!isIsoInstant(body.startIso)) return apiFail("`startIso` must be an ISO instant.", 422);
-      if (!isIsoInstant(body.endIso)) return apiFail("`endIso` must be an ISO instant.", 422);
+      const fields = eventFields(body);
+      if (fields instanceof Response) return fields;
+      return apiResult(await createCalendarEvent(fields));
+    }
 
-      if (body.allDay !== undefined && typeof body.allDay !== "boolean") {
-        return apiFail("`allDay` must be a boolean.", 422);
-      }
-      if (body.crewId !== undefined && body.crewId !== null && typeof body.crewId !== "string") {
-        return apiFail("`crewId` must be a string or null.", 422);
-      }
-      // The column's own constraint owns the kind vocabulary; re-listing the
-      // values here would be a second copy to drift.
-      if (body.kind !== undefined && typeof body.kind !== "string") {
-        return apiFail("`kind` must be a string.", 422);
-      }
-      if (body.notes !== undefined && typeof body.notes !== "string") {
-        return apiFail("`notes` must be a string.", 422);
-      }
+    case "update": {
+      if (typeof body.id !== "string" || !body.id) return apiFail("`id` must be a string.", 422);
+      const fields = eventFields(body);
+      if (fields instanceof Response) return fields;
+      return apiResult(await updateCalendarEvent(body.id, fields));
+    }
 
-      return apiResult(
-        await createCalendarEvent({
-          title: body.title,
-          startIso: body.startIso,
-          endIso: body.endIso,
-          allDay: body.allDay as boolean | undefined,
-          crewId: body.crewId as string | null | undefined,
-          kind: body.kind as CalendarEventKind | undefined,
-          notes: body.notes as string | undefined,
-        }),
-      );
+    case "delete": {
+      if (typeof body.id !== "string" || !body.id) return apiFail("`id` must be a string.", 422);
+      return apiResult(await deleteCalendarEvent(body.id));
     }
 
     default:

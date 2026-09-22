@@ -341,6 +341,25 @@ export default function ExpensesScreen(): React.ReactElement {
             </View>
             <Text style={styles.overheadValue}>{fmtMoney(totals.monthlyOverhead)}</Text>
           </View>
+          {(ledgerQuery.data?.rules ?? []).filter((rule) => rule.active).length > 0 ? (
+            <View style={styles.card}>
+              {(ledgerQuery.data?.rules ?? [])
+                .filter((rule) => rule.active)
+                .map((rule, index) => (
+                  <View key={rule.id} style={[styles.row, index > 0 && styles.divided]}>
+                    <View style={styles.rowBody}>
+                      <Text style={styles.rowTitle} numberOfLines={1}>
+                        {rule.name}
+                      </Text>
+                      <Text style={styles.muted}>
+                        Next: {rule.next_due_on}
+                      </Text>
+                    </View>
+                    <Text style={styles.money}>{fmtMoney(rule.amount_cents)}</Text>
+                  </View>
+                ))}
+            </View>
+          ) : null}
 
           {formOpen ? (
             <View style={styles.form}>

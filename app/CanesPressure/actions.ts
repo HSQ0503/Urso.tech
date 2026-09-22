@@ -914,7 +914,13 @@ export async function bridgeCall(
     status: "initiated",
     twilio_sid: sid,
   });
-  if (opts?.leadId) await logEvent(opts.leadId, "call", "Click-to-call started (bridging your phone)");
+  if (opts?.leadId) {
+    await logEvent(opts.leadId, "call", "Click-to-call started (bridging your phone)");
+    const lead = await getLead(opts.leadId);
+    if (lead && lead.status === "new") {
+      await canesDb().from("leads").update({ status: "contacted" }).eq("id", opts.leadId);
+    }
+  }
   return { ok: true, notice: "Calling your phone now — answer to connect." };
 }
 
@@ -2831,6 +2837,63 @@ export async function createCalendarEvent(input: {
     notes: input.notes?.trim() || null,
   });
   if (error) return { ok: false, notice: error.message };
+  refresh();
+  return { ok: true };
+}
+
+export async function updateCalendarEvent(
+  id: string,
+  input: {
+    title: string;
+    startIso: string;
+    endIso: string;
+    allDay?: boolean;
+    crewId?: string | null;
+    kind?: CalendarEventKind;
+    notes?: string;
+  },
+): Promise<ActionResult> {
+  if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted("schedule");
+  if (denied) return denied;
+  const title = input.title.trim();
+  if (!title) return { ok: false, notice: "A title is required." };
+  const start = new Date(input.startIso);
+  const end = new Date(input.endIso);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    return { ok: false, notice: "Invalid date." };
+  }
+  if (end.getTime() <= start.getTime()) return { ok: false, notice: "End must be after start." };
+  const { data, error } = await canesDb()
+    .from("calendar_events")
+    .update({
+      title,
+      starts_at: start.toISOString(),
+      ends_at: end.toISOString(),
+      all_day: input.allDay ?? false,
+      crew_id: input.crewId ?? null,
+      kind: input.kind ?? "block",
+      notes: input.notes?.trim() || null,
+    })
+    .eq("id", id)
+    .select("id");
+  if (error) return { ok: false, notice: error.message };
+  if (!data?.length) return { ok: false, notice: "Event not found." };
+  refresh();
+  return { ok: true };
+}
+
+export async function deleteCalendarEvent(id: string): Promise<ActionResult> {
+  if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted("schedule");
+  if (denied) return denied;
+  const { data, error } = await canesDb()
+    .from("calendar_events")
+    .delete()
+    .eq("id", id)
+    .select("id");
+  if (error) return { ok: false, notice: error.message };
+  if (!data?.length) return { ok: false, notice: "Event not found." };
   refresh();
   return { ok: true };
 }

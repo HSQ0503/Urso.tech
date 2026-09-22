@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -93,6 +94,48 @@ test("customer messages identify Canes and reminders have no confirmation demand
   assert.match(text, /561-537-5674/);
   assert.match(text, /https:\/\/example.com\/job/);
   assert.doesNotMatch(text, /YES|confirm/i);
+});
+
+test("ET wall-clock conversion round-trips through isoToEtLocal", () => {
+  const { etLocalToIso, isoToEtLocal } = source("packages/types/src/types.ts");
+  const iso = etLocalToIso("2026-09-20T09:00");
+  assert.equal(isoToEtLocal(iso), "2026-09-20T09:00");
+});
+
+test("uncontacted Meta leads are new meta_ads rows only", () => {
+  const { isUncontactedMetaLead } = source("packages/types/src/types.ts");
+  assert.equal(isUncontactedMetaLead({ source: "meta_ads", status: "new" }), true);
+  assert.equal(isUncontactedMetaLead({ source: "meta_ads", status: "contacted" }), false);
+  assert.equal(isUncontactedMetaLead({ source: "website", status: "new" }), false);
+});
+
+test("Instant Form field_data maps name, phone, extras in notes", () => {
+  const { parseInstantFormFields, leadgenIdsFromPayload, verifyMetaSignature } = source(
+    "lib/canes/meta-form.ts",
+    { "node:crypto": { createHmac, timingSafeEqual } },
+  );
+  const fields = parseInstantFormFields([
+    { name: "full_name", values: ["Jamie Rivera"] },
+    { name: "phone_number", values: ["(561) 555-0199"] },
+    { name: "email", values: ["jamie@example.com"] },
+    { name: "which_surface", values: ["driveway"] },
+  ]);
+  assert.equal(fields.name, "Jamie Rivera");
+  assert.equal(fields.phone, "+15615550199");
+  assert.equal(fields.email, "jamie@example.com");
+  assert.match(fields.notes, /which surface: driveway/);
+  assert.deepEqual(
+    leadgenIdsFromPayload({
+      object: "page",
+      entry: [{ changes: [{ field: "leadgen", value: { leadgen_id: "abc" } }] }],
+    }),
+    ["abc"],
+  );
+  const body = '{"object":"page"}';
+  const header = `sha256=${createHmac("sha256", "secret").update(body, "utf8").digest("hex")}`;
+  assert.equal(verifyMetaSignature(header, body, "secret"), true);
+  assert.equal(verifyMetaSignature(header, body, "other"), false);
+  assert.equal(verifyMetaSignature(null, body, "secret"), false);
 });
 
 test("Canes migrations and transactional workflows in isolated PostgreSQL", async (t) => {
@@ -959,12 +1002,94 @@ test("Canes migrations and transactional workflows in isolated PostgreSQL", asyn
       "new privileged functions cannot be called by ordinary authenticated users",
       async () => {
         const { rows } = await db.query(
-          `select has_function_privilege('authenticated','mint_scheduled_plan_visit(uuid)','EXECUTE') as repeat,has_function_privilege('authenticated','generate_expense_occurrences()','EXECUTE') as expense`,
+          `select has_function_privilege('authenticated','mint_scheduled_plan_visit(uuid)','EXECUTE') as repeat,has_function_privilege('authenticated','generate_expense_occurrences()','EXECUTE') as expense,has_function_privilege('authenticated','claim_meta_leadgen(text)','EXECUTE') as meta`,
         );
         assert.equal(rows[0].repeat, false);
         assert.equal(rows[0].expense, false);
+        assert.equal(rows[0].meta, false);
       },
     );
+    await t.test("expense rule starting on the 1st still mints this month", async () => {
+      const {
+        rows: [month],
+      } = await db.query(
+        `select date_trunc('month', now() at time zone 'America/New_York')::date::text as start`,
+      );
+      const {
+        rows: [rule],
+      } = await db.query(
+        `select create_canes_expense_rule(jsonb_build_object('name','First-of-month rule','category','Software','amount_cents',2500,'frequency','monthly','starts_on',$1::text,'next_due_on',$1::text,'anchor_day',1,'cutover_on',$1::text)) as id`,
+        [month.start],
+      );
+      assert.equal(
+        (
+          await db.query(
+            `select count(*)::int as n from business_expenses where rule_id=$1 and occurrence_on=$2::date`,
+            [rule.id, month.start],
+          )
+        ).rows[0].n,
+        1,
+      );
+    });
+    await t.test("meta leadgen id is unique and fill-blanks leave website source", async () => {
+      const {
+        rows: [lead],
+      } = await db.query(
+        `insert into leads(type,status,source,phone,name) values('cold','new','website','+15555550199','Existing') returning id`,
+      );
+      assert.equal(
+        (await db.query(`select claim_meta_leadgen('lg-1') as state`)).rows[0].state,
+        "acquired",
+      );
+      assert.equal(
+        (await db.query(`select claim_meta_leadgen('lg-1') as state`)).rows[0].state,
+        "busy",
+      );
+      await db.query(
+        `select apply_meta_lead_existing_update('lg-1',$1,'','a@b.com','1 Main','','Meta note',false)`,
+        [lead.id],
+      );
+      const {
+        rows: [row],
+      } = await db.query(
+        `select source,name,email,address,notes,meta_leadgen_id from leads where id=$1`,
+        [lead.id],
+      );
+      assert.equal(row.source, "website");
+      assert.equal(row.name, "Existing");
+      assert.equal(row.email, "a@b.com");
+      assert.equal(row.address, "1 Main");
+      assert.equal(row.meta_leadgen_id, "lg-1");
+      await db.query(`select finish_meta_leadgen('lg-1','existing',$1)`, [lead.id]);
+      assert.equal(
+        (await db.query(`select claim_meta_leadgen('lg-1') as state`)).rows[0].state,
+        "completed",
+      );
+      const {
+        rows: [other],
+      } = await db.query(
+        `insert into leads(type,status,source,phone) values('cold','new','other','+15555550198') returning id`,
+      );
+      await db.query(`select claim_meta_leadgen('lg-2')`);
+      await db.query(
+        `select apply_meta_lead_existing_update('lg-2',$1,'Pat','','','','',true)`,
+        [other.id],
+      );
+      assert.equal(
+        (
+          await db.query(`select source,name from leads where id=$1`, [other.id])
+        ).rows[0].source,
+        "meta_ads",
+      );
+      await db.query(
+        `insert into leads(type,status,source,phone,meta_leadgen_id) values('cold','new','meta_ads','+15555550197','lg-unique')`,
+      );
+      await assert.rejects(() =>
+        db.query(
+          `insert into leads(type,status,source,phone,meta_leadgen_id) values('cold','new','meta_ads','+15555550196','lg-unique')`,
+        ),
+      );
+    });
   } finally {
     await db.close();
   }

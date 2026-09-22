@@ -8,9 +8,9 @@
 // Above the rows sit the tabs Sebastian asked for (2026-09-13): WHERE the lead
 // came from — All · Lead Gen · Website · Meta Ads · Door Knock · Referral — so
 // he can watch a channel while his Meta ads run. The pipeline stage did not
-// disappear; it became the sections inside the list, with "Call these now"
-// pinned on top of every tab. All client-side over the one page of leads
-// already loaded, so switching costs nothing and never invents a number.
+// disappear; it became the sections inside the list, with New pinned on top
+// of every tab. All client-side over the one page of leads already loaded, so
+// switching costs nothing and never invents a number.
 //
 // Times are America/New_York via fmtEt. The only clock arithmetic here is
 // minutesSince, which is a pure epoch difference and has no timezone in it;
@@ -31,6 +31,7 @@ import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   fmtPhone,
+  isUncontactedMetaLead,
   minutesSince,
   SOURCE_LABEL,
   STATUS_LABEL,
@@ -84,7 +85,7 @@ const STAGES = ["new", "working", "won", "lost"] as const;
 type Stage = (typeof STAGES)[number];
 
 const STAGE_LABEL: Record<Stage, string> = {
-  new: "Call these now",
+  new: "New",
   working: "In progress",
   won: "Won",
   lost: "Lost",
@@ -194,6 +195,7 @@ function LeadRow({
   onPress: () => void;
 }) {
   const hot = lead.type === "hot";
+  const uncontacted = isUncontactedMetaLead(lead);
   const reviewParse = lead.parse_confidence !== null && lead.parse_confidence < LOW_CONFIDENCE;
   return (
     <Pressable
@@ -203,11 +205,11 @@ function LeadRow({
       style={({ pressed }) => [
         ...listRowStyle(first, last),
         styles.row,
-        hot && styles.rowHot,
+        uncontacted && styles.rowHot,
         pressed && styles.pressed,
       ]}
     >
-      <Avatar name={leadTitle(lead)} hot={hot} />
+      <Avatar name={leadTitle(lead)} hot={uncontacted} />
       <View style={styles.rowBody}>
         <View style={styles.rowTop}>
           <Text style={styles.name} numberOfLines={1}>
@@ -322,8 +324,8 @@ export default function LeadsScreen(): React.ReactElement {
               <View style={styles.rule}>
                 <SectionRule
                   label={STAGE_LABEL[item.stage]}
-                  meta={item.count}
-                  tone={item.stage === "new" ? "danger" : "muted"}
+                  meta={item.stage === "new" ? null : item.count}
+                  tone="muted"
                 />
               </View>
             ) : (
@@ -366,7 +368,7 @@ const styles = StyleSheet.create({
 
   // The one accent on this screen: a hot lead is a person waiting on a call.
   row: { minHeight: 72, flexDirection: "row", alignItems: "center", gap: 11 },
-  rowHot: { borderLeftColor: color.brand },
+  rowHot: { borderLeftWidth: 3, borderLeftColor: color.brand },
   pressed: { backgroundColor: color.hover },
 
   rowBody: { flex: 1, minWidth: 0 },

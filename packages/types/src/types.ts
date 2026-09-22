@@ -43,6 +43,7 @@ export type Lead = {
   snoozed_until: string | null;
   last_activity_at: string;
   opportunity_started_at?: string;
+  meta_leadgen_id?: string | null;
 };
 
 export type Message = {
@@ -304,6 +305,28 @@ export function etLocalToIso(naive: string): string {
     guess += intended - etWallClockAsUtcMs(new Date(guess));
   }
   return new Date(guess).toISOString();
+}
+
+// Inverse of etLocalToIso: an instant as America/New_York "YYYY-MM-DDTHH:mm"
+// so an editor can load a stored block back into the same pickers that created it.
+export function isoToEtLocal(iso: string): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: ET,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date(iso));
+  const get = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value ?? "00";
+  const hour = get("hour") === "24" ? "00" : get("hour");
+  return `${get("year")}-${get("month")}-${get("day")}T${hour}:${get("minute")}`;
+}
+
+export function isUncontactedMetaLead(lead: Pick<Lead, "source" | "status">): boolean {
+  return lead.source === "meta_ads" && lead.status === "new";
 }
 
 // Normalize a US phone into E.164 (+1XXXXXXXXXX); returns null if hopeless.

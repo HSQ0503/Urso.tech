@@ -305,6 +305,7 @@ function TimeGridColumn({
   dropActiveYmd,
   onOpenJob,
   onOpenVisit,
+  onOpenEvent,
   onDropJob,
   setDropActive,
 }: {
@@ -318,6 +319,7 @@ function TimeGridColumn({
   dropActiveYmd: string | null;
   onOpenJob: (job: JobWithItems) => void;
   onOpenVisit: (visit: Lead) => void;
+  onOpenEvent: (event: CalendarEvent) => void;
   onDropJob: (ymd: string, timeOfDay: string) => (e: React.DragEvent) => void;
   setDropActive: (ymd: string | null) => void;
 }) {
@@ -394,25 +396,29 @@ function TimeGridColumn({
       ))}
 
       {allDayEvents.map((e, i) => (
-        <div
+        <button
           key={e.id}
+          type="button"
           className="cp-timegrid-event"
           style={{ top: 2 + i * 18, left: 2, right: 2, height: 16 }}
           title={e.notes ?? undefined}
+          onClick={() => onOpenEvent(e)}
         >
           {e.title}
-        </div>
+        </button>
       ))}
 
       {timedEvents.map(({ e, span }) => (
-        <div
+        <button
           key={e.id}
+          type="button"
           className="cp-timegrid-event"
           style={blockStyle({ ...span, lane: 0, lanes: 1 }, win.start)}
           title={e.notes ?? undefined}
+          onClick={() => onOpenEvent(e)}
         >
           {e.title}
-        </div>
+        </button>
       ))}
 
       {placements.map((p) => {
@@ -493,6 +499,7 @@ function TimeGrid({
   dropActiveYmd,
   onOpenJob,
   onOpenVisit,
+  onOpenEvent,
   onOpenDay,
   onDropJob,
   setDropActive,
@@ -505,6 +512,7 @@ function TimeGrid({
   dropActiveYmd: string | null;
   onOpenJob: (job: JobWithItems) => void;
   onOpenVisit: (visit: Lead) => void;
+  onOpenEvent: (event: CalendarEvent) => void;
   onOpenDay: (ymd: string) => void;
   onDropJob: (ymd: string, timeOfDay: string) => (e: React.DragEvent) => void;
   setDropActive: (ymd: string | null) => void;
@@ -607,6 +615,7 @@ function TimeGrid({
               dropActiveYmd={dropActiveYmd}
               onOpenJob={onOpenJob}
               onOpenVisit={onOpenVisit}
+              onOpenEvent={onOpenEvent}
               onDropJob={onDropJob}
               setDropActive={setDropActive}
             />
@@ -766,6 +775,7 @@ export function CalendarBoard({
   dropActiveYmd,
   onOpenJob,
   onOpenVisit,
+  onOpenEvent,
   onOpenRunSheet,
   onDropJob,
   onOpenDay,
@@ -786,6 +796,7 @@ export function CalendarBoard({
   dropActiveYmd: string | null;
   onOpenJob: (job: JobWithItems) => void;
   onOpenVisit: (visit: Lead) => void;
+  onOpenEvent: (event: CalendarEvent) => void;
   onOpenRunSheet: (jobs: JobWithItems[], crew: Crew | null, dayLabel: string) => void;
   // Composes ET wall-time from the dropped day + the dragged job's time-of-day.
   onDropJob: (ymd: string, payload: ReturnType<typeof readDrag>) => void;
@@ -871,6 +882,7 @@ export function CalendarBoard({
           dropActiveYmd={dropActiveYmd}
           onOpenJob={onOpenJob}
           onOpenVisit={onOpenVisit}
+          onOpenEvent={onOpenEvent}
           onOpenDay={onOpenDay}
           onDropJob={gridDropHandler}
           setDropActive={setDropActive}
@@ -890,6 +902,7 @@ export function CalendarBoard({
       dropActiveYmd={dropActiveYmd}
       onOpenJob={onOpenJob}
       onOpenVisit={onOpenVisit}
+      onOpenEvent={onOpenEvent}
       onOpenDay={onOpenDay}
       onDropJob={gridDropHandler}
       setDropActive={setDropActive}

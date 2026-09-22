@@ -100,14 +100,17 @@ export async function addBusinessExpenseRow(input: {
   note?: string | null;
 }): Promise<string | null> {
   if (input.recurring && input.frequency !== "one_time") {
-    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
     const { data, error } = await canesDb().rpc("create_canes_expense_rule", { p_input: {
       name: input.name, amount_cents: input.amountCents, category: input.category,
       frequency: input.frequency, starts_on: input.incurredOn, next_due_on: input.incurredOn,
       ends_on: input.endsOn ?? null, anchor_day: Number(input.incurredOn.slice(-2)),
-      cutover_on: input.incurredOn > today ? input.incurredOn : today, note: input.note ?? null,
+      cutover_on: input.incurredOn, note: input.note ?? null,
     } });
-    return error ? null : data as string;
+    if (error) {
+      console.error(`[canes] create_canes_expense_rule: ${error.message}`);
+      return null;
+    }
+    return data as string;
   }
   const { data, error } = await canesDb()
     .from("business_expenses")

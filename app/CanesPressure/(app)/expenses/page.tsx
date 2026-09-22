@@ -112,6 +112,29 @@ export default async function ExpensesPage() {
         </div>
       </section>
 
+      {ledger.rules.filter((rule) => rule.active).length > 0 ? (
+        <section className="cp-card overflow-hidden rounded-xl md:rounded-md">
+          <div className="px-4 py-3">
+            <p className="cp-label">Upcoming recurring expenses</p>
+          </div>
+          <ul className="divide-y divide-[var(--cp-line)]">
+            {ledger.rules
+              .filter((rule) => rule.active)
+              .map((rule) => (
+                <li key={rule.id} className="flex items-baseline justify-between gap-3 px-4 py-3">
+                  <span className="min-w-0">
+                    <span className="block truncate text-[14px] font-semibold">{rule.name}</span>
+                    <span className="text-[12.5px] text-[var(--cp-muted)]">Next: {rule.next_due_on}</span>
+                  </span>
+                  <span className="shrink-0 text-[14px] font-semibold tabular-nums">
+                    {fmtMoney(rule.amount_cents)}
+                  </span>
+                </li>
+              ))}
+          </ul>
+        </section>
+      ) : null}
+
       {/* Section 1 — my expenses (overhead) */}
       <section className="flex flex-col gap-4">
         <SectionHead label="My expenses" title="Dated expenses" />

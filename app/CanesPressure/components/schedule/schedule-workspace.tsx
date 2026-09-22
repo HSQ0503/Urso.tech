@@ -240,6 +240,7 @@ export function ScheduleWorkspace({
   const activeVisit = visitId ? visits.find((v) => v.id === visitId) ?? null : null;
   const [runSheet, setRunSheet] = useState<{ jobs: JobWithItems[]; crew: Crew | null; dayLabel: string } | null>(null);
   const [createEventOpen, setCreateEventOpen] = useState(false);
+  const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
   const [createJobOpen, setCreateJobOpen] = useState(false);
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const [bookVisitOpen, setBookVisitOpen] = useState(false);
@@ -478,7 +479,7 @@ export function ScheduleWorkspace({
               <button type="button" className="cp-btn cp-btn-sm" onClick={() => setBookVisitOpen(true)}>
                 <CalendarClock size={14} strokeWidth={2} /> Book quote visit
               </button>
-              <button type="button" className="cp-btn cp-btn-sm" onClick={() => setCreateEventOpen(true)}>
+              <button type="button" className="cp-btn cp-btn-sm" onClick={() => { setEditingEvent(null); setCreateEventOpen(true); }}>
                 <CalendarPlus size={14} strokeWidth={2} /> Event
               </button>
             </div>
@@ -497,6 +498,7 @@ export function ScheduleWorkspace({
             dropActiveYmd={dropActiveYmd}
             onOpenJob={(j) => setDetailJobId(j.id)}
             onOpenVisit={(v) => setVisitId(v.id)}
+            onOpenEvent={(ev) => { setEditingEvent(ev); setCreateEventOpen(true); }}
             onOpenRunSheet={(sheetJobs, crew, dayLabel) => setRunSheet({ jobs: sheetJobs, crew, dayLabel })}
             onDropJob={handleDrop}
             onOpenDay={openDay}
@@ -618,7 +620,12 @@ export function ScheduleWorkspace({
                   const dow = group.showDow ? DOW_SHORT.format(d.day.anchor) : null;
                   return [
                     ...d.events.map((ev) => (
-                      <MobileEventRow key={ev.id} event={ev} dow={dow} />
+                      <MobileEventRow
+                        key={ev.id}
+                        event={ev}
+                        dow={dow}
+                        onOpen={() => { setEditingEvent(ev); setCreateEventOpen(true); }}
+                      />
                     )),
                     ...d.visits.map((v) => (
                       <MobileVisitRow
@@ -677,7 +684,16 @@ export function ScheduleWorkspace({
           onClose={() => setRunSheet(null)}
         />
       )}
-      {createEventOpen && <CreateEventSheet crews={crews} onClose={() => setCreateEventOpen(false)} />}
+      {createEventOpen && (
+        <CreateEventSheet
+          crews={crews}
+          event={editingEvent}
+          onClose={() => {
+            setCreateEventOpen(false);
+            setEditingEvent(null);
+          }}
+        />
+      )}
       {bookVisitOpen && <BookVisitSheet onClose={() => setBookVisitOpen(false)} />}
       {createJobOpen && (
         <CreateJobSheet crews={crews} customers={customers} onClose={() => setCreateJobOpen(false)} />
@@ -722,6 +738,7 @@ export function ScheduleWorkspace({
               className="cp-card cp-card-hover flex items-center gap-3 px-3.5 py-3 text-left"
               onClick={() => {
                 setCreateMenuOpen(false);
+                setEditingEvent(null);
                 setCreateEventOpen(true);
               }}
             >
@@ -1020,15 +1037,23 @@ function MobileJobRow({
   );
 }
 
-// A calendar event (time off / block / holiday) as a muted, non-interactive
-// list row — the "unavailable ground" reading, hatched marker instead of a crew
-// dot so it never reads as a bookable job.
-function MobileEventRow({ event, dow }: { event: CalendarEvent; dow: string | null }) {
+// A calendar event (time off / block / holiday) as a muted list row. Tap opens
+// the same create sheet in edit mode. Marker is a square so it never reads as a
+// bookable job.
+function MobileEventRow({
+  event,
+  dow,
+  onOpen,
+}: {
+  event: CalendarEvent;
+  dow: string | null;
+  onOpen: () => void;
+}) {
   const time = event.all_day
     ? "All day"
     : fmtEt(event.starts_at, { hour: "numeric", minute: "2-digit" });
   return (
-    <div className="cp-list-row" title={event.notes ?? undefined}>
+    <button type="button" className="cp-list-row" title={event.notes ?? undefined} onClick={onOpen}>
       <span className="inline-block h-2 w-2 shrink-0 rounded-[2px] bg-[var(--cp-line-strong)]" />
       <span className="min-w-0 flex-1">
         <span className="cp-list-title block truncate text-[var(--cp-muted)]">
@@ -1038,7 +1063,7 @@ function MobileEventRow({ event, dow }: { event: CalendarEvent; dow: string | nu
           {dow ? `${dow} · ${time}` : time}
         </span>
       </span>
-    </div>
+    </button>
   );
 }
 
