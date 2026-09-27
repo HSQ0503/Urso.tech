@@ -19,11 +19,9 @@ const destinations: { label: string; href: string; description: string; permissi
 
 export default async function CanesHome() {
   const [overview, access] = await Promise.all([getOverview(), getConsoleAccess()]);
-  const attention = overview.coldNeedingCall.length + overview.followUpsDue.length + overview.unconfirmedToday.length;
   const demo = access.kind === "none";
   const visible = destinations.filter(item => demo || (item.ownerOnly ? access.kind === "owner" : item.permission ? accessAllows(access, item.permission) : true));
   return <div className="space-y-6"><header><p className="cp-mono">Canes Pressure Washing</p><h1 className="cp-display mt-2 text-3xl">Home</h1><p className="mt-2 text-sm">{fmtMoney(overview.money.collectedThisWeekCents)} collected in the last seven days.</p></header>
-    {attention > 0 ? <Link href="/CanesPressure/leads" className="cp-card block p-4">{attention} lead {attention === 1 ? "needs" : "items need"} attention →</Link> : null}
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-5">{visible.map(item => <Link key={item.href} href={`/CanesPressure${item.href}`} className="cp-card flex min-h-36 flex-col justify-between p-5 transition-colors hover:border-[var(--cp-brand)]"><h2 className="text-lg font-semibold">{item.label}</h2><p className="mt-3 text-sm text-[var(--cp-muted)]">{item.description}{item.href === "/jobs" && overview.pipeline.jobs.unscheduledCount > 0 ? ` · ${overview.pipeline.jobs.unscheduledCount} unscheduled` : ""}</p></Link>)}</div>
   </div>;
 }

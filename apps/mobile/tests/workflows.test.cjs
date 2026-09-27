@@ -54,6 +54,8 @@ function harness() {
       if (name === "@expo/vector-icons") return { Feather: host("Icon") };
       if (name === "@/queries") return queries;
       if (name === "@/api") return { documentActions: api, estimateActions: api, invoiceActions: api, recurringActions: api, customerActions: api };
+      if (name === "@/app/CanesPressure/actions") return api;
+      if (name === "./sheet-shell") return { SheetShell: host("SheetShell") };
       if (name === "@/components/payment-corrections") return { PaymentCorrections: host("PaymentCorrections") };
       if (name === "@/components/document-revision") return { DocumentRevisionSheet: host("DocumentRevisionSheet") };
       if (name === "@/components/toast") return { useToast: () => ({ show() {} }) };
@@ -63,7 +65,7 @@ function harness() {
       if (name === "@/components/address-input") return { AddressInput: host("AddressInput") };
       if (name === "@/components/phone-input") return { PhoneInput: host("PhoneInput"), toPhoneDisplay: (value) => value };
       if (name === "@/components/notice") return { Notice: host("Notice") };
-      if (name === "@urso/types") return load(path.resolve(root, "../../packages/types/src/types.ts"));
+      if (name === "@urso/types" || name === "@/lib/canes/types") return load(path.resolve(root, "../../packages/types/src/types.ts"));
       const base = name.startsWith("@/") ? path.join(root, "src", name.slice(2)) : path.resolve(path.dirname(file), name);
       const resolved = [base, `${base}.ts`, `${base}.tsx`].find((candidate) => existsSync(candidate));
       if (resolved) return load(resolved);
@@ -126,7 +128,7 @@ test("opening another estimate replaces the previous customer's form state", asy
   await act(async () => renderer.unmount());
 });
 
-function callAction({ denied = null, eventError = null, callError = null } = {}) {
+function callAction({ denied = null, eventError = null, callError = null, leadStatus = "new" } = {}) {
   const writes = [];
   const source = readFileSync(path.resolve(root, "../../app/CanesPressure/actions.ts"), "utf8");
   const ast = ts.createSourceFile("actions.ts", source, ts.ScriptTarget.Latest, true);
@@ -135,7 +137,7 @@ function callAction({ denied = null, eventError = null, callError = null } = {})
   const dependencies = {
     canesConfigured: () => true,
     denyUnlessPermitted: async () => denied,
-    getLead: async () => ({ id: "lead", phone: "+15555550123", status: "new" }),
+    getLead: async () => ({ id: "lead", phone: "+15555550123", status: leadStatus }),
     getAdminSession: async () => ({ email: "owner@example.com" }),
     getTechnicianActor: async () => null,
     canesDb: () => ({ from: (table) => ({
@@ -158,6 +160,31 @@ test("call notes persist with author and outcome for the next teammate", async (
   assert.equal(event.data.note, "Call tomorrow at 5pm about paver sealing.");
   assert.equal(event.data.recorded_by, "owner@example.com");
   assert.equal(event.data.outcome, "follow_up");
+});
+
+test("logging a closed call marks a new lead contacted without changing booked work", async () => {
+  const fresh = callAction();
+  assert.equal((await fresh.run("lead", "closed", "Customer agreed; booking next.")).ok, true);
+  assert.equal(fresh.writes.find((write) => write.table === "leads").row.status, "contacted");
+  const booked = callAction({ leadStatus: "appointment_set" });
+  assert.equal((await booked.run("lead", "closed", "Discussed the booked visit.")).ok, true);
+  assert.equal(booked.writes.find((write) => write.table === "leads").row.status, undefined);
+});
+
+test("editing an overnight calendar block preserves its Eastern end date", async () => {
+  const { state, load } = harness();
+  const { CreateEventSheet } = load("../../app/CanesPressure/components/schedule/create-event-sheet.tsx");
+  const event = { id: "block", title: "Time off", starts_at: "2026-09-28T03:00:00Z", ends_at: "2026-09-28T05:00:00Z", all_day: false, crew_id: null, kind: "block", notes: "" };
+  const renderer = await mount(CreateEventSheet, { crews: [], event, onClose() {} });
+  await act(async () => renderer.root.findByProps({ id: "event-title" }).props.onChange({ target: { value: "Updated time off" } }));
+  const save = renderer.root.findAllByType("button").find((item) => text(item) === "Save event");
+  assert.equal(save.props.disabled, false);
+  await act(async () => save.props.onClick());
+  const write = state.writes.find((item) => item.action === "updateCalendarEvent");
+  assert.equal(write.args[0], "block");
+  assert.equal(write.args[1].startIso, "2026-09-28T03:00:00.000Z");
+  assert.equal(write.args[1].endIso, "2026-09-28T05:00:00.000Z");
+  await act(async () => renderer.unmount());
 });
 
 test("a failed note write never claims the note was saved", async () => {

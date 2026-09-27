@@ -323,7 +323,7 @@ export async function logCallOutcome(
   });
   const patch: Record<string, string> = { last_activity_at: new Date().toISOString() };
   // Calling about existing booked work must not move it back into the funnel.
-  if ((outcome === "follow_up" || outcome === "no_answer") && ["new", "contacted"].includes(lead.status)) {
+  if (outcome !== "lost" && ["new", "contacted"].includes(lead.status)) {
     patch.status = "contacted";
   } else if (outcome === "lost") {
     patch.status = "lost";

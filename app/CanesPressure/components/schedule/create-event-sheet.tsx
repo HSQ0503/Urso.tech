@@ -55,24 +55,25 @@ export function CreateEventSheet({
 }) {
   const editing = event ?? null;
   const initial = editing ? splitEt(editing.starts_at) : null;
-  const initialEnd = editing && !editing.all_day ? splitEt(editing.ends_at).time : "12:00";
+  const initialEnd = editing && !editing.all_day ? splitEt(editing.ends_at) : null;
   const [isPending, startTransition] = useTransition();
   const [feedback, setFeedback] = useState<Feedback>(null);
 
   const [title, setTitle] = useState(editing?.title ?? "");
   const [date, setDate] = useState(initial?.date ?? todayEt());
   const [start, setStart] = useState(initial?.time ?? "09:00");
-  const [end, setEnd] = useState(initialEnd);
+  const [endDate, setEndDate] = useState(initialEnd?.date ?? initial?.date ?? todayEt());
+  const [end, setEnd] = useState(initialEnd?.time ?? "12:00");
   const [allDay, setAllDay] = useState(editing?.all_day ?? false);
   const [crewId, setCrewId] = useState(editing?.crew_id ?? "");
   const [kind, setKind] = useState<CalendarEventKind>(editing?.kind ?? "block");
   const [notes, setNotes] = useState(editing?.notes ?? "");
 
-  const timesInvalid = !allDay && !!start && !!end && end <= start;
+  const timesInvalid = !allDay && (endDate < date || (endDate === date && !!start && !!end && end <= start));
   const canSubmit =
     title.trim().length > 0 &&
     date.length === 10 &&
-    (allDay || (!!start && !!end && !timesInvalid));
+    (allDay || (endDate.length === 10 && !!start && !!end && !timesInvalid));
 
   function submit() {
     setFeedback(null);
@@ -81,7 +82,7 @@ export function CreateEventSheet({
       : etLocalToIso(`${date}T${start}`);
     const endIso = allDay
       ? etLocalToIso(`${nextDay(date)}T00:00`)
-      : etLocalToIso(`${date}T${end}`);
+      : etLocalToIso(`${endDate}T${end}`);
     const payload = {
       title: title.trim(),
       startIso,
@@ -127,18 +128,33 @@ export function CreateEventSheet({
         </div>
 
         <div>
-          <label className="cp-label" htmlFor="event-date">Date</label>
+          <label className="cp-label" htmlFor="event-date">{allDay ? "Date" : "Start date"}</label>
           <input
             id="event-date"
             type="date"
             className="cp-input"
             value={date}
-            onChange={(e) => setDate(e.target.value)}
+            onChange={(e) => {
+              const next = e.target.value;
+              if (endDate === date || endDate < next) setEndDate(next);
+              setDate(next);
+            }}
           />
         </div>
 
         {!allDay && (
           <div className="grid grid-cols-2 gap-2">
+            <div className="col-span-2">
+              <label className="cp-label" htmlFor="event-end-date">End date</label>
+              <input
+                id="event-end-date"
+                type="date"
+                className="cp-input"
+                value={endDate}
+                min={date}
+                onChange={(e) => setEndDate(e.target.value)}
+              />
+            </div>
             <div>
               <label className="cp-label" htmlFor="event-start">Start</label>
               <input
@@ -164,7 +180,7 @@ export function CreateEventSheet({
 
         {timesInvalid && (
           <p className="text-[12.5px] leading-snug text-[var(--cp-warn)]">
-            End time must be after the start time.
+            End date and time must be after the start.
           </p>
         )}
 

@@ -27,7 +27,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { fmtMoney } from "@urso/types";
 import { Notice } from "@/components/notice";
 import {
-  Announcement,
   LauncherBar,
   LauncherGreeting,
   SupportRow,
@@ -70,15 +69,6 @@ export default function HomeScreen(): React.ReactElement {
   // the notice explains the missing counts and the tiles stay tappable.
   const notice = noticeFrom(overviewQuery.error);
 
-  // What the announcement strip counts when nothing is cold: the queues that
-  // used to make up the action screen, all of them lead-shaped.
-  const needs =
-    (overview?.coldNeedingCall.length ?? 0) +
-    (overview?.unconfirmedToday.length ?? 0) +
-    (overview?.pastDueVisits.length ?? 0) +
-    (overview?.followUpsDue.length ?? 0);
-
-  const cold = overview?.coldNeedingCall.length ?? 0;
   const overdue = overview?.pipeline.invoices.overdueCount ?? 0;
 
   // Markate's slot order, kept, with one swap Sebastian asked for (2026-09-13):
@@ -165,9 +155,6 @@ export default function HomeScreen(): React.ReactElement {
 
   return (
     <View style={styles.screen}>
-      {/* The bar carries only the menu. Inbox already has a tab and the
-          announcement strip below already says what needs him — a third and
-          fourth door to the same two places was the clutter he named. */}
       <LauncherBar onMenu={() => router.push("/(owner)/more")} actions={[]} />
 
       {showSpinner ? (
@@ -186,33 +173,6 @@ export default function HomeScreen(): React.ReactElement {
             />
           }
         >
-          {/* Markate sells product news in this strip. It is the most looked-at
-              band on the screen, so it carries the one thing that actually
-              needs him — and reads as an all-clear when nothing does, because a
-              strip that looks the same either way stops being read. */}
-          {cold > 0 ? (
-            <Announcement
-              icon="phone-call"
-              title={`Call ${cold} lead${cold === 1 ? "" : "s"} now`}
-              detail="Speed to lead is what wins the job."
-              onPress={() => router.push("/(owner)/leads")}
-            />
-          ) : needs > 0 ? (
-            <Announcement
-              icon="bell"
-              title={`${needs} thing${needs === 1 ? "" : "s"} need you`}
-              detail="Unconfirmed or past-due visits and follow-ups, on their leads."
-              onPress={() => router.push("/(owner)/leads")}
-            />
-          ) : (
-            <Announcement
-              icon="check-circle"
-              title="You're all caught up"
-              detail="Nothing is waiting on you right now."
-              tone="good"
-            />
-          )}
-
           <LauncherGreeting
             name={name ?? "there"}
             money={fmtMoney(overview?.money.collectedThisWeekCents ?? 0)}
