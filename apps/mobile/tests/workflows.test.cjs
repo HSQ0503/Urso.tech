@@ -13,7 +13,8 @@ afterEach(() => mock.timers.reset());
 const root = path.resolve(__dirname, "..");
 const host = (name) => name;
 const native = {
-  ...Object.fromEntries(["ActivityIndicator", "KeyboardAvoidingView", "Pressable", "ScrollView", "SectionList", "Text", "TextInput", "View"].map((name) => [name, host(name)])),
+  ...Object.fromEntries(["ActivityIndicator", "Image", "KeyboardAvoidingView", "Pressable", "RefreshControl", "ScrollView", "SectionList", "Text", "TextInput", "View"].map((name) => [name, host(name)])),
+  AppState: { currentState: "active" },
   Modal: ({ visible, children }) => visible ? React.createElement("Modal", null, children) : null,
   StyleSheet: { create: (styles) => styles, hairlineWidth: 1, absoluteFill: {} },
   Platform: { OS: "ios" },
@@ -23,7 +24,7 @@ const native = {
 // Exercise the real React screens and handlers, replacing only native hosts,
 // navigation and network boundaries so tests never touch customer data.
 function harness() {
-  const state = { params: { id: "first" }, estimates: {}, invoices: {}, jobs: {}, writes: [], navigation: [], alerts: [], actionData: { estimateId: "created" } };
+  const state = { params: { id: "first" }, estimates: {}, invoices: {}, jobs: {}, writes: [], navigation: [], alerts: [], actionData: { estimateId: "created" }, permissionGranted: true, pickerCalls: 0, photo: { uri: "file:///original.png", width: 4000, height: 3000, mimeType: "image/png", fileSize: 6_000_000 }, photoExports: [] };
   const cache = new Map();
   const key = new Proxy(() => [], { get: () => key });
   const queries = {
@@ -36,10 +37,13 @@ function harness() {
     useCustomers: () => ({ data: [] }),
     useCatalog: () => ({ data: [] }),
     useSettings: () => ({ data: { deposit_presets: [0, 25, 50] } }),
+    useThreads: () => ({ data: [], isPending: false }),
+    useThreadMessages: () => ({ data: [], isPending: false }),
+    useThreadCalls: () => ({ data: [], isPending: false }),
   };
   const api = new Proxy({}, { get: (_, action) => async (...args) => {
     state.writes.push({ action, args });
-    return { ok: true, data: state.actionData };
+    return state.actionResult ?? { ok: true, data: state.actionData };
   } });
   function load(file) {
     if (cache.has(file)) return cache.get(file).exports;
@@ -52,8 +56,21 @@ function harness() {
       if (name === "react-native-safe-area-context") return { useSafeAreaInsets: () => ({ top: 0, bottom: 0 }) };
       if (name === "react-native-svg") return { __esModule: true, default: host("Svg"), Polyline: host("Polyline") };
       if (name === "@expo/vector-icons") return { Feather: host("Icon") };
+      if (name === "lucide-react") return new Proxy({}, { get: (_, name) => host(name) });
+      if (name === "next/image") return { __esModule: true, default: host("img") };
+      if (name === "@/lib/canes/message-photo-client") return { prepareMessagePhoto: async () => new File(["photo"], "photo.jpg", { type: "image/jpeg" }) };
+      if (name === "expo-image-picker") return {
+        requestMediaLibraryPermissionsAsync: async () => ({ granted: state.permissionGranted }),
+        launchImageLibraryAsync: async () => { state.pickerCalls++; return { canceled: false, assets: [state.photo] }; },
+        UIImagePickerPreferredAssetRepresentationMode: { Compatible: "compatible" },
+      };
+      if (name === "expo-image-manipulator") return {
+        SaveFormat: { JPEG: "jpeg" },
+        ImageManipulator: { manipulate: () => ({ resize() {}, release() {}, renderAsync: async () => ({ release() {}, saveAsync: async (options) => { state.photoExports.push(options); return { uri: "file:///prepared.jpg", width: 1600, height: 1200, base64: "aW1hZ2U=" }; } }) }) },
+      };
       if (name === "@/queries") return queries;
-      if (name === "@/api") return { documentActions: api, estimateActions: api, invoiceActions: api, recurringActions: api, customerActions: api };
+      if (name === "@/api") return { documentActions: api, estimateActions: api, invoiceActions: api, recurringActions: api, customerActions: api, threadActions: api, leadActions: api, callActions: api };
+      if (name === "@/components/message-content") return { MessageContent: host("MessageContent") };
       if (name === "@/app/CanesPressure/actions") return api;
       if (name === "./sheet-shell") return { SheetShell: host("SheetShell") };
       if (name === "@/components/payment-corrections") return { PaymentCorrections: host("PaymentCorrections") };
@@ -90,6 +107,148 @@ function button(renderer, label) {
   return renderer.root.findAllByType("Pressable").find((item) => item.props.accessibilityLabel === label);
 }
 const text = (node) => typeof node === "string" ? node : Array.isArray(node) ? node.map(text).join("") : node ? text(node.children) : "";
+
+test("photo picker remains usable when full library access is denied", async (t) => {
+  const { state, load } = harness();
+  state.params = { phone: "+15615550188" };
+  state.permissionGranted = false;
+  const renderer = await mount(load("app/(owner)/thread/[phone].tsx").default);
+  t.after(async () => act(async () => renderer.unmount()));
+  await act(async () => button(renderer, "Attach a photo").props.onPress());
+  assert.equal(state.pickerCalls, 1);
+  assert.match(text(renderer.toJSON()), /Photo ready/);
+});
+
+test("a large photo is prepared as JPEG and can be sent without a caption", async (t) => {
+  const { state, load } = harness();
+  state.params = { phone: "+15615550188" };
+  const renderer = await mount(load("app/(owner)/thread/[phone].tsx").default);
+  t.after(async () => act(async () => renderer.unmount()));
+  await act(async () => button(renderer, "Attach a photo").props.onPress());
+  assert.match(text(renderer.toJSON()), /Photo ready/);
+  assert.equal(button(renderer, "Send message").props.disabled, false);
+  await act(async () => button(renderer, "Send message").props.onPress());
+  const send = state.writes.find((write) => write.action === "sendMedia");
+  assert.equal(send.args[0], "+15615550188");
+  assert.equal(send.args[2], "");
+  assert.equal(send.args[3].mimeType, "image/jpeg");
+  assert.equal(send.args[3].uri, "file:///prepared.jpg");
+  assert.equal(state.photoExports[0].format, "jpeg");
+});
+
+test("changing conversations clears the previous recipient's photo", async (t) => {
+  const { state, load } = harness();
+  state.params = { phone: "+15615550188" };
+  const Screen = load("app/(owner)/thread/[phone].tsx").default;
+  const renderer = await mount(Screen);
+  t.after(async () => act(async () => renderer.unmount()));
+  await act(async () => button(renderer, "Attach a photo").props.onPress());
+  assert.match(text(renderer.toJSON()), /Photo ready/);
+  state.params = { phone: "+15555550123" };
+  await act(async () => renderer.update(React.createElement(Screen)));
+  assert.doesNotMatch(text(renderer.toJSON()), /Photo ready/);
+  assert.equal(button(renderer, "Send message").props.disabled, true);
+});
+
+test("browser composer sends a photo without text and retains it after a refusal", async (t) => {
+  const { state, load } = harness();
+  const { Composer } = load("../../app/CanesPressure/components/inbox/composer.tsx");
+  const renderer = await mount(Composer, { peerPhone: "+15615550188", leadId: null });
+  t.after(async () => act(async () => renderer.unmount()));
+  const inputs = renderer.root.findAllByType("input").filter((input) => input.props.type === "file");
+  assert.equal(inputs.length, 1);
+  await act(async () => inputs[0].props.onChange({ target: { files: [new File(["photo"], "source.png", { type: "image/png" })], value: "source.png" } }));
+  assert.equal(renderer.root.findAllByType("img").length, 1);
+  state.actionResult = { ok: false, notice: "That photo could not be sent." };
+  const send = renderer.root.findAllByType("button").find((item) => item.props["aria-label"] === "Send message");
+  assert.equal(send.props.disabled, false);
+  await act(async () => send.props.onClick());
+  const write = state.writes.find((item) => item.action === "sendPhotoMessage");
+  assert.equal(write.args[0], "+15615550188");
+  assert.equal(write.args[1].get("file").type, "image/jpeg");
+  assert.equal(write.args[1].get("message"), "");
+  assert.equal(renderer.root.findAllByType("img").length, 1);
+  assert.match(text(renderer.toJSON()), /That photo could not be sent/);
+});
+
+function serverFunction(file, name, dependencies) {
+  const source = readFileSync(path.resolve(root, "../..", file), "utf8");
+  const ast = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true);
+  const fn = ast.statements.find((node) => ts.isFunctionDeclaration(node) && node.name?.text === name);
+  const compiled = ts.transpileModule(fn.getText(ast), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+  return vm.runInThisContext(`(function(exports,${Object.keys(dependencies).join(",")}){${compiled}\nreturn ${name};})`)({}, ...Object.values(dependencies));
+}
+
+test("photo uploads require permission and MMS-compatible content before storage", async () => {
+  const writes = [];
+  let denied = { ok: false, notice: "Not allowed" };
+  const validate = serverFunction("lib/canes/message-media.ts", "validateMessageMedia", { MESSAGE_MEDIA_MIME_TYPES: ["image/jpeg", "image/png"], MESSAGE_MEDIA_MAX_BYTES: 4 * 1024 * 1024 });
+  const send = serverFunction("app/CanesPressure/actions.ts", "sendPhotoMessage", {
+    canesConfigured: () => true,
+    denyUnlessPermitted: async () => denied,
+    toE164: () => "+15615550188",
+    validateMessageMedia: validate,
+    storeMessageMedia: async () => { writes.push("upload"); return { path: "messages/photo.jpg", ref: "canes-storage://canes-message-media/messages/photo.jpg" }; },
+    sendMessageWithMedia: async () => ({ ok: true }),
+    removeMessageMedia: async () => writes.push("remove"),
+  });
+  const form = new FormData();
+  form.set("file", new File(["photo"], "photo.jpg", { type: "image/jpeg" }));
+  assert.equal((await send("+15615550188", form)).ok, false);
+  assert.deepEqual(writes, []);
+  denied = null;
+  form.set("file", new File(["photo"], "photo.webp", { type: "image/webp" }));
+  assert.equal((await send("+15615550188", form)).ok, false);
+  assert.deepEqual(writes, []);
+  form.set("file", new File(["photo"], "photo.jpg", { type: "image/jpeg" }));
+  assert.equal((await send("+15615550188", form)).ok, true);
+  assert.deepEqual(writes, ["upload"]);
+});
+
+test("browser image authentication preserves the API permission boundary", async () => {
+  const file = "app/api/v1/canes/messages/[id]/media/[index]/route.ts";
+  const resolve = serverFunction(file, "authenticateMedia", {
+    authenticate: async () => null,
+    getAdminSession: async () => ({ email: "owner@example.com", scope: "canes" }),
+    getTechnicianActor: async () => null,
+  });
+  assert.equal((await resolve(new Request("https://example.com/media"))).kind, "admin");
+  assert.equal(await resolve(new Request("https://example.com/media", { headers: { authorization: "Bearer invalid" } })), null);
+  const anonymous = serverFunction(file, "authenticateMedia", {
+    authenticate: async () => null, getAdminSession: async () => null, getTechnicianActor: async () => null,
+  });
+  assert.equal(await anonymous(new Request("https://example.com/media")), null);
+});
+
+test("an uncertain MMS response keeps its uploaded image available to the provider", async () => {
+  const rawSend = serverFunction("lib/twilio.ts", "sendSms", {
+    messagesUrl: () => "https://example.com/messages",
+    fetch: async () => { throw new Error("Response timed out"); },
+  });
+  const provider = await rawSend({ accountSid: "test", authToken: "test", from: "+15615550188", to: "+15555550123", body: "", mediaUrls: ["https://example.com/photo.jpg"] });
+  const canesSend = serverFunction("lib/canes/twilio.ts", "sendCanesSms", {
+    twilioConfigured: () => true, canesConfigured: () => false,
+    checkSmsConsent: async () => null, canesTwilioCreds: () => ({}),
+    toE164: (phone) => phone, statusCallbackUrl: () => "https://example.com/status", twilioSend: async () => provider,
+  });
+  const mediaSend = serverFunction("app/CanesPressure/actions.ts", "sendMessageWithMedia", {
+    canesConfigured: () => true, denyUnlessPermitted: async () => null,
+    signedMessageMediaUrl: async () => "https://example.com/photo.jpg", sendCanesSms: canesSend,
+  });
+  const removed = [];
+  const photoSend = serverFunction("app/CanesPressure/actions.ts", "sendPhotoMessage", {
+    canesConfigured: () => true, denyUnlessPermitted: async () => null,
+    toE164: (phone) => phone, validateMessageMedia: () => null,
+    storeMessageMedia: async () => ({ path: "messages/photo.jpg", ref: "stored-photo" }),
+    sendMessageWithMedia: mediaSend, removeMessageMedia: async (path) => removed.push(path),
+  });
+  const form = new FormData();
+  form.set("file", new File(["photo"], "photo.jpg", { type: "image/jpeg" }));
+  const result = await photoSend("+15555550123", form);
+  assert.equal(result.ok, false);
+  assert.deepEqual(removed, []);
+  assert.match(result.notice, /could not be confirmed/);
+});
 
 test("changing the time preserves a booking date beyond the first week", async () => {
   const { load } = harness();

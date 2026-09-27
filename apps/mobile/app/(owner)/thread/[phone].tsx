@@ -59,6 +59,7 @@ import {
 } from "@urso/types";
 import { callActions, leadActions, threadActions } from "@/api";
 import { MessageContent } from "@/components/message-content";
+import { prepareMessagePhoto, type MessagePhoto } from "@/message-photo";
 import { Notice } from "@/components/notice";
 import { keys, useThreadCalls, useThreadMessages, useThreads } from "@/queries";
 import { noticeFrom, useAction, usePullToRefresh } from "@/query";
@@ -129,6 +130,7 @@ function stampTime(iso: string): string {
 }
 
 function deliveryLabel(message: Message, latestOutbound: boolean): string | null {
+  if (message.delivery_status === "unknown") return "Delivery not confirmed";
   if (message.delivery_status === "failed" || message.delivery_status === "undelivered") {
     return "Not delivered";
   }
@@ -253,6 +255,11 @@ function firstParam(value: string | string[] | undefined): string | null {
 }
 
 export default function ThreadScreen(): React.ReactElement {
+  const { phone } = useLocalSearchParams<{ phone: string | string[] }>();
+  return <ThreadConversation key={firstParam(phone) ?? ""} />;
+}
+
+function ThreadConversation(): React.ReactElement {
   const params = useLocalSearchParams<{
     phone: string | string[];
     name?: string | string[];
@@ -309,7 +316,9 @@ export default function ThreadScreen(): React.ReactElement {
   const activeLeadId = lead?.id ?? fallbackLeadId;
 
   const [draft, setDraft] = useState("");
-  const [attachment, setAttachment] = useState<ImagePicker.ImagePickerAsset | null>(null);
+  const [attachment, setAttachment] = useState<MessagePhoto | null>(null);
+  const [preparingPhoto, setPreparingPhoto] = useState(false);
+  const pickingPhoto = useRef(false);
   const [sendNotice, setSendNotice] = useState<string | null>(null);
   // The bridge answers in two directions: a refusal (no Twilio credentials, no
   // owner phone, no number) and a success that still has something to say.
@@ -346,16 +355,13 @@ export default function ThreadScreen(): React.ReactElement {
     (vars: {
       leadId: string | null;
       message: string;
-      attachment: ImagePicker.ImagePickerAsset | null;
+      attachment: MessagePhoto | null;
     }) => {
       if (vars.attachment) {
-        const mimeType = vars.attachment.mimeType ?? "image/jpeg";
-        const extension =
-          mimeType === "image/png" ? "png" : mimeType === "image/webp" ? "webp" : "jpg";
         return threadActions.sendMedia(phone, vars.leadId, vars.message, {
           uri: vars.attachment.uri,
-          name: vars.attachment.fileName ?? `message-photo.${extension}`,
-          mimeType,
+          name: vars.attachment.fileName,
+          mimeType: vars.attachment.mimeType,
         });
       }
       return vars.leadId === null
@@ -451,32 +457,27 @@ export default function ThreadScreen(): React.ReactElement {
   };
 
   const pickPhoto = async () => {
+    if (pickingPhoto.current) return;
+    pickingPhoto.current = true;
+    setPreparingPhoto(true);
     setSendNotice(null);
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      setSendNotice("Allow photo access to attach an image.");
-      return;
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        allowsEditing: false,
+        quality: 1,
+        shouldDownloadFromNetwork: true,
+        preferredAssetRepresentationMode:
+          ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
+      });
+      if (result.canceled || !result.assets[0]) return;
+      setAttachment(await prepareMessagePhoto(result.assets[0]));
+    } catch {
+      setSendNotice("That photo could not be prepared. Try another image.");
+    } finally {
+      pickingPhoto.current = false;
+      setPreparingPhoto(false);
     }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"],
-      allowsEditing: false,
-      quality: 0.72,
-      preferredAssetRepresentationMode:
-        ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
-    });
-    if (result.canceled) return;
-    const picked = result.assets[0];
-    if (!picked) return;
-    const mimeType = picked.mimeType ?? "image/jpeg";
-    if (!["image/jpeg", "image/png", "image/webp"].includes(mimeType)) {
-      setSendNotice("Choose a JPEG, PNG, or WebP photo.");
-      return;
-    }
-    if (picked.fileSize && picked.fileSize > 4 * 1024 * 1024) {
-      setSendNotice("That photo is too large. Choose one under 4 MB.");
-      return;
-    }
-    setAttachment(picked);
   };
 
   const fallbackKind = contactId !== null ? "customer" : activeLeadId !== null ? "lead" : null;
@@ -618,6 +619,7 @@ export default function ThreadScreen(): React.ReactElement {
         </ScrollView>
 
         <View style={[styles.composerBar, { paddingBottom: insets.bottom + space.sm }]}>
+          {preparingPhoto ? <Text style={styles.composerHint}>Preparing photo…</Text> : null}
           {attachment ? (
             <View style={styles.attachmentPreview}>
               <Image source={{ uri: attachment.uri }} style={styles.attachmentThumb} />
@@ -630,7 +632,7 @@ export default function ThreadScreen(): React.ReactElement {
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Remove attached photo"
-                disabled={sendRun.isPending}
+                disabled={sendRun.isPending || preparingPhoto}
                 onPress={() => setAttachment(null)}
                 style={({ pressed }) => [styles.attachmentRemove, pressed && styles.backPressed]}
               >
@@ -642,12 +644,12 @@ export default function ThreadScreen(): React.ReactElement {
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Attach a photo"
-              disabled={sendRun.isPending}
+              disabled={sendRun.isPending || preparingPhoto}
               onPress={() => void pickPhoto()}
               style={({ pressed }) => [
                 styles.attach,
                 pressed && styles.attachPressed,
-                sendRun.isPending && styles.disabled,
+                (sendRun.isPending || preparingPhoto) && styles.disabled,
               ]}
             >
               <Feather name="paperclip" size={19} color={color.brandDeep} />
@@ -666,12 +668,12 @@ export default function ThreadScreen(): React.ReactElement {
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Send message"
-              disabled={sendRun.isPending || (draft.trim().length === 0 && attachment === null)}
+              disabled={sendRun.isPending || preparingPhoto || (draft.trim().length === 0 && attachment === null)}
               onPress={() => void send()}
               style={({ pressed }) => [
                 styles.send,
                 pressed && styles.sendPressed,
-                (sendRun.isPending || (draft.trim().length === 0 && attachment === null)) &&
+                (sendRun.isPending || preparingPhoto || (draft.trim().length === 0 && attachment === null)) &&
                   styles.disabled,
               ]}
             >
@@ -679,7 +681,7 @@ export default function ThreadScreen(): React.ReactElement {
             </Pressable>
           </View>
           <View style={styles.composerMeta}>
-            <Text style={styles.composerHint}>SMS from the Canes business line</Text>
+            <Text style={styles.composerHint}>{attachment ? "Photo message" : "SMS"} from the Canes business line</Text>
             {draft.length > 0 ? <Text style={styles.composerCount}>{draft.length}</Text> : null}
           </View>
           <Notice text={sendNotice} />

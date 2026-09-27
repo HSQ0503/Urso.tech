@@ -1,5 +1,7 @@
-import { NextResponse } from "next/server";
-import { apiFail, apiRoute, denyUnlessPagePermitted } from "@/lib/api/v1";
+import { NextResponse, type NextRequest } from "next/server";
+import { apiFail, apiRoute, authenticate, denyUnlessPagePermitted, type ApiActor } from "@/lib/api/v1";
+import { getAdminSession } from "@/lib/urso-auth";
+import { getTechnicianActor } from "@/lib/canes/crew-auth";
 import { canesDb } from "@/lib/canes/supabase";
 import { canesTwilioCreds } from "@/lib/canes/twilio";
 import { downloadMessageMedia } from "@/lib/canes/message-media";
@@ -14,6 +16,16 @@ import { downloadMessageMedia } from "@/lib/canes/message-media";
 // inbox and thread readers.
 
 export const dynamic = "force-dynamic";
+
+async function authenticateMedia(req: NextRequest): Promise<ApiActor | null> {
+  const bearer = await authenticate(req);
+  if (bearer || req.headers.has("authorization")) return bearer;
+  // Browser image elements use the verified web session; writes remain bearer-only.
+  const admin = await getAdminSession();
+  if (admin) return { kind: "admin", ...admin };
+  const actor = await getTechnicianActor();
+  return actor ? { kind: "technician", actor } : null;
+}
 
 const TRUSTED_MEDIA_HOSTS = new Set([
   "api.twilio.com",
@@ -95,4 +107,4 @@ export const GET = apiRoute<{ id: string; index: string }>(async ({ actor, param
 
   const contentType = upstream.headers.get("content-type") ?? "application/octet-stream";
   return mediaResponse(upstream.body, contentType);
-});
+}, { authenticate: authenticateMedia });

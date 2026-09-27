@@ -46,6 +46,10 @@ export type Lead = {
   meta_leadgen_id?: string | null;
 };
 
+// Fits the browser's server-action upload limit and leaves room for MMS delivery.
+export const MESSAGE_PHOTO_MAX_BYTES = 750_000;
+export const MESSAGE_PHOTO_MAX_EDGE = 1600;
+
 export type Message = {
   id: string;
   created_at: string;

@@ -55,7 +55,7 @@ export async function sendSms(opts: {
   body: string;
   mediaUrls?: string[];
   statusCallback?: string; // Twilio POSTs delivery-status updates here
-}): Promise<{ ok: boolean; sid?: string; error?: string }> {
+}): Promise<{ ok: boolean; sid?: string; error?: string; uncertain?: true }> {
   try {
     const basic = Buffer.from(`${opts.accountSid}:${opts.authToken}`).toString("base64");
     const params = new URLSearchParams({ To: opts.to, From: opts.from });
@@ -71,12 +71,14 @@ export async function sendSms(opts: {
       body: params,
       signal: AbortSignal.timeout(8_000),
     });
-    if (!res.ok) return { ok: false, error: `Twilio responded ${res.status}` };
+    if (!res.ok) return { ok: false, error: `Twilio responded ${res.status}`, ...(res.status >= 500 ? { uncertain: true as const } : {}) };
     const json = (await res.json()) as { sid?: string };
+    if (!json.sid) return { ok: false, error: "Twilio did not confirm a message ID.", uncertain: true };
     return { ok: true, sid: json.sid };
   } catch (error) {
     return {
       ok: false,
+      uncertain: true,
       error: error instanceof Error ? error.message : "Twilio request failed",
     };
   }

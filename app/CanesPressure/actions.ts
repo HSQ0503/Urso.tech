@@ -14,7 +14,7 @@ import { canesConfigured, canesDb, squareConfigured } from "@/lib/canes/supabase
 import { getSettings, getLead } from "@/lib/canes/data";
 import { bookManualAppointment } from "@/lib/canes/lead-messaging";
 import { sendCanesSms, fillTemplate, canesTwilioCreds, canesVoiceNumber, alertOwner } from "@/lib/canes/twilio";
-import { signedMessageMediaUrl } from "@/lib/canes/message-media";
+import { removeMessageMedia, signedMessageMediaUrl, storeMessageMedia, validateMessageMedia } from "@/lib/canes/message-media";
 import {
   getEstimate,
   getEstimateByToken,
@@ -759,12 +759,44 @@ export async function sendMessage(peerPhone: string, body: string, leadId?: stri
   return { ok: true };
 }
 
+export async function sendPhotoMessage(peerPhone: string, form: FormData): Promise<ActionResult> {
+  if (!canesConfigured()) return DEMO;
+  const denied = await denyUnlessPermitted("leads");
+  if (denied) return denied;
+  const phone = toE164(peerPhone);
+  if (!phone) return { ok: false, notice: "Choose a valid customer phone number." };
+  const file = form.get("file");
+  if (!(file instanceof File)) return { ok: false, notice: "Choose a photo to send." };
+  const invalid = validateMessageMedia(file);
+  if (invalid) return { ok: false, notice: invalid };
+  const message = form.get("message");
+  const leadId = form.get("leadId");
+  let stored: Awaited<ReturnType<typeof storeMessageMedia>> | null = null;
+  try {
+    stored = await storeMessageMedia(file);
+    const result = await sendMessageWithMedia(
+      phone,
+      typeof message === "string" ? message : "",
+      [stored.ref],
+      typeof leadId === "string" && leadId ? leadId : null,
+    );
+    if (!result.ok && !result.deliveryUncertain) await removeMessageMedia(stored.path);
+    return result;
+  } catch (error) {
+    console.error("[canes] photo message failed:", error);
+    // A send can throw after provider acceptance; keep the file available to Twilio.
+    return { ok: false, notice: stored
+      ? "Photo delivery could not be confirmed. Refresh the conversation before trying again."
+      : "The photo could not be uploaded. It is still attached; try again." };
+  }
+}
+
 export async function sendMessageWithMedia(
   peerPhone: string,
   body: string,
   mediaRefs: string[],
   leadId?: string | null,
-): Promise<ActionResult> {
+): Promise<ActionResult & { deliveryUncertain?: true }> {
   if (!body.trim() && mediaRefs.length === 0) return { ok: false, notice: "Add a message or photo." };
   if (mediaRefs.length !== 1 || typeof mediaRefs[0] !== "string") {
     return { ok: false, notice: "Attach one photo at a time." };
@@ -784,7 +816,9 @@ export async function sendMessageWithMedia(
     leadId: leadId ?? null,
     automated: false,
   });
-  if (!res.ok) return { ok: false, notice: res.skipped ?? res.error ?? "Send failed." };
+  if (!res.ok) return res.uncertain
+    ? { ok: false, deliveryUncertain: true, notice: "Photo delivery could not be confirmed. Refresh the conversation before trying again." }
+    : { ok: false, notice: res.skipped ?? res.error ?? "Send failed." };
   if (leadId) {
     const lead = await getLead(leadId);
     if (lead && lead.status === "new") {

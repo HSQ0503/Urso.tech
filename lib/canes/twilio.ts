@@ -68,7 +68,7 @@ export function fillTemplate(
     .replaceAll("{address}", vars.address ?? "your property");
 }
 
-export type SendResult = { ok: boolean; sid?: string; skipped?: string; error?: string };
+export type SendResult = { ok: boolean; sid?: string; skipped?: string; error?: string; uncertain?: true };
 
 async function checkSmsConsent(to: string): Promise<SendResult | null> {
   if (!canesConfigured()) {
@@ -138,7 +138,7 @@ export async function sendCanesSms(opts: {
       media_urls: opts.storedMediaUrls ?? [],
       automated: opts.automated ?? false,
       twilio_sid: res.sid ?? null,
-      delivery_status: res.ok ? "queued" : "failed",
+      delivery_status: res.ok ? "queued" : res.uncertain ? "unknown" : "failed",
     };
     const { error } = await canesDb().from("messages").insert(row);
     // A lead deleted mid-send leaves a dangling lead_id (FK) — keep the
@@ -147,7 +147,7 @@ export async function sendCanesSms(opts: {
       await canesDb().from("messages").insert({ ...row, lead_id: null });
     }
   }
-  return res.ok ? { ok: true, sid: res.sid } : { ok: false, error: res.error };
+  return res.ok ? { ok: true, sid: res.sid } : { ok: false, error: res.error, ...(res.uncertain ? { uncertain: true } : {}) };
 }
 
 // Owner alerts (escalations, digests, Square warnings) reach Sebastian by PUSH

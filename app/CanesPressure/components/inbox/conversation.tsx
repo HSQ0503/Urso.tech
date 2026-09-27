@@ -2,6 +2,7 @@
 
 import { Fragment, useEffect, useRef } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { CallButton } from "../call-button";
 import {
   ChevronLeft,
@@ -194,6 +195,12 @@ export function Conversation({
                 out ? (m.automated ? "cp-bubble-out cp-bubble-auto" : "cp-bubble-out") : "cp-bubble-in"
               } whitespace-pre-wrap break-words px-3.5 py-2 text-[14px] leading-relaxed`}
             >
+              {m.media_urls.map((_, index) => {
+                const src = `/api/v1/canes/messages/${encodeURIComponent(m.id)}/media/${index}`;
+                return <a key={index} href={src} target="_blank" rel="noopener noreferrer" aria-label="Open attached photo" className="mb-2 block">
+                  <Image src={src} alt="Message attachment" width={240} height={180} unoptimized className="max-h-64 max-w-full rounded-lg object-contain" />
+                </a>;
+              })}
               {m.body}
             </div>
             <span className="mt-1 text-[11px] tabular-nums text-[var(--cp-faint)]">
@@ -202,6 +209,7 @@ export function Conversation({
             {(m.delivery_status === "failed" || m.delivery_status === "undelivered") && (
               <span className="text-[11px] font-medium text-[var(--cp-danger)]">Not delivered</span>
             )}
+            {m.delivery_status === "unknown" && <span className="text-[11px] text-[var(--cp-muted)]">Delivery not confirmed</span>}
           </div>
         ),
       };
@@ -306,7 +314,7 @@ export function Conversation({
       {/* Composer pinned above the mobile tab bar (z-40); pad the bottom to clear
           it plus the home-indicator safe area. Desktop keeps its flush padding. */}
       <div className="border-t border-[var(--cp-line)] bg-[var(--cp-surface)] px-3 py-3 pb-[calc(0.75rem+64px+env(safe-area-inset-bottom))] md:px-4 md:pb-3">
-        <Composer peerPhone={peerPhone} leadId={lead?.id ?? null} />
+        <Composer key={peerPhone} peerPhone={peerPhone} leadId={lead?.id ?? null} />
       </div>
     </div>
   );

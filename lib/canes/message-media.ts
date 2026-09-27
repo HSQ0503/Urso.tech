@@ -7,7 +7,7 @@ import { canesDb } from "@/lib/canes/supabase";
 
 export const MESSAGE_MEDIA_BUCKET = "canes-message-media";
 export const MESSAGE_MEDIA_MAX_BYTES = 4 * 1024 * 1024;
-const MESSAGE_MEDIA_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
+const MESSAGE_MEDIA_MIME_TYPES = ["image/jpeg", "image/png"] as const;
 const DELIVERY_URL_TTL_SECONDS = 60 * 60;
 
 type StoredMessageMedia = {
@@ -17,13 +17,12 @@ type StoredMessageMedia = {
 
 function extensionFor(mimeType: string): string {
   if (mimeType === "image/png") return "png";
-  if (mimeType === "image/webp") return "webp";
   return "jpg";
 }
 
 export function validateMessageMedia(file: File): string | null {
   if (!(MESSAGE_MEDIA_MIME_TYPES as readonly string[]).includes(file.type)) {
-    return "Choose a JPEG, PNG, or WebP photo.";
+    return "Choose a JPEG or PNG photo. Other formats must be converted before sending.";
   }
   if (!Number.isFinite(file.size) || file.size <= 0) return "That photo looks empty. Try again.";
   if (file.size > MESSAGE_MEDIA_MAX_BYTES) return "That photo is too large. Choose one under 4 MB.";
