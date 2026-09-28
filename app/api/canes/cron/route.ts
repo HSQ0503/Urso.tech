@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { canesAutomationsEnabled } from "@/lib/canes/automations";
 import { estimateText, jobReminderText } from "@/lib/canes/customer-messages";
 import { canesConfigured, canesDb } from "@/lib/canes/supabase";
 import { getAgenda, getLead, getOverview, getSettings } from "@/lib/canes/data";
@@ -102,6 +103,14 @@ export async function GET(req: NextRequest) {
       report[name] = { error: msg };
     }
   };
+
+  if (!(await canesAutomationsEnabled())) {
+    // Keep the payment ledger and stale payment-link cleanup safe while outreach is paused.
+    await section("legacy_square_history", businessDeadlineAt, () => reconcileLegacySquarePaymentHistory(3));
+    await section("credit_payment_links", businessDeadlineAt, () => retireCreditAdjustedPaymentLinks(businessDeadlineAt));
+    await section("push_receipts", cronDeadlineAt, () => processCanesPushReceipts({ deadlineAt: cronDeadlineAt }));
+    return NextResponse.json({ automations: "paused", ...report });
+  }
 
   // Purge an abandoned tour practice sandbox first, so no later section (or
   // the digest) ever reports on stale fake data. Cheap no-op when none exists.

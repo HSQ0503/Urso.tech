@@ -1,3 +1,4 @@
+import { canesAutomationsEnabled } from "@/lib/canes/automations";
 import { priceServiceLine, type ServiceLineInput } from "@urso/types";
 import { randomBytes } from "crypto";
 import { canesConfigured, canesDb } from "@/lib/canes/supabase";
@@ -588,6 +589,7 @@ export async function recordPlanFeeInvoice(planId: string, invoiceId: string): P
 //
 // The database advances each schedule and creates its next future visit atomically.
 export async function generateDueVisits(): Promise<{ minted: number; skipped: number; errors: string[] }> {
+  if (!(await canesAutomationsEnabled())) return { minted: 0, skipped: 0, errors: [] };
   if (!canesConfigured()) return { minted: 0, skipped: 0, errors: [] };
   const db = canesDb();
   const { data, error } = await db.from("recurring_plans").select("id").eq("status", "active").eq("scheduling_enabled", true).limit(500);

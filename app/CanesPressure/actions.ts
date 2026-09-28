@@ -1,5 +1,7 @@
 "use server";
 
+import { canesAutomationsEnabled } from "@/lib/canes/automations";
+
 import { priceServiceLine } from "@urso/types";
 import { validSignature, type SignatureDrawing } from "@/lib/canes/signatures";
 import { archiveDocument } from "@/lib/canes/document-archive";
@@ -848,7 +850,7 @@ export async function sendConfirmationNow(leadId: string): Promise<ActionResult>
     when: fmtEt(lead.appointment_at),
     address: lead.address,
   });
-  const res = await sendCanesSms({ to: lead.phone, body, leadId, automated: true, force: true });
+  const res = await sendCanesSms({ to: lead.phone, body, leadId, automated: true, userInitiated: true, force: true });
   if (!res.ok) return { ok: false, notice: res.skipped ?? res.error ?? "Send failed." };
   await logEvent(leadId, "automation", lead.status === "confirmed" ? "Booking notice resent manually" : "Confirmation text sent manually");
   refresh();
@@ -1493,7 +1495,7 @@ export async function sendEstimate(
   // Email inline with a per-attempt idempotency key. The provider outcome is
   // part of the action result — never claim "emailed" after a missing key,
   // render failure, or provider rejection.
-  const emailResult = canEmail ? await notifyEstimateSent(sent, now) : null;
+  const emailResult = canEmail ? await notifyEstimateSent(sent, now, true) : null;
 
   // Text inline NOW so it lands in the thread immediately (sendCanesSms logs to
   // messages). If quiet hours or Twilio isn't configured, fall back to the tasks
@@ -1506,7 +1508,7 @@ export async function sendEstimate(
       to: sent.customer_phone as string,
       body: estimateText(sent.customer_name, `${base}/CanesPressure/e/${sent.public_token}`),
       leadId: estimate.lead_id,
-      automated: true,
+      automated: true, userInitiated: true,
     });
     if (res.ok) {
       textSent = true;
@@ -3765,6 +3767,7 @@ export async function sendInvoice(
       hosted_payment_url: hostedUrl ?? null,
     };
 
+    const retryEnabled = await canesAutomationsEnabled();
     let emailResult: Awaited<ReturnType<typeof notifyInvoiceSent>> | null = null;
     let emailQueued = false;
     if (canEmail && published.email_dedupe_key) {
@@ -3775,7 +3778,7 @@ export async function sendInvoice(
         .eq("status", "pending")
         .select("id");
       if (claimed?.length) {
-        emailResult = await notifyInvoiceSent(sent, deliveryId);
+        emailResult = await notifyInvoiceSent(sent, deliveryId, true);
         if (emailResult.ok) {
           await db.from("tasks")
             .update({ status: "sent", sent_at: new Date().toISOString() })
@@ -3783,13 +3786,13 @@ export async function sendInvoice(
             .eq("status", "sending");
         } else {
           await db.from("tasks")
-            .update({ status: "pending", scheduled_for: new Date().toISOString() })
+            .update({ status: retryEnabled ? "pending" : "canceled", scheduled_for: new Date().toISOString() })
             .eq("dedupe_key", published.email_dedupe_key)
             .eq("status", "sending");
-          emailQueued = true;
+          emailQueued = retryEnabled;
         }
       } else {
-        emailQueued = true;
+        emailQueued = retryEnabled;
       }
     }
 
@@ -3808,7 +3811,7 @@ export async function sendInvoice(
           to: sent.customer_phone as string,
           body: `Here is your invoice from Canes Pressure Washing: ${link}`,
           leadId: fresh.lead_id,
-          automated: true,
+          automated: true, userInitiated: true,
         });
         if (res.ok) {
           textSent = true;
@@ -3817,14 +3820,14 @@ export async function sendInvoice(
             .eq("dedupe_key", published.text_dedupe_key)
             .eq("status", "sending");
         } else {
-          textQueued = true;
+          textQueued = retryEnabled;
           await db.from("tasks")
-            .update({ status: "pending", scheduled_for: new Date().toISOString() })
+            .update({ status: retryEnabled ? "pending" : "canceled", scheduled_for: new Date().toISOString() })
             .eq("dedupe_key", published.text_dedupe_key)
             .eq("status", "sending");
         }
       } else {
-        textQueued = true;
+        textQueued = retryEnabled;
       }
     }
     await enqueueInvoiceReminders(sent);
@@ -3862,7 +3865,7 @@ function sendInvoiceNotice(s: { emailSent: boolean; emailQueued: boolean; emailF
   if (s.emailQueued) return s.emailFailure
     ? `Email queued for retry: ${s.emailFailure}`
     : "Email queued for delivery.";
-  return "Invoice delivery queued.";
+  return "Invoice prepared, but delivery was not confirmed. Refresh before sending again.";
 }
 
 // Record a cash payment against an invoice — the Verify step. The database RPC
@@ -5334,9 +5337,9 @@ export async function sendRecurringPlanContract(
   if (canText && plan.customer_phone) {
     const name = plan.customer_name ? ` ${plan.customer_name.split(" ")[0]}` : "";
     const body = `Hi${name}, here is your recurring service agreement from Canes Pressure Washing (${PLAN_CADENCE_LABEL[plan.cadence].toLowerCase()}, ${fmtMoney(plan.price_per_visit_cents)} per visit). Review and sign here: ${url} Reply STOP to opt out.`;
-    const sms = await sendCanesSms({ to: plan.customer_phone, body, automated: true });
+    const sms = await sendCanesSms({ to: plan.customer_phone, body, automated: true, userInitiated: true });
     if (sms.ok) { accepted = true; outcomes.push("Text submitted for delivery."); }
-    else if (sms.skipped === "quiet_hours") {
+    else if (sms.skipped === "quiet_hours" && await canesAutomationsEnabled()) {
       const key = `recurring_agreement:${plan.id}:${plan.updated_at}`;
       const queued = await canesDb().from("tasks").upsert({kind:"estimate_send",dedupe_key:key,status:"pending",scheduled_for:new Date().toISOString(),payload:{plan_id:plan.id}},{onConflict:"dedupe_key",ignoreDuplicates:true});
       if (queued.error) outcomes.push("Text could not be queued. Try again.");
@@ -5349,7 +5352,7 @@ export async function sendRecurringPlanContract(
     } else outcomes.push(`Text not sent: ${sms.skipped ?? sms.error ?? "unknown"}.`);
   }
   if (canEmail) {
-    const email = await notifyPlanSent(plan, new Date().toISOString());
+    const email = await notifyPlanSent(plan, new Date().toISOString(), true);
     if (email.ok) accepted = true;
     outcomes.push(email.ok ? "Emailed." : `Email not sent: ${email.skipped ?? email.error ?? "unknown"}.`);
   }

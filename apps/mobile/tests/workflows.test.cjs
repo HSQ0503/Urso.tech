@@ -179,6 +179,62 @@ function serverFunction(file, name, dependencies) {
   return vm.runInThisContext(`(function(exports,${Object.keys(dependencies).join(",")}){${compiled}\nreturn ${name};})`)({}, ...Object.values(dependencies));
 }
 
+test("paused automations block even forced SMS while explicit sends remain usable", async () => {
+  const sent = [];
+  const send = serverFunction("lib/canes/twilio.ts", "sendCanesSms", {
+    canesAutomationsEnabled: async () => false,
+    twilioConfigured: () => true, canesConfigured: () => false,
+    checkSmsConsent: async () => null, getSettings: async () => ({}),
+    nextAllowedSendTime: () => new Date(), canesTwilioCreds: () => ({}),
+    toE164: (phone) => phone, statusCallbackUrl: () => "https://example.com/status",
+    twilioSend: async (input) => { sent.push(input); return { ok: true, sid: "manual" }; },
+  });
+  const input = { to: "+15615550188", body: "test", automated: true };
+  assert.equal((await send({ ...input, force: true })).skipped, "Automations are paused.");
+  assert.equal(sent.length, 0);
+  assert.equal((await send({ ...input, userInitiated: true })).ok, true);
+  assert.equal((await send({ ...input, automated: false })).ok, true);
+  assert.equal(sent.length, 2);
+});
+
+test("automation switch fails closed on missing, disabled, and unreadable settings", async () => {
+  for (const [value, error, expected] of [[true, null, true], [false, null, false], [undefined, null, false], [true, { message: "offline" }, false]]) {
+    const query = { select() { return this; }, eq() { return this; }, maybeSingle: async () => ({ data: value === undefined ? null : { value }, error }) };
+    const enabled = serverFunction("lib/canes/automations.ts", "canesAutomationsEnabled", {
+      canesConfigured: () => true, canesDb: () => ({ from: () => query }),
+    });
+    assert.equal(await enabled(), expected);
+  }
+});
+
+test("paused email and push paths never reach a delivery provider", async () => {
+  const deps = { canesAutomationsEnabled: async () => false };
+  for (const name of ["sendCustomerEmail", "sendOwnerNotificationEmail"]) {
+    const send = serverFunction("lib/canes/notify.tsx", name, deps);
+    assert.equal((await send({})).skipped, "Automations are paused.");
+  }
+  const push = serverFunction("lib/canes/push.ts", "sendCanesPush", deps);
+  assert.equal((await push({})).accepted, 0);
+  const drain = serverFunction("lib/canes/push.ts", "drainCanesPushOutbox", deps);
+  assert.equal((await drain()).skipped, "Automations are paused.");
+});
+
+test("paused cron runs financial safety checks without any business automation", async () => {
+  const calls = [];
+  const cron = serverFunction("app/api/canes/cron/route.ts", "GET", {
+    PUSH_CRON_RESERVE_MS: 27000, PUSH_RECEIPT_RESERVE_MS: 13000,
+    process: { env: { CRON_SECRET: "test" } },
+    NextResponse: { json: (value) => value }, canesConfigured: () => true,
+    canesAutomationsEnabled: async () => false, hasCronBudget: () => true,
+    reconcileLegacySquarePaymentHistory: async () => { calls.push("ledger"); },
+    retireCreditAdjustedPaymentLinks: async () => { calls.push("payment-links"); },
+    processCanesPushReceipts: async () => { calls.push("receipts"); },
+  });
+  const result = await cron({ headers: new Headers({ authorization: "Bearer test" }) });
+  assert.equal(result.automations, "paused");
+  assert.deepEqual(calls, ["ledger", "payment-links", "receipts"]);
+});
+
 test("photo uploads require permission and MMS-compatible content before storage", async () => {
   const writes = [];
   let denied = { ok: false, notice: "Not allowed" };

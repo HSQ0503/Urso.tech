@@ -1,3 +1,4 @@
+import { canesAutomationsEnabled } from "@/lib/canes/automations";
 import { getEstimate } from "@/lib/canes/estimates";
 import { getInvoice } from "@/lib/canes/invoices";
 import {
@@ -151,6 +152,7 @@ export async function drainPaymentEmailTasks(options: {
   deadlineAt?: number;
   limit?: number;
 } = {}): Promise<{ due: number; sent: number; deferred: number; canceled: number; contested: number }> {
+  if (!(await canesAutomationsEnabled())) return { due: 0, sent: 0, deferred: 0, canceled: 0, contested: 0 };
   const db = canesDb();
   let query = db
     .from("tasks")

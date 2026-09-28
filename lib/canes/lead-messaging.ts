@@ -133,7 +133,7 @@ export async function sendLeadMessageTask(id: string, settings: CanesSettings): 
       return "deferred";
     }
     if (!result.ok) {
-      const canceled = result.skipped === "This customer opted out of texts." || result.skipped === "superseded";
+      const canceled = result.skipped === "This customer opted out of texts." || result.skipped === "superseded" || result.skipped === "Automations are paused.";
       await finish(canceled ? "canceled" : "failed", { ...task.payload, error: result.error ?? result.skipped ?? "SMS failed" });
       if (!canceled) await db.from("events").insert({
         lead_id: lead.id, kind: "automation", detail: "Automatic text failed. Review the inbox before sending again.",

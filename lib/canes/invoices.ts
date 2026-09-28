@@ -1,3 +1,4 @@
+import { canesAutomationsEnabled } from "@/lib/canes/automations";
 import { canesConfigured, canesDb } from "@/lib/canes/supabase";
 import { getSettings, isDemo } from "@/lib/canes/data";
 import { DEMO_INVOICES, DEMO_INVOICE_ITEMS, DEMO_PAYMENTS } from "@/lib/canes/fixtures";
@@ -163,7 +164,7 @@ export function invoicePublicUrl(invoice: Pick<Invoice, "public_token">): string
 // Queue the invoice_send SMS task (drained by the cron outbox). Insert-only on
 // dedupe_key so a re-send never resurrects a task that already ran.
 export async function enqueueInvoiceSend(invoice: Invoice): Promise<boolean> {
-  if (!canesConfigured()) return false;
+  if (!canesConfigured() || !(await canesAutomationsEnabled())) return false;
   const { data, error } = await canesDb()
     .from("tasks")
     .upsert(
@@ -188,7 +189,7 @@ export async function enqueueInvoiceSend(invoice: Invoice): Promise<boolean> {
 // Queue the unpaid-invoice reminders at the days configured in
 // settings.invoice_reminder_days (default [3, 7]). Insert-only on dedupe_key.
 export async function enqueueInvoiceReminders(invoice: Invoice): Promise<void> {
-  if (!canesConfigured()) return;
+  if (!canesConfigured() || !(await canesAutomationsEnabled())) return;
   const db = canesDb();
   const now = Date.now();
   const settings = await getSettings();

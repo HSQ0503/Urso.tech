@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { canesAutomationsEnabled } from "@/lib/canes/automations";
 import { isOptIn, isOptOut, sendSms as twilioSend, validateSignature } from "@/lib/twilio";
 import { canesDb, canesConfigured, twilioConfigured } from "@/lib/canes/supabase";
 import { ownerHasPushDevice, sendCanesPush, type CanesPush } from "@/lib/canes/push";
@@ -100,15 +101,19 @@ export async function sendCanesSms(opts: {
   storedMediaUrls?: string[];
   leadId?: string | null;
   automated?: boolean;
+  userInitiated?: true;
   force?: boolean;
   beforeSend?: () => Promise<boolean>;
 }): Promise<SendResult> {
+  if (opts.automated && !opts.userInitiated && !(await canesAutomationsEnabled())) {
+    return { ok: false, skipped: "Automations are paused." };
+  }
   if (!twilioConfigured()) {
     return { ok: false, skipped: "Twilio is not configured yet (CANES_TWILIO_* env vars missing)." };
   }
   const consentRefusal = await checkSmsConsent(opts.to);
   if (consentRefusal) return consentRefusal;
-  if (opts.automated && !opts.force) {
+  if (opts.automated && !opts.force && !opts.userInitiated) {
     const settings = await getSettings();
     if (nextAllowedSendTime(settings)) {
       return { ok: false, skipped: "quiet_hours" };
@@ -165,6 +170,7 @@ export async function sendCanesSms(opts: {
 export type OwnerAlertOptions = { alreadyPushed?: boolean };
 
 export async function alertOwner(body: string, opts: OwnerAlertOptions = {}): Promise<SendResult> {
+  if (!(await canesAutomationsEnabled())) return { ok: true, skipped: "Automations are paused." };
   let reachable = false;
   try {
     reachable = await ownerHasPushDevice();

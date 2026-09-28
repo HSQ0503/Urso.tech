@@ -1,4 +1,5 @@
 import { Resend } from "resend";
+import { canesAutomationsEnabled } from "@/lib/canes/automations";
 import { render } from "@react-email/components";
 import { fmtEt, fmtMoney, fmtPhone, invoiceBalanceCents, minutesSince } from "@/lib/canes/types";
 import type { Estimate, Invoice, Lead, PaymentMethod, RecurringPlan } from "@/lib/canes/types";
@@ -66,6 +67,7 @@ function shouldRetryResend(error: unknown): boolean {
 }
 
 async function sendCustomerEmail(input: {
+  userInitiated?: boolean;
   to: string;
   subject: string;
   html: string;
@@ -73,6 +75,7 @@ async function sendCustomerEmail(input: {
   documentType: "estimate" | "invoice" | "plan";
   documentId: string;
 }): Promise<CustomerEmailResult> {
+  if (!input.userInitiated && !(await canesAutomationsEnabled())) return { ok: false, skipped: "Automations are paused." };
   const key = process.env.RESEND_API;
   if (!key) return { ok: false, skipped: "Email delivery is not configured." };
 
@@ -112,6 +115,7 @@ async function sendOwnerNotificationEmail(input: {
   html: string;
   idempotencyKey: string;
 }): Promise<CustomerEmailResult> {
+  if (!(await canesAutomationsEnabled())) return { ok: false, skipped: "Automations are paused." };
   const key = process.env.RESEND_API;
   if (!key) return { ok: false, skipped: "Email delivery is not configured." };
 
@@ -140,6 +144,7 @@ async function sendOwnerNotificationEmail(input: {
 // Owner-facing send: subject + pre-rendered HTML to the notify list. Best-effort
 // — skips without a key, swallows every error, never throws into the caller.
 async function send(subject: string, html: string): Promise<void> {
+  if (!(await canesAutomationsEnabled())) return;
   const key = process.env.RESEND_API;
   if (!key) {
     console.warn("[canes/notify] RESEND_API not set — skipping email:", subject);
@@ -251,7 +256,7 @@ export async function sendDigestEmail(subject: string, html: string): Promise<vo
 // ── Estimate emails (Phase 2) ────────────────────────────────────────────────
 
 // Customer-facing: the estimate is ready to review + approve at its token link.
-export async function notifyEstimateSent(estimate: Estimate, deliveryId = estimate.id): Promise<CustomerEmailResult> {
+export async function notifyEstimateSent(estimate: Estimate, deliveryId = estimate.id, userInitiated = false): Promise<CustomerEmailResult> {
   if (!estimate.customer_email) return { ok: false, skipped: "No email address is on file." };
   try {
     const html = await render(
@@ -269,6 +274,7 @@ export async function notifyEstimateSent(estimate: Estimate, deliveryId = estima
     );
     return sendCustomerEmail({
       to: estimate.customer_email,
+      userInitiated,
       subject: `Your estimate from Canes Pressure Washing — ${estimate.number}`,
       html,
       idempotencyKey: `estimate-send/${estimate.id}/${deliveryId}`,
@@ -283,7 +289,7 @@ export async function notifyEstimateSent(estimate: Estimate, deliveryId = estima
 }
 
 // Customer-facing: the recurring service agreement, for signature.
-export async function notifyPlanSent(plan: RecurringPlan, deliveryId = plan.id): Promise<CustomerEmailResult> {
+export async function notifyPlanSent(plan: RecurringPlan, deliveryId = plan.id, userInitiated = false): Promise<CustomerEmailResult> {
   if (!plan.customer_email) return { ok: false, skipped: "No email address is on file." };
   try {
     const html = await render(
@@ -301,6 +307,7 @@ export async function notifyPlanSent(plan: RecurringPlan, deliveryId = plan.id):
     );
     return sendCustomerEmail({
       to: plan.customer_email,
+      userInitiated,
       subject: `Your recurring service agreement from Canes Pressure Washing — ${plan.number}`,
       html,
       idempotencyKey: `plan-send/${plan.id}/${deliveryId}`,
@@ -404,7 +411,7 @@ export async function notifyEstimateDeclined(estimate: Estimate): Promise<void> 
 // ── Invoice emails (Phase 2.5) ────────────────────────────────────────────────
 
 // Customer-facing: the invoice is ready to view + pay at its token link.
-export async function notifyInvoiceSent(invoice: Invoice, deliveryId = invoice.id): Promise<CustomerEmailResult> {
+export async function notifyInvoiceSent(invoice: Invoice, deliveryId = invoice.id, userInitiated = false): Promise<CustomerEmailResult> {
   if (!invoice.customer_email) return { ok: false, skipped: "No email address is on file." };
   try {
     const balance = invoiceBalanceCents(invoice);
@@ -432,6 +439,7 @@ export async function notifyInvoiceSent(invoice: Invoice, deliveryId = invoice.i
     );
     return sendCustomerEmail({
       to: invoice.customer_email,
+      userInitiated,
       subject: `Your invoice from Canes Pressure Washing — ${invoice.number}`,
       html,
       idempotencyKey: `invoice-send/${invoice.id}/${deliveryId}`,

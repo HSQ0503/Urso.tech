@@ -311,7 +311,7 @@ async function afterDial(params: Record<string, string>, eventKey: string): Prom
           automated: true,
           force: true,
         });
-        if (!sent.ok) throw new Error(sent.error ?? sent.skipped ?? "missed-call text failed");
+        if (!sent.ok && sent.skipped !== "Automations are paused.") throw new Error(sent.error ?? sent.skipped ?? "missed-call text failed");
       });
     }
   }

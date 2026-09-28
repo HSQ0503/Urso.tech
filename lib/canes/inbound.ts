@@ -720,7 +720,7 @@ async function handleLeadReply(
         automated: true,
         force: true,
       });
-      if (!result.ok) throw new Error(result.error ?? result.skipped ?? "Confirmation SMS failed");
+      if (!result.ok && result.skipped !== "Automations are paused.") throw new Error(result.error ?? result.skipped ?? "Confirmation SMS failed");
     });
     if (!sid || routeContext?.kind !== "appointment_confirmation") {
       await logLeadEvent(lead.id, "confirmed", "Customer replied YES");
@@ -766,7 +766,7 @@ async function handleLeadReply(
           automated: true,
           force: true,
         });
-        if (!result.ok) throw new Error(result.error ?? result.skipped ?? "Confirmation SMS failed");
+        if (!result.ok && result.skipped !== "Automations are paused.") throw new Error(result.error ?? result.skipped ?? "Confirmation SMS failed");
       });
       console.log(`[canes] job confirmed by ${from}`);
       return { handled: "confirmed", leadIds: [lead.id], notes: ["Job confirmed."] };
@@ -821,7 +821,7 @@ async function handleLeadReply(
           automated: true,
           force: true,
         });
-        if (!result.ok) throw new Error(result.error ?? result.skipped ?? "Confirmation SMS failed");
+        if (!result.ok && result.skipped !== "Automations are paused.") throw new Error(result.error ?? result.skipped ?? "Confirmation SMS failed");
       });
       await logLeadEvent(
         lead.id,

@@ -1,3 +1,4 @@
+import { canesAutomationsEnabled } from "@/lib/canes/automations";
 import type { ApiActor } from "@/lib/api/v1";
 import { canesConfigured, canesDb } from "@/lib/canes/supabase";
 
@@ -787,6 +788,7 @@ export async function enqueueCanesPushBatch(inputs: CanesPush[]): Promise<{
   failed: number;
   skipped: number;
 }> {
+  if (!(await canesAutomationsEnabled())) return { ok: true, queued: 0, failed: 0, skipped: inputs.length };
   if (!canesConfigured()) return { ok: true, queued: 0, failed: 0, skipped: inputs.length };
   const now = new Date().toISOString();
   const rows = new Map<string, Record<string, unknown>>();
@@ -890,6 +892,7 @@ export async function sendCanesPush(
   deadlineAt?: number,
   storedEventData?: Record<string, unknown>,
 ): Promise<CanesPushResult> {
+  if (!(await canesAutomationsEnabled())) return { ok: true, accepted: 0, failed: 0, persisted: true, skipped: "Automations are paused." };
   if (!canesConfigured()) {
     return { ok: true, accepted: 0, failed: 0, persisted: true, skipped: "not configured" };
   }
@@ -1204,6 +1207,7 @@ async function requirePushWrite(
 }
 
 export async function drainCanesPushOutbox(options: PushProcessingOptions = {}) {
+  if (!(await canesAutomationsEnabled())) return { skipped: "Automations are paused." };
   if (!canesConfigured()) return { skipped: "not configured" };
   if (remainingBudget(options.deadlineAt) < PROVIDER_ATTEMPT_BUDGET_MS) {
     return { skipped: "cron deadline" };
