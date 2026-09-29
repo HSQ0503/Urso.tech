@@ -257,6 +257,9 @@ export async function sendDigestEmail(subject: string, html: string): Promise<vo
 
 // Customer-facing: the estimate is ready to review + approve at its token link.
 export async function notifyEstimateSent(estimate: Estimate, deliveryId = estimate.id, userInitiated = false): Promise<CustomerEmailResult> {
+  if (!userInitiated && !(await canesAutomationsEnabled("estimate"))) {
+    return { ok: false, skipped: "Estimate automations are paused." };
+  }
   if (!estimate.customer_email) return { ok: false, skipped: "No email address is on file." };
   try {
     const html = await render(

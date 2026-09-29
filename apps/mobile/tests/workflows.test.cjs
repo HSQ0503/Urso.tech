@@ -175,7 +175,7 @@ function serverFunction(file, name, dependencies) {
   const source = readFileSync(path.resolve(root, "../..", file), "utf8");
   const ast = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true);
   const fn = ast.statements.find((node) => ts.isFunctionDeclaration(node) && node.name?.text === name);
-  const compiled = ts.transpileModule(fn.getText(ast), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+  const compiled = ts.transpileModule(fn.getText(ast), { fileName: file, compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React } }).outputText;
   return vm.runInThisContext(`(function(exports,${Object.keys(dependencies).join(",")}){${compiled}\nreturn ${name};})`)({}, ...Object.values(dependencies));
 }
 
@@ -217,6 +217,74 @@ test("paused email and push paths never reach a delivery provider", async () => 
   assert.equal((await push({})).accepted, 0);
   const drain = serverFunction("lib/canes/push.ts", "drainCanesPushOutbox", deps);
   assert.equal((await drain()).skipped, "Automations are paused.");
+});
+
+test("estimate pause is independent of other automations and still honors the global pause", async () => {
+  for (const [global, estimate, expected] of [[true, false, false], [true, undefined, false], [true, true, true], [false, true, false]]) {
+    const enabled = serverFunction("lib/canes/automations.ts", "canesAutomationsEnabled", {
+      canesConfigured: () => true,
+      canesDb: () => ({ from: () => ({
+        select() { return this; }, eq(_column, key) { this.key = key; return this; },
+        async maybeSingle() { return { data: { value: this.key === "automations_enabled" ? global : estimate }, error: null }; },
+      }) }),
+    });
+    assert.equal(await enabled(), global);
+    assert.equal(await enabled("estimate"), expected);
+  }
+});
+
+test("disabled estimates cannot queue texts or send automatic email, but manual email remains available", async () => {
+  const deps = { canesConfigured: () => true, canesAutomationsEnabled: async (scope) => scope !== "estimate" };
+  const enqueue = serverFunction("lib/canes/estimates.ts", "enqueueEstimateSend", deps);
+  const reminders = serverFunction("lib/canes/estimates.ts", "enqueueEstimateReminders", deps);
+  assert.equal(await enqueue({}), false);
+  await reminders({});
+  const deliveries = [];
+  const email = serverFunction("lib/canes/notify.tsx", "notifyEstimateSent", {
+    ...deps, React: { createElement: () => ({}) }, EstimateEmail: () => null,
+    render: async () => "email", fmtMoney: () => "$100", APP_URL: "https://example.com",
+    sendCustomerEmail: async (input) => { deliveries.push(input); return { ok: true }; },
+  });
+  assert.equal((await email({ id: "estimate" })).skipped, "Estimate automations are paused.");
+  assert.equal((await email({ id: "estimate", customer_email: "test@example.com" }, "manual", true)).ok, true);
+  assert.equal(deliveries.length, 1);
+  assert.equal(deliveries[0].userInitiated, true);
+});
+
+test("outbox cancels estimate messages while invoice reminders and service agreements still send", async () => {
+  const tasks = [
+    { id: "estimate", kind: "estimate_send", payload: { estimate_id: "estimate" } },
+    { id: "reminder", kind: "estimate_reminder", payload: { estimate_id: "estimate" } },
+    { id: "plan", kind: "estimate_send", payload: { plan_id: "plan" } },
+    { id: "invoice", kind: "invoice_reminder", payload: { invoice_id: "invoice" } },
+  ];
+  const writes = [];
+  const sent = [];
+  const drain = serverFunction("app/api/canes/cron/route.ts", "drainDueTasks", {
+    canesDb: () => ({ from: () => ({
+      update(value) { this.value = value; return this; },
+      eq(column, value) { if (column === "id") this.id = value; return this; },
+      in() { return this; }, not() { return this; }, lt() { return this; },
+      lte() { return this; }, order() { return this; }, select() { return this; },
+      limit() { return this; },
+      then(resolve, reject) {
+        if (this.value && this.id) writes.push({ id: this.id, ...this.value });
+        return Promise.resolve({ data: this.value ? [{ id: this.id }] : tasks }).then(resolve, reject);
+      },
+    }) }),
+    getSettings: async () => ({}), LEAD_MESSAGE_KINDS: [], hasCronBudget: () => true,
+    canesAutomationsEnabled: async (scope) => scope !== "estimate",
+    getEstimate: async () => { throw new Error("Disabled estimate reached delivery"); },
+    getPlan: async () => ({ status: "active", customer_phone: "+15555550101", public_token: "plan" }),
+    getInvoice: async () => ({ status: "sent", customer_phone: "+15555550102", public_token: "invoice" }),
+    invoicePublicUrl: () => "https://example.com/invoice", APP_URL: "https://example.com",
+    sendCanesSms: async (input) => { sent.push(input); return { ok: true }; },
+  });
+  const result = await drain(Date.now() + 60000);
+  assert.equal(result.sent, 2);
+  assert.equal(result.canceled, 2);
+  assert.deepEqual(sent.map((item) => item.to), ["+15555550101", "+15555550102"]);
+  assert.deepEqual(writes.filter((item) => item.status === "canceled").map((item) => item.id), ["estimate", "reminder"]);
 });
 
 test("paused cron runs financial safety checks without any business automation", async () => {

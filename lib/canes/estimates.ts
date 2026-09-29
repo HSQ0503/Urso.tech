@@ -329,7 +329,7 @@ export async function nextEstimateNumber(): Promise<string> {
 // Queue the estimate_send SMS task (drained by the cron outbox). Insert-only on
 // dedupe_key so a re-send never resurrects a task that already ran.
 export async function enqueueEstimateSend(estimate: Estimate): Promise<boolean> {
-  if (!canesConfigured() || !(await canesAutomationsEnabled())) return false;
+  if (!canesConfigured() || !(await canesAutomationsEnabled("estimate"))) return false;
   const { data, error } = await canesDb()
     .from("tasks")
     .upsert(
@@ -356,7 +356,7 @@ export async function enqueueEstimateSend(estimate: Estimate): Promise<boolean> 
 // the day number keys the stage, so editing the cadence never re-sends a
 // reminder that already fired.
 export async function enqueueEstimateReminders(estimate: Estimate): Promise<void> {
-  if (!canesConfigured() || !(await canesAutomationsEnabled())) return;
+  if (!canesConfigured() || !(await canesAutomationsEnabled("estimate"))) return;
   const db = canesDb();
   const now = Date.now();
   const settings = await getSettings();

@@ -271,6 +271,11 @@ async function drainDueTasks(deadlineAt: number) {
     }
     const isEstimateTask = task.kind === "estimate_send" || task.kind === "estimate_reminder";
     if (isEstimateTask) {
+      if (!(await canesAutomationsEnabled("estimate"))) {
+        await db.from("tasks").update({ status: "canceled" }).eq("id", task.id);
+        canceled++;
+        continue;
+      }
       const estimateId =
         typeof task.payload?.estimate_id === "string" ? task.payload.estimate_id : null;
       const estimate = estimateId ? await getEstimate(estimateId) : null;
