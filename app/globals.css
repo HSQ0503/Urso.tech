@@ -83,6 +83,44 @@
     0%, 100% { opacity: 0.25; transform: translateX(-2px); }
     50%      { opacity: 1;    transform: translateX(2px); }
   }
+
+  /* Pontian (app/pontian). Values from the Pontian Brand + Digital Guidelines v1.0. */
+  --color-pt-blue: #0173fd;
+  --color-pt-yellow: #fdd907;
+  --color-pt-red: #f51728;
+  --color-pt-ink: #111111;
+  --color-pt-action: #0068e8;
+  --color-pt-action-deep: #0054b8;
+  --color-pt-paper: #f6f5f2;
+  --color-pt-line: #e4e2dc;
+  --color-pt-muted: #4a4a48;
+
+  --animate-pt-from-left: pt-from-left 450ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-pt-from-right: pt-from-right 450ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-pt-from-below: pt-from-below 450ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-pt-scroll-hint: pt-scroll-hint 1.6s ease-in-out infinite;
+
+  @keyframes pt-scroll-hint {
+    0%   { transform: translateY(-100%); }
+    100% { transform: translateY(300%); }
+  }
+
+  @keyframes pt-from-left {
+    from { opacity: 0; transform: translateX(-56px); }
+    to   { opacity: 1; transform: none; }
+  }
+  @keyframes pt-from-right {
+    from { opacity: 0; transform: translateX(56px); }
+    to   { opacity: 1; transform: none; }
+  }
+  @keyframes pt-from-below {
+    from { opacity: 0; transform: translateY(40px); }
+    to   { opacity: 1; transform: none; }
+  }
+}
+
+body:has(.pontian-root) {
+  background: #ffffff;
 }
 
 /* ===== Theme ===== Dark is the default; light flips every semantic token while
