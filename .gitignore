@@ -57,3 +57,10 @@ next-env.d.ts
 
 # FranPOS discovery payloads — contain real customer PII, never commit
 .franpos-discovery/
+
+# Local-only client research and scratch builds, never commit (public repo)
+artifacts/mf-einstein-research-report/
+artifacts/mf-einstein-research-report-en/
+artifacts/skorman-*.md
+output/
+tmp/
