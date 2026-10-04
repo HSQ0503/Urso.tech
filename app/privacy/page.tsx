@@ -8,7 +8,7 @@ export const metadata: Metadata = {
     "How Urso collects, uses, and protects information across our website and the dashboards we build for our clients.",
 };
 
-const EFFECTIVE = "June 9, 2026";
+const EFFECTIVE = "October 4, 2026";
 
 const intro = `This Privacy Policy explains how Urso ("Urso", "we", "us", or "our") — a data and analytics agency based in Orlando, Florida — collects, uses, and protects information in connection with our website at urso.ws and the dashboards and services we provide to our business clients (the "Services"). By using our Services or authorizing Urso to connect to your accounts, you agree to this Policy.`;
 
@@ -26,7 +26,7 @@ const sections: Block[] = [
     p: [`We collect three kinds of information:`],
     list: [
       `Information you give us — your name, email, business name, and anything you send when you contact us or request a diagnostic.`,
-      `Data from services you connect — when a Client authorizes a connection, we access business data from the platforms below, strictly to power their dashboard: Google Business Profile (listing details, reviews, ratings, replies, and performance insights for locations you manage); QuickBooks Online (financial reports, expenses, vendor bills, and accounting records); FranPOS (point-of-sale orders, products, customers, appointments, and staff records); and Twilio (call metadata such as time, answered/missed status and duration, and SMS delivery status).`,
+      `Data from services you connect — when a Client authorizes a connection, we access business data to operate their workspace: Google Business Profile (listing details, reviews, ratings, replies, and performance insights for locations you manage); QuickBooks Online (financial reports, expenses, vendor bills, and accounting records); FranPOS (point-of-sale orders, products, customers, appointments, and staff records); Meta (contact details and answers submitted through connected Facebook Page lead forms, and associated lead identifiers); and Twilio (call metadata, customer message content and photos, and message delivery status).`,
       `Information collected automatically — basic usage and device information, and cookies, when you visit urso.ws, used to operate and improve the site.`,
     ],
   },
@@ -48,6 +48,13 @@ const sections: Block[] = [
       `We do not allow humans to read your Google data except: (a) with your explicit consent; (b) where necessary for security purposes, or to comply with applicable law; or (c) where the data has been aggregated or anonymized and is used to operate or improve the Services.`,
     ],
     note: `Urso's use and transfer to any other app of information received from Google APIs will adhere to the Google API Services User Data Policy, including the Limited Use requirements.`,
+  },
+  {
+    h: "Meta lead data and deletion",
+    p: [
+      `When a Client connects a Facebook Page, we use its submitted lead data to create or update leads in that Client's Urso workspace, notify authorized team members, and support the follow-up actions the Client authorizes. Access is limited to the connected Page.`,
+      `To request deletion of Meta lead data held by Urso, email han@urso.ws with the connected business or Page name and enough information to identify your lead record. Do not send passwords or access tokens. We handle these requests under the retention and deletion terms in this Policy. You can stop future access by removing Urso Canes Lead Sync from Facebook's Business Integrations settings.`,
+    ],
   },
   {
     h: "How we share information",
@@ -82,7 +89,7 @@ const sections: Block[] = [
   {
     h: "Third-party services",
     p: [
-      `Our Services connect to and depend on third parties, each with its own privacy policy: Google Business Profile, QuickBooks Online (Intuit), FranPOS, Twilio, Supabase, and Vercel. We encourage you to review their policies to understand how they handle data.`,
+      `Our Services connect to and depend on third parties, each with its own privacy policy: Google Business Profile, QuickBooks Online (Intuit), FranPOS, Meta, Twilio, Supabase, and Vercel. We encourage you to review their policies to understand how they handle data.`,
     ],
   },
   {
@@ -132,7 +139,7 @@ export default function PrivacyPage() {
       <section className="px-5 py-14 sm:px-8 sm:py-16 md:px-14 md:py-20">
         <div className="max-w-[760px] space-y-11">
           {sections.map((s, i) => (
-            <div key={s.h}>
+            <div key={s.h} id={s.h === "Meta lead data and deletion" ? "meta-data-deletion" : undefined}>
               <h2 className="font-mono text-[11px] uppercase tracking-[0.16em]">
                 <span className="text-orange">{String(i + 1).padStart(2, "0")}</span>
                 <span className="ml-2.5 text-ink">{s.h}</span>
