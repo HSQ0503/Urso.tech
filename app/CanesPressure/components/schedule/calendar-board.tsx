@@ -433,6 +433,9 @@ function TimeGridColumn({
               className={`cp-timegrid-block ${conflicts.has(job.id) ? "cp-conflict" : ""}`}
               data-unassigned={!job.crew}
               data-finished={finished}
+              data-compact={(p.end - p.start) * PX_PER_MIN < 44}
+              title={`${job.customer_name ?? "Customer"} · ${timeWindow(job)} · ${job.crew?.name ?? "Unassigned"}`}
+              aria-label={`${job.customer_name ?? "Customer"}, ${timeWindow(job)}, ${job.crew?.name ?? "Unassigned"}`}
               style={{
                 ...style,
                 ...(job.crew ? ({ ["--cp-crew"]: job.crew.color } as React.CSSProperties) : {}),
@@ -451,7 +454,7 @@ function TimeGridColumn({
               onClick={() => onOpenJob(job)}
             >
               <span className="cp-timegrid-block-time tabular-nums">{timeWindow(job)}</span>
-              <span className="truncate">
+              <span className="cp-timegrid-block-name truncate">
                 {job.customer_name ?? "Customer"}
                 {finished ? " · Complete" : ""}
               </span>
@@ -471,8 +474,9 @@ function TimeGridColumn({
             key={`visit-${visit.id}`}
             type="button"
             className="cp-timegrid-visit"
+            data-compact={(p.end - p.start) * PX_PER_MIN < 32}
             style={style}
-            title={`Quote · ${visit.name ?? "Estimate visit"}`}
+            title={`Quote · ${visit.name ?? "Estimate visit"} · ${fmtEt(visit.appointment_at, { hour: "numeric", minute: "2-digit" })}`}
             onClick={() => onOpenVisit(visit)}
           >
             <span className="tabular-nums">

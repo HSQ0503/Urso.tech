@@ -368,7 +368,7 @@ const styles = StyleSheet.create({
 
   // The one accent on this screen: a hot lead is a person waiting on a call.
   row: { minHeight: 72, flexDirection: "row", alignItems: "center", gap: 11 },
-  rowHot: { borderLeftWidth: 3, borderLeftColor: color.brand },
+  rowHot: { borderLeftWidth: 3, borderLeftColor: color.brand, backgroundColor: color.brandSoft },
   pressed: { backgroundColor: color.hover },
 
   rowBody: { flex: 1, minWidth: 0 },

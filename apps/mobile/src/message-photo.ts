@@ -1,4 +1,4 @@
-import type { ImagePickerAsset } from "expo-image-picker";
+import { launchImageLibraryAsync, UIImagePickerPreferredAssetRepresentationMode, type ImagePickerAsset } from "expo-image-picker";
 import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import { MESSAGE_PHOTO_MAX_BYTES, MESSAGE_PHOTO_MAX_EDGE } from "@urso/types";
 
@@ -8,6 +8,15 @@ export type MessagePhoto = {
   fileName: string;
   fileSize: number;
 };
+
+export async function chooseMessagePhoto(): Promise<MessagePhoto | null> {
+  const result = await launchImageLibraryAsync({
+    mediaTypes: ["images"], allowsEditing: false, quality: 1,
+    shouldDownloadFromNetwork: true,
+    preferredAssetRepresentationMode: UIImagePickerPreferredAssetRepresentationMode.Compatible,
+  });
+  return result.canceled || !result.assets[0] ? null : prepareMessagePhoto(result.assets[0]);
+}
 
 export async function prepareMessagePhoto(asset: ImagePickerAsset): Promise<MessagePhoto> {
   for (let attempt = 0; attempt < 4; attempt++) {

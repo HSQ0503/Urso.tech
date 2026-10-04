@@ -136,6 +136,38 @@ function visiblePreferences(
   return [...known, ...extra];
 }
 
+export function PushSetupPrompt(): React.ReactElement | null {
+  const push = usePushNotifications();
+  const [busy, setBusy] = useState(false);
+  if (push.workspace !== "owner" || push.status.environment !== "device" ||
+      push.status.permission === "checking" || push.status.registration === "registered") return null;
+  const openSettings = push.status.permission === "denied" && !push.status.canAskAgain;
+  return (
+    <View style={{ padding: space.md, gap: space.sm, borderWidth: 1, borderColor: color.brand, borderRadius: radius.md }}>
+      <Text style={{ color: color.ink, fontFamily: font.bodyMedium }}>Get alerts on this phone</Text>
+      <Text style={{ color: color.muted }}>Enable app notifications for new leads, customer messages, and job updates.</Text>
+      {push.status.notice ? <Text style={{ color: color.muted }}>{push.status.notice}</Text> : null}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={openSettings ? "Open notification settings" : "Enable app notifications"}
+        disabled={busy || push.status.registration === "registering"}
+        style={{ minHeight: 44, justifyContent: "center" }}
+        onPress={async () => {
+          setBusy(true);
+          try {
+            if (openSettings) await push.openSystemSettings();
+            else await push.enable();
+          } finally { setBusy(false); }
+        }}
+      >
+        <Text style={{ color: color.brand, fontFamily: font.bodyMedium }}>
+          {busy ? "Connecting…" : openSettings ? "Open notification settings" : "Enable app notifications"}
+        </Text>
+      </Pressable>
+    </View>
+  );
+}
+
 export function PushNotificationSettings({
   workspace,
 }: {

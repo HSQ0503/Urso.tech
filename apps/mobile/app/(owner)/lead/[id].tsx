@@ -11,10 +11,11 @@
 // appointment at the wrong hour, which on this project already cost a missed
 // visit once.
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Image,
   KeyboardAvoidingView,
   Linking,
   Modal,
@@ -49,6 +50,7 @@ import {
   callActions,
   estimateActions,
   leadActions,
+  threadActions,
   type CallOutcome,
   type LeadPatch,
 } from "@/api";
@@ -58,6 +60,7 @@ import { isCompleteWhen, SlotPicker } from "@/components/slot-picker";
 import { Avatar } from "@/components/avatar";
 import { NavigateButton } from "@/components/navigate";
 import { Notice } from "@/components/notice";
+import { chooseMessagePhoto, type MessagePhoto } from "@/message-photo";
 import { PhoneInput, toPhoneDisplay } from "@/components/phone-input";
 import { keys, useEstimates, useLead, useLeadCalls, useLeadEvents } from "@/queries";
 import { noticeFrom, useAction, usePullToRefresh, useRefetchOnFocus } from "@/query";
@@ -366,6 +369,9 @@ function LeadDetail({ id }: { id: string }): React.ReactElement {
   const [resendNotice, setResendNotice] = useState<string | null>(null);
   const [resendGood, setResendGood] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
+  const [attachment, setAttachment] = useState<MessagePhoto | null>(null);
+  const [preparingPhoto, setPreparingPhoto] = useState(false);
+  const pickingPhoto = useRef(false);
   const [editing, setEditing] = useState(false);
   const [outcomesOpen, setOutcomesOpen] = useState(false);
   const [visitOpen, setVisitOpen] = useState(false);
@@ -419,7 +425,7 @@ function LeadDetail({ id }: { id: string }): React.ReactElement {
   // exist once it has. The action writes a call row and a lead event before it
   // returns, which is exactly what the tel: link cannot do.
   const bridgeRun = useAction((peerPhone: string) => callActions.bridge(peerPhone, id), {
-    invalidates: [keys.leads.calls(id), keys.leads.events(id), keys.leads.one(id)],
+    invalidates: [keys.leads.calls(id), keys.leads.events(id), keys.leads.one(id), keys.leads.all(), keys.overview(), keys.agenda()],
   });
   // An outcome writes a call row and can move the status, so both the call
   // surfaces (thread + this lead's list) and the status surfaces refresh.
@@ -441,8 +447,12 @@ function LeadDetail({ id }: { id: string }): React.ReactElement {
   // A sent text appears in the inbox thread, and sending moves a "new" lead
   // to "contacted" server-side — status surfaces refresh too.
   const sendRun = useAction(
-    (vars: { phone: string; message: string }) =>
-      leadActions.sendMessage(id, vars.phone, vars.message),
+    (vars: { phone: string; message: string; attachment: MessagePhoto | null }) =>
+      vars.attachment
+        ? threadActions.sendMedia(vars.phone, id, vars.message, {
+          uri: vars.attachment.uri, name: vars.attachment.fileName, mimeType: vars.attachment.mimeType,
+        })
+        : leadActions.sendMessage(id, vars.phone, vars.message),
     {
       invalidates: [
         keys.leads.one(id),
@@ -629,12 +639,29 @@ function LeadDetail({ id }: { id: string }): React.ReactElement {
 
   const send = async () => {
     if (phone === null) return; // the composer never renders without one
-    const r = await sendRun.mutateAsync({ phone, message: draft });
+    const r = await sendRun.mutateAsync({ phone, message: draft, attachment });
     if (r.ok) {
       setDraft(""); // cleared ONLY on ok — a refused message stays put for a retry
+      setAttachment(null);
       setSendNotice(null);
     } else {
       setSendNotice(r.notice);
+    }
+  };
+
+  const pickPhoto = async () => {
+    if (pickingPhoto.current) return;
+    pickingPhoto.current = true;
+    setPreparingPhoto(true);
+    setSendNotice(null);
+    try {
+      const photo = await chooseMessagePhoto();
+      if (photo) setAttachment(photo);
+    } catch {
+      setSendNotice("That photo could not be prepared. Try another image.");
+    } finally {
+      pickingPhoto.current = false;
+      setPreparingPhoto(false);
     }
   };
 
@@ -1261,12 +1288,25 @@ function LeadDetail({ id }: { id: string }): React.ReactElement {
             <View style={styles.card}>
               <View style={styles.pad}>
                 <Text style={styles.fieldLabel}>Text {fmtPhone(phone)}</Text>
+                <Pressable accessibilityRole="button" accessibilityLabel="Attach a photo"
+                  disabled={preparingPhoto || sendRun.isPending} onPress={() => void pickPhoto()} style={styles.button}>
+                  <Text style={styles.buttonText}>{preparingPhoto ? "Preparing photo…" : "Attach a photo"}</Text>
+                </Pressable>
+                {attachment ? (
+                  <View style={{ gap: space.sm }}>
+                    <Image source={{ uri: attachment.uri }} style={{ width: 80, height: 80, borderRadius: radius.sm }} accessibilityLabel="Photo ready to send" />
+                    <Pressable accessibilityRole="button" accessibilityLabel="Remove photo" disabled={sendRun.isPending}
+                      onPress={() => setAttachment(null)} style={styles.button}>
+                      <Text style={styles.buttonText}>Remove photo</Text>
+                    </Pressable>
+                  </View>
+                ) : null}
                 <TextInput
                   value={draft}
                   onChangeText={setDraft}
                   editable={!sendRun.isPending}
                   multiline
-                  placeholder="Type a message…"
+                  placeholder={attachment ? "Add a caption (optional)…" : "Type a message…"}
                   placeholderTextColor={color.faint}
                   accessibilityLabel="Message to the lead"
                   style={styles.composer}
@@ -1274,7 +1314,7 @@ function LeadDetail({ id }: { id: string }): React.ReactElement {
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="Send message"
-                  disabled={sendRun.isPending}
+                  disabled={sendRun.isPending || preparingPhoto || (!draft.trim() && !attachment)}
                   onPress={() => void send()}
                   style={({ pressed }) => [
                     styles.primary,

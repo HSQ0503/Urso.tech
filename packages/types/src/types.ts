@@ -44,6 +44,7 @@ export type Lead = {
   last_activity_at: string;
   opportunity_started_at?: string;
   meta_leadgen_id?: string | null;
+  first_contacted_at?: string | null;
 };
 
 // Fits the browser's server-action upload limit and leaves room for MMS delivery.
@@ -329,8 +330,9 @@ export function isoToEtLocal(iso: string): string {
   return `${get("year")}-${get("month")}-${get("day")}T${hour}:${get("minute")}`;
 }
 
-export function isUncontactedMetaLead(lead: Pick<Lead, "source" | "status">): boolean {
-  return lead.source === "meta_ads" && lead.status === "new";
+export function isUncontactedMetaLead(lead: Pick<Lead, "source" | "status" | "first_contacted_at">): boolean {
+  return lead.source === "meta_ads" &&
+    (lead.first_contacted_at === undefined ? lead.status === "new" : lead.first_contacted_at === null);
 }
 
 // Normalize a US phone into E.164 (+1XXXXXXXXXX); returns null if hopeless.

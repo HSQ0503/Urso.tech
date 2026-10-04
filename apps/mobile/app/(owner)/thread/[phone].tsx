@@ -43,7 +43,6 @@ import {
   View,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
-import * as ImagePicker from "expo-image-picker";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
@@ -59,7 +58,7 @@ import {
 } from "@urso/types";
 import { callActions, leadActions, threadActions } from "@/api";
 import { MessageContent } from "@/components/message-content";
-import { prepareMessagePhoto, type MessagePhoto } from "@/message-photo";
+import { chooseMessagePhoto, type MessagePhoto } from "@/message-photo";
 import { Notice } from "@/components/notice";
 import { keys, useThreadCalls, useThreadMessages, useThreads } from "@/queries";
 import { noticeFrom, useAction, usePullToRefresh } from "@/query";
@@ -344,8 +343,9 @@ function ThreadConversation(): React.ReactElement {
             keys.leads.calls(activeLeadId),
             keys.leads.events(activeLeadId),
             keys.leads.one(activeLeadId),
+            keys.leads.all(), keys.overview(), keys.agenda(),
           ]
-        : [keys.threads.calls(phone), keys.threads.all()],
+        : [keys.threads.calls(phone), keys.threads.all(), keys.leads.all(), keys.overview(), keys.agenda()],
   });
 
   // A sent text lands in this stream and reorders the inbox; it also writes a
@@ -383,7 +383,7 @@ function ThreadConversation(): React.ReactElement {
               keys.overview(),
               keys.agenda(),
             ]
-          : [keys.threads.messages(phone), keys.threads.all()],
+          : [keys.threads.messages(phone), keys.threads.all(), keys.leads.all(), keys.overview(), keys.agenda()],
     },
   );
 
@@ -462,16 +462,8 @@ function ThreadConversation(): React.ReactElement {
     setPreparingPhoto(true);
     setSendNotice(null);
     try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ["images"],
-        allowsEditing: false,
-        quality: 1,
-        shouldDownloadFromNetwork: true,
-        preferredAssetRepresentationMode:
-          ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
-      });
-      if (result.canceled || !result.assets[0]) return;
-      setAttachment(await prepareMessagePhoto(result.assets[0]));
+      const photo = await chooseMessagePhoto();
+      if (photo) setAttachment(photo);
     } catch {
       setSendNotice("That photo could not be prepared. Try another image.");
     } finally {

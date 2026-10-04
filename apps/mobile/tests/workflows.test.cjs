@@ -24,11 +24,15 @@ const native = {
 // Exercise the real React screens and handlers, replacing only native hosts,
 // navigation and network boundaries so tests never touch customer data.
 function harness() {
-  const state = { params: { id: "first" }, estimates: {}, invoices: {}, jobs: {}, writes: [], navigation: [], alerts: [], actionData: { estimateId: "created" }, permissionGranted: true, pickerCalls: 0, photo: { uri: "file:///original.png", width: 4000, height: 3000, mimeType: "image/png", fileSize: 6_000_000 }, photoExports: [] };
+  const state = { params: { id: "first" }, estimates: {}, invoices: {}, jobs: {}, writes: [], navigation: [], alerts: [], actionData: { estimateId: "created" }, permissionGranted: true, pickerCalls: 0, photo: { uri: "file:///original.png", width: 4000, height: 3000, mimeType: "image/png", fileSize: 6_000_000 }, photoExports: [], push: { workspace: "owner", status: { environment: "device", permission: "not-determined", registration: "idle", canAskAgain: true, notice: null } }, pushEnabled: 0 };
   const cache = new Map();
   const key = new Proxy(() => [], { get: () => key });
   const queries = {
     keys: key,
+    useLead: (id) => ({ data: { id, name: "Test lead", phone: "+15615550188", status: "new", source: "meta_ads", type: "cold", created_at: "2026-10-04T12:00:00Z", appointment_at: null, notes: null, address: null, service: null }, isPending: false }),
+    useLeadEvents: () => ({ data: [], isPending: false }),
+    useLeadCalls: () => ({ data: [], isPending: false }),
+    useEstimates: () => ({ data: [] }),
     useEstimate: (id) => ({ data: state.estimates[id] ?? null, isPending: false }),
     useInvoice: (id) => ({ data: state.invoices[id] ?? null, isPending: false }),
     useJob: (id) => ({ data: state.jobs[id] ?? null, isPending: false, isError: false }),
@@ -52,7 +56,9 @@ function harness() {
     function requireSource(name) {
       if (name === "react-native") return { ...native, Alert: { alert: (...args) => state.alerts.push(args) } };
       if (name === "react" || name.startsWith("react/")) return require(name);
-      if (name === "expo-router") return { useLocalSearchParams: () => state.params, useFocusEffect: (effect) => React.useEffect(effect, [effect]), router: { back() {}, replace: (href) => state.navigation.push(href), push: (href) => state.navigation.push(href) } };
+      if (name === "expo-device") return {};
+      if (name === "@/push-notifications") return { usePushNotifications: () => ({ ...state.push, enable: async () => { state.pushEnabled++; return true; } }) };
+      if (name === "expo-router") return { useRouter: () => ({ push: (href) => state.navigation.push(href) }), useLocalSearchParams: () => state.params, useFocusEffect: (effect) => React.useEffect(effect, [effect]), router: { back() {}, replace: (href) => state.navigation.push(href), push: (href) => state.navigation.push(href) } };
       if (name === "react-native-safe-area-context") return { useSafeAreaInsets: () => ({ top: 0, bottom: 0 }) };
       if (name === "react-native-svg") return { __esModule: true, default: host("Svg"), Polyline: host("Polyline") };
       if (name === "@expo/vector-icons") return { Feather: host("Icon") };
@@ -76,7 +82,7 @@ function harness() {
       if (name === "@/components/payment-corrections") return { PaymentCorrections: host("PaymentCorrections") };
       if (name === "@/components/document-revision") return { DocumentRevisionSheet: host("DocumentRevisionSheet") };
       if (name === "@/components/toast") return { useToast: () => ({ show() {} }) };
-      if (name === "@/query") return { noticeFrom: () => null, usePullToRefresh: () => ({ refreshing: false, onRefresh() {} }), useAction: (fn) => ({ mutateAsync: fn, isPending: false }) };
+      if (name === "@/query") return { noticeFrom: () => null, useRefetchOnFocus() {}, usePullToRefresh: () => ({ refreshing: false, onRefresh() {} }), useAction: (fn) => ({ mutateAsync: fn, isPending: false }) };
       if (name === "@/components/ledger") return { Mark: host("Mark"), NextStep: host("NextStep") };
       if (name === "@/components/delivery-sheet") return { DeliverySheet: host("DeliverySheet") };
       if (name === "@/components/address-input") return { AddressInput: host("AddressInput") };
@@ -117,6 +123,32 @@ test("photo picker remains usable when full library access is denied", async (t)
   await act(async () => button(renderer, "Attach a photo").props.onPress());
   assert.equal(state.pickerCalls, 1);
   assert.match(text(renderer.toJSON()), /Photo ready/);
+});
+
+test("an unregistered owner phone has a direct notification setup action", async () => {
+  const { state, load } = harness();
+  const Prompt = load("src/components/push-settings.tsx").PushSetupPrompt;
+  const renderer = await mount(Prompt);
+  await act(async () => button(renderer, "Enable app notifications").props.onPress());
+  assert.equal(state.pushEnabled, 1);
+  state.push.status.registration = "registered";
+  await act(async () => renderer.update(React.createElement(Prompt)));
+  assert.equal(renderer.toJSON(), null);
+  await act(async () => renderer.unmount());
+});
+
+test("lead details can send a photo without a caption and clear it after success", async () => {
+  const { state, load } = harness();
+  const renderer = await mount(load("app/(owner)/lead/[id].tsx").default);
+  await act(async () => button(renderer, "Attach a photo").props.onPress());
+  assert.equal(state.pickerCalls, 1);
+  assert.equal(button(renderer, "Send message").props.disabled, false);
+  await act(async () => button(renderer, "Send message").props.onPress());
+  const send = state.writes.find((write) => write.action === "sendMedia");
+  assert.deepEqual(send.args.slice(0, 3), ["+15615550188", "first", ""]);
+  assert.equal(send.args[3].mimeType, "image/jpeg");
+  assert.equal(button(renderer, "Remove photo"), undefined);
+  await act(async () => renderer.unmount());
 });
 
 test("a large photo is prepared as JPEG and can be sent without a caption", async (t) => {
@@ -181,6 +213,7 @@ function serverFunction(file, name, dependencies) {
 
 test("paused automations block even forced SMS while explicit sends remain usable", async () => {
   const sent = [];
+  const contacted = [];
   const send = serverFunction("lib/canes/twilio.ts", "sendCanesSms", {
     canesAutomationsEnabled: async () => false,
     twilioConfigured: () => true, canesConfigured: () => false,
@@ -188,6 +221,7 @@ test("paused automations block even forced SMS while explicit sends remain usabl
     nextAllowedSendTime: () => new Date(), canesTwilioCreds: () => ({}),
     toE164: (phone) => phone, statusCallbackUrl: () => "https://example.com/status",
     twilioSend: async (input) => { sent.push(input); return { ok: true, sid: "manual" }; },
+    recordManualLeadContact: async (phone) => contacted.push(phone),
   });
   const input = { to: "+15615550188", body: "test", automated: true };
   assert.equal((await send({ ...input, force: true })).skipped, "Automations are paused.");
@@ -195,6 +229,53 @@ test("paused automations block even forced SMS while explicit sends remain usabl
   assert.equal((await send({ ...input, userInitiated: true })).ok, true);
   assert.equal((await send({ ...input, automated: false })).ok, true);
   assert.equal(sent.length, 2);
+  assert.deepEqual(contacted, [input.to, input.to]);
+});
+
+test("Meta attention survives pipeline changes until a human contacts the lead", () => {
+  const isUncontacted = serverFunction("packages/types/src/types.ts", "isUncontactedMetaLead", {});
+  assert.equal(isUncontacted({ source: "meta_ads", status: "estimated", first_contacted_at: null }), true);
+  assert.equal(isUncontacted({ source: "meta_ads", status: "new", first_contacted_at: "2026-10-04T12:00:00Z" }), false);
+  assert.equal(isUncontacted({ source: "website", status: "new", first_contacted_at: null }), false);
+});
+
+test("manual contact resolves the normalized phone without a client lead id", async () => {
+  const calls = [];
+  const record = serverFunction("lib/canes/lead-contact.ts", "recordManualLeadContact", {
+    canesConfigured: () => true, toE164: () => "+15615550188",
+    canesDb: () => ({ rpc: async (...args) => { calls.push(args); return { error: null }; } }),
+  });
+  await record("(561) 555-0188");
+  assert.deepEqual(calls, [["record_manual_lead_contact", { p_phone: "+15615550188" }]]);
+});
+
+test("owner alerts queue app notifications and never fall back to personal SMS", async () => {
+  for (const persisted of [true, false]) {
+    let queued = 0;
+    const alert = serverFunction("lib/canes/twilio.ts", "alertOwner", {
+      canesAutomationsEnabled: async () => true, ownerAlertPush: (body) => ({ body }),
+      sendCanesPush: async () => { queued++; return { persisted, accepted: 0, skipped: "no enabled devices" }; },
+      twilioSend: () => { throw new Error("Personal SMS must not be sent"); },
+    });
+    assert.equal((await alert("New lead")).ok, persisted);
+    assert.equal(queued, 1);
+    assert.equal((await alert("New lead", { alreadyPushed: true })).ok, true);
+    assert.equal(queued, 1);
+  }
+});
+
+test("long conversations show the latest photo instead of the oldest 500 messages", async () => {
+  const rows = Array.from({ length: 501 }, (_, index) => ({ id: String(index), created_at: index, media_urls: index === 500 ? ["latest-photo"] : [] }));
+  const query = {
+    select() { return this; }, eq() { return this; },
+    order(_column, options) { this.ascending = options.ascending; return this; },
+    async limit(count) { return { data: (this.ascending ? [...rows] : [...rows].reverse()).slice(0, count) }; },
+  };
+  const read = serverFunction("lib/canes/data.ts", "getThreadMessages", { isDemo: () => false, canesDb: () => ({ from: () => query }) });
+  const result = await read("+15615550188");
+  assert.equal(result.length, 500);
+  assert.equal(result[0].id, "1");
+  assert.deepEqual(result.at(-1).media_urls, ["latest-photo"]);
 });
 
 test("automation switch fails closed on missing, disabled, and unreadable settings", async () => {

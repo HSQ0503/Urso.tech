@@ -211,9 +211,9 @@ export async function getThreadMessages(peerPhone: string): Promise<Message[]> {
     .from("messages")
     .select("*")
     .eq("peer_phone", peerPhone)
-    .order("created_at", { ascending: true })
+    .order("created_at", { ascending: false })
     .limit(500);
-  return (data ?? []) as Message[];
+  return ((data ?? []) as Message[]).reverse();
 }
 
 export async function listThreads(): Promise<Thread[]> {

@@ -71,7 +71,11 @@ export async function sendSms(opts: {
       body: params,
       signal: AbortSignal.timeout(8_000),
     });
-    if (!res.ok) return { ok: false, error: `Twilio responded ${res.status}`, ...(res.status >= 500 ? { uncertain: true as const } : {}) };
+    if (!res.ok) {
+      const problem = await res.json().catch(() => null) as { code?: unknown } | null;
+      const code = typeof problem?.code === "number" ? ` (code ${problem.code})` : "";
+      return { ok: false, error: `Message provider responded ${res.status}${code}.`, ...(res.status >= 500 ? { uncertain: true as const } : {}) };
+    }
     const json = (await res.json()) as { sid?: string };
     if (!json.sid) return { ok: false, error: "Twilio did not confirm a message ID.", uncertain: true };
     return { ok: true, sid: json.sid };

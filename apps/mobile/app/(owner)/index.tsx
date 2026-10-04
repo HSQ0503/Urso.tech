@@ -26,6 +26,7 @@ import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { fmtMoney } from "@urso/types";
 import { Notice } from "@/components/notice";
+import { PushSetupPrompt } from "@/components/push-settings";
 import {
   LauncherBar,
   LauncherGreeting,
@@ -178,6 +179,7 @@ export default function HomeScreen(): React.ReactElement {
             money={fmtMoney(overview?.money.collectedThisWeekCents ?? 0)}
             detail={`collected this week · ${overview?.todayAgenda.length ?? 0} today`}
           />
+          <PushSetupPrompt />
 
           {notice !== null ? <Notice text={notice} /> : null}
 

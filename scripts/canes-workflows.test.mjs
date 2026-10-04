@@ -7,6 +7,37 @@ import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import { PGlite } from "@electric-sql/pglite";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+
+test("manual contact migration ignores automated and old outreach and preserves booked stages", async () => {
+  const db = new PGlite();
+  try {
+    await db.exec(`
+      create role anon; create role authenticated; create role service_role;
+      create table leads (phone text primary key, created_at timestamptz, status text, last_activity_at timestamptz);
+      create table messages (peer_phone text, created_at timestamptz, direction text, automated boolean, delivery_status text);
+      create table calls (peer_phone text, created_at timestamptz, direction text);
+      insert into leads values ('+15555550101','2026-10-01','new',now()), ('+15555550102','2026-10-01','estimated',now());
+      insert into messages values
+        ('+15555550101','2026-10-02','out',true,'delivered'),
+        ('+15555550101','2026-09-01','out',false,'delivered'),
+        ('+15555550101','2026-10-02','out',false,'failed');
+    `);
+    await db.exec(fs.readFileSync(path.join(root, "supabase/canes/20261004225927_canes_manual_lead_contact.sql"), "utf8"));
+    assert.equal((await db.query("select first_contacted_at from leads where phone='+15555550101'")).rows[0].first_contacted_at, null);
+    await db.query("select record_manual_lead_contact('+15555550101');");
+    const first = (await db.query("select status,first_contacted_at from leads where phone='+15555550101'")).rows[0];
+    assert.equal(first.status, "contacted");
+    assert.ok(first.first_contacted_at);
+    await db.query("select record_manual_lead_contact('+15555550101');");
+    assert.deepEqual((await db.query("select status,first_contacted_at from leads where phone='+15555550101'")).rows[0], first);
+    await db.query("select record_manual_lead_contact('+15555550102');");
+    assert.equal((await db.query("select status from leads where phone='+15555550102'")).rows[0].status, "estimated");
+    const grants = (await db.query("select has_function_privilege('authenticated','record_manual_lead_contact(text)','execute') as member, has_function_privilege('service_role','record_manual_lead_contact(text)','execute') as service")).rows[0];
+    assert.equal(grants.member, false);
+    assert.equal(grants.service, true);
+  } finally { await db.close(); }
+});
+
 function source(file, mocks = {}) {
   const exports = {};
   const code = ts.transpileModule(

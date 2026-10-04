@@ -1,5 +1,7 @@
 "use server";
 
+import { recordManualLeadContact } from "@/lib/canes/lead-contact";
+
 import { canesAutomationsEnabled } from "@/lib/canes/automations";
 
 import { priceServiceLine } from "@urso/types";
@@ -323,7 +325,10 @@ export async function logCallOutcome(
     direction: "out",
     status: outcome === "no_answer" ? "no-answer" : "completed",
   });
-  const patch: Record<string, string> = { last_activity_at: new Date().toISOString() };
+  const patch: Record<string, string> = {
+    last_activity_at: new Date().toISOString(),
+    first_contacted_at: lead.first_contacted_at ?? new Date().toISOString(),
+  };
   // Calling about existing booked work must not move it back into the funnel.
   if (outcome !== "lost" && ["new", "contacted"].includes(lead.status)) {
     patch.status = "contacted";
@@ -750,13 +755,6 @@ export async function sendMessage(peerPhone: string, body: string, leadId?: stri
   if (denied) return denied;
   const res = await sendCanesSms({ to: peerPhone, body: body.trim(), leadId: leadId ?? null, automated: false });
   if (!res.ok) return { ok: false, notice: res.skipped ?? res.error ?? "Send failed." };
-  if (leadId) {
-    const lead = await getLead(leadId);
-    if (lead && lead.status === "new") {
-      await canesDb().from("leads").update({ status: "contacted" }).eq("id", leadId);
-    }
-    await touch(leadId);
-  }
   refresh();
   return { ok: true };
 }
@@ -821,13 +819,6 @@ export async function sendMessageWithMedia(
   if (!res.ok) return res.uncertain
     ? { ok: false, deliveryUncertain: true, notice: "Photo delivery could not be confirmed. Refresh the conversation before trying again." }
     : { ok: false, notice: res.skipped ?? res.error ?? "Send failed." };
-  if (leadId) {
-    const lead = await getLead(leadId);
-    if (lead && lead.status === "new") {
-      await canesDb().from("leads").update({ status: "contacted" }).eq("id", leadId);
-    }
-    await touch(leadId);
-  }
   refresh();
   return { ok: true };
 }
@@ -952,11 +943,9 @@ export async function bridgeCall(
   });
   if (opts?.leadId) {
     await logEvent(opts.leadId, "call", "Click-to-call started (bridging your phone)");
-    const lead = await getLead(opts.leadId);
-    if (lead && lead.status === "new") {
-      await canesDb().from("leads").update({ status: "contacted" }).eq("id", opts.leadId);
-    }
   }
+  await recordManualLeadContact(to);
+  refresh();
   return { ok: true, notice: "Calling your phone now — answer to connect." };
 }
 

@@ -2,7 +2,8 @@ import { randomUUID } from "node:crypto";
 import { canesAutomationsEnabled } from "@/lib/canes/automations";
 import { isOptIn, isOptOut, sendSms as twilioSend, validateSignature } from "@/lib/twilio";
 import { canesDb, canesConfigured, twilioConfigured } from "@/lib/canes/supabase";
-import { ownerHasPushDevice, sendCanesPush, type CanesPush } from "@/lib/canes/push";
+import { sendCanesPush, type CanesPush } from "@/lib/canes/push";
+import { recordManualLeadContact } from "@/lib/canes/lead-contact";
 import { getSettings } from "@/lib/canes/data";
 import { toE164, type CanesSettings } from "@/lib/canes/types";
 
@@ -152,52 +153,25 @@ export async function sendCanesSms(opts: {
       await canesDb().from("messages").insert({ ...row, lead_id: null });
     }
   }
+  if (res.ok && (!opts.automated || opts.userInitiated)) await recordManualLeadContact(to);
   return res.ok ? { ok: true, sid: res.sid } : { ok: false, error: res.error, ...(res.uncertain ? { uncertain: true } : {}) };
 }
 
-// Owner alerts (escalations, digests, Square warnings) reach Sebastian by PUSH
-// first and by SMS only when no owner device is registered.
-//
-// Why: the business line is now the A2P-registered sender for customer texts.
-// Dozens of self-addressed alerts a day carrying urso.ws links and urgency
-// wording were the spammiest traffic on that number — exactly what handset
-// filters learn on — so they leave the SMS channel. Exempt from quiet hours
-// either way: he asked to be woken up by leads, not protected from them.
-//
-// `alreadyPushed`: the caller sent its own richer push for this event (the
-// Square paths do). Then this is fallback-only — SMS if push can't reach him,
-// nothing otherwise, so he never gets the same warning twice.
+// Owner alerts use the app outbox; customer SMS and click-to-call stay separate.
 export type OwnerAlertOptions = { alreadyPushed?: boolean };
 
 export async function alertOwner(body: string, opts: OwnerAlertOptions = {}): Promise<SendResult> {
   if (!(await canesAutomationsEnabled())) return { ok: true, skipped: "Automations are paused." };
-  let reachable = false;
+  if (opts.alreadyPushed) return { ok: true, skipped: "push covers it" };
   try {
-    reachable = await ownerHasPushDevice();
+    const push = await sendCanesPush(ownerAlertPush(body));
+    return push.persisted
+      ? { ok: true, skipped: push.skipped }
+      : { ok: false, error: "App notification could not be queued." };
   } catch (error) {
-    console.error("[canes] owner push device lookup failed:", error);
+    console.error("[canes] owner app notification failed:", error);
+    return { ok: false, error: "App notification could not be queued." };
   }
-
-  if (reachable) {
-    if (opts.alreadyPushed) return { ok: true, skipped: "push covers it" };
-    try {
-      const push = await sendCanesPush(ownerAlertPush(body));
-      if (push.accepted > 0 || push.skipped === "duplicate" || push.skipped === "no enabled devices") {
-        // "no enabled devices" here means the category is switched off on
-        // every device — a preference, honoured rather than routed around.
-        return { ok: true, skipped: push.accepted > 0 ? undefined : push.skipped };
-      }
-      console.error(`[canes] owner alert push failed (${push.skipped ?? "provider"}), falling back to SMS`);
-    } catch (error) {
-      console.error("[canes] owner alert push threw, falling back to SMS:", error);
-    }
-  }
-
-  const to = process.env.CANES_OWNER_PHONE;
-  if (!to) return { ok: false, skipped: "CANES_OWNER_PHONE not set" };
-  if (!twilioConfigured()) return { ok: false, skipped: "Twilio not configured" };
-  const creds = canesTwilioCreds();
-  return twilioSend({ ...creds, from: creds.from, to, body });
 }
 
 // Console links in the SMS text map onto the app's own screens; the URL itself
