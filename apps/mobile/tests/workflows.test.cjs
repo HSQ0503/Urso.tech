@@ -211,6 +211,57 @@ function serverFunction(file, name, dependencies) {
   return vm.runInThisContext(`(function(exports,${Object.keys(dependencies).join(",")}){${compiled}\nreturn ${name};})`)({}, ...Object.values(dependencies));
 }
 
+function metaConnectionHarness({ authorized = true, identityMatches = true, alreadyConnected = false, denied = false } = {}) {
+  const calls = [];
+  let subscribed = alreadyConnected;
+  const route = serverFunction("app/api/canes/meta/connect/route.ts", "POST", {
+    process: { env: { CRON_SECRET: "service-secret", CANES_META_APP_ID: "app", CANES_META_PAGE_ID: "page", CANES_META_PAGE_ACCESS_TOKEN: "private-page-token", CANES_META_APP_SECRET: "private-app-secret" } },
+    NextResponse: { json: (body, options) => ({ body, status: options?.status ?? 200 }) },
+    fetch: async (url, options) => {
+      calls.push({ url, ...options });
+      if (!authorized) throw new Error("Unauthorized request reached Meta");
+      if (url.includes("debug_token")) return Response.json({ data: { is_valid: true, type: "PAGE", app_id: "app", profile_id: identityMatches ? "page" : "another-page" } });
+      if (url.includes("me?")) return Response.json({ id: "page", name: "Canes" });
+      if (denied) return Response.json({ error: { code: 200, message: "private-page-token must never be returned" } }, { status: 403 });
+      if (options.method === "POST") { subscribed = true; return Response.json({ success: true }); }
+      return Response.json({ data: [{ id: "app", subscribed_fields: subscribed ? ["leadgen", "feed"] : ["feed"] }] });
+    },
+  });
+  return { calls, run: () => route(new Request("https://example.com/api/canes/meta/connect", { method: "POST", headers: authorized ? { authorization: "Bearer service-secret" } : {} })) };
+}
+
+test("Meta setup rejects anonymous callers before using provider credentials", async () => {
+  const harness = metaConnectionHarness({ authorized: false });
+  assert.equal((await harness.run()).status, 401);
+  assert.equal(harness.calls.length, 0);
+});
+
+test("Meta setup refuses a token for another Page without subscribing it", async () => {
+  const harness = metaConnectionHarness({ identityMatches: false });
+  assert.equal((await harness.run()).status, 409);
+  assert.equal(harness.calls.length, 1);
+});
+
+test("Meta setup preserves existing fields and verifies the new subscription", async () => {
+  const harness = metaConnectionHarness();
+  const result = await harness.run();
+  assert.equal(result.body.connected, true);
+  assert.equal(result.body.changed, true);
+  assert.equal(harness.calls.length, 5);
+  assert.equal(harness.calls.find(call => call.method === "POST").body.get("subscribed_fields"), "feed,leadgen");
+  assert.doesNotMatch(JSON.stringify(result), /private-/);
+});
+
+test("Meta setup is idempotent and does not leak provider error messages", async () => {
+  const connected = metaConnectionHarness({ alreadyConnected: true });
+  assert.equal((await connected.run()).body.changed, false);
+  assert.equal(connected.calls.some(call => call.method === "POST"), false);
+  const denied = await metaConnectionHarness({ denied: true }).run();
+  assert.equal(denied.status, 502);
+  assert.deepEqual(denied.body.meta, { status: 403, code: 200 });
+  assert.doesNotMatch(JSON.stringify(denied), /private-page-token/);
+});
+
 test("paused automations block even forced SMS while explicit sends remain usable", async () => {
   const sent = [];
   const contacted = [];
