@@ -258,7 +258,7 @@ test("Meta setup is idempotent and does not leak provider error messages", async
   assert.equal(connected.calls.some(call => call.method === "POST"), false);
   const denied = await metaConnectionHarness({ denied: true }).run();
   assert.equal(denied.status, 502);
-  assert.deepEqual(denied.body.meta, { status: 403, code: 200 });
+  assert.deepEqual(denied.body.meta, { status: 403, code: 200, operation: "subscription_check", message: "<redacted> must never be returned" });
   assert.doesNotMatch(JSON.stringify(denied), /private-page-token/);
 });
 

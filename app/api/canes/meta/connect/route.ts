@@ -22,9 +22,9 @@ export async function POST(req: Request): Promise<Response> {
     name?: string;
     success?: boolean;
     data?: unknown;
-    error?: { code?: number };
+    error?: { code?: number; message?: string };
   };
-  let providerFailure: { status: number; code: number | null } | undefined;
+  let providerFailure: { status: number; code: number | null; operation: string; message?: string } | undefined;
   const graph = async (path: string, bearer = token, fields?: string[]): Promise<GraphResponse> => {
     const result = await fetch(`https://graph.facebook.com/${process.env.CANES_META_GRAPH_VERSION ?? "v26.0"}/${path}`, {
       method: fields ? "POST" : "GET",
@@ -35,7 +35,16 @@ export async function POST(req: Request): Promise<Response> {
     });
     const body = await result.json() as GraphResponse;
     if (!result.ok || body.error) {
-      providerFailure = { status: result.status, code: typeof body.error?.code === "number" ? body.error.code : null };
+      let message = typeof body.error?.message === "string" ? body.error.message : undefined;
+      for (const credential of [token, appSecret, secret]) {
+        message = message?.replaceAll(credential, "<redacted>").replaceAll(encodeURIComponent(credential), "<redacted>");
+      }
+      providerFailure = {
+        status: result.status,
+        code: typeof body.error?.code === "number" ? body.error.code : null,
+        operation: fields ? "subscribe" : path.startsWith("debug_token") ? "token_check" : path.startsWith("me?") ? "page_check" : "subscription_check",
+        ...(message ? { message: message.slice(0, 500) } : {}),
+      };
       throw new Error("Meta rejected the connection.");
     }
     return body;
