@@ -1,9 +1,10 @@
 import { canesDb } from "@/lib/canes/supabase";
-import { getLead } from "@/lib/canes/data";
+import { canesAutomationsEnabled } from "@/lib/canes/automations";
+import { getLead, getSettings } from "@/lib/canes/data";
 import { fillTemplate, nextAllowedSendTime, sendCanesSms } from "@/lib/canes/twilio";
 import { fmtEt, type AutomationTask, type CanesSettings, type Lead } from "@/lib/canes/types";
 
-export const LEAD_MESSAGE_KINDS = ["hold_text", "confirmation", "manual_booking"] as const;
+export const LEAD_MESSAGE_KINDS = ["hold_text", "meta_intro", "confirmation", "manual_booking"] as const;
 export type LeadMessageResult = "sent" | "deferred" | "canceled" | "failed" | "contested";
 
 export function sameInstant(a: unknown, b: unknown): boolean {
@@ -18,6 +19,12 @@ export function currentAppointmentTask(task: AutomationTask, lead: Lead, now = D
 
 export function leadMessageIsCurrent(task: AutomationTask, lead: Lead | null, now = Date.now()): boolean {
   if (!lead?.phone || lead.opted_out) return false;
+  if (task.kind === "meta_intro") {
+    return lead.source === "meta_ads" && lead.type === "cold" && lead.status === "new" &&
+      !lead.first_contacted_at && lead.phone === task.payload.phone &&
+      lead.meta_leadgen_id === task.payload.meta_leadgen_id &&
+      sameInstant(task.payload.opportunity_started_at, lead.opportunity_started_at ?? lead.created_at);
+  }
   if (task.kind === "hold_text") {
     return lead.type === "cold" && lead.status === "new" &&
       (!task.payload.opportunity_started_at ||
@@ -59,6 +66,50 @@ export async function queueVirtualQuote(lead: Lead, settings: CanesSettings): Pr
     payload: { opportunity_started_at: opportunity },
   });
   await sendLeadMessageTask(task.id, settings);
+}
+
+export async function queueMetaIntro(leadId: string, leadgenId: string, submittedAt?: string): Promise<void> {
+  const parsed = submittedAt ? Date.parse(submittedAt) : NaN;
+  const { error } = await canesDb().rpc("queue_meta_intro", {
+    p_lead_id: leadId,
+    p_leadgen_id: leadgenId,
+    p_submitted_at: Number.isFinite(parsed) ? new Date(parsed).toISOString() : null,
+  });
+  if (error) throw new Error(`Meta introduction could not be queued: ${error.message}`);
+}
+
+export function metaIntroText(template: string, name: string | null, service: unknown): string {
+  const selected = typeof service === "string" ? service.replace(/[_\s]+/g, " ").trim().slice(0, 120) : "";
+  const person = name?.replace(/\s+/g, " ").trim() || null;
+  return fillTemplate(template, { name: person }).replaceAll("{request}", selected ? `request for ${selected}` : "quote request");
+}
+
+async function metaIntroEligible(task: AutomationTask): Promise<boolean> {
+  if (task.kind !== "meta_intro") return true;
+  const { data, error } = await canesDb().rpc("meta_intro_is_eligible", { p_task_id: task.id });
+  if (error) throw new Error(`Meta introduction eligibility failed: ${error.message}`);
+  return data === true;
+}
+
+export async function drainMetaIntros(deadlineAt: number) {
+  const db = canesDb();
+  const { error: recoveryError } = await db.from("tasks").update({ status: "failed" })
+    .eq("kind", "meta_intro").eq("status", "sending")
+    .lt("scheduled_for", new Date(Date.now() - 10 * 60_000).toISOString());
+  if (recoveryError) throw new Error(`Meta introduction recovery failed: ${recoveryError.message}`);
+  if (!(await canesAutomationsEnabled("meta_intro"))) return { paused: true };
+  const { data, error } = await db.from("tasks").select("*")
+    .eq("kind", "meta_intro").eq("status", "pending")
+    .lte("scheduled_for", new Date().toISOString())
+    .order("scheduled_for", { ascending: true }).limit(25);
+  if (error) throw new Error(`Meta introduction queue read failed: ${error.message}`);
+  const settings = await getSettings();
+  const results: Record<LeadMessageResult, number> = { sent: 0, deferred: 0, canceled: 0, failed: 0, contested: 0 };
+  for (const task of (data ?? []) as AutomationTask[]) {
+    if (Date.now() + 12_000 >= deadlineAt) break;
+    results[await sendLeadMessageTask(task.id, settings)]++;
+  }
+  return results;
 }
 
 export async function upsertConfirmationTask(
@@ -108,13 +159,13 @@ export async function sendLeadMessageTask(id: string, settings: CanesSettings): 
 
   try {
     const lead = task.lead_id ? await getLead(task.lead_id) : null;
-    if (!lead?.phone || !leadMessageIsCurrent(task, lead)) {
+    if (!lead?.phone || !leadMessageIsCurrent(task, lead) || !(await metaIntroEligible(task))) {
       await finish("canceled");
       return "canceled";
     }
-    const template = task.kind === "hold_text" ? settings.templates.hold_text :
+    const template = task.kind === "meta_intro" ? settings.templates.meta_intro : task.kind === "hold_text" ? settings.templates.hold_text :
       task.kind === "manual_booking" ? settings.templates.manual_booking : settings.templates.confirmation;
-    const body = fillTemplate(template, {
+    const body = task.kind === "meta_intro" ? metaIntroText(template, lead.name, task.payload.service) : fillTemplate(template, {
       name: lead.name, when: fmtEt(lead.appointment_at), address: lead.address,
     });
     const result = await sendCanesSms({
@@ -125,7 +176,7 @@ export async function sendLeadMessageTask(id: string, settings: CanesSettings): 
           db.from("tasks").select("status").eq("id", id).single(),
         ]);
         return state.data?.status === "sending" && current?.phone === lead.phone &&
-          leadMessageIsCurrent(task, current);
+          leadMessageIsCurrent(task, current) && await metaIntroEligible(task);
       },
     });
     if (result.skipped === "quiet_hours") {
@@ -143,7 +194,7 @@ export async function sendLeadMessageTask(id: string, settings: CanesSettings): 
     await finish("sent", { ...task.payload, twilio_sid: result.sid });
     await db.from("events").insert({
       lead_id: lead.id, kind: "automation",
-      detail: task.kind === "hold_text" ? "Virtual quote introduction sent" :
+      detail: task.kind === "meta_intro" ? "Meta quote introduction sent" : task.kind === "hold_text" ? "Virtual quote introduction sent" :
         task.kind === "manual_booking" ? "Confirmed booking notice sent" : "Appointment confirmation text sent",
     });
     if (task.kind === "confirmation") {

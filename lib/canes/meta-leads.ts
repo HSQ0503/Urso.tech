@@ -1,7 +1,6 @@
 import { canesConfigured, canesDb } from "@/lib/canes/supabase";
 import { findLeadByPhone, logLeadEvent } from "@/lib/canes/inbound";
-import { queueVirtualQuote } from "@/lib/canes/lead-messaging";
-import { getSettings } from "@/lib/canes/data";
+import { queueMetaIntro } from "@/lib/canes/lead-messaging";
 import { notifyColdLead } from "@/lib/canes/notify";
 import { pushMetaLeadNoPhone, pushNewLead } from "@/lib/canes/push-events";
 import { alertOwner } from "@/lib/canes/twilio";
@@ -21,6 +20,7 @@ export type MetaLeadIngest = {
 
 export type MetaGraphLead = {
   id?: string;
+  created_time?: string;
   field_data?: unknown;
 };
 
@@ -110,9 +110,6 @@ async function notifyNewMetaLead(lead: Lead, leadgenId: string, fields: InstantF
     );
     if (!result.ok) throw new Error(result.error ?? result.skipped ?? "Owner alert failed");
   });
-  await runMetaEffect(leadgenId, "hold-text", async () => {
-    await queueVirtualQuote(named, await getSettings());
-  });
 }
 
 async function notifyExistingMetaLead(lead: Lead, leadgenId: string, fields: InstantFormFields) {
@@ -197,6 +194,13 @@ export async function ingestMetaLeadgen(
   }
 
   const existing = await findLeadByPhone(fields.phone);
+  // A webhook retry can find its own newly created lead before the receipt finished.
+  if (existing?.meta_leadgen_id === leadgenId) {
+    await queueMetaIntro(existing.id, leadgenId, graph.created_time);
+    await notifyNewMetaLead(existing, leadgenId, fields);
+    await finishReceipt(leadgenId, "created", existing.id);
+    return { handled: "created", leadId: existing.id };
+  }
   if (existing) {
     const { error: updateError } = await canesDb().rpc("apply_meta_lead_existing_update", {
       p_leadgen_id: leadgenId,
@@ -232,6 +236,7 @@ export async function ingestMetaLeadgen(
     return { handled: "existing", leadId: lead.id };
   }
 
+  await queueMetaIntro(lead.id, leadgenId, graph.created_time);
   await notifyNewMetaLead(lead, leadgenId, fields);
   await finishReceipt(leadgenId, "created", lead.id);
   return { handled: "created", leadId: lead.id };

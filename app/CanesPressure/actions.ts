@@ -987,6 +987,10 @@ export async function saveSettings(patch: {
   if (denied) return denied;
   const db = canesDb();
   if (patch.templates) {
+    const metaIntro = patch.templates.meta_intro;
+    if (metaIntro !== undefined && (!metaIntro.trim() || !/\bSTOP\b/i.test(metaIntro))) {
+      return { ok: false, notice: "Keep a reply STOP instruction in the Meta introduction." };
+    }
     // Older clients send only the template keys they know.
     patch = { ...patch, templates: { ...(await getSettings()).templates, ...patch.templates } };
   }

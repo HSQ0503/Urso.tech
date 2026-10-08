@@ -17,6 +17,7 @@ const sent = [];
 let smsFailure = false;
 let allowed = true;
 let parsedFallback = null;
+let beforeMetaEligibility = null;
 let checks = 0;
 const vendor = "+15615550100";
 const ownerPhone = "+15615550199";
@@ -93,6 +94,7 @@ const client = {
   from: (table) => new Query(table),
   async rpc(name, args) {
     try {
+      if (name === "meta_intro_is_eligible" && beforeMetaEligibility) await beforeMetaEligibility();
       const keys = Object.keys(args);
       if (name === "claim_lead_message_task") {
         const result = await db.query("select * from claim_lead_message_task($1)", [args.p_task_id]);
@@ -109,6 +111,7 @@ const stubs = new Map([
   ["@/lib/canes/supabase", { canesDb: () => client, canesConfigured: () => true, twilioConfigured: () => true }],
   ["@/lib/canes/access", { denyUnlessPermitted: async () => allowed ? null : { ok: false, notice: "Denied" } }],
   ["@/lib/canes/push-events", harmless], ["@/lib/canes/notify", harmless],
+  ["@/lib/canes/push", { sendCanesPush: async () => ({ ok: true, persisted: true }) }],
   ["@/lib/urso-auth", { readMobileToken: token => token === "owner-test-token" ? { email: "owner@example.test", scope: "canes" } : null }],
   ["@/lib/canes/crew-auth", { verifyCrewAccessToken: async () => null }],
   ["@/lib/canes/fixtures", {}], ["@/lib/canes/tour", { PRACTICE_PHONE: "+15555555555" }],
@@ -119,7 +122,8 @@ const stubs = new Map([
 ]);
 const realModules = new Set([
   "lib/canes/types.ts", "packages/types/src/index.ts", "packages/types/src/types.ts", "packages/types/src/crew-types.ts", "packages/types/src/wg-mobile.ts",
-  "lib/canes/lead-messaging.ts", "lib/canes/data.ts", "lib/canes/twilio.ts", "lib/twilio.ts", "lib/canes/parse.ts", "lib/canes/inbound.ts",
+  "lib/canes/lead-messaging.ts", "lib/canes/automations.ts", "lib/canes/lead-contact.ts", "lib/canes/data.ts", "lib/canes/twilio.ts", "lib/twilio.ts", "lib/canes/parse.ts", "lib/canes/inbound.ts",
+  "lib/canes/meta-leads.ts", "lib/canes/meta-form.ts", "app/api/canes/cron/meta-intro/route.ts",
   "app/CanesPressure/actions.ts", "app/api/canes/cron/route.ts",
   "lib/api/v1.ts", "app/api/v1/canes/leads/[id]/actions/route.ts",
 ]);
@@ -140,7 +144,7 @@ function load(file) {
   const wrapped = runInNewContext(`(function(require,module,exports){${code}\n})`, {
     console: quietConsole, Date, Intl, URL, Response, Buffer, AbortSignal,
     setTimeout, clearTimeout,
-    process: { env: { CANES_OWNER_PHONE: ownerPhone, CANES_TWILIO_NUMBER: businessPhone, NEXT_PUBLIC_APP_URL: "https://example.test" } },
+    process: { env: { CANES_OWNER_PHONE: ownerPhone, CANES_TWILIO_NUMBER: businessPhone, NEXT_PUBLIC_APP_URL: "https://example.test", CRON_SECRET: "isolated-test-cron" } },
     fetch() { throw new Error("External network calls are forbidden in this suite"); },
   }, { filename: file });
   wrapped(localRequire, loadedModule, loadedModule.exports);
@@ -164,8 +168,12 @@ const inbound = load("lib/canes/inbound.ts");
 const actions = load("app/CanesPressure/actions.ts");
 const cron = load("app/api/canes/cron/route.ts");
 const parser = load("lib/canes/parse.ts");
-const setting = async (key, value) => client.from("settings").upsert({ key, value }, { onConflict: "key" });
+const setting = async (key, value) => db.query(
+  "insert into settings(key,value) values ($1,$2::jsonb) on conflict(key) do update set value=excluded.value",
+  [key, JSON.stringify(value)],
+);
 await setting("lead_vendor_phones", [vendor]);
+await setting("automations_enabled", true);
 await setting("quiet_hours", { start: 0, end: 0, timezone: "America/New_York" });
 const customerTexts = (phone) => sent.filter(s => s.to === phone);
 const leadFor = (phone) => inbound.findLeadByPhone(phone);
@@ -178,8 +186,7 @@ const seed = async (phone, extra = {}) => {
 };
 
 try {
-  await check("all 26 migrations apply; manual-booking RPC is private", async () => {
-    assert.equal(migrationFiles.length, 26);
+  await check("all migrations apply; manual-booking RPC is private", async () => {
     for (const role of ["anon", "authenticated"]) assert.equal(await scalar("select has_function_privilege($1, 'book_lead_appointment_locked(uuid,timestamptz)', 'execute')", [role]), false);
     assert.equal(await scalar("select has_function_privilege('service_role', 'book_lead_appointment_locked(uuid,timestamptz)', 'execute')"), true);
   });
@@ -377,6 +384,184 @@ try {
     await actions.saveSettings({ templates: { hold_text: "Custom virtual introduction" } });
     await db.exec(readFileSync(resolve(root, "supabase/canes", migrationFiles.at(-1)), "utf8"));
     assert.equal((await data.getSettings()).templates.hold_text, "Custom virtual introduction");
+  });
+
+  const meta = load("lib/canes/meta-leads.ts");
+  await setting("meta_intro_enabled", true);
+  await setting("meta_intro_enabled_since", new Date(Date.now() - 3_600_000).toISOString());
+  let metaNumber = 200;
+  const newMeta = async (extra = {}, submittedAt = new Date(Date.now() - 240_000).toISOString()) => {
+    const leadgenId = randomUUID();
+    const lead = await seed(`+15615550${++metaNumber}`, {
+      source: "meta_ads", meta_leadgen_id: leadgenId, service: "house_wash", ...extra,
+    });
+    await client.rpc("claim_meta_leadgen", { p_leadgen_id: leadgenId });
+    await messages.queueMetaIntro(lead.id, leadgenId, submittedAt);
+    const task = (await client.from("tasks").select("*").eq("dedupe_key", `meta_intro:${leadgenId}`).maybeSingle()).data;
+    return { lead, leadgenId, task, submittedAt };
+  };
+  const makeDue = async (task) => db.query("update tasks set scheduled_for=now()-interval '1 second' where id=$1", [task.id]);
+
+  await check("Meta queues five minutes from form submission and never sends early", async () => {
+    const { lead, task, submittedAt } = await newMeta();
+    assert.ok(task);
+    assert.equal(Date.parse(task.scheduled_for) - Date.parse(submittedAt), 300_000);
+    assert.equal(await messages.sendLeadMessageTask(task.id, await data.getSettings()), "contested");
+    assert.equal(customerTexts(lead.phone).length, 0);
+    assert.equal(await scalar("select status from tasks where id=$1", [task.id]), "pending");
+  });
+  await check("Meta timestamp fallback uses the durable receipt time", async () => {
+    for (const timestamp of ["invalid", null, new Date(Date.now() + 86_400_000).toISOString()]) {
+      const { task, leadgenId } = await newMeta({}, timestamp);
+      const received = await scalar("select created_at from meta_leadgen_receipts where leadgen_id=$1", [leadgenId]);
+      assert.equal(Date.parse(task.scheduled_for) - new Date(received).getTime(), 300_000);
+    }
+  });
+  await check("duplicate Meta queue attempts and overlapping workers send once", async () => {
+    const { lead, leadgenId, task, submittedAt } = await newMeta();
+    await Promise.all([messages.queueMetaIntro(lead.id, leadgenId, submittedAt), messages.queueMetaIntro(lead.id, leadgenId, submittedAt)]);
+    assert.equal(await scalar("select count(*)::int from tasks where lead_id=$1 and kind='meta_intro'", [lead.id]), 1);
+    await makeDue(task);
+    const settings = await data.getSettings();
+    const results = await Promise.all([messages.sendLeadMessageTask(task.id, settings), messages.sendLeadMessageTask(task.id, settings)]);
+    assert.deepEqual(results.sort(), ["contested", "sent"]);
+    assert.equal(customerTexts(lead.phone).length, 1);
+    assert.match(customerTexts(lead.phone)[0].body, /^Hey Jamie, it's Sebastian from Canes Pressure Washing!/);
+    assert.match(customerTexts(lead.phone)[0].body, /request for house wash/);
+    assert.match(customerTexts(lead.phone)[0].body, /reply STOP anytime to opt out/);
+  });
+  await check("Meta copy has usable name and service fallbacks", async () => {
+    const template = (await data.getSettings()).templates.meta_intro;
+    const text = messages.metaIntroText(template, "   ", null);
+    assert.match(text, /^Hey, /);
+    assert.match(text, /Just saw your quote request/);
+    assert.doesNotMatch(text, /\{\w+\}|undefined|null/);
+    assert.match(messages.metaIntroText(template, "  Alex   Smith ", "window_cleaning"), /^Hey Alex, /);
+  });
+  await check("Meta skips existing contacts and sends no immediate introduction", async () => {
+    const known = await seed(`+15615550${++metaNumber}`);
+    for (const phone of [known.phone, `+15615550${++metaNumber}`]) {
+      const id = randomUUID();
+      const result = await meta.ingestMetaLeadgen(id, { fetchLead: async () => ({
+        id, created_time: new Date().toISOString(), field_data: [
+          { name: "full_name", values: ["Alex Test"] }, { name: "phone_number", values: [phone] },
+          { name: "which_exterior_services_are_you_looking_to_get_done?", values: ["Window cleaning", "House wash"] },
+        ],
+      }) });
+      assert.equal(result.handled, phone === known.phone ? "existing" : "created");
+      assert.equal(customerTexts(phone).length, 0);
+      if (phone !== known.phone) assert.equal((await data.getLead(result.leadId)).service, "Window cleaning, House wash");
+      assert.equal(await scalar("select count(*)::int from tasks where dedupe_key=$1", [`meta_intro:${id}`]), phone === known.phone ? 0 : 1);
+      assert.equal((await meta.ingestMetaLeadgen(id, { fetchLead: async () => { throw new Error("Duplicate fetched Graph"); } })).handled, "duplicate");
+    }
+  });
+  await check("retry after creating the Meta lead recovers its introduction", async () => {
+    const leadgenId = randomUUID();
+    const lead = await seed(`+15615550${++metaNumber}`, { source: "meta_ads", meta_leadgen_id: leadgenId });
+    await client.rpc("claim_meta_leadgen", { p_leadgen_id: leadgenId });
+    await db.query("update meta_leadgen_receipts set updated_at=now()-interval '3 minutes' where leadgen_id=$1", [leadgenId]);
+    const result = await meta.ingestMetaLeadgen(leadgenId, { fetchLead: async () => ({
+      created_time: new Date().toISOString(), field_data: [{ name: "phone_number", values: [lead.phone] }],
+    }) });
+    assert.equal(result.handled, "created");
+    assert.equal(await scalar("select count(*)::int from tasks where dedupe_key=$1", [`meta_intro:${leadgenId}`]), 1);
+    assert.equal(customerTexts(lead.phone).length, 0);
+  });
+  await check("Meta cancels for human contact, replies, calls, opt-outs and changed opportunities", async () => {
+    const changes = [
+      async (lead) => client.rpc("record_manual_lead_contact", { p_phone: lead.phone }),
+      async (lead) => client.from("messages").insert({ peer_phone: lead.phone, lead_id: lead.id, direction: "in", body: "Tomorrow please", automated: false }),
+      async (lead) => client.from("calls").insert({ peer_phone: lead.phone, lead_id: lead.id, direction: "out" }),
+      async (lead) => client.from("leads").update({ opted_out: true }).eq("id", lead.id),
+      async (lead) => client.from("leads").update({ status: "estimated" }).eq("id", lead.id),
+      async (lead) => client.from("leads").update({ opportunity_started_at: day(1) }).eq("id", lead.id),
+      async (lead) => client.from("leads").update({ phone: `+15615550${++metaNumber}` }).eq("id", lead.id),
+    ];
+    for (const change of changes) {
+      const { lead, task } = await newMeta();
+      const changed = await change(lead); assert.equal(changed.error, null);
+      await makeDue(task);
+      assert.equal(await messages.sendLeadMessageTask(task.id, await data.getSettings()), "canceled");
+      assert.equal(customerTexts(lead.phone).length, 0);
+    }
+  });
+  await check("reply arriving during send preparation prevents provider delivery", async () => {
+    const { lead, task } = await newMeta(); await makeDue(task);
+    let reads = 0;
+    beforeMetaEligibility = async () => {
+      if (++reads === 2) await client.from("messages").insert({ peer_phone: lead.phone, direction: "in", body: "Call tomorrow", automated: false });
+    };
+    try { assert.equal(await messages.sendLeadMessageTask(task.id, await data.getSettings()), "canceled"); }
+    finally { beforeMetaEligibility = null; }
+    assert.equal(reads, 2); assert.equal(customerTexts(lead.phone).length, 0);
+  });
+  await check("Meta respects quiet hours and retains the scheduled task", async () => {
+    const { lead, task } = await newMeta(); await makeDue(task);
+    const hour = Number(new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "numeric", hourCycle: "h23" }).format(new Date()));
+    await setting("quiet_hours", { start: hour, end: (hour + 2) % 24, timezone: "America/New_York" });
+    assert.equal(await messages.sendLeadMessageTask(task.id, await data.getSettings()), "deferred");
+    assert.equal(customerTexts(lead.phone).length, 0);
+    assert.equal(await scalar("select status from tasks where id=$1", [task.id]), "pending");
+    await setting("quiet_hours", { start: 0, end: 0, timezone: "America/New_York" });
+    await makeDue(task);
+    assert.equal((await messages.drainMetaIntros(Date.now() + 60_000)).sent, 1);
+  });
+  await check("Meta and global switches block queues and dispatch without enabling estimates", async () => {
+    for (const key of ["meta_intro_enabled", "automations_enabled"]) {
+      const { lead, task } = await newMeta(); await makeDue(task);
+      await setting(key, false);
+      assert.equal((await messages.drainMetaIntros(Date.now() + 60_000)).paused, true);
+      assert.equal(await messages.sendLeadMessageTask(task.id, await data.getSettings()), "canceled");
+      assert.equal((await newMeta()).task, null);
+      assert.equal(customerTexts(lead.phone).length, 0);
+      await setting(key, true);
+    }
+    await setting("estimate_automations_enabled", false);
+    const { task } = await newMeta(); assert.ok(task);
+  });
+  await check("historical forms and leads are never backfilled", async () => {
+    assert.equal((await newMeta({}, new Date(Date.now() - 7_200_000).toISOString())).task, null);
+    assert.equal((await newMeta({ created_at: new Date(Date.now() - 7_200_000).toISOString() })).task, null);
+  });
+  await check("missing Meta settings fail closed and deleted leads cannot be texted", async () => {
+    const { lead, task } = await newMeta(); await makeDue(task);
+    await client.from("settings").delete().eq("key", "meta_intro_enabled");
+    assert.equal((await messages.drainMetaIntros(Date.now() + 60_000)).paused, true);
+    assert.equal((await newMeta()).task, null);
+    await setting("meta_intro_enabled", true);
+    await client.from("leads").delete().eq("id", lead.id);
+    await messages.sendLeadMessageTask(task.id, await data.getSettings());
+    assert.equal(customerTexts(lead.phone).length, 0);
+  });
+  await check("template edits retain STOP instructions and older clients preserve the Meta template", async () => {
+    const before = (await data.getSettings()).templates.meta_intro;
+    assert.equal((await actions.saveSettings({ templates: { meta_intro: "Hey, when can I call?" } })).ok, false);
+    assert.equal((await data.getSettings()).templates.meta_intro, before);
+    assert.equal((await actions.saveSettings({ templates: { confirmation_ack: "See you then. Reply STOP anytime to opt out." } })).ok, true);
+    assert.equal((await data.getSettings()).templates.meta_intro, before);
+  });
+  await check("failed and interrupted Meta sends are not automatically replayed", async () => {
+    const { lead, task } = await newMeta(); await makeDue(task);
+    smsFailure = true;
+    try { assert.equal(await messages.sendLeadMessageTask(task.id, await data.getSettings()), "failed"); }
+    finally { smsFailure = false; }
+    await messages.drainMetaIntros(Date.now() + 60_000);
+    assert.equal(customerTexts(lead.phone).length, 0);
+    const interrupted = await newMeta();
+    await db.query("update tasks set status='sending',scheduled_for=now()-interval '11 minutes' where id=$1", [interrupted.task.id]);
+    await drain();
+    assert.equal(await scalar("select status from tasks where id=$1", [interrupted.task.id]), "failed");
+    assert.equal(customerTexts(interrupted.lead.phone).length, 0);
+  });
+  await check("Meta RPCs remain private and the worker refuses callers without its secret", async () => {
+    for (const fn of ["queue_meta_intro(uuid,text,timestamptz)", "meta_intro_is_eligible(uuid)", "claim_lead_message_task(uuid)"]) {
+      for (const role of ["anon", "authenticated"]) assert.equal(await scalar("select has_function_privilege($1,$2,'execute')", [role,fn]), false);
+      assert.equal(await scalar("select has_function_privilege('service_role',$1,'execute')", [fn]), true);
+    }
+    const route = load("app/api/canes/cron/meta-intro/route.ts");
+    assert.equal((await route.GET(new Request("https://example.test/api/canes/cron/meta-intro"))).status, 401);
+    assert.equal((await route.GET(new Request("https://example.test/api/canes/cron/meta-intro", { headers: { authorization: "Bearer wrong" } }))).status, 401);
+    assert.equal((await route.GET(new Request("https://example.test/api/canes/cron/meta-intro", { headers: { authorization: "Bearer isolated-test-cron" } }))).status, 200);
   });
   console.log(`\n${checks} integration scenarios passed. No external messages sent.`);
 } finally { await db.close(); }

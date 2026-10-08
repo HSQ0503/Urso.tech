@@ -34,6 +34,7 @@ const MAPPED = new Set([
   "country",
   "service",
   "services",
+  "which_exterior_services_are_you_looking_to_get_done?",
 ]);
 
 function fieldName(raw: unknown): string {
@@ -91,7 +92,8 @@ export function parseInstantFormFields(fieldData: unknown): InstantFormFields {
     phone,
     email,
     address,
-    service: firstValue(fields, "service", "services"),
+    service: ["service", "services", "which_exterior_services_are_you_looking_to_get_done?"]
+      .map((key) => fields.get(key)).find((values) => values?.length)?.join(", ") ?? "",
     notes: extras.join("\n"),
   };
 }

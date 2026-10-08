@@ -86,6 +86,7 @@ export const CALL_OWNER_MISSED_STATUS = "owner-no-answer";
 
 export type TaskKind =
   | "hold_text"
+  | "meta_intro"
   | "confirmation"
   | "manual_booking"
   | "no_reply_escalation"
@@ -129,6 +130,7 @@ export type CanesSettings = {
   confirmation_offset_hours: number;
   templates: {
     hold_text: string;
+    meta_intro: string;
     confirmation: string;
     confirmation_ack: string;
     manual_booking: string;

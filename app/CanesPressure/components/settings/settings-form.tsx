@@ -81,6 +81,11 @@ function hourLabel(h: number): string {
 
 const TEMPLATE_FIELDS: { key: keyof CanesSettings["templates"]; label: string; help: string }[] = [
   {
+    key: "meta_intro",
+    label: "Meta quote introduction",
+    help: "Sent about five minutes after a new Meta form, during texting hours. {request} becomes the selected service or “quote request”. Skipped if you have already contacted them or they have replied.",
+  },
+  {
     key: "hold_text",
     label: "Virtual quote introduction",
     help: "Sent when a new vendor virtual-quote inquiry arrives, asking what they want cleaned.",
@@ -256,7 +261,7 @@ export function SettingsForm({ settings }: { settings: CanesSettings }) {
     <div className="flex flex-col gap-5">
       <SectionCard
         title="Message templates"
-        description="Placeholders {name}, {when} and {address} fill in automatically. Keep the 'Reply STOP to opt out' language in customer-facing texts. It is required for SMS compliance."
+        description="Placeholders {name}, {when} and {address} fill in automatically. The Meta introduction also supports {request}. Keep clear STOP instructions in the first text; a friendlier sentence is fine."
         onSave={saveTemplates}
         pending={templatesPending}
         notice={templatesNotice}

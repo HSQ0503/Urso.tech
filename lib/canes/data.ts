@@ -49,16 +49,18 @@ const DEFAULT_SETTINGS: CanesSettings = {
   quiet_hours: { start: 21, end: 8, timezone: "America/New_York" },
   confirmation_offset_hours: 12,
   templates: {
+    meta_intro:
+      "Hey{name}, it's Sebastian from Canes Pressure Washing! Just saw your {request}. When's a good time to call? Also, you can reply STOP anytime to opt out.",
     hold_text:
-      "Hi{name}, it's Sebastian with Canes Pressure Washing. I got your virtual quote request for our exterior services. What were you looking to get done? Reply STOP to opt out.",
+      "Hi{name}, it's Sebastian with Canes Pressure Washing. I got your virtual quote request for our exterior services. What were you looking to get done? Also, you can reply STOP anytime to opt out.",
     confirmation:
-      "Hi{name}, this is Canes Pressure Washing confirming your free estimate visit {when} at {address}. Reply YES to confirm your appointment time, or reply here to reschedule. Reply STOP to opt out.",
+      "Hi{name}, this is Canes Pressure Washing confirming your free estimate visit {when} at {address}. Reply YES to confirm your appointment time, or reply here to reschedule. Also, you can reply STOP anytime to opt out.",
     confirmation_ack:
-      "You are confirmed for {when}. See you then! - Canes Pressure Washing. Reply STOP to opt out.",
+      "You are confirmed for {when}. See you then! - Canes Pressure Washing. Also, you can reply STOP anytime to opt out.",
     manual_booking:
-      "Hi{name}, Canes Pressure Washing will see you {when}. If anything changes, reply here. Reply STOP to opt out.",
+      "Hi{name}, Canes Pressure Washing will see you {when}. If anything changes, reply here. Also, you can reply STOP anytime to opt out.",
     missed_call:
-      "Hi, this is Canes Pressure Washing. Sorry we missed your call - we will get back to you shortly. Reply here and we will text you right back. Msg & data rates may apply. Reply HELP for help or STOP to opt out.",
+      "Hi, this is Canes Pressure Washing. Sorry we missed your call - we will get back to you shortly. Reply here and we will text you right back. Msg & data rates may apply. Reply HELP for help. You can reply STOP anytime to opt out.",
   },
   lead_vendor_phones: [],
   estimate_terms:
@@ -71,7 +73,7 @@ const DEFAULT_SETTINGS: CanesSettings = {
   estimate_expiry_days: 28,
   estimate_tax_rate_bps: 0,
   job_confirmation_template:
-    "Hi{name}, this is Canes Pressure Washing confirming your appointment {when} at {address}. Reply YES to confirm your appointment time, or reply here to reschedule. Reply STOP to opt out.",
+    "Hi{name}, this is Canes Pressure Washing confirming your appointment {when} at {address}. Reply YES to confirm your appointment time, or reply here to reschedule. Also, you can reply STOP anytime to opt out.",
   job_confirmation_offset_hours: 24,
   invoice_terms:
     "Payment is due upon receipt. Thank you for your business. Canes Pressure Washing is not responsible for pre-existing damage, loose or failing surfaces, or oxidation revealed by cleaning.",
@@ -84,7 +86,7 @@ const DEFAULT_SETTINGS: CanesSettings = {
   // word reads as YES/NO-conditioned service to a 10DLC reviewer (ticket
   // #28001908), and the slot warning is scheduling practice, not consent.
   confirmation_final_template:
-    "Hi{name}, we have not heard back about your Canes Pressure Washing appointment {when} at {address}. Just reply here to let us know it still works, or send a day and time that suits you better and we will lock it in. If we do not hear from you we may offer the slot to another customer. Reply STOP to opt out.",
+    "Hi{name}, we have not heard back about your Canes Pressure Washing appointment {when} at {address}. Just reply here to let us know it still works, or send a day and time that suits you better and we will lock it in. If we do not hear from you we may offer the slot to another customer. Also, you can reply STOP anytime to opt out.",
   confirmation_auto_release: false,
   call_greeting_enabled: true,
   call_greeting_text:
