@@ -1,6 +1,7 @@
 "use client";
 
 import { DocumentRevisionControls } from "../document-revision";
+import { ServiceAreaEditor } from "../service-area-field";
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
@@ -163,6 +164,7 @@ export function JobDetailSheet({
       onClose={onClose}
     >
       <DocumentRevisionControls kind="job" id={job.id} />
+      <ServiceAreaEditor key={`area-${job.id}-${job.service_area}`} kind="job" id={job.id} value={job.service_area ?? null} />
       {/* A compact summary surface keeps identity, value, status, and the three
           common field actions together before the denser editing sections. */}
       <section className="rounded-lg border border-[var(--cp-line)] bg-[var(--cp-bg)] p-4 md:p-5">

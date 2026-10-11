@@ -1,5 +1,7 @@
 "use client";
 
+import { serviceAreaInfo } from "@urso/types";
+
 import { MapPin, Trash2 } from "lucide-react";
 import { fmtMoney, type JobWithItems } from "@/lib/canes/types";
 
@@ -42,6 +44,7 @@ export function readDrag(e: React.DragEvent): DragPayload | null {
 // The card body, shared by the draggable tray (md+) and the mobile tap list.
 // Presentation only — the parent supplies the drag/click wrapper.
 export function TrayCardBody({ job }: { job: JobWithItems }) {
+  const area = serviceAreaInfo(job.service_area);
   return (
     <>
       <div className="flex items-baseline justify-between gap-2">
@@ -52,6 +55,7 @@ export function TrayCardBody({ job }: { job: JobWithItems }) {
           {fmtMoney(job.total_cents)}
         </span>
       </div>
+      {area && <span className="text-[11px] font-medium" style={{ color: area.color }}>Area {area.number} - {area.short}</span>}
       {job.job_name && (
         <span className="truncate text-[12px] text-[var(--cp-muted)]">{job.job_name}</span>
       )}

@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { ServiceAreaField } from "../service-area-field";
+import type { ServiceArea } from "@urso/types";
 import { useRouter } from "next/navigation";
 import { useMemo, useRef, useState, useTransition } from "react";
 import { Check, Plus, Trash2 } from "lucide-react";
@@ -241,6 +243,7 @@ export function EstimateBuilder({
   const [customerPhone, setCustomerPhone] = useState(seed.customerPhone);
   const [customerEmail, setCustomerEmail] = useState(seed.customerEmail);
   const [jobAddress, setJobAddress] = useState(seed.jobAddress);
+  const [serviceArea, setServiceArea] = useState<ServiceArea | null>(estimate?.service_area ?? null);
   // Client link (Sebastian's client-first ask): a picker hit binds contact_id;
   // typing a different name unbinds it and reads as a new client. pickedName
   // tracks the name the current link belongs to.
@@ -366,6 +369,7 @@ export function EstimateBuilder({
       customerPhone,
       customerEmail,
       contactId,
+      serviceArea,
       jobAddress,
       jobName,
       estimateType: type,
@@ -396,6 +400,7 @@ export function EstimateBuilder({
       customerName: customerName || undefined,
       customerPhone: customerPhone || undefined,
       customerEmail: customerEmail || undefined,
+      serviceArea,
       jobAddress: jobAddress || undefined,
       jobName: jobName || undefined,
     });
@@ -519,6 +524,7 @@ export function EstimateBuilder({
       <section className="cp-card p-4">
         <h2 className="text-[15px] font-semibold">Customer &amp; job</h2>
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <ServiceAreaField value={serviceArea} onChange={setServiceArea} disabled={disabled} id="estimate-area" />
           <div>
             <label className="cp-label" htmlFor="est-name">Client name</label>
             <CustomerPicker

@@ -25,7 +25,8 @@ function source(file) {
     },
   }).outputText;
   new Function("require", "exports", code)((name) => {
-    if (name === "@/lib/canes/types") return source("packages/types/src/types.ts");
+    if (name === "@/lib/canes/types" || name === "@urso/types") return source("packages/types/src/types.ts");
+    if (name === "./service-areas") return source("packages/types/src/service-areas.ts");
     if (name === "./unscheduled-tray") return { readDrag: () => null, writeDrag: () => {} };
     return require(name);
   }, exports);

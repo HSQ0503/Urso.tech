@@ -15,6 +15,8 @@ import { CustomerPicker } from "../customer-picker";
 import { PhoneInput } from "../phone-input";
 import { isCompleteWhen, SchedulePicker } from "../leads/schedule-picker";
 import { SheetShell } from "./sheet-shell";
+import { ServiceAreaField } from "../service-area-field";
+import type { ServiceArea } from "@urso/types";
 
 // Manual-job sheet — the mobile FAB's "Job" path. Client-first: the name
 // field is a typeahead over existing customers; a pick links the contact and
@@ -50,6 +52,7 @@ export function CreateJobSheet({
   const [deposit, setDeposit] = useState("");
   const [depositMethod, setDepositMethod] = useState<PaymentMethod>("cash");
   const [jobAddress, setJobAddress] = useState("");
+  const [serviceArea, setServiceArea] = useState<ServiceArea | null>(null);
   const [scheduleNow, setScheduleNow] = useState(false);
   const [when, setWhen] = useState("");
   const [duration, setDuration] = useState(120);
@@ -97,6 +100,7 @@ export function CreateJobSheet({
     setFeedback(null);
     startTransition(async () => {
       const res = await createManualJob({
+        serviceArea,
         contactId: contact?.id,
         customerName: customerName.trim(),
         customerPhone: customerPhone.trim() || undefined,
@@ -217,6 +221,7 @@ export function CreateJobSheet({
         </div>
 
         <div>
+          <ServiceAreaField value={serviceArea} onChange={setServiceArea} id="new-job-area" disabled={isPending} />
           <label className="cp-label" htmlFor="job-address">Address (optional)</label>
           <AddressInput
             id="job-address"

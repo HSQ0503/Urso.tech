@@ -10,7 +10,7 @@ import {
 } from "@/lib/api/v1";
 import { createManualJob } from "@/app/CanesPressure/actions";
 import { listJobs } from "@/lib/canes/estimates";
-import type { PaymentMethod } from "@urso/types";
+import { isServiceArea, type PaymentMethod } from "@urso/types";
 
 // GET /api/v1/canes/jobs — every job, newest work first.
 //
@@ -42,6 +42,7 @@ import type { PaymentMethod } from "@urso/types";
 export const dynamic = "force-dynamic";
 
 type Body = {
+  serviceArea?: unknown;
   action?: unknown;
   contactId?: unknown;
   customerName?: unknown;
@@ -92,6 +93,9 @@ export const POST = apiRoute(async ({ req }) => {
 
   switch (body.action) {
     case "createManual": {
+      if (body.serviceArea !== undefined && body.serviceArea !== null && !isServiceArea(body.serviceArea)) {
+        return apiFail("Choose a valid service area.", 422);
+      }
       // Same unchecked cast as the other deposit paths, plus a negative-cents
       // gap: the action caps a deposit with Math.min but never rejects a
       // negative one, so it silently reduced collected money and reported ok.
@@ -162,6 +166,7 @@ export const POST = apiRoute(async ({ req }) => {
       // apiResult() hands back as the payload.
       return apiResult(
         await createManualJob({
+          serviceArea: body.serviceArea,
           ...optional,
           depositMethod,
           customerName: body.customerName,

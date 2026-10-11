@@ -1,5 +1,7 @@
 "use server";
 
+import { isServiceArea, serviceAreaScheduleNotice, type ServiceArea } from "@urso/types";
+
 import { recordManualLeadContact } from "@/lib/canes/lead-contact";
 
 import { canesAutomationsEnabled } from "@/lib/canes/automations";
@@ -1199,6 +1201,7 @@ async function resolveEstimateContact(input: {
 }
 
 export async function createEstimate(input: {
+  serviceArea?: ServiceArea | null;
   leadId?: string;
   contactId?: string;
   estimateType: EstimateType;
@@ -1211,6 +1214,7 @@ export async function createEstimate(input: {
   if (!canesConfigured()) return DEMO;
   const denied = await denyUnlessPermitted("estimates");
   if (denied) return denied;
+  if (input.serviceArea !== undefined && input.serviceArea !== null && !isServiceArea(input.serviceArea)) return { ok: false, notice: "Choose a valid service area." };
   const settings = await getSettings();
   const number = await nextEstimateNumber();
   const phone = input.customerPhone ? toE164(input.customerPhone) : null;
@@ -1235,6 +1239,7 @@ export async function createEstimate(input: {
   const { data, error } = await canesDb()
     .from("estimates")
     .insert({
+      ...(input.serviceArea !== undefined ? { service_area: input.serviceArea, service_area_selected: true } : {}),
       lead_id: input.leadId ?? null,
       contact_id: contactId,
       number,
@@ -1265,6 +1270,7 @@ export async function createEstimate(input: {
 export async function updateEstimate(
   estimateId: string,
   patch: {
+    serviceArea?: ServiceArea | null;
     customerName?: string;
     customerPhone?: string;
     customerEmail?: string;
@@ -1284,6 +1290,7 @@ export async function updateEstimate(
   if (!canesConfigured()) return DEMO;
   const denied = await denyUnlessPermitted("estimates");
   if (denied) return denied;
+  if (patch.serviceArea !== undefined && patch.serviceArea !== null && !isServiceArea(patch.serviceArea)) return { ok: false, notice: "Choose a valid service area." };
   const estimate = await getEstimate(estimateId);
   if (!estimate) return { ok: false, notice: "Estimate not found." };
   // Money/terms are frozen once sent, but the contact snapshot stays editable —
@@ -1297,6 +1304,7 @@ export async function updateEstimate(
   }
 
   const row: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (patch.serviceArea !== undefined) { row.service_area = patch.serviceArea; row.service_area_selected = true; }
   if (patch.customerName !== undefined) row.customer_name = patch.customerName || null;
   if (patch.customerPhone !== undefined) {
     const phone = patch.customerPhone ? toE164(patch.customerPhone) : null;
@@ -2396,7 +2404,7 @@ export async function scheduleJob(
   }
   await logJobEvent(job.lead_id, `Scheduled ${fmtEt(startIso)} · ${crewLabel(crew)}`);
   refresh();
-  const notices = [conflict, lateNightNotice(startIso)].filter(Boolean);
+  const notices = [conflict, lateNightNotice(startIso), serviceAreaScheduleNotice(job.service_area, startIso)].filter(Boolean);
   return { ok: true, notice: notices.length ? notices.join(" ") : undefined };
 }
 
@@ -4889,6 +4897,7 @@ export async function setPrimaryAddress(contactId: string, addressId: string): P
 // single line item, and — when a slot is given — schedules it and arms the
 // day-before confirmation exactly like scheduleJob.
 export async function createManualJob(input: {
+  serviceArea?: ServiceArea | null;
   contactId?: string;
   customerName: string;
   customerPhone?: string;
@@ -4908,6 +4917,7 @@ export async function createManualJob(input: {
   if (!canesConfigured()) return DEMO;
   const denied = await denyUnlessPermitted("schedule");
   if (denied) return denied;
+  if (input.serviceArea !== undefined && input.serviceArea !== null && !isServiceArea(input.serviceArea)) return { ok: false, notice: "Choose a valid service area." };
   const customerName = input.customerName.trim();
   if (!customerName) return { ok: false, notice: "A customer name is required." };
   const jobName = input.jobName.trim();
@@ -4947,6 +4957,7 @@ export async function createManualJob(input: {
   const { data, error } = await db
     .from("jobs")
     .insert({
+      ...(input.serviceArea !== undefined ? { service_area: input.serviceArea, service_area_selected: true } : {}),
       estimate_id: null,
       lead_id: lead,
       contact_id: contactId,
@@ -5025,7 +5036,8 @@ export async function createManualJob(input: {
   }
   await logJobEvent(lead, `Job created manually${startIso ? ` — scheduled ${fmtEt(startIso)}` : ""}`);
   refresh();
-  const notices = [depositNotice, startIso ? lateNightNotice(startIso) : undefined].filter(Boolean);
+  const notices = [depositNotice, startIso ? lateNightNotice(startIso) : undefined,
+    startIso ? serviceAreaScheduleNotice(createdJob?.service_area, startIso) : undefined].filter(Boolean);
   return { ok: true, jobId, ...(notices.length ? { notice: notices.join(" ") } : {}) };
 }
 
@@ -5183,6 +5195,7 @@ export async function duplicateEstimate(
 
   const created = await createEstimate({
     ...target,
+    serviceArea: opts?.contactId ? undefined : source.service_area,
     estimateType: source.estimate_type,
     jobName: source.job_name ?? undefined,
   });

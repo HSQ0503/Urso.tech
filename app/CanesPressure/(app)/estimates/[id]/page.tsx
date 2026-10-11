@@ -1,3 +1,4 @@
+import { ServiceAreaEditor } from "@/app/CanesPressure/components/service-area-field";
 import { DocumentRevisionControls } from "@/app/CanesPressure/components/document-revision";
 import { AcceptanceHistory } from "@/app/CanesPressure/components/estimates/acceptance-history";
 import { getEstimateAcceptances } from "@/lib/canes/estimates";
@@ -58,6 +59,7 @@ export default async function EstimatePage({ params }: { params: Promise<{ id: s
   return (
     <div>
       <DocumentRevisionControls kind="estimate" id={id} />
+      {estimate.status !== "draft" && <ServiceAreaEditor kind="estimate" id={id} value={estimate.service_area ?? null} />}
       {/* ── Mobile: iOS back row + large title header. ── */}
       <div className="md:hidden">
         <Link

@@ -1,3 +1,4 @@
+import { SERVICE_AREAS, serviceAreaForDate, serviceAreaInfo, type ServiceArea } from "@urso/types";
 // The owner's calendar — a month at a glance, then a day in full.
 //
 // Sebastian, 2026-09-13: "The scheduling should be how Markate is, where it's
@@ -81,6 +82,7 @@ const GRID_CELLS = 42;
 // crew. The api client types it `unknown` because the domain type lives
 // server-side, so this is the slice this screen reads — nothing more.
 type BoardJob = {
+  service_area?: ServiceArea | null;
   id: string;
   status: JobStatus;
   customer_name: string | null;
@@ -757,6 +759,7 @@ function JobRow({
   onPress: () => void;
 }) {
   const total = job.total_cents > 0 ? fmtMoney(job.total_cents) : null;
+  const area = serviceAreaInfo(job.service_area);
   return (
     <Pressable
       accessibilityRole="button"
@@ -778,6 +781,7 @@ function JobRow({
       <Text style={styles.address} numberOfLines={1}>
         {job.job_address ?? "Address pending"}
       </Text>
+      {area && <Text style={{ color: area.color, fontFamily: font.bodyMedium, fontSize: 12 }}>Area {area.number} - {area.short}</Text>}
       {job.scheduling_conflict?<Text style={{color:color.danger}}>Crew overlap — review this time</Text>:null}
       <View style={styles.rowMeta}>
         {/* Green only where green MEANS something. Rendering every status in the
@@ -873,6 +877,10 @@ function MonthGrid({
   const today = todayKey();
   return (
     <View style={styles.grid}>
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12, paddingVertical: 8 }}>
+        {SERVICE_AREAS.map((area) => <Text key={area.key} style={{ color: area.color, fontFamily: font.bodyMedium, fontSize: 11 }}>{area.number} {area.short}</Text>)}
+        <Text style={{ color: color.muted, fontFamily: font.body, fontSize: 11 }}>Sunday: open</Text>
+      </View>
       <View style={styles.gridHead}>
         {WEEKDAYS.map((label) => (
           <Text key={label} style={styles.gridHeadText}>
@@ -884,6 +892,7 @@ function MonthGrid({
         <View key={row} style={styles.gridRow}>
           {cells.slice(row * 7, row * 7 + 7).map((cell) => {
             const mark = marks.get(cell.key);
+            const area = serviceAreaForDate(cell.key);
             const selected = cell.key === selectedKey;
             const isToday = cell.key === today;
             return (
@@ -892,11 +901,14 @@ function MonthGrid({
                 accessibilityRole="button"
                 accessibilityState={{ selected }}
                 accessibilityLabel={`${fmtEt(cell.instant, { weekday: "long", month: "long", day: "numeric" })}${
+                  area ? `, Area ${area.number} ${area.label}, ` : ""
+                }${
                   mark ? `, ${mark.jobs} job${mark.jobs === 1 ? "" : "s"}, ${mark.visits} quote visit${mark.visits === 1 ? "" : "s"}` : ""
                 }`}
                 onPress={() => onPick(cell.key)}
                 style={({ pressed }) => [
                   styles.cell,
+                  area && { borderTopWidth: 3, borderTopColor: area.color, backgroundColor: area.tint },
                   selected && styles.cellOn,
                   isToday && !selected && styles.cellToday,
                   pressed && !selected && styles.pressedSurface,

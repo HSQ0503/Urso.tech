@@ -121,7 +121,7 @@ const stubs = new Map([
   ["@ai-sdk/google", { google: () => null }],
 ]);
 const realModules = new Set([
-  "lib/canes/types.ts", "packages/types/src/index.ts", "packages/types/src/types.ts", "packages/types/src/crew-types.ts", "packages/types/src/wg-mobile.ts",
+  "lib/canes/types.ts", "packages/types/src/index.ts", "packages/types/src/types.ts", "packages/types/src/service-areas.ts", "packages/types/src/crew-types.ts", "packages/types/src/wg-mobile.ts",
   "lib/canes/lead-messaging.ts", "lib/canes/automations.ts", "lib/canes/lead-contact.ts", "lib/canes/data.ts", "lib/canes/twilio.ts", "lib/twilio.ts", "lib/canes/parse.ts", "lib/canes/inbound.ts",
   "lib/canes/meta-leads.ts", "lib/canes/meta-form.ts", "app/api/canes/cron/meta-intro/route.ts",
   "app/CanesPressure/actions.ts", "app/api/canes/cron/route.ts",
@@ -136,6 +136,7 @@ function load(file) {
   const localRequire = (name) => {
     if (stubs.has(name)) return stubs.get(name);
     let target = name === "@urso/types" ? "packages/types/src/index.ts" : name.startsWith("@/") ? `${name.slice(2)}.ts` : null;
+    if (name.startsWith("@urso/types/")) target = `packages/types/src/${name.slice("@urso/types/".length)}.ts`;
     if (name.startsWith(".")) target = resolve(root, file, "..", name).slice(root.length + 1) + ".ts";
     if (target) return realModules.has(target) ? load(target) : harmless;
     return require(name);

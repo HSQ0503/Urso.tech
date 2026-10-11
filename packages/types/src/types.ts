@@ -1,6 +1,9 @@
 // Canes Pressure Washing — shared types for the Phase 1 lead/phone funnel.
 // Mirrors supabase/canes/0001_init.sql exactly.
 
+import type { ServiceArea } from "./service-areas";
+export * from "./service-areas";
+
 export type LeadType = "hot" | "cold";
 
 export type LeadStatus =
@@ -365,6 +368,7 @@ export type Contact = {
 };
 
 export type Address = {
+  service_area?: ServiceArea | null;
   id: string; created_at: string; contact_id: string | null; line: string;
   site_notes: string | null; is_primary: boolean;
 };
@@ -396,6 +400,7 @@ export type CatalogItem = {
 };
 
 export type Estimate = {
+  service_area?: ServiceArea | null;
   archived_at?: string | null;
   revision?: number;
   signature_data?: { strokes: number[][][]; width: number; height: number } | null;
@@ -452,6 +457,7 @@ export const RECURRENCE_PER_MONTH: Record<JobRecurrence, number> = {
 };
 
 export type Job = {
+  service_area?: ServiceArea | null;
   subtotal_cents?: number;
   adjustment_cents?: number;
   tax_rate_bps?: number;
@@ -523,6 +529,7 @@ export const PLAN_STATUS_LABEL: Record<PlanStatus, string> = {
 };
 
 export type RecurringPlan = {
+  service_area?: ServiceArea | null;
   scheduling_enabled?: boolean;
   repeat_time?: string | null;
   anchor_day?: number | null;
@@ -783,6 +790,7 @@ export type PaymentSource = "manual" | "square_webhook";
 export type PaymentKind = "deposit" | "balance";
 
 export type Invoice = {
+  service_area?: ServiceArea | null;
   credit_link_pending?: boolean;
   archived_at?: string | null;
   revision?: number;

@@ -1,3 +1,5 @@
+import { ServiceAreaPicker } from "@/components/service-area-picker";
+import type { ServiceArea } from "@urso/types";
 // A job with no estimate behind it.
 //
 // The neighbour who walks up while Sebastian is already washing a driveway:
@@ -139,6 +141,7 @@ export default function NewJobScreen(): React.ReactElement {
   const tiedEmail = selectedCustomer?.email ?? paramEmail;
 
   const [jobName, setJobName] = useState("");
+  const [serviceArea, setServiceArea] = useState<ServiceArea | null>(null);
   const [totalText, setTotalText] = useState("");
   const [address, setAddress] = useState(params.address ?? "");
   // The schedule hands over the day the dispatcher is looking at. A day with no
@@ -181,6 +184,7 @@ export default function NewJobScreen(): React.ReactElement {
       setNameDraft("");
       setPhoneDraft("");
       setJobName("");
+      setServiceArea(null);
       setTotalText("");
       setAddress(params.address ?? "");
       const day = (params.day ?? "").trim();
@@ -281,6 +285,7 @@ export default function NewJobScreen(): React.ReactElement {
           ? { customerPhone: phoneDraft }
           : {}),
       ...(tied && tiedEmail ? { customerEmail: tiedEmail } : {}),
+      serviceArea,
       ...(trimmedAddress ? { jobAddress: trimmedAddress } : {}),
       jobName,
       totalCents: inputToCents(totalText),
@@ -455,6 +460,7 @@ export default function NewJobScreen(): React.ReactElement {
           </View>
         </Section>
 
+        <ServiceAreaPicker value={serviceArea} onChange={setServiceArea} />
         <Section label="Work">
           <View style={styles.card}>
             <View style={styles.pad}>

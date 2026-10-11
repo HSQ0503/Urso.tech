@@ -543,6 +543,26 @@ test("opening another estimate replaces the previous customer's form state", asy
   await act(async () => renderer.unmount());
 });
 
+test("service area selection is saved with the estimate and resets between documents", async () => {
+  const { state, load } = harness();
+  state.estimates.first = { ...estimate("Angela"), service_area: "north" };
+  state.estimates.second = { ...estimate("Amy"), service_area: "south" };
+  const Screen = load("app/(owner)/estimate/new.tsx").default;
+  const renderer = await mount(Screen);
+  const north = "Area 1, North Palm Beach County, Monday and Tuesday";
+  const central = "Area 2, Central Palm Beach County, Wednesday and Thursday";
+  const south = "Area 3, South Palm Beach County, Friday and Saturday";
+  assert.equal(button(renderer, north).props.accessibilityState.selected, true);
+  await act(async () => button(renderer, central).props.onPress());
+  await act(async () => button(renderer, "Save estimate").props.onPress());
+  assert.equal(state.writes.find((write) => write.action === "update").args[1].serviceArea, "central");
+  state.params = { id: "second" };
+  await act(async () => renderer.update(React.createElement(Screen)));
+  assert.equal(button(renderer, south).props.accessibilityState.selected, true);
+  assert.equal(button(renderer, central).props.accessibilityState.selected, false);
+  await act(async () => renderer.unmount());
+});
+
 function callAction({ denied = null, eventError = null, callError = null, leadStatus = "new" } = {}) {
   const writes = [];
   const source = readFileSync(path.resolve(root, "../../app/CanesPressure/actions.ts"), "utf8");

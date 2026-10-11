@@ -1,3 +1,4 @@
+import { DocumentAreaEditor } from "@/components/service-area-picker";
 import { DocumentRevisionSheet } from "@/components/document-revision";
 import { EstimateAcceptanceHistory } from "@/components/estimate-acceptance";
 import { useState, type ComponentProps } from "react";
@@ -385,6 +386,7 @@ function EstimatePreview({ id }: { id: string }): React.ReactElement {
 
         <View style={styles.dividerBand} />
 
+        <View style={{ paddingHorizontal: 16 }}><DocumentAreaEditor key={`area-${estimate.id}-${estimate.service_area}`} kind="estimate" id={estimate.id} value={estimate.service_area ?? null} /></View>
         <View style={styles.services}>
           <Text style={styles.servicesTitle}>Services</Text>
           <View style={styles.tableHead}>

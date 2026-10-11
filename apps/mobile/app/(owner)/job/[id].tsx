@@ -1,3 +1,4 @@
+import { DocumentAreaEditor } from "@/components/service-area-picker";
 import { DocumentRevisionSheet } from "@/components/document-revision";
 // The job sheet — everything about one job on one screen.
 //
@@ -730,6 +731,7 @@ function JobDetail(): React.ReactElement {
               value={job.customer_phone !== null ? fmtPhone(job.customer_phone) : "—"}
             />
             <Field label="Email" value={job.customer_email ?? "—"} />
+            <DocumentAreaEditor key={`area-${job.id}-${job.service_area}`} kind="job" id={job.id} value={job.service_area ?? null} />
             {job.job_address !== null ? (
               <View style={styles.addressBlock}>
                 <Text style={styles.body}>{job.job_address}</Text>

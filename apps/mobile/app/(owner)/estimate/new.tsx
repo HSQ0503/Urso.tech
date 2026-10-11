@@ -1,3 +1,5 @@
+import { ServiceAreaPicker } from "@/components/service-area-picker";
+import type { ServiceArea } from "@urso/types";
 import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -255,6 +257,7 @@ function EstimateEditor({ editId, requestedType }: { editId: string | null; requ
   const [customerPhone, setCustomerPhone] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
   const [jobAddress, setJobAddress] = useState("");
+  const [serviceArea, setServiceArea] = useState<ServiceArea | null>(null);
   const [jobName, setJobName] = useState("");
   const [expiresAtIso, setExpiresAtIso] = useState(() => futureIso(28));
   const [expiryOpen, setExpiryOpen] = useState(false);
@@ -281,6 +284,7 @@ function EstimateEditor({ editId, requestedType }: { editId: string | null; requ
     setCustomerPhone(estimate.customer_phone ?? "");
     setCustomerEmail(estimate.customer_email ?? "");
     setJobAddress(estimate.job_address ?? "");
+    setServiceArea(estimate.service_area ?? null);
     setJobName(estimate.job_name ?? "");
     setExpiresAtIso(estimate.expires_at ?? futureIso(28));
     setDepositPercent(estimate.deposit_percent);
@@ -372,6 +376,7 @@ function EstimateEditor({ editId, requestedType }: { editId: string | null; requ
         customerName: selectedName,
         ...(customerPhone ? { customerPhone } : {}),
         ...(customerEmail ? { customerEmail } : {}),
+        serviceArea,
         ...(jobAddress.trim() ? { jobAddress: jobAddress.trim() } : {}),
         ...(jobName.trim() ? { jobName: jobName.trim() } : {}),
       });
@@ -395,6 +400,7 @@ function EstimateEditor({ editId, requestedType }: { editId: string | null; requ
         customerName: selectedName,
         customerPhone,
         customerEmail,
+        serviceArea,
         jobAddress: jobAddress.trim(),
         jobName: jobName.trim(),
         expiresAtIso,
@@ -487,6 +493,7 @@ function EstimateEditor({ editId, requestedType }: { editId: string | null; requ
           </View>
         </View>
 
+        <ServiceAreaPicker value={serviceArea} onChange={setServiceArea} disabled={create.isPending || update.isPending} />
         <View style={styles.detailsBlock}>
           <View style={styles.detailField}>
             <Text style={styles.detailLabel}>Estimate Date</Text>

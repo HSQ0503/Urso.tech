@@ -1,3 +1,4 @@
+import type { ServiceArea } from "@urso/types";
 import type {
   Agenda,
   DocumentEdit,
@@ -594,6 +595,7 @@ export const jobActions = {
   // Posts to the jobs COLLECTION, not a job's actions, because there is no job
   // yet. Returns the new id so the caller can land on its sheet.
   createManual: (input: {
+    serviceArea?: ServiceArea | null;
     contactId?: string;
     customerName: string;
     customerPhone?: string;
@@ -704,6 +706,7 @@ export const estimateActions = {
   createForCustomer: (contactId: string) =>
     act<{ estimateId?: string }>("/canes/estimates", { action: "createForCustomer", contactId }),
   create: (input: {
+    serviceArea?: ServiceArea | null;
     estimateType: "standard" | "options" | "packages";
     contactId?: string;
     customerName?: string;
@@ -719,6 +722,7 @@ export const estimateActions = {
   update: (
     id: string,
     patch: Partial<{
+      serviceArea: ServiceArea | null;
       customerName: string;
       customerPhone: string;
       customerEmail: string;
@@ -820,6 +824,8 @@ export const recurringActions = {
 };
 
 export const documentActions = {
+  setServiceArea: (kind: "estimate" | "job" | "invoice" | "plan", id: string, area: ServiceArea | null) =>
+    act(`/canes/documents/${kind}/${id}/area`, { area }),
   archives: () => request<{kind: DocumentKind;id:string;label:string;archivedAt:string}[]>("/canes/archives"),
   restore: (kind:DocumentKind,id:string) => act<{notice?:string}>("/canes/archives",{kind,id}),
   credits: (id: string) => request<{id: string; number: string; availableCents: number}[]>(`/canes/documents/invoice/${id}?view=credits`),

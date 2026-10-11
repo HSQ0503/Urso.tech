@@ -1,5 +1,7 @@
 "use client";
 
+import { serviceAreaForDate } from "@urso/types";
+
 import { useEffect, useMemo, useRef } from "react";
 import {
   ET,
@@ -567,6 +569,7 @@ function TimeGrid({
         <div className="cp-timegrid-daycols">
           {days.map((day) => {
             const head = dayHeadLabel(day, todayYmd);
+            const area = serviceAreaForDate(day.ymd);
             const revenue = dayRevenueCents(buckets, day.ymd);
             return (
               <button
@@ -575,6 +578,7 @@ function TimeGrid({
                 // flex-col utilities override the .cp-timegrid-dayhead row so
                 // the revenue chip sits under the date; $0 days stay quiet.
                 className="cp-timegrid-dayhead flex-col items-stretch gap-0.5"
+                style={area ? { borderTop: `3px solid ${area.color}`, backgroundColor: area.tint } : undefined}
                 data-today={day.ymd === todayYmd}
                 onClick={() => onOpenDay(day.ymd)}
               >
@@ -582,6 +586,7 @@ function TimeGrid({
                   <span>{head.dow}</span>
                   <span className="cp-timegrid-dayhead-sub">{head.sub}</span>
                 </span>
+                {area && <span className="text-[10px] font-medium tracking-normal">{area.number} {area.short}</span>}
                 {revenue > 0 && (
                   <span className="text-[10px] font-semibold tabular-nums tracking-normal text-[var(--cp-ink)]">
                     {fmtMoney(revenue)}
@@ -682,6 +687,7 @@ function MonthGrid({
       <div className="grid grid-cols-7 gap-1.5">
         {days.map((day) => {
           const inMonth = day.anchor.getUTCMonth() === monthIdx;
+          const area = serviceAreaForDate(day.ymd);
           const dayJobs = (buckets.jobs.get(day.ymd) ?? []).slice().sort((a, b) =>
             (a.scheduled_at ?? "").localeCompare(b.scheduled_at ?? ""),
           );
@@ -703,7 +709,7 @@ function MonthGrid({
               data-dropactive={dropActiveYmd === day.ymd}
               // minHeight inline: .cp-cal-col's 160px is unlayered CSS and
               // beats a min-h-* utility; month cells want a compact 92px.
-              style={{ opacity: inMonth ? 1 : 0.5, minHeight: 92 }}
+              style={{ opacity: inMonth ? 1 : 0.5, minHeight: 92, ...(area ? { borderTop: `3px solid ${area.color}`, backgroundColor: area.tint } : {}) }}
               onClick={() => onOpenDay(day.ymd)}
               onDragOver={(e) => {
                 e.preventDefault();
@@ -716,6 +722,7 @@ function MonthGrid({
               onDrop={onDropJob(day.ymd)}
             >
               <span className="cp-cal-col-head">{day.anchor.getUTCDate()}</span>
+              {area && <span className="text-[9px] font-medium">{area.number} {area.short}</span>}
               {revenue > 0 && (
                 <span className="text-[10.5px] font-semibold tabular-nums leading-none">
                   {fmtMoney(revenue)}
