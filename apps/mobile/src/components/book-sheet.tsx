@@ -6,7 +6,7 @@ import { Notice } from "@/components/notice";
 import { isCompleteWhen, SlotPicker } from "@/components/slot-picker";
 import { keys } from "@/queries";
 import { useAction } from "@/query";
-import { color, font, HIT, space, type } from "@/theme";
+import { color, font, HIT, space, type } from "@/canes-theme";
 
 // Book an unscheduled job onto a day and time, in place.
 //

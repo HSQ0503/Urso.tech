@@ -52,7 +52,7 @@ import { useToast } from "@/components/toast";
 import { isCompleteWhen, SlotPicker } from "@/components/slot-picker";
 import { keys, useCrews, useInvoices, useJob } from "@/queries";
 import { noticeFrom, useAction, usePullToRefresh } from "@/query";
-import { color, font, HIT, radius, space, type } from "@/theme";
+import { color, font, HIT, radius, space, type } from "@/canes-theme";
 
 // The web's own dollars-to-cents contract (estimate-builder.tsx), copied
 // character for character — the one place the app converts money instead of

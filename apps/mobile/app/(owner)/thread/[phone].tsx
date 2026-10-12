@@ -62,7 +62,7 @@ import { chooseMessagePhoto, type MessagePhoto } from "@/message-photo";
 import { Notice } from "@/components/notice";
 import { keys, useThreadCalls, useThreadMessages, useThreads } from "@/queries";
 import { noticeFrom, useAction, usePullToRefresh } from "@/query";
-import { color, font, HIT, radius, space, type } from "@/theme";
+import { color, font, HIT, radius, space, type } from "@/canes-theme";
 
 const KIND_LABEL: Record<ThreadKind, string> = {
   vendor: "Lead vendor",

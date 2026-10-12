@@ -6,7 +6,7 @@ import { fmtMoney, paymentNetCents, type InvoiceWithItems } from "@urso/types";
 import { documentActions } from "@/api";
 import { keys } from "@/queries";
 import { noticeFrom, unwrap, useAction } from "@/query";
-import { color, HIT, space, type } from "@/theme";
+import { color, HIT, space, type } from "@/canes-theme";
 import { Notice } from "./notice";
 
 export function PaymentCorrections({ invoice }: { invoice: InvoiceWithItems }) {

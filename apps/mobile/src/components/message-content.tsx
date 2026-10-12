@@ -16,7 +16,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { Message } from "@urso/types";
 import { messageMediaUrl } from "@/api";
 import { getAdminToken } from "@/session";
-import { color, font, HIT, radius, space, type } from "@/theme";
+import { color, font, HIT, radius, space, type } from "@/canes-theme";
 
 const URL_PATTERN = /\b(?:https?:\/\/|www\.)[^\s<>]+/gi;
 const TRAILING_PUNCTUATION = /[),.!?:;]+$/;

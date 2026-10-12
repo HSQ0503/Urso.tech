@@ -10,7 +10,7 @@ import { useToast } from "@/components/toast";
 import { addCalendarDays, dateLabel, todayEt } from "@/dates";
 import { keys, useJob } from "@/queries";
 import { noticeFrom, useAction } from "@/query";
-import { color, font, HIT, radius, space, type } from "@/theme";
+import { color, font, HIT, radius, space, type } from "@/canes-theme";
 
 // "Convert to recurring" — the same sheet from an estimate, an invoice or a
 // work order. The document already knows the customer and the services; the

@@ -61,7 +61,7 @@ import { Notice } from "@/components/notice";
 import { isCompleteWhen, SlotPicker } from "@/components/slot-picker";
 import { keys, useCalendarEvents, useCrews, useLeads, useScheduleBoard } from "@/queries";
 import { noticeFrom, useAction, usePullToRefresh, useRefetchOnFocus } from "@/query";
-import { color, font, HIT, radius, space, type } from "@/theme";
+import { color, font, HIT, radius, space, type } from "@/canes-theme";
 
 // Statuses where the green actually means "this is happening / happened".
 const IN_FLIGHT: JobStatus[] = ["in_progress", "completed", "invoiced", "paid"];
@@ -970,7 +970,9 @@ export default function ScheduleScreen(): React.ReactElement {
     // picked, as long as it is still on the grid.
     setSelectedKey((key) => {
       if (monthKey === null) return todayKey();
-      return next.cells.some((c) => c.key === key) ? key : `${next.monthKey}-01`;
+      return next.cells.some((c) => c.key === key)
+        ? key
+        : `${next.monthKey}-01`;
     });
   }, [monthKey]);
   useFocusEffect(rollWindow);
@@ -982,7 +984,9 @@ export default function ScheduleScreen(): React.ReactElement {
       const built = buildMonth(next);
       setWin(built);
       // Land on the 1st of the new month — or on today if we just came home.
-      setSelectedKey(next === todayKey().slice(0, 7) ? todayKey() : `${next}-01`);
+      setSelectedKey(
+        next === todayKey().slice(0, 7) ? todayKey() : `${next}-01`,
+      );
       return next;
     });
   }, []);
@@ -996,7 +1000,7 @@ export default function ScheduleScreen(): React.ReactElement {
   // One read covers the whole grid (42 days — inside the route's 92-day cap), so
   // tapping around the month is instant and offline-friendly.
   const boardQuery = useScheduleBoard(win.fromIso, win.days);
-  const eventsQuery = useCalendarEvents(win.fromIso,win.days);
+  const eventsQuery = useCalendarEvents(win.fromIso, win.days);
   useRefetchOnFocus(eventsQuery.refetch);
   const crewsQuery = useCrews();
   // Quote visits are leads with an appointment. Gated on `leads`, NOT on
@@ -1010,37 +1014,61 @@ export default function ScheduleScreen(): React.ReactElement {
 
   const { refreshing, onRefresh } = usePullToRefresh(() => {
     rollWindow();
-    return Promise.all([boardQuery.refetch(), crewsQuery.refetch(), leadsQuery.refetch(), eventsQuery.refetch()]);
+    return Promise.all([
+      boardQuery.refetch(),
+      crewsQuery.refetch(),
+      leadsQuery.refetch(),
+      eventsQuery.refetch(),
+    ]);
   });
 
   const board = useMemo(
     () => (boardQuery.data === undefined ? null : toBoardJobs(boardQuery.data)),
     [boardQuery.data],
   );
-  const crews = useMemo(() => (crewsQuery.data ?? []).filter((c) => c.active), [crewsQuery.data]);
+  const crews = useMemo(
+    () => (crewsQuery.data ?? []).filter((c) => c.active),
+    [crewsQuery.data],
+  );
   const crewNames = useMemo(
-    () => new Map<string, string>((crewsQuery.data ?? []).map((c) => [c.id, c.name])),
+    () =>
+      new Map<string, string>(
+        (crewsQuery.data ?? []).map((c) => [c.id, c.name]),
+      ),
     [crewsQuery.data],
   );
   const crewsNotice = noticeFrom(crewsQuery.error);
   const notices = useMemo(() => {
-    const failures = [boardQuery.error, crewsQuery.error, leadsQuery.error, eventsQuery.error]
+    const failures = [
+      boardQuery.error,
+      crewsQuery.error,
+      leadsQuery.error,
+      eventsQuery.error,
+    ]
       .map(noticeFrom)
       .filter((notice): notice is string => notice !== null);
     return [...new Set(failures)];
   }, [boardQuery.error, crewsQuery.error, leadsQuery.error, eventsQuery.error]);
 
-  const gridKeys = useMemo(() => new Set(win.cells.map((c) => c.key)), [win.cells]);
+  const gridKeys = useMemo(
+    () => new Set(win.cells.map((c) => c.key)),
+    [win.cells],
+  );
 
   const visits = useMemo<Visit[]>(
     () =>
       (leadsQuery.data ?? [])
-        .filter((lead): lead is Visit => lead.appointment_at !== null && VISIT_STATUSES.includes(lead.status))
+        .filter(
+          (lead): lead is Visit =>
+            lead.appointment_at !== null &&
+            VISIT_STATUSES.includes(lead.status),
+        )
         .filter((lead) => gridKeys.has(etDateKey(lead.appointment_at))),
     [leadsQuery.data, gridKeys],
   );
 
-  const activeVisit = visitId === null ? null : visits.find((v) => v.id === visitId) ?? null;
+  const activeVisit =
+    visitId === null ? null : (visits.find((v) => v.id === visitId) ?? null);
 
   // What each cell shows: how many jobs, how many visits, and the day's booked
   // money (jobs only — a quote visit is not sold work).
@@ -1060,7 +1088,13 @@ export default function ScheduleScreen(): React.ReactElement {
       mark.cents += job.total_cents;
     }
     for (const visit of visits) at(etDateKey(visit.appointment_at)).visits += 1;
-    for (const cell of win.cells) for (const event of eventsQuery.data??[]) if (event.starts_at<etLocalToIso(`${nextDayKey(cell.key)}T00:00`) && event.ends_at>etLocalToIso(`${cell.key}T00:00`)) at(cell.key).events+=1;
+    for (const cell of win.cells)
+      for (const event of eventsQuery.data ?? [])
+        if (
+          event.starts_at < etLocalToIso(`${nextDayKey(cell.key)}T00:00`) &&
+          event.ends_at > etLocalToIso(`${cell.key}T00:00`)
+        )
+          at(cell.key).events += 1;
     return map;
   }, [board, visits, eventsQuery.data, win.cells]);
 
@@ -1068,25 +1102,46 @@ export default function ScheduleScreen(): React.ReactElement {
   // drive it, which is the only order that helps from a truck.
   const rows = useMemo<Row[]>(() => {
     const dayJobs = (board ?? [])
-      .filter((job) => job.scheduled_at !== null && etDateKey(job.scheduled_at) === selectedKey)
+      .filter(
+        (job) =>
+          job.scheduled_at !== null &&
+          etDateKey(job.scheduled_at) === selectedKey,
+      )
       .map((job) => ({
         at: job.scheduled_at as string,
         row: {
           kind: "job" as const,
           key: job.id,
           job,
-          crewName: job.crew_id === null ? UNASSIGNED : crewNames.get(job.crew_id) ?? null,
+          crewName:
+            job.crew_id === null
+              ? UNASSIGNED
+              : (crewNames.get(job.crew_id) ?? null),
         },
       }));
     const dayVisits = visits
       .filter((visit) => etDateKey(visit.appointment_at) === selectedKey)
-      .map((visit) => ({ at: visit.appointment_at, row: { kind: "visit" as const, key: `visit-${visit.id}`, visit } }));
-    const dayEvents=(eventsQuery.data??[]).filter(event=>event.starts_at<etLocalToIso(`${nextDayKey(selectedKey)}T00:00`) && event.ends_at>etLocalToIso(`${selectedKey}T00:00`)).map(event=>({at:event.starts_at,row:{kind:"event" as const,key:`event-${event.id}`,event}}));
+      .map((visit) => ({
+        at: visit.appointment_at,
+        row: { kind: "visit" as const, key: `visit-${visit.id}`, visit },
+      }));
+    const dayEvents = (eventsQuery.data ?? [])
+      .filter(
+        (event) =>
+          event.starts_at < etLocalToIso(`${nextDayKey(selectedKey)}T00:00`) &&
+          event.ends_at > etLocalToIso(`${selectedKey}T00:00`),
+      )
+      .map((event) => ({
+        at: event.starts_at,
+        row: { kind: "event" as const, key: `event-${event.id}`, event },
+      }));
     const entries = [...dayJobs, ...dayVisits, ...dayEvents]
       .sort((a, b) => Date.parse(a.at) - Date.parse(b.at))
       .map((entry) => entry.row);
     if (entries.length === 0) {
-      return [{ kind: "calm", key: "calm-day", text: "Nothing booked for this day." }];
+      return [
+        { kind: "calm", key: "calm-day", text: "Nothing booked for this day." },
+      ];
     }
     return entries;
   }, [board, visits, selectedKey, crewNames, eventsQuery.data]);
@@ -1094,7 +1149,8 @@ export default function ScheduleScreen(): React.ReactElement {
   const dayCents = marks.get(selectedKey)?.cents ?? 0;
 
   const calendarReadable = board !== null || leadsQuery.data !== undefined;
-  const loading = boardQuery.isFetching || crewsQuery.isFetching || leadsQuery.isFetching;
+  const loading =
+    boardQuery.isFetching || crewsQuery.isFetching || leadsQuery.isFetching;
   const showSpinner = loading && !calendarReadable;
   const dead = !loading && !calendarReadable;
 
@@ -1114,7 +1170,10 @@ export default function ScheduleScreen(): React.ReactElement {
         accessibilityRole="button"
         accessibilityLabel="Previous month"
         onPress={() => shiftMonth(-1)}
-        style={({ pressed }) => [styles.monthArrow, pressed && styles.pressedSurface]}
+        style={({ pressed }) => [
+          styles.monthArrow,
+          pressed && styles.pressedSurface,
+        ]}
       >
         <Feather name="chevron-left" size={20} color={color.ink} />
       </Pressable>
@@ -1123,7 +1182,10 @@ export default function ScheduleScreen(): React.ReactElement {
         accessibilityRole="button"
         accessibilityLabel="Next month"
         onPress={() => shiftMonth(1)}
-        style={({ pressed }) => [styles.monthArrow, pressed && styles.pressedSurface]}
+        style={({ pressed }) => [
+          styles.monthArrow,
+          pressed && styles.pressedSurface,
+        ]}
       >
         <Feather name="chevron-right" size={20} color={color.ink} />
       </Pressable>
@@ -1143,13 +1205,25 @@ export default function ScheduleScreen(): React.ReactElement {
     </View>
   );
 
-  const grid = <MonthGrid cells={win.cells} marks={marks} selectedKey={selectedKey} onPick={setSelectedKey} />;
+  const grid = (
+    <MonthGrid
+      cells={win.cells}
+      marks={marks}
+      selectedKey={selectedKey}
+      onPick={setSelectedKey}
+    />
+  );
 
   // Mounted in every branch: a refused board is exactly the moment he still
   // wants to block out the afternoon.
   const eventSheet = (
     <>
-      <Modal visible={createOpen} transparent animationType="fade" onRequestClose={() => setCreateOpen(false)}>
+      <Modal
+        visible={createOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setCreateOpen(false)}
+      >
         <View style={styles.menuOverlay}>
           <Pressable
             accessibilityRole="button"
@@ -1157,14 +1231,22 @@ export default function ScheduleScreen(): React.ReactElement {
             onPress={() => setCreateOpen(false)}
             style={styles.menuBackdrop}
           />
-          <View style={[styles.createMenu, { paddingBottom: insets.bottom + space.lg }]}>
+          <View
+            style={[
+              styles.createMenu,
+              { paddingBottom: insets.bottom + space.lg },
+            ]}
+          >
             <View style={styles.createMenuHead}>
               <Text style={styles.createMenuTitle}>Create</Text>
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Close"
                 onPress={() => setCreateOpen(false)}
-                style={({ pressed }) => [styles.menuClose, pressed && styles.pressedSurface]}
+                style={({ pressed }) => [
+                  styles.menuClose,
+                  pressed && styles.pressedSurface,
+                ]}
               >
                 <Feather name="x" size={20} color={color.muted} />
               </Pressable>
@@ -1173,14 +1255,22 @@ export default function ScheduleScreen(): React.ReactElement {
               accessibilityRole="button"
               onPress={() => {
                 setCreateOpen(false);
-                router.push(`/(owner)/job/new?day=${encodeURIComponent(selectedKey)}`);
+                router.push(
+                  `/(owner)/job/new?day=${encodeURIComponent(selectedKey)}`,
+                );
               }}
-              style={({ pressed }) => [styles.createChoice, pressed && styles.pressedSurface]}
+              style={({ pressed }) => [
+                styles.createChoice,
+                pressed && styles.pressedSurface,
+              ]}
             >
               <Feather name="tool" size={18} color={color.brandDeep} />
               <View style={styles.createChoiceBody}>
                 <Text style={styles.createChoiceTitle}>Work order</Text>
-                <Text style={styles.createChoiceSub}>Add work for a customer on {dayLabel(selectedKey).toLowerCase()}</Text>
+                <Text style={styles.createChoiceSub}>
+                  Add work for a customer on{" "}
+                  {dayLabel(selectedKey).toLowerCase()}
+                </Text>
               </View>
               <Feather name="chevron-right" size={18} color={color.faint} />
             </Pressable>
@@ -1191,12 +1281,17 @@ export default function ScheduleScreen(): React.ReactElement {
                 setEditingEvent(null);
                 setEventOpen(true);
               }}
-              style={({ pressed }) => [styles.createChoice, pressed && styles.pressedSurface]}
+              style={({ pressed }) => [
+                styles.createChoice,
+                pressed && styles.pressedSurface,
+              ]}
             >
               <Feather name="calendar" size={18} color={color.brandDeep} />
               <View style={styles.createChoiceBody}>
                 <Text style={styles.createChoiceTitle}>Event</Text>
-                <Text style={styles.createChoiceSub}>Block time, time off, or a holiday</Text>
+                <Text style={styles.createChoiceSub}>
+                  Block time, time off, or a holiday
+                </Text>
               </View>
               <Feather name="chevron-right" size={18} color={color.faint} />
             </Pressable>
@@ -1238,7 +1333,11 @@ export default function ScheduleScreen(): React.ReactElement {
         {bar}
         {grid}
         <View style={styles.centre}>
-          <Notices items={notices.length > 0 ? notices : ["The schedule isn't available."]} />
+          <Notices
+            items={
+              notices.length > 0 ? notices : ["The schedule isn't available."]
+            }
+          />
           <Pressable
             accessibilityRole="button"
             onPress={() => {
@@ -1247,7 +1346,10 @@ export default function ScheduleScreen(): React.ReactElement {
               void crewsQuery.refetch();
               void leadsQuery.refetch();
             }}
-            style={({ pressed }) => [styles.button, pressed && styles.pressedSurface]}
+            style={({ pressed }) => [
+              styles.button,
+              pressed && styles.pressedSurface,
+            ]}
           >
             <Text style={styles.buttonText}>Try again</Text>
           </Pressable>
@@ -1264,9 +1366,17 @@ export default function ScheduleScreen(): React.ReactElement {
       <FlatList
         data={rows}
         keyExtractor={(item) => item.key}
-        contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + space.xxl + HIT }]}
+        contentContainerStyle={[
+          styles.list,
+          { paddingBottom: insets.bottom + space.xxl + HIT },
+        ]}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={color.brand} colors={[color.brand]} />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={color.brand}
+            colors={[color.brand]}
+          />
         }
         ListHeaderComponent={
           <View>
@@ -1278,12 +1388,19 @@ export default function ScheduleScreen(): React.ReactElement {
             <View style={styles.sectionHead}>
               <Text style={styles.sectionLabel} numberOfLines={1}>
                 {dayLabel(selectedKey)}
-                {([todayKey(), nextDayKey(todayKey())].includes(selectedKey)) ? <Text style={styles.sectionDate}>
-                  {"  "}
-                  {fmtEt(etLocalToIso(`${selectedKey}T12:00`), { month: "short", day: "numeric" })}
-                </Text> : null}
+                {[todayKey(), nextDayKey(todayKey())].includes(selectedKey) ? (
+                  <Text style={styles.sectionDate}>
+                    {"  "}
+                    {fmtEt(etLocalToIso(`${selectedKey}T12:00`), {
+                      month: "short",
+                      day: "numeric",
+                    })}
+                  </Text>
+                ) : null}
               </Text>
-              {dayCents > 0 ? <Text style={styles.sectionMeta}>{fmtMoney(dayCents)}</Text> : null}
+              {dayCents > 0 ? (
+                <Text style={styles.sectionMeta}>{fmtMoney(dayCents)}</Text>
+              ) : null}
             </View>
           </View>
         }
@@ -1297,10 +1414,15 @@ export default function ScheduleScreen(): React.ReactElement {
                   setEditingEvent(item.event);
                   setEventOpen(true);
                 }}
-                style={({ pressed }) => [styles.row, pressed && styles.pressedSurface]}
+                style={({ pressed }) => [
+                  styles.row,
+                  pressed && styles.pressedSurface,
+                ]}
               >
                 <Text style={styles.time}>
-                  {item.event.all_day ? "All day" : fmtEtTimeRange(item.event.starts_at, item.event.ends_at)}
+                  {item.event.all_day
+                    ? "All day"
+                    : fmtEtTimeRange(item.event.starts_at, item.event.ends_at)}
                 </Text>
                 <Text style={styles.customerLead}>{item.event.title}</Text>
                 <Text style={styles.address}>
@@ -1310,18 +1432,34 @@ export default function ScheduleScreen(): React.ReactElement {
               </Pressable>
             );
           }
-          if (item.kind === "calm") return <Text style={styles.calm}>{item.text}</Text>;
-          if (item.kind === "visit") return <VisitRow visit={item.visit} onPress={() => setVisitId(item.visit.id)} />;
-          return <JobRow job={item.job} crewName={item.crewName} onPress={() => openJob(item.job.id)} />;
+          if (item.kind === "calm")
+            return <Text style={styles.calm}>{item.text}</Text>;
+          if (item.kind === "visit")
+            return (
+              <VisitRow
+                visit={item.visit}
+                onPress={() => setVisitId(item.visit.id)}
+              />
+            );
+          return (
+            <JobRow
+              job={item.job}
+              crewName={item.crewName}
+              onPress={() => openJob(item.job.id)}
+            />
+          );
         }}
       />
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Create"
         onPress={() => setCreateOpen(true)}
-        style={({ pressed }) => [styles.fab, pressed && styles.chromeActionPressed]}
+        style={({ pressed }) => [
+          styles.fab,
+          pressed && styles.chromeActionPressed,
+        ]}
       >
-        <Feather name="plus" size={25} color={color.surface} />
+        <Feather name="plus" size={25} color="#ffffff" />
       </Pressable>
       {eventSheet}
       {activeVisit !== null ? (
@@ -1336,7 +1474,10 @@ export default function ScheduleScreen(): React.ReactElement {
           }}
           onOpenEstimate={(estimateId) => {
             setVisitId(null);
-            router.push({ pathname: "/(owner)/estimate/new", params: { id: estimateId } });
+            router.push({
+              pathname: "/(owner)/estimate/new",
+              params: { id: estimateId },
+            });
           }}
         />
       ) : null}

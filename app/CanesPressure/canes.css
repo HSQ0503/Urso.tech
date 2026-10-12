@@ -1,150 +1,59 @@
-/* Canes Pressure Washing — operations design system, v4.
-   Layout grounded in working field-service software (Jobber-class web apps,
-   OpenPhone's inbox); the voice is Urso's brand system: Fraunces serif for
-   display type, IBM Plex Mono for micro-labels and status chips, IBM Plex Sans
-   for everything else, and Urso orange #fe5100 as the one accent. Raw orange is
-   for accents and text moments (as /dashboard renders it); solid fills use the
-   deepened steps so white button text keeps contrast.
-   No gradients, no washes, nothing blinks.
-
-   v4 aligns the palette with the Woof Gang dashboard (globals.css): the base
-   .canes values below ARE that dashboard's light tokens, so public pages
-   (request, e/, i/, login) sit on the same Urso field, fixed light. The gated
-   app adds .theme-scope, which re-maps every cp token onto the live --color-*
-   tokens — dark by default, flipped by the site-wide data-theme toggle. Blues,
-   teals and slates are gone: status color is carried by the orange family,
-   the green "good" token, one functional danger red, and neutral ink washes.
-   Everything scopes under .canes so the rest of urso.tech is untouched.
-
-   Everything lives in @layer components so Tailwind v4 utilities (which live
-   in @layer utilities, later in the layer order) can override .cp-* classes —
-   unlayered rules would silently beat every utility. */
+/* Canes: compact, dark operations UI. Tokens stay scoped to this workspace. */
 
 @layer components {
 
-.canes {
-  /* palette — the Woof Gang dashboard's light tokens (globals.css). Cards stay
-     crisp white so the hairline structure still reads. */
-  --cp-bg: #eceef1;
-  --cp-surface: #ffffff;
-  --cp-ink: #14171c;
-  --cp-muted: rgba(20, 23, 28, 0.62);
-  --cp-faint: rgba(20, 23, 28, 0.42);
-  --cp-line: rgba(15, 18, 22, 0.1);
-  --cp-line-strong: rgba(15, 18, 22, 0.17);
-  --cp-hover: rgba(15, 18, 22, 0.045);
-  --cp-brand: #fe5100;
-  --cp-brand-fill: #e84900;
-  /* darken step for solid-fill hover/press only — never text */
-  --cp-brand-down: #c23e00;
-  /* orange as text/icon color; the app scope re-maps it to raw brand orange */
-  --cp-brand-deep: #c23e00;
-  --cp-brand-soft: rgba(254, 81, 0, 0.1);
+.canes, :is(.canes .theme-scope, .canes.theme-scope) {
+  --cp-bg: #11151b;
+  --cp-surface: #1a2029;
+  --cp-ink: #f1f4f8;
+  --cp-muted: #b2bbc8;
+  --cp-faint: #909dad;
+  --cp-line: #303946;
+  --cp-line-strong: #465363;
+  --cp-hover: #242d39;
+  --cp-brand: #5eead4;
+  --cp-brand-fill: #0f766e;
+  --cp-brand-down: #115e59;
+  --cp-brand-deep: #5eead4;
+  --cp-brand-soft: #163d3b;
   --cp-hot: var(--cp-brand);
-  --cp-hot-bg: rgba(254, 81, 0, 0.1);
+  --cp-hot-bg: #163d3b;
   --cp-cold: var(--cp-muted);
-  --cp-cold-bg: color-mix(in srgb, var(--cp-ink) 6%, transparent);
-  --cp-good: #11935a;
-  --cp-good-bg: color-mix(in srgb, var(--cp-good) 12%, transparent);
-  /* schedule object identity: sold jobs are always green, independent of the
-     assigned crew color; crew color stays available as secondary metadata */
-  --cp-job: #15803d;
-  --cp-job-bg: color-mix(in srgb, var(--cp-job) 11%, var(--cp-surface));
-  /* quote (estimate-visit) accent — violet, deliberately outside the orange
-     brand family and the cool crew palette so a quote never reads as a job */
-  --cp-quote: #6d28d9;
-  --cp-quote-bg: color-mix(in srgb, var(--cp-quote) 10%, var(--cp-surface));
-  --cp-warn: var(--cp-brand);
-  --cp-warn-bg: rgba(254, 81, 0, 0.1);
-  --cp-danger: #b42318;
-  --cp-danger-bg: color-mix(in srgb, var(--cp-danger) 10%, transparent);
-  /* neutral shadow tint — deepens under the dark app scope */
-  --cp-shadow: rgba(15, 18, 22, 0.08);
-
-  /* dark chrome — the sidebar carries Urso's true black field (was #0d1013),
-     lit by the brand's signature orange bloom at the top-left corner. */
-  --cp-chrome: #070707;
-  --cp-sidebar-bg:
-    radial-gradient(120% 28% at 15% 0%, rgba(254, 81, 0, 0.11) 0%, transparent 58%),
-    linear-gradient(180deg, #0a0908 0%, #070707 60%, #050505 100%);
-  --cp-chrome-raise: rgba(255, 255, 255, 0.06);
-  --cp-chrome-line: rgba(255, 255, 255, 0.08);
-  --cp-chrome-ink: #f4f5f6;
-  --cp-chrome-muted: rgba(244, 245, 246, 0.6);
-  --cp-chrome-faint: rgba(244, 245, 246, 0.38);
-
-  /* motion — the one Urso easing curve (the marketing site's --ease-out). */
-  --cp-ease: cubic-bezier(0.16, 1, 0.3, 1);
-
-  /* type — inherited from the root layout's next/font variables */
+  --cp-cold-bg: #242d39;
+  --cp-good: #6ee7a0;
+  --cp-good-bg: #183d30;
+  --cp-job: #6ee7a0;
+  --cp-job-bg: #183d30;
+  --cp-quote: #c4b5fd;
+  --cp-quote-bg: #312943;
+  --cp-warn: #fcd34d;
+  --cp-warn-bg: #3d3422;
+  --cp-danger: #fda4af;
+  --cp-danger-bg: #43262f;
+  --cp-shadow: rgba(0,0,0,.2);
+  --cp-chrome: #11151b;
+  --cp-sidebar-bg: #11151b;
+  --cp-chrome-raise: #242d39;
+  --cp-chrome-line: #303946;
+  --cp-chrome-ink: #f1f4f8;
+  --cp-chrome-muted: #b2bbc8;
+  --cp-chrome-faint: #909dad;
+  --cp-ease: ease-out;
   --cp-font-body: var(--font-ibm-plex-sans), system-ui, -apple-system, sans-serif;
-  --cp-font-display: var(--font-fraunces), Georgia, serif;
-  --cp-font-mono: var(--font-ibm-plex-mono), ui-monospace, "SF Mono", monospace;
-
+  --cp-font-display: var(--cp-font-body);
+  --cp-font-mono: var(--font-ibm-plex-mono), ui-monospace, monospace;
   background: var(--cp-bg);
   color: var(--cp-ink);
   font-family: var(--cp-font-body);
   font-feature-settings: "tnum" 1;
   -webkit-font-smoothing: antialiased;
-  color-scheme: light;
-}
-
-/* ── Woof Gang alignment: the gated app is theme-aware ───────────────────────
-   The (app) shell carries .theme-scope, re-mapping every cp token onto the
-   dashboard's semantic --color-* tokens from globals.css — dark by default,
-   flipped as one by :root[data-theme="light"], exactly like /dashboard.
-   Portals that escape the shell (More sheet, tour) put both classes on one
-   node, hence the :is() covering descendant and self. The crew portal keeps
-   the fixed dark chrome tokens above. */
-:is(.canes .theme-scope, .canes.theme-scope) {
   color-scheme: dark;
-  --cp-bg: var(--color-bg);
-  --cp-surface: var(--color-surface);
-  --cp-ink: var(--color-ink);
-  --cp-muted: var(--color-ink-dim);
-  --cp-faint: var(--color-ink-dimmer);
-  --cp-line: var(--color-edge);
-  --cp-line-strong: var(--color-edge-strong);
-  --cp-hover: var(--color-raise);
-  --cp-brand-deep: var(--color-orange);
-  --cp-brand-soft: var(--color-orange-soft);
-  --cp-good: var(--color-good);
-  --cp-danger: #f26555;
-  --cp-shadow: rgba(0, 0, 0, 0.55);
-  /* Derived tokens must be re-declared here: a var() inside a custom property
-     resolves where the property is DECLARED, so the base .canes versions bake
-     in the light values and would inherit down unchanged. Declared on this
-     element they re-resolve against the re-mapped tokens above — and against
-     the light/print overrides below, since those hit this same element. */
-  --cp-hot: var(--cp-brand);
-  --cp-cold: var(--cp-muted);
-  --cp-cold-bg: color-mix(in srgb, var(--cp-ink) 8%, transparent);
-  --cp-good-bg: color-mix(in srgb, var(--cp-good) 13%, transparent);
-  --cp-job: var(--cp-good);
-  --cp-job-bg: color-mix(in srgb, var(--cp-job) 15%, var(--cp-surface));
-  --cp-quote: #a78bfa;
-  --cp-quote-bg: color-mix(in srgb, var(--cp-quote) 14%, var(--cp-surface));
-  --cp-danger-bg: color-mix(in srgb, var(--cp-danger) 12%, transparent);
-  /* sidebar + chrome follow the dashboard's theme-aware materials */
-  --cp-chrome: var(--color-sidebar);
-  --cp-sidebar-bg: var(--sidebar-bg);
-  --cp-chrome-raise: var(--color-raise);
-  --cp-chrome-line: var(--color-edge);
-  --cp-chrome-ink: var(--color-ink);
-  --cp-chrome-muted: var(--color-ink-dim);
-  --cp-chrome-faint: var(--color-ink-dimmer);
-}
-:root[data-theme="light"] :is(.canes .theme-scope, .canes.theme-scope) {
-  color-scheme: light;
-  --cp-quote: #6d28d9;
-  --cp-danger: #b42318;
-  --cp-shadow: rgba(15, 18, 22, 0.08);
 }
 
 /* Run sheets and invoices print from inside the themed app — force the light
    literals on paper regardless of the toggle. */
 @media print {
-  :is(.canes .theme-scope, .canes.theme-scope) {
+  .canes, :is(.canes .theme-scope, .canes.theme-scope) {
     color-scheme: light;
     --cp-bg: #ffffff;
     --cp-surface: #ffffff;
@@ -154,8 +63,9 @@
     --cp-line: rgba(15, 18, 22, 0.1);
     --cp-line-strong: rgba(15, 18, 22, 0.17);
     --cp-hover: rgba(15, 18, 22, 0.045);
-    --cp-brand-deep: #c23e00;
-    --cp-brand-soft: rgba(254, 81, 0, 0.1);
+    --cp-brand: #0f766e;
+    --cp-brand-deep: #0f766e;
+    --cp-brand-soft: #e0f2ee;
     --cp-good: #11935a;
     --cp-quote: #6d28d9;
     --cp-danger: #b42318;
@@ -166,8 +76,7 @@
 .canes ::selection { background: var(--cp-brand-soft); }
 .canes :focus-visible { outline: 2px solid var(--cp-brand); outline-offset: 2px; }
 
-/* display type — Fraunces, the Urso voice. Page titles, the greeting, and
-   public-page headers. Pair with an orange terminal period in JSX. */
+/* Plain headings share the body family across app and customer pages. */
 .cp-display {
   font-family: var(--cp-font-display);
   font-weight: 600;
@@ -177,7 +86,7 @@
    terminal period in JSX: "<em>Good</em> afternoon, Sebastian." */
 .cp-display em,
 .cp-ios-title em {
-  font-style: italic;
+  font-style: normal;
   font-weight: 500;
 }
 
@@ -187,8 +96,8 @@
   font-family: var(--cp-font-mono);
   font-size: 10.5px;
   font-weight: 500;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--cp-muted);
 }
 
@@ -225,8 +134,8 @@
   font-family: var(--cp-font-mono);
   font-size: 10.5px;
   font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--cp-muted);
 }
 .cp-group-danger { color: var(--cp-danger); }
@@ -286,8 +195,8 @@
   font-family: var(--cp-font-mono);
   font-size: 10.5px;
   font-weight: 500;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--cp-muted);
   margin-bottom: 6px;
 }
@@ -334,11 +243,11 @@
   gap: 4px;
   padding: 2.5px 7px;
   border-radius: 4px;
-  font-family: var(--cp-font-mono);
-  font-size: 10px;
+  font-family: var(--cp-font-body);
+  font-size: 12px;
   font-weight: 600;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   line-height: 1.5;
   white-space: nowrap;
 }
@@ -448,11 +357,11 @@
 /* quiet mono section headers in the dark sidebar */
 .cp-nav-section {
   padding: 6px 10px 3px;
-  font-family: var(--cp-font-mono);
-  font-size: 10px;
+  font-family: var(--cp-font-body);
+  font-size: 12px;
   font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--cp-chrome-faint);
 }
 .cp-nav-link[data-active="true"]::before {
@@ -479,7 +388,7 @@
   padding: 5px 2px;
   font-size: 10px;
   font-weight: 600;
-  letter-spacing: 0.01em;
+  letter-spacing: 0;
   color: var(--cp-faint);
   -webkit-tap-highlight-color: transparent;
 }
@@ -637,8 +546,8 @@
   font-family: var(--cp-font-mono);
   font-size: 10.5px;
   font-weight: 600;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--cp-muted);
   font-feature-settings: "tnum" 1;
 }
@@ -780,8 +689,8 @@
   font-family: var(--cp-font-mono);
   font-size: 10.5px;
   font-weight: 600;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--cp-muted);
   cursor: pointer;
   font-feature-settings: "tnum" 1;
@@ -817,7 +726,7 @@
   font-family: var(--cp-font-mono);
   font-size: 9.5px;
   font-weight: 500;
-  letter-spacing: 0.04em;
+  letter-spacing: 0;
   color: var(--cp-faint);
   font-feature-settings: "tnum" 1;
   white-space: nowrap;
@@ -1008,8 +917,8 @@
   font-family: var(--cp-font-mono);
   font-size: 10.5px;
   font-weight: 500;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--cp-faint);
   padding: 0 6px 7px;
 }

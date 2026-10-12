@@ -1,4 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
+import {
+  generateServiceVisits,
+  reviewServicePayments,
+} from "@/lib/canes/service-agreements";
+import { reconcileWorkerCommissions } from "@/lib/canes/money";import { NextRequest, NextResponse } from "next/server";
 import { canesAutomationsEnabled } from "@/lib/canes/automations";
 import { estimateText, jobReminderText } from "@/lib/canes/customer-messages";
 import { canesConfigured, canesDb } from "@/lib/canes/supabase";
@@ -82,7 +86,8 @@ export async function GET(req: NextRequest) {
       req.nextUrl.searchParams.get("secret") === secret
     : process.env.NODE_ENV !== "production"; // no secret set → dev only
 
-  if (!authorized) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  if (!authorized)
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   if (!canesConfigured()) return NextResponse.json({ skipped: true });
 
   const report: Record<string, unknown> = {};
@@ -104,11 +109,26 @@ export async function GET(req: NextRequest) {
     }
   };
 
+  await section("service_payment_review", businessDeadlineAt, () =>
+    reviewServicePayments(businessDeadlineAt),
+  );
+  await section(
+    "worker_commissions",
+    businessDeadlineAt,
+    reconcileWorkerCommissions,
+  );
+
   if (!(await canesAutomationsEnabled())) {
     // Keep the payment ledger and stale payment-link cleanup safe while outreach is paused.
-    await section("legacy_square_history", businessDeadlineAt, () => reconcileLegacySquarePaymentHistory(3));
-    await section("credit_payment_links", businessDeadlineAt, () => retireCreditAdjustedPaymentLinks(businessDeadlineAt));
-    await section("push_receipts", cronDeadlineAt, () => processCanesPushReceipts({ deadlineAt: cronDeadlineAt }));
+    await section("legacy_square_history", businessDeadlineAt, () =>
+      reconcileLegacySquarePaymentHistory(3),
+    );
+    await section("credit_payment_links", businessDeadlineAt, () =>
+      retireCreditAdjustedPaymentLinks(businessDeadlineAt),
+    );
+    await section("push_receipts", cronDeadlineAt, () =>
+      processCanesPushReceipts({ deadlineAt: cronDeadlineAt }),
+    );
     return NextResponse.json({ automations: "paused", ...report });
   }
 
@@ -118,41 +138,68 @@ export async function GET(req: NextRequest) {
     await sweepStalePractice();
     return { checked: true };
   });
-  await section("tasks", businessDeadlineAt, () => drainDueTasks(businessDeadlineAt));
+  await section("tasks", businessDeadlineAt, () =>
+    drainDueTasks(businessDeadlineAt),
+  );
   await section("payment_emails", businessDeadlineAt, () =>
-    drainPaymentEmailTasks({ deadlineAt: businessDeadlineAt }));
+    drainPaymentEmailTasks({ deadlineAt: businessDeadlineAt }),
+  );
   await section("legacy_square_history", businessDeadlineAt, () =>
-    reconcileLegacySquarePaymentHistory(3));
-  await section("credit_payment_links", businessDeadlineAt, () => retireCreditAdjustedPaymentLinks(businessDeadlineAt));
+    reconcileLegacySquarePaymentHistory(3),
+  );
+  await section("credit_payment_links", businessDeadlineAt, () =>
+    retireCreditAdjustedPaymentLinks(businessDeadlineAt),
+  );
   await section("expire_estimates", businessDeadlineAt, expireEstimates);
   // Recurring plans: mint the next visit as an unscheduled work order once it
   // is inside the plan's lead window. Idempotent (plan clock + unique index),
   // so a retry after a half-run cannot double a visit.
+  await section(
+    "recurring_services",
+    businessDeadlineAt,
+    generateServiceVisits,
+  );
   await section("recurring_visits", businessDeadlineAt, generateDueVisits);
   await section("recurring_expenses", businessDeadlineAt, async () => {
     const { data, error } = await canesDb().rpc("generate_expense_occurrences");
     if (error) throw new Error("Recurring expense generation failed.");
     return { created: data };
   });
-  await section("safety_net", businessDeadlineAt, () => confirmationSafetyNet(businessDeadlineAt));
-  await section("no_reply", businessDeadlineAt, () => noReplyEscalations(businessDeadlineAt));
-  await section("auto_release", businessDeadlineAt, () => autoReleaseUnconfirmed(businessDeadlineAt));
-  await section("cold_escalation", businessDeadlineAt, () => coldEscalations(businessDeadlineAt));
+  await section("safety_net", businessDeadlineAt, () =>
+    confirmationSafetyNet(businessDeadlineAt),
+  );
+  await section("no_reply", businessDeadlineAt, () =>
+    noReplyEscalations(businessDeadlineAt),
+  );
+  await section("auto_release", businessDeadlineAt, () =>
+    autoReleaseUnconfirmed(businessDeadlineAt),
+  );
+  await section("cold_escalation", businessDeadlineAt, () =>
+    coldEscalations(businessDeadlineAt),
+  );
   await section("crew_late", businessDeadlineAt, crewLateCheckIns);
-  await section("follow_up", businessDeadlineAt, () => followUps(businessDeadlineAt));
-  await section("digest", businessDeadlineAt, () => morningDigest(businessDeadlineAt));
+  await section("follow_up", businessDeadlineAt, () =>
+    followUps(businessDeadlineAt),
+  );
+  await section("digest", businessDeadlineAt, () =>
+    morningDigest(businessDeadlineAt),
+  );
   await section("daily_followup_summary", businessDeadlineAt, () =>
-    dailyFollowupSummary(businessDeadlineAt));
+    dailyFollowupSummary(businessDeadlineAt),
+  );
   await section("notification_repair", businessDeadlineAt, () =>
-    repairNotificationOutbox(businessDeadlineAt));
+    repairNotificationOutbox(businessDeadlineAt),
+  );
 
   // Business automation gets a bounded first window. The final 27 seconds are
   // reserved for the push outbox, with the final 13 seconds exclusively for
   // receipt reconciliation, so either queue can make progress every heartbeat.
   await section("push_outbox", pushOutboxDeadlineAt, () =>
-    drainCanesPushOutbox({ deadlineAt: pushOutboxDeadlineAt }));
+    drainCanesPushOutbox({ deadlineAt: pushOutboxDeadlineAt }),
+  );
   await section("push_receipts", cronDeadlineAt, () =>
-    processCanesPushReceipts({ deadlineAt: cronDeadlineAt }));
+    processCanesPushReceipts({ deadlineAt: cronDeadlineAt }),
+  );
 
   return NextResponse.json(report);
 }

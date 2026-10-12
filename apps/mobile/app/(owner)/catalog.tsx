@@ -9,7 +9,7 @@ import { ChromeBar } from "@/components/ledger";
 import { Notice } from "@/components/notice";
 import { keys, useCatalog } from "@/queries";
 import { noticeFrom, useAction, usePullToRefresh, useRefetchOnFocus } from "@/query";
-import { color, font, HIT, radius, space, type } from "@/theme";
+import { color, font, HIT, radius, space, type } from "@/canes-theme";
 
 type Draft = { id?: string; name: string; description: string; kind: CatalogKind; price: string; unit: string };
 const EMPTY: Draft = { name: "", description: "", kind: "service", price: "", unit: "job" };

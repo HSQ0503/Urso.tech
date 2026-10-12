@@ -24,7 +24,7 @@ import { Notice } from "@/components/notice";
 import { PhoneInput } from "@/components/phone-input";
 import { useCustomers } from "@/queries";
 import { noticeFrom, usePullToRefresh, useRefetchOnFocus } from "@/query";
-import { color, font, HIT, radius, space, type } from "@/theme";
+import { color, font, HIT, radius, space, type } from "@/canes-theme";
 
 function matchesCustomer(customer: CustomerSummary, query: string): boolean {
   const text = query.trim().toLowerCase();
@@ -216,11 +216,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.lg,
   },
   primaryPressed: { backgroundColor: color.brandDown },
-  primaryText: { ...type.body, fontFamily: font.bodySemi, color: color.surface },
+  primaryText: { ...type.body, fontFamily: font.bodySemi, color: "#ffffff" },
   disabled: { opacity: 0.45 },
   centre: { minHeight: 160, alignItems: "center", justifyContent: "center" },
-  empty: { ...type.body, color: color.muted, textAlign: "center", padding: space.xl },
-  customer: { minHeight: 68, flexDirection: "row", alignItems: "center", gap: space.md },
+  empty: {
+    ...type.body,
+    color: color.muted,
+    textAlign: "center",
+    padding: space.xl,
+  },
+  customer: {
+    minHeight: 68,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+  },
   pressed: { backgroundColor: color.hover },
   customerBody: { flex: 1, minWidth: 0, gap: 4 },
   customerTop: { flexDirection: "row", alignItems: "center", gap: space.sm },

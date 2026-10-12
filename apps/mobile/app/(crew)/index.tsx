@@ -21,7 +21,7 @@ import {
 } from "@urso/types";
 import { api, SessionExpiredError } from "@/api";
 import { signOutWithPushCleanup } from "@/push-notifications";
-import { color, font, HIT, radius, space, type } from "@/theme";
+import { color, font, HIT, radius, space, type } from "@/canes-theme";
 
 // The technician's week — the first screen of every workday.
 //

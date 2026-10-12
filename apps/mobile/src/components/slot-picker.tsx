@@ -4,7 +4,7 @@ import { ET } from "@urso/types";
 import { Feather } from "@expo/vector-icons";
 import { DatePicker } from "@/components/date-picker";
 import { dateLabel, isCalendarDate } from "@/dates";
-import { color, font, HIT, radius, space, type } from "@/theme";
+import { color, font, HIT, radius, space, type } from "@/canes-theme";
 
 // Tap-to-book scheduler, ported line-for-line from the web SchedulePicker
 // (components/leads/schedule-picker.tsx): day chips for the coming week, hour

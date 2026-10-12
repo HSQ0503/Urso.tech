@@ -3,7 +3,7 @@ import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ChromeBar, bodyStyle } from "@/components/ledger";
 import { PushNotificationSettings } from "@/components/push-settings";
-import { color, space } from "@/theme";
+import { color, space } from "@/canes-theme";
 
 export default function CrewNotificationSettingsScreen(): React.ReactElement {
   const router = useRouter();

@@ -8,7 +8,7 @@ import { Notice } from "@/components/notice";
 import { PushNotificationSettings } from "@/components/push-settings";
 import { keys, useSettings } from "@/queries";
 import { noticeFrom, useAction, usePullToRefresh } from "@/query";
-import { color, font, HIT, radius, space, type } from "@/theme";
+import { color, font, HIT, radius, space, type } from "@/canes-theme";
 
 type Draft = { estimateMessage: string; estimateTerms: string; expiryDays: string; taxPercent: string; confirmationHours: string };
 const EMPTY: Draft = { estimateMessage: "", estimateTerms: "", expiryDays: "", taxPercent: "", confirmationHours: "" };

@@ -1,4 +1,4 @@
-import { canesAutomationsEnabled } from "@/lib/canes/automations";
+import { STANDARD_SERVICES } from "@urso/types";import { canesAutomationsEnabled } from "@/lib/canes/automations";
 import type { EstimateAcceptance } from "@urso/types";
 import { canesConfigured, canesDb } from "@/lib/canes/supabase";
 import { getSettings, isDemo } from "@/lib/canes/data";
@@ -100,7 +100,17 @@ export async function getEstimateWithItems(id: string): Promise<EstimateWithItem
 export async function listCatalog(activeOnly = false): Promise<CatalogItem[]> {
   let rows: CatalogItem[];
   if (isDemo()) {
-    rows = [...DEMO_CATALOG];
+    rows = STANDARD_SERVICES.map((service, position) => ({
+      ...DEMO_CATALOG[0],
+      id: `demo-${service.key}`,
+      name: service.name,
+      description: null,
+      kind: "service",
+      service_category: service.key,
+      default_price_cents: 0,
+      active: true,
+      position,
+    }));
   } else {
     const { data, error } = await canesDb()
       .from("service_catalog")

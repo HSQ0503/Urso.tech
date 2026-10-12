@@ -25,7 +25,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { color, font, HIT, motion, radius, space, type } from "@/theme";
+import { color, font, HIT, motion, radius, space, type } from "@/canes-theme";
 import { ChromeFurniture } from "@/components/ledger";
 
 export type SheetField =

@@ -24,7 +24,7 @@ import {
 } from "@urso/types";
 import { useCalls, useThreads } from "@/queries";
 import { noticeFrom, usePullToRefresh, useRefetchOnFocus } from "@/query";
-import { color, font, HIT, radius, space, type } from "@/theme";
+import { color, font, HIT, radius, space, type } from "@/canes-theme";
 import { Avatar, ChromeBar, SearchStrip, listRowStyle, searchInputStyle } from "@/components/ledger";
 
 // The inbox — the business line, in the shape Sebastian drew (2026-09-13).
@@ -609,8 +609,13 @@ const styles = StyleSheet.create({
   },
   tabOn: { backgroundColor: color.brandFill },
   tabText: { fontFamily: font.bodySemi, fontSize: 15, color: color.ink },
-  tabTextOn: { color: color.surface },
-  tabHint: { ...type.small, color: color.muted, marginHorizontal: 20, marginTop: 8 },
+  tabTextOn: { color: "#ffffff" },
+  tabHint: {
+    ...type.small,
+    color: color.muted,
+    marginHorizontal: 20,
+    marginTop: 8,
+  },
 
   list: { paddingHorizontal: space.lg, paddingTop: space.md },
   listEmpty: { flexGrow: 1 },
@@ -629,7 +634,12 @@ const styles = StyleSheet.create({
   },
   rowMain: { flex: 1, minWidth: 0 },
   rowTop: { flexDirection: "row", alignItems: "center", gap: 7 },
-  waitingDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: color.brand },
+  waitingDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: color.brand,
+  },
   name: { ...type.title, color: color.ink, flexShrink: 1 },
   nameWaiting: { color: color.ink },
   when: {
@@ -639,7 +649,12 @@ const styles = StyleSheet.create({
     marginLeft: "auto",
   },
   whenWaiting: { color: color.brandDeep, fontFamily: font.bodyMedium },
-  previewRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 3 },
+  previewRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 3,
+  },
   preview: { ...type.small, color: color.muted, flexShrink: 1 },
   previewMissed: { color: color.brandDeep },
 
@@ -666,6 +681,11 @@ const styles = StyleSheet.create({
   buttonText: { ...type.body, color: color.ink },
   pressed: { backgroundColor: color.hover },
 
-  empty: { flex: 1, alignItems: "center", justifyContent: "center", padding: space.xl },
+  empty: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: space.xl,
+  },
   emptyText: { ...type.body, color: color.muted, textAlign: "center" },
 });

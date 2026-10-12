@@ -1,6 +1,6 @@
 import { Linking, Pressable, StyleSheet, Text } from "react-native";
 import { Feather } from "@expo/vector-icons";
-import { color, HIT, radius, space, type } from "@/theme";
+import { color, HIT, radius, space, type } from "@/canes-theme";
 
 // "Navigate" — the most phone-native action there is, and the owner app had it
 // in exactly zero places while the CREW app has had it all along

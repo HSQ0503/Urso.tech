@@ -53,7 +53,7 @@ import { Notice } from "@/components/notice";
 import { useToast } from "@/components/toast";
 import { keys, useCrews, useJobs } from "@/queries";
 import { noticeFrom, useAction, usePullToRefresh, useRefetchOnFocus } from "@/query";
-import { color, font, HIT, radius, space, type } from "@/theme";
+import { color, font, HIT, radius, space, type } from "@/canes-theme";
 
 // The tabs, in the order he works them: what still needs a day, what has one,
 // what is finished, what was called off. Unscheduled is the default because
@@ -140,13 +140,20 @@ function SwipeRow({
 
   const settle = (to: number) => {
     open.current = to !== 0;
-    Animated.spring(x, { toValue: to, useNativeDriver: true, bounciness: 0, speed: 24 }).start();
+    Animated.spring(x, {
+      toValue: to,
+      useNativeDriver: true,
+      bounciness: 0,
+      speed: 24,
+    }).start();
   };
 
   const pan = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (_, g) =>
-        enabledRef.current && Math.abs(g.dx) > 10 && Math.abs(g.dx) > Math.abs(g.dy) * 1.6,
+        enabledRef.current &&
+        Math.abs(g.dx) > 10 &&
+        Math.abs(g.dx) > Math.abs(g.dy) * 1.6,
       onPanResponderMove: (_, g) => {
         const base = open.current ? -REVEAL : 0;
         x.setValue(Math.min(0, Math.max(-REVEAL, base + g.dx)));
@@ -169,13 +176,19 @@ function SwipeRow({
             settle(0);
             onAction();
           }}
-          style={({ pressed }) => [styles.swipeAction, pressed && styles.swipeActionPressed]}
+          style={({ pressed }) => [
+            styles.swipeAction,
+            pressed && styles.swipeActionPressed,
+          ]}
         >
-          <Feather name="slash" size={18} color={color.surface} />
+          <Feather name="slash" size={18} color="#ffffff" />
           <Text style={styles.swipeActionText}>{actionLabel}</Text>
         </Pressable>
       </View>
-      <Animated.View style={{ transform: [{ translateX: x }] }} {...pan.panHandlers}>
+      <Animated.View
+        style={{ transform: [{ translateX: x }] }}
+        {...pan.panHandlers}
+      >
         {children}
       </Animated.View>
     </View>
@@ -220,8 +233,16 @@ function WorkOrderRow({
           icon="user"
           text={job.customer_name ?? "No customer on this job"}
           right={
-            <View style={[styles.pill, { backgroundColor: tone.fill, borderColor: tone.tint }]}>
-              <Text style={[styles.pillText, { color: tone.tint }]} numberOfLines={1}>
+            <View
+              style={[
+                styles.pill,
+                { backgroundColor: tone.fill, borderColor: tone.tint },
+              ]}
+            >
+              <Text
+                style={[styles.pillText, { color: tone.tint }]}
+                numberOfLines={1}
+              >
                 {JOB_STATUS_LABEL[job.status]}
               </Text>
             </View>
@@ -230,7 +251,11 @@ function WorkOrderRow({
 
         {crewName !== null ? <IconLine icon="users" text={crewName} /> : null}
         {when !== null ? <IconLine icon="calendar" text={when} /> : null}
-        {job.scheduling_conflict?<Text style={{color:color.danger}}>Crew overlap — review scheduled time</Text>:null}
+        {job.scheduling_conflict ? (
+          <Text style={{ color: color.danger }}>
+            Crew overlap — review scheduled time
+          </Text>
+        ) : null}
         {job.status === "canceled" && job.canceled_reason ? (
           <IconLine icon="slash" text={job.canceled_reason} />
         ) : null}
@@ -245,9 +270,12 @@ function WorkOrderRow({
           accessibilityRole="button"
           accessibilityLabel={`Schedule ${job.customer_name ?? "this job"}`}
           onPress={onSchedule}
-          style={({ pressed }) => [styles.scheduleButton, pressed && styles.scheduleButtonPressed]}
+          style={({ pressed }) => [
+            styles.scheduleButton,
+            pressed && styles.scheduleButtonPressed,
+          ]}
         >
-          <Feather name="calendar" size={16} color={color.surface} />
+          <Feather name="calendar" size={16} color="#ffffff" />
           <Text style={styles.scheduleButtonText}>Schedule</Text>
         </Pressable>
       ) : null}
@@ -415,7 +443,12 @@ const styles = StyleSheet.create({
   head: { gap: space.md, paddingTop: space.md, paddingBottom: space.sm },
   hint: { ...type.small, color: color.muted, paddingHorizontal: 16 },
 
-  filters: { flexDirection: "row", flexWrap: "wrap", gap: 7, paddingHorizontal: 16 },
+  filters: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 7,
+    paddingHorizontal: 16,
+  },
   filter: {
     minHeight: HIT,
     flexDirection: "row",
@@ -429,11 +462,21 @@ const styles = StyleSheet.create({
   },
   filterOn: { borderColor: color.brandEdge, backgroundColor: color.brandSoft },
   filterText: { ...type.small, fontFamily: font.bodySemi, color: color.muted },
-  filterCount: { fontFamily: font.monoMedium, fontSize: 12, color: color.faint },
+  filterCount: {
+    fontFamily: font.monoMedium,
+    fontSize: 12,
+    color: color.faint,
+  },
   filterTextOn: { color: color.brandDeep },
 
   swipeWrap: { backgroundColor: color.danger },
-  swipeUnder: { position: "absolute", top: 0, bottom: 0, right: 0, width: REVEAL },
+  swipeUnder: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    right: 0,
+    width: REVEAL,
+  },
   swipeAction: {
     flex: 1,
     alignItems: "center",
@@ -442,7 +485,11 @@ const styles = StyleSheet.create({
     backgroundColor: color.danger,
   },
   swipeActionPressed: { opacity: 0.85 },
-  swipeActionText: { ...type.small, fontFamily: font.bodySemi, color: color.surface },
+  swipeActionText: {
+    ...type.small,
+    fontFamily: font.bodySemi,
+    color: "#ffffff",
+  },
 
   // Markate's list is edge to edge with hairline separators rather than a stack
   // of floating cards — at four lines a row, cards would be all border.
@@ -490,7 +537,11 @@ const styles = StyleSheet.create({
     backgroundColor: color.brandFill,
   },
   scheduleButtonPressed: { backgroundColor: color.brandDown },
-  scheduleButtonText: { ...type.smaller, fontFamily: font.bodySemi, color: color.surface },
+  scheduleButtonText: {
+    ...type.smaller,
+    fontFamily: font.bodySemi,
+    color: "#ffffff",
+  },
 
   line: { flexDirection: "row", alignItems: "center", gap: 8 },
   lineText: { ...type.small, color: color.muted, flex: 1, minWidth: 0 },

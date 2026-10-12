@@ -1,0 +1,118 @@
+import {
+  color as baseColor,
+  type as baseType,
+  mark as baseMark,
+  shadow as baseShadow,
+} from "./theme";
+
+// Canes owns this palette. Other workspaces continue using theme.ts.
+export { HIT, motion, space } from "./theme";
+export const radius = { sheet: 16, lg: 10, md: 10, sm: 8, chip: 6 } as const;
+export const color = {
+  ...baseColor,
+  bg: "#11151b",
+  surface: "#1a2029",
+  ink: "#f1f4f8",
+  muted: "#b2bbc8",
+  faint: "#909dad",
+  line: "#303946",
+  lineStrong: "#465363",
+  hover: "#242d39",
+  brand: "#5eead4",
+  brandFill: "#0f766e",
+  brandDown: "#115e59",
+  brandDeep: "#5eead4",
+  brandSoft: "#163d3b",
+  brandWash: "#182f32",
+  brandEdgeSoft: "#28665f",
+  brandEdge: "#33887d",
+  brandEdgeStrong: "#49bbaa",
+  brandPressed: "#1d514c",
+  good: "#6ee7a0",
+  goodBg: "#183d30",
+  job: "#6ee7a0",
+  jobBg: "#183d30",
+  quote: "#c4b5fd",
+  quoteBg: "#312943",
+  danger: "#fda4af",
+  dangerBg: "#43262f",
+  dangerWash: "#32222a",
+  chrome: "#11151b",
+  chromeRaise: "#242d39",
+  chromeLine: "#303946",
+  chromeEdge: "#465363",
+  chromeInk: "#f1f4f8",
+  chromeMuted: "#b2bbc8",
+  chromeFaint: "#909dad",
+} as const;
+export const font = {
+  display: "Geist_600SemiBold",
+  displayMedium: "Geist_500Medium",
+  body: "Geist_400Regular",
+  bodyMedium: "Geist_500Medium",
+  bodySemi: "Geist_600SemiBold",
+  mono: "GeistMono_400Regular",
+  monoMedium: "GeistMono_500Medium",
+} as const;
+export const type = {
+  ...baseType,
+  display: {
+    fontFamily: font.bodySemi,
+    fontSize: 25,
+    lineHeight: 32,
+    letterSpacing: -0.3,
+  },
+  lockup: { fontFamily: font.bodySemi, fontSize: 27, letterSpacing: -0.3 },
+  chromeTitle: {
+    fontFamily: font.bodySemi,
+    fontSize: 23,
+    lineHeight: 30,
+    letterSpacing: -0.3,
+  },
+  wordmark: { fontFamily: font.bodySemi, fontSize: 19, letterSpacing: 0 },
+  heading: {
+    fontFamily: font.bodySemi,
+    fontSize: 19,
+    lineHeight: 25,
+    letterSpacing: 0,
+  },
+  title: { fontFamily: font.bodySemi, fontSize: 16, lineHeight: 22 },
+  titleLg: { fontFamily: font.bodySemi, fontSize: 17, lineHeight: 23 },
+  body: { fontFamily: font.body, fontSize: 15, lineHeight: 22 },
+  small: { fontFamily: font.body, fontSize: 13, lineHeight: 19 },
+  smaller: { fontFamily: font.body, fontSize: 12.5, lineHeight: 18 },
+  rule: {
+    fontFamily: font.bodyMedium,
+    fontSize: 13,
+    letterSpacing: 0,
+    textTransform: "none" as const,
+  },
+  ruleSm: {
+    fontFamily: font.bodyMedium,
+    fontSize: 12,
+    letterSpacing: 0,
+    textTransform: "none" as const,
+  },
+  micro: {
+    fontFamily: font.bodyMedium,
+    fontSize: 12,
+    letterSpacing: 0,
+    textTransform: "none" as const,
+  },
+  figure: { fontFamily: font.monoMedium, fontSize: 16, letterSpacing: 0 },
+  figureSm: { fontFamily: font.monoMedium, fontSize: 13 },
+  figureMd: { fontFamily: font.monoMedium, fontSize: 15 },
+  figureLg: { fontFamily: font.monoMedium, fontSize: 21 },
+} as const;
+export const mark = {
+  ...baseMark,
+  bleed: { ...baseMark.bleed, opacity: 0 },
+  bleedTall: { ...baseMark.bleedTall, opacity: 0 },
+  rail: { ...baseMark.rail, width: 0 },
+  railWide: { ...baseMark.railWide, width: 0 },
+};
+export const shadow = {
+  ...baseShadow,
+  card: { ...baseShadow.card, shadowOpacity: 0, elevation: 0 },
+  railGlow: { ...baseShadow.railGlow, shadowOpacity: 0 },
+};

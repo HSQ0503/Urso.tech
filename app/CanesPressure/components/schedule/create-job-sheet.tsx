@@ -16,6 +16,8 @@ import { PhoneInput } from "../phone-input";
 import { isCompleteWhen, SchedulePicker } from "../leads/schedule-picker";
 import { SheetShell } from "./sheet-shell";
 import { ServiceAreaField } from "../service-area-field";
+import { ServiceLinesEditor } from "../service-lines-editor";
+import { priceServices, type ServiceLineInput } from "@urso/types";
 import type { ServiceArea } from "@urso/types";
 
 // Manual-job sheet — the mobile FAB's "Job" path. Client-first: the name
@@ -48,7 +50,7 @@ export function CreateJobSheet({
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [jobName, setJobName] = useState("");
-  const [total, setTotal] = useState("");
+  const [lines, setLines] = useState<ServiceLineInput[]>([]);
   const [deposit, setDeposit] = useState("");
   const [depositMethod, setDepositMethod] = useState<PaymentMethod>("cash");
   const [jobAddress, setJobAddress] = useState("");
@@ -61,7 +63,10 @@ export function CreateJobSheet({
   const [pickSeq, setPickSeq] = useState(0);
   // What the last pick filled in — editing the name only clears fields the
   // pick wrote (never something Sebastian typed himself).
-  const applied = useRef<{ phone: string; address: string }>({ phone: "", address: "" });
+  const applied = useRef<{ phone: string; address: string }>({
+    phone: "",
+    address: "",
+  });
 
   // Compare phones by digits — the input shows "(561) 555-0118" while the
   // directory carries "+15615550118".
@@ -80,14 +85,20 @@ export function CreateJobSheet({
     setCustomerName(name);
     if (contact && name.trim() !== (contact.name ?? "").trim()) {
       setContact(null);
-      if (digits(customerPhone) === digits(applied.current.phone)) setCustomerPhone("");
+      if (digits(customerPhone) === digits(applied.current.phone))
+        setCustomerPhone("");
       if (jobAddress === applied.current.address) setJobAddress("");
       applied.current = { phone: "", address: "" };
       setPickSeq((n) => n + 1); // remount PhoneInput so a cleared phone shows empty
     }
   }
 
-  const cents = toCents(total);
+  let cents = 0;
+  try {
+    cents = priceServices(lines).totalCents;
+  } catch {
+    /* The form stays editable. */
+  }
   const depositCents = toCents(deposit);
   const canSubmit =
     customerName.trim().length > 0 &&
@@ -106,10 +117,12 @@ export function CreateJobSheet({
         customerPhone: customerPhone.trim() || undefined,
         jobName: jobName.trim(),
         totalCents: cents,
+        items: lines,
         depositCollectedCents: depositCents > 0 ? depositCents : undefined,
         depositMethod: depositCents > 0 ? depositMethod : undefined,
         jobAddress: jobAddress.trim() || undefined,
-        scheduledAtIso: scheduleNow && isCompleteWhen(when) ? etLocalToIso(when) : undefined,
+        scheduledAtIso:
+          scheduleNow && isCompleteWhen(when) ? etLocalToIso(when) : undefined,
         durationMinutes: scheduleNow ? duration : undefined,
         crewId: scheduleNow && crewId ? crewId : undefined,
       });
@@ -124,7 +137,9 @@ export function CreateJobSheet({
     <SheetShell title="New job" onClose={onClose}>
       <div className="space-y-3">
         <div>
-          <label className="cp-label" htmlFor="job-customer">Client name</label>
+          <label className="cp-label" htmlFor="job-customer">
+            Client name
+          </label>
           <CustomerPicker
             id="job-customer"
             customers={customers}
@@ -136,7 +151,9 @@ export function CreateJobSheet({
         </div>
 
         <div>
-          <label className="cp-label" htmlFor="job-phone">Phone (optional)</label>
+          <label className="cp-label" htmlFor="job-phone">
+            Phone (optional)
+          </label>
           <PhoneInput
             key={`${contact?.id ?? "new"}:${pickSeq}`}
             id="job-phone"
@@ -147,7 +164,9 @@ export function CreateJobSheet({
         </div>
 
         <div>
-          <label className="cp-label" htmlFor="job-name">Job</label>
+          <label className="cp-label" htmlFor="job-name">
+            Job
+          </label>
           <input
             id="job-name"
             className="cp-input"
@@ -157,28 +176,12 @@ export function CreateJobSheet({
           />
         </div>
 
-        <div>
-          <label className="cp-label" htmlFor="job-total">Total</label>
-          <div className="relative">
-            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[13px] text-[var(--cp-muted)]">
-              $
-            </span>
-            <input
-              id="job-total"
-              className="cp-input tabular-nums"
-              // Inline because .cp-input's padding is unlayered CSS and beats
-              // Tailwind's pl-*; the $ prefix needs the extra room.
-              style={{ paddingLeft: 24 }}
-              inputMode="decimal"
-              placeholder="450.00"
-              value={total}
-              onChange={(e) => setTotal(e.target.value)}
-            />
-          </div>
-        </div>
+        <ServiceLinesEditor lines={lines} onChange={setLines} />
 
         <div>
-          <label className="cp-label" htmlFor="job-deposit">Deposit already collected (optional)</label>
+          <label className="cp-label" htmlFor="job-deposit">
+            Deposit already collected (optional)
+          </label>
           <div className="relative">
             <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[13px] text-[var(--cp-muted)]">
               $
@@ -195,17 +198,19 @@ export function CreateJobSheet({
           </div>
           {depositCents > 0 && (
             <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-              {(Object.keys(PAYMENT_METHOD_LABEL) as PaymentMethod[]).map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  className="cp-slot"
-                  data-selected={m === depositMethod}
-                  onClick={() => setDepositMethod(m)}
-                >
-                  {PAYMENT_METHOD_LABEL[m]}
-                </button>
-              ))}
+              {(Object.keys(PAYMENT_METHOD_LABEL) as PaymentMethod[]).map(
+                (m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    className="cp-slot"
+                    data-selected={m === depositMethod}
+                    onClick={() => setDepositMethod(m)}
+                  >
+                    {PAYMENT_METHOD_LABEL[m]}
+                  </button>
+                ),
+              )}
             </div>
           )}
           {depositCents > cents && cents > 0 && (
@@ -215,14 +220,22 @@ export function CreateJobSheet({
           )}
           {depositCents > 0 && depositCents <= cents && (
             <p className="mt-1 text-[12px] text-[var(--cp-faint)]">
-              Goes in the ledger now — the invoice will bill {fmtMoney(cents - depositCents)}.
+              Goes in the ledger now — the invoice will bill{" "}
+              {fmtMoney(cents - depositCents)}.
             </p>
           )}
         </div>
 
         <div>
-          <ServiceAreaField value={serviceArea} onChange={setServiceArea} id="new-job-area" disabled={isPending} />
-          <label className="cp-label" htmlFor="job-address">Address (optional)</label>
+          <ServiceAreaField
+            value={serviceArea}
+            onChange={setServiceArea}
+            id="new-job-area"
+            disabled={isPending}
+          />
+          <label className="cp-label" htmlFor="job-address">
+            Address (optional)
+          </label>
           <AddressInput
             id="job-address"
             placeholder="812 Palmetto Dr, Lake Worth"
@@ -231,7 +244,10 @@ export function CreateJobSheet({
           />
         </div>
 
-        <p className="text-sm">After saving, use Make recurring on the work order to choose its repeat date and time.</p>
+        <p className="text-sm">
+          After saving, use Make recurring on the work order to choose its
+          repeat date and time.
+        </p>
 
         <label className="flex cursor-pointer items-center gap-2 text-[13px]">
           <input
@@ -265,7 +281,9 @@ export function CreateJobSheet({
             </div>
 
             <div>
-              <label className="cp-label" htmlFor="job-crew">Crew</label>
+              <label className="cp-label" htmlFor="job-crew">
+                Crew
+              </label>
               <select
                 id="job-crew"
                 className="cp-select"
@@ -274,7 +292,9 @@ export function CreateJobSheet({
               >
                 <option value="">Unassigned</option>
                 {crews.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
                 ))}
               </select>
             </div>
@@ -304,7 +324,12 @@ export function CreateJobSheet({
                 ? `Create job (${fmtMoney(cents)})`
                 : "Create job"}
           </button>
-          <button type="button" className="cp-btn" disabled={isPending} onClick={onClose}>
+          <button
+            type="button"
+            className="cp-btn"
+            disabled={isPending}
+            onClick={onClose}
+          >
             Cancel
           </button>
         </div>

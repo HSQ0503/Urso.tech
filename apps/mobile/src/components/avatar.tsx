@@ -1,5 +1,5 @@
 import { StyleSheet, Text, View } from "react-native";
-import { color, font } from "@/theme";
+import { color, font } from "@/canes-theme";
 
 // The person mark. There are no customer photos in the data model, so identity
 // is a monogram — Fraunces initials on the brand-soft wash, hairline-bordered

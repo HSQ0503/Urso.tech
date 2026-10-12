@@ -1,4 +1,5 @@
-import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
+import { SQUARE_API_BASE, SQUARE_ENV, SQUARE_VERSION } from "./square-config";
+import { invoiceCardAuthorization } from "./square-cards";import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { squareConfigured, squarePaymentsReady, canesConfigured, canesDb } from "@/lib/canes/supabase";
 import { getInvoice, getInvoiceBySquareId, getInvoiceItems, getInvoicePayments } from "@/lib/canes/invoices";
 import { pushDepositReceived, pushInvoicePaid, pushPaymentIssue } from "@/lib/canes/push-events";
@@ -24,14 +25,10 @@ import type { Estimate, Invoice, InvoiceItem } from "@/lib/canes/types";
 //     server-computed total; a mismatch is recorded but flagged, never auto-paid
 //   • status flips are TOCTOU-safe (conditional claim on the prior status)
 
-const SQUARE_ENV = process.env.CANES_SQUARE_ENV ?? "production";
-const SQUARE_API_BASE =
-  SQUARE_ENV === "sandbox"
-    ? "https://connect.squareupsandbox.com"
-    : "https://connect.squareup.com";
-// Pin the API version Square evaluates the request against.
-const SQUARE_VERSION = "2026-07-15";
-const APP_URL = (process.env.NEXT_PUBLIC_APP_URL ?? "https://urso.ws").replace(/\/$/, "");
+const APP_URL = (process.env.NEXT_PUBLIC_APP_URL ?? "https://urso.ws").replace(
+  /\/$/,
+  "",
+);
 const POSTGRES_INT_MAX = 2_147_483_647;
 
 function validPaymentCents(value: number): boolean {
@@ -483,7 +480,8 @@ export async function createSquareInvoice(
       hostedUrl: null,
       squareInvoiceId: null,
       squareOrderId: null,
-      error: "Square payments are not ready. Configure the webhook signature key and canonical HTTPS app URL before publishing a charge page.",
+      error:
+        "Square payments are not ready. Configure the webhook signature key and canonical HTTPS app URL before publishing a charge page.",
     };
   }
   const accessToken = process.env.CANES_SQUARE_ACCESS_TOKEN as string;
@@ -497,27 +495,40 @@ export async function createSquareInvoice(
   };
 
   try {
-    // 0. Customer profile — Square requires primary_recipient.customer_id (a
-    // real customer id, not a bare email) before an invoice can be published.
-    const [firstName, ...restName] = (invoice.customer_name ?? "").trim().split(/\s+/);
-    const custRes = await fetch(`${SQUARE_API_BASE}/v2/customers`, {
-      method: "POST",
-      headers,
-      signal: AbortSignal.timeout(8_000),
-      body: JSON.stringify({
-        idempotency_key: `customer:${invoice.id}:${attemptId}`,
-        given_name: firstName || "Customer",
-        family_name: restName.join(" ") || undefined,
-        email_address: invoice.customer_email ?? undefined,
-        phone_number: invoice.customer_phone ?? undefined,
-        reference_id: invoice.contact_id ?? invoice.lead_id ?? undefined,
-      }),
-    });
-    const custJson = (await custRes.json()) as Record<string, unknown>;
-    if (!custRes.ok) {
-      return { hostedUrl: null, squareInvoiceId: null, squareOrderId: null, error: squareErr(custJson, custRes.status) };
+    const cardAuthorization = await invoiceCardAuthorization(invoice);
+    let customerId: string | undefined = cardAuthorization?.customerId;
+    if (!customerId) {
+      // 0. Customer profile — Square requires primary_recipient.customer_id (a
+      // real customer id, not a bare email) before an invoice can be published.
+      const [firstName, ...restName] = (invoice.customer_name ?? "")
+        .trim()
+        .split(/\s+/);
+      const custRes = await fetch(`${SQUARE_API_BASE}/v2/customers`, {
+        method: "POST",
+        headers,
+        signal: AbortSignal.timeout(8_000),
+        body: JSON.stringify({
+          idempotency_key: `customer:${invoice.id}:${attemptId}`,
+          given_name: firstName || "Customer",
+          family_name: restName.join(" ") || undefined,
+          email_address: invoice.customer_email ?? undefined,
+          phone_number: invoice.customer_phone ?? undefined,
+          reference_id: invoice.contact_id ?? invoice.lead_id ?? undefined,
+        }),
+      });
+      const custJson = (await custRes.json()) as Record<string, unknown>;
+      if (!custRes.ok) {
+        return {
+          hostedUrl: null,
+          squareInvoiceId: null,
+          squareOrderId: null,
+          error: squareErr(custJson, custRes.status),
+        };
+      }
+      customerId = ((custJson.customer ?? {}) as Record<string, unknown>).id as
+        | string
+        | undefined;
     }
-    const customerId = ((custJson.customer ?? {}) as Record<string, unknown>).id as string | undefined;
 
     // 1. Order with the billed line items. Square Money = amount in cents.
     // The order must collect EXACTLY the balance due — total_cents already
@@ -531,7 +542,9 @@ export async function createSquareInvoice(
     const squareLineSum =
       lineItems.length > 0
         ? lineItems.reduce(
-            (sum, it) => sum + Math.round(Math.round(it.unit_price_cents) * (it.quantity || 1)),
+            (sum, it) =>
+              sum +
+              Math.round(Math.round(it.unit_price_cents) * (it.quantity || 1)),
             0,
           )
         : targetCents;
@@ -539,8 +552,11 @@ export async function createSquareInvoice(
     const surchargeCents = Math.max(0, targetCents - squareLineSum);
     let creditLabel = "Payments & credits";
     if (creditCents > 0) {
-      const completed = (await getInvoicePayments(invoice.id)).filter((p) => p.status === "completed");
-      if (completed.some((p) => p.kind === "deposit")) creditLabel = "Deposit received";
+      const completed = (await getInvoicePayments(invoice.id)).filter(
+        (p) => p.status === "completed",
+      );
+      if (completed.some((p) => p.kind === "deposit"))
+        creditLabel = "Deposit received";
     }
     const orderRes = await fetch(`${SQUARE_API_BASE}/v2/orders`, {
       method: "POST",
@@ -575,7 +591,10 @@ export async function createSquareInvoice(
                   {
                     name: "Adjustment",
                     quantity: "1",
-                    base_price_money: { amount: surchargeCents, currency: "USD" },
+                    base_price_money: {
+                      amount: surchargeCents,
+                      currency: "USD",
+                    },
                   },
                 ]
               : []),
@@ -597,17 +616,29 @@ export async function createSquareInvoice(
     });
     const orderJson = (await orderRes.json()) as Record<string, unknown>;
     if (!orderRes.ok) {
-      return { hostedUrl: null, squareInvoiceId: null, squareOrderId: null, error: squareErr(orderJson, orderRes.status) };
+      return {
+        hostedUrl: null,
+        squareInvoiceId: null,
+        squareOrderId: null,
+        error: squareErr(orderJson, orderRes.status),
+      };
     }
     const order = (orderJson.order ?? {}) as Record<string, unknown>;
     const orderId = order.id as string | undefined;
     if (!orderId) {
-      return { hostedUrl: null, squareInvoiceId: null, squareOrderId: null, error: "Square order missing id" };
+      return {
+        hostedUrl: null,
+        squareInvoiceId: null,
+        squareOrderId: null,
+        error: "Square order missing id",
+      };
     }
 
     // 2. Draft invoice on the order — card payment on receipt, due today (Square
     // requires a today-or-future due date), delivered by us (SHARE_MANUALLY).
-    const dueDate = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+    const dueDate = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/New_York",
+    }).format(new Date());
     const draftRes = await fetch(`${SQUARE_API_BASE}/v2/invoices`, {
       method: "POST",
       headers,
@@ -618,44 +649,73 @@ export async function createSquareInvoice(
           location_id: locationId,
           order_id: orderId,
           invoice_number: invoice.number,
-          delivery_method: "SHARE_MANUALLY", // we deliver the link via our own SMS/email
+          delivery_method: cardAuthorization ? "EMAIL" : "SHARE_MANUALLY",
           accepted_payment_methods: { card: true },
           payment_requests: [
             {
               request_type: "BALANCE",
               due_date: dueDate,
               tipping_enabled: false,
-              automatic_payment_source: "NONE",
+              automatic_payment_source: cardAuthorization
+                ? "CARD_ON_FILE"
+                : "NONE",
+              ...(cardAuthorization
+                ? { card_id: cardAuthorization.cardId }
+                : {}),
             },
           ],
-          ...(customerId ? { primary_recipient: { customer_id: customerId } } : {}),
+          ...(customerId
+            ? { primary_recipient: { customer_id: customerId } }
+            : {}),
         },
       }),
     });
     const draftJson = (await draftRes.json()) as Record<string, unknown>;
     if (!draftRes.ok) {
-      return { hostedUrl: null, squareInvoiceId: null, squareOrderId: orderId, error: squareErr(draftJson, draftRes.status) };
+      return {
+        hostedUrl: null,
+        squareInvoiceId: null,
+        squareOrderId: orderId,
+        error: squareErr(draftJson, draftRes.status),
+      };
     }
     const draft = (draftJson.invoice ?? {}) as Record<string, unknown>;
     const squareInvoiceId = draft.id as string | undefined;
     const version = draft.version as number | undefined;
     if (!squareInvoiceId) {
-      return { hostedUrl: null, squareInvoiceId: null, squareOrderId: orderId, error: "Square invoice missing id" };
+      return {
+        hostedUrl: null,
+        squareInvoiceId: null,
+        squareOrderId: orderId,
+        error: "Square invoice missing id",
+      };
     }
 
     // 3. Publish so the customer gets the PCI-compliant hosted pay page.
-    const pubRes = await fetch(`${SQUARE_API_BASE}/v2/invoices/${squareInvoiceId}/publish`, {
-      method: "POST",
-      headers,
-      signal: AbortSignal.timeout(8_000),
-      body: JSON.stringify({ idempotency_key: `publish:${invoice.id}:${attemptId}`, version: version ?? 0 }),
-    });
+    const pubRes = await fetch(
+      `${SQUARE_API_BASE}/v2/invoices/${squareInvoiceId}/publish`,
+      {
+        method: "POST",
+        headers,
+        signal: AbortSignal.timeout(8_000),
+        body: JSON.stringify({
+          idempotency_key: `publish:${invoice.id}:${attemptId}`,
+          version: version ?? 0,
+        }),
+      },
+    );
     const pubJson = (await pubRes.json()) as Record<string, unknown>;
     if (!pubRes.ok) {
-      return { hostedUrl: null, squareInvoiceId, squareOrderId: orderId, error: squareErr(pubJson, pubRes.status) };
+      return {
+        hostedUrl: null,
+        squareInvoiceId,
+        squareOrderId: orderId,
+        error: squareErr(pubJson, pubRes.status),
+      };
     }
     const published = (pubJson.invoice ?? {}) as Record<string, unknown>;
-    const hostedUrl = typeof published.public_url === "string" ? published.public_url : null;
+    const hostedUrl =
+      typeof published.public_url === "string" ? published.public_url : null;
 
     return { hostedUrl, squareInvoiceId, squareOrderId: orderId };
   } catch (err) {

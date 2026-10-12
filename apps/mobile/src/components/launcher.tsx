@@ -30,7 +30,7 @@ import {
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { color, font, HIT, radius, space, type } from "@/theme";
+import { color, font, HIT, radius, space, type } from "@/canes-theme";
 
 type IconName = React.ComponentProps<typeof Feather>["name"];
 
@@ -347,7 +347,7 @@ const styles = StyleSheet.create({
     fontFamily: font.monoMedium,
     fontSize: 10,
     lineHeight: 13,
-    color: color.surface,
+    color: "#ffffff",
     fontVariant: ["tabular-nums"],
   },
 

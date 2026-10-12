@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { ServiceAreaField } from "../service-area-field";
-import type { ServiceArea } from "@urso/types";
+import type { ServiceArea, ServiceCategory } from "@urso/types";
 import { useRouter } from "next/navigation";
 import { useMemo, useRef, useState, useTransition } from "react";
 import { Check, Plus, Trash2 } from "lucide-react";
@@ -15,7 +15,6 @@ import {
   saveEstimateItems,
   sendEstimate,
   updateEstimate,
-  upsertCatalogItem,
   type ActionResult,
 } from "@/app/CanesPressure/actions";
 import {
@@ -45,6 +44,8 @@ import { isCompleteWhen, SchedulePicker } from "../leads/schedule-picker";
 // Read-only once the estimate leaves draft (approved/sent estimates are locked).
 
 type DraftLine = {
+  serviceLineId?: string;
+  serviceCategory?: ServiceCategory | null;
   key: string;
   catalogId: string | null;
   name: string;
@@ -92,13 +93,17 @@ function inputToCents(v: string): number {
 function itemToDraft(it: EstimateItem): DraftLine {
   return {
     key: it.id,
+    serviceLineId: it.service_line_id,
+    serviceCategory: it.service_category,
     catalogId: it.catalog_id,
     name: it.name,
     description: it.description,
     kind: it.kind,
     quantity: it.quantity,
     unitPriceCents: it.unit_price_cents,
-    discountCents: it.discount_cents, discountMode: it.discount_mode, discountValue: it.discount_value ?? it.discount_cents,
+    discountCents: it.discount_cents,
+    discountMode: it.discount_mode,
+    discountValue: it.discount_value ?? it.discount_cents,
     taxable: it.taxable,
     isOption: it.is_option,
     isMandatory: it.is_mandatory,
@@ -109,6 +114,7 @@ function catalogToDraft(c: CatalogItem): DraftLine {
   return {
     key: newKey(),
     catalogId: c.id,
+    serviceCategory: c.service_category,
     name: c.name,
     description: c.description,
     kind: c.kind,
@@ -243,19 +249,27 @@ export function EstimateBuilder({
   const [customerPhone, setCustomerPhone] = useState(seed.customerPhone);
   const [customerEmail, setCustomerEmail] = useState(seed.customerEmail);
   const [jobAddress, setJobAddress] = useState(seed.jobAddress);
-  const [serviceArea, setServiceArea] = useState<ServiceArea | null>(estimate?.service_area ?? null);
+  const [serviceArea, setServiceArea] = useState<ServiceArea | null>(
+    estimate?.service_area ?? null,
+  );
   // Client link (Sebastian's client-first ask): a picker hit binds contact_id;
   // typing a different name unbinds it and reads as a new client. pickedName
   // tracks the name the current link belongs to.
   const [contactId, setContactId] = useState(seed.contactId);
   const [pickSeq, setPickSeq] = useState(0);
-  const pickedName = useRef<string | null>(seed.contactId ? seed.customerName : null);
+  const pickedName = useRef<string | null>(
+    seed.contactId ? seed.customerName : null,
+  );
   // What the current link filled in — a seeded link's fields count too, so
   // unlinking a seeded client never leaves their phone/email/address behind
   // on a "new" client (ensureContact would silently re-link them by phone).
   const appliedPick = useRef<{ phone: string; email: string; address: string }>(
     seed.contactId
-      ? { phone: seed.customerPhone, email: seed.customerEmail, address: seed.jobAddress }
+      ? {
+          phone: seed.customerPhone,
+          email: seed.customerEmail,
+          address: seed.jobAddress,
+        }
       : { phone: "", email: "", address: "" },
   );
 
@@ -271,7 +285,11 @@ export function EstimateBuilder({
     setCustomerPhone(hit.phone ?? "");
     setCustomerEmail(hit.email ?? "");
     setJobAddress(hit.address ?? "");
-    appliedPick.current = { phone: hit.phone ?? "", email: hit.email ?? "", address: hit.address ?? "" };
+    appliedPick.current = {
+      phone: hit.phone ?? "",
+      email: hit.email ?? "",
+      address: hit.address ?? "",
+    };
   }
 
   function changeCustomerName(name: string) {
@@ -280,7 +298,8 @@ export function EstimateBuilder({
       setContactId(null);
       pickedName.current = null;
       // Only clear what the link wrote — never something typed by hand.
-      if (digits(customerPhone) === digits(appliedPick.current.phone)) setCustomerPhone("");
+      if (digits(customerPhone) === digits(appliedPick.current.phone))
+        setCustomerPhone("");
       if (customerEmail === appliedPick.current.email) setCustomerEmail("");
       if (jobAddress === appliedPick.current.address) setJobAddress("");
       appliedPick.current = { phone: "", email: "", address: "" };
@@ -293,13 +312,16 @@ export function EstimateBuilder({
   const [internalNotes, setInternalNotes] = useState(seed.internalNotes);
   const [adjustmentCents, setAdjustmentCents] = useState(seed.adjustmentCents);
   const [depositPercent, setDepositPercent] = useState(seed.depositPercent);
-  const [customDeposit, setCustomDeposit] = useState(!depositPresets.includes(seed.depositPercent));
+  const [customDeposit, setCustomDeposit] = useState(
+    !depositPresets.includes(seed.depositPercent),
+  );
   const [expiry, setExpiry] = useState(isoToEtNaive(seed.expiresAtIso));
-  const [lines, setLines] = useState<DraftLine[]>(() => initialItems.map(itemToDraft));
+  const [lines, setLines] = useState<DraftLine[]>(() =>
+    initialItems.map(itemToDraft),
+  );
   const [channelChoice, setChannelChoice] = useState<ChannelChoice>("both");
   const [override, setOverride] = useState<SendOverride>(EMPTY_OVERRIDE);
   // Keys of custom lines already saved to the catalog this session (for feedback).
-  const [savedToCatalog, setSavedToCatalog] = useState<Record<string, boolean>>({});
 
   const totals = useMemo(() => {
     let subtotal = 0;
@@ -324,6 +346,7 @@ export function EstimateBuilder({
       {
         key: newKey(),
         catalogId: null,
+        serviceCategory: "custom",
         name: "",
         description: null,
         kind: "service",
@@ -338,7 +361,9 @@ export function EstimateBuilder({
   }
 
   function patchLine(key: string, patch: Partial<DraftLine>) {
-    setLines((prev) => prev.map((l) => (l.key === key ? { ...l, ...patch } : l)));
+    setLines((prev) =>
+      prev.map((l) => (l.key === key ? { ...l, ...patch } : l)),
+    );
   }
 
   function removeLine(key: string) {
@@ -350,12 +375,16 @@ export function EstimateBuilder({
       .filter((l) => l.name.trim())
       .map((l) => ({
         catalogId: l.catalogId,
+        serviceLineId: l.serviceLineId,
+        serviceCategory: l.serviceCategory,
         name: l.name.trim(),
         description: l.description,
         kind: l.kind,
         quantity: l.quantity,
         unitPriceCents: l.unitPriceCents,
-        discountCents: Math.round(l.quantity*l.unitPriceCents)-lineTotal(l), discountMode:l.discountMode??"amount", discountValue:l.discountValue??l.discountCents,
+        discountCents: Math.round(l.quantity * l.unitPriceCents) - lineTotal(l),
+        discountMode: l.discountMode ?? "amount",
+        discountValue: l.discountValue ?? l.discountCents,
         taxable: l.taxable,
         isOption: type === "options" ? l.isOption : false,
         isMandatory: l.isMandatory,
@@ -408,7 +437,10 @@ export function EstimateBuilder({
     // Never send contactId in the follow-up patch: for a new client the state
     // is null, and it would wipe the contact link createEstimate just resolved
     // server-side (name dedupe / ensureContact).
-    const upd = await updateEstimate(created.estimateId, { ...detailsPatch(), contactId: undefined });
+    const upd = await updateEstimate(created.estimateId, {
+      ...detailsPatch(),
+      contactId: undefined,
+    });
     if (!upd.ok) return upd;
     const items = await saveEstimateItems(created.estimateId, itemsPayload());
     if (!items.ok) return items;
@@ -465,26 +497,12 @@ export function EstimateBuilder({
     });
   }
 
-  // Save a custom (no catalog_id) line into the reusable service catalog.
-  function handleSaveToCatalog(l: DraftLine) {
-    const name = l.name.trim();
-    if (!name) return;
-    startTransition(async () => {
-      const res = await upsertCatalogItem({
-        name,
-        kind: l.kind,
-        defaultPriceCents: l.unitPriceCents,
-        taxable: l.taxable,
-      });
-      if (res.ok) {
-        setSavedToCatalog((prev) => ({ ...prev, [l.key]: true }));
-      } else {
-        setNotice(res.notice ?? "Could not save to services.");
-      }
-    });
-  }
-
-  const activeCatalog = catalog.filter((c) => c.active);
+  const activeCatalog = catalog.filter(
+    (c) =>
+      c.active &&
+      (c.kind === "product" ||
+        (c.service_category && c.service_category !== "custom")),
+  );
   const disabled = isPending || readOnly;
 
   // Which channels are reachable, and what the picker's choice resolves to. When
@@ -524,9 +542,16 @@ export function EstimateBuilder({
       <section className="cp-card p-4">
         <h2 className="text-[15px] font-semibold">Customer &amp; job</h2>
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          <ServiceAreaField value={serviceArea} onChange={setServiceArea} disabled={disabled} id="estimate-area" />
+          <ServiceAreaField
+            value={serviceArea}
+            onChange={setServiceArea}
+            disabled={disabled}
+            id="estimate-area"
+          />
           <div>
-            <label className="cp-label" htmlFor="est-name">Client name</label>
+            <label className="cp-label" htmlFor="est-name">
+              Client name
+            </label>
             <CustomerPicker
               id="est-name"
               customers={customers}
@@ -538,7 +563,9 @@ export function EstimateBuilder({
             />
           </div>
           <div>
-            <label className="cp-label" htmlFor="est-phone">Phone</label>
+            <label className="cp-label" htmlFor="est-phone">
+              Phone
+            </label>
             <PhoneInput
               key={`${contactId ?? "manual"}:${pickSeq}`}
               id="est-phone"
@@ -548,7 +575,9 @@ export function EstimateBuilder({
             />
           </div>
           <div>
-            <label className="cp-label" htmlFor="est-email">Email (optional)</label>
+            <label className="cp-label" htmlFor="est-email">
+              Email (optional)
+            </label>
             <input
               id="est-email"
               type="email"
@@ -560,7 +589,9 @@ export function EstimateBuilder({
             />
           </div>
           <div>
-            <label className="cp-label" htmlFor="est-jobname">Job name</label>
+            <label className="cp-label" htmlFor="est-jobname">
+              Job name
+            </label>
             <input
               id="est-jobname"
               className="cp-input"
@@ -571,7 +602,9 @@ export function EstimateBuilder({
             />
           </div>
           <div className="sm:col-span-2">
-            <label className="cp-label" htmlFor="est-address">Job address</label>
+            <label className="cp-label" htmlFor="est-address">
+              Job address
+            </label>
             <AddressInput
               id="est-address"
               value={jobAddress}
@@ -600,14 +633,20 @@ export function EstimateBuilder({
           <h2 className="text-[15px] font-semibold">Add services</h2>
           {activeCatalog.length === 0 ? (
             <p className="mt-1 text-[12px] text-[var(--cp-faint)]">
-              No saved services yet — add a line below, or set up your service list in{" "}
-              <Link href="/CanesPressure/estimates/items" className="font-medium text-[var(--cp-brand-fill)] hover:underline">
+              No saved services yet — add a line below, or set up your service
+              list in{" "}
+              <Link
+                href="/CanesPressure/estimates/items"
+                className="font-medium text-[var(--cp-brand-fill)] hover:underline"
+              >
                 Settings
               </Link>
               .
             </p>
           ) : (
-            <p className="mt-1 text-[12px] text-[var(--cp-faint)]">Tap to add a line.</p>
+            <p className="mt-1 text-[12px] text-[var(--cp-faint)]">
+              Tap to add a line.
+            </p>
           )}
           {/* Mobile wraps the tap-to-add chips (thumb-friendly, no hidden
               off-screen services); desktop keeps the single-row scroll strip. */}
@@ -621,7 +660,9 @@ export function EstimateBuilder({
                 disabled={disabled}
               >
                 {c.name}
-                <span className="cp-slot-sub tabular-nums">{fmtMoney(c.default_price_cents)}</span>
+                <span className="cp-slot-sub tabular-nums">
+                  {fmtMoney(c.default_price_cents)}
+                </span>
               </button>
             ))}
             <button
@@ -631,7 +672,7 @@ export function EstimateBuilder({
               disabled={disabled}
             >
               <Plus size={15} strokeWidth={2} />
-              <span className="cp-slot-sub">Custom</span>
+              <span className="cp-slot-sub">Add Custom Service</span>
             </button>
           </div>
         </section>
@@ -656,7 +697,9 @@ export function EstimateBuilder({
                       <input
                         className="cp-input flex-1"
                         value={l.name}
-                        onChange={(e) => patchLine(l.key, { name: e.target.value })}
+                        onChange={(e) =>
+                          patchLine(l.key, { name: e.target.value })
+                        }
                         disabled={disabled}
                         placeholder="Service name"
                         aria-label="Line name"
@@ -675,7 +718,9 @@ export function EstimateBuilder({
                     </div>
                     <div className="grid grid-cols-[1fr_1.4fr_auto] items-center gap-2">
                       <div>
-                        <label className="cp-label" htmlFor={`qty-${l.key}`}>Qty</label>
+                        <label className="cp-label" htmlFor={`qty-${l.key}`}>
+                          Qty
+                        </label>
                         <input
                           id={`qty-${l.key}`}
                           type="number"
@@ -684,12 +729,18 @@ export function EstimateBuilder({
                           step="0.5"
                           className="cp-input tabular-nums"
                           value={l.quantity}
-                          onChange={(e) => patchLine(l.key, { quantity: Number(e.target.value) || 0 })}
+                          onChange={(e) =>
+                            patchLine(l.key, {
+                              quantity: Number(e.target.value) || 0,
+                            })
+                          }
                           disabled={disabled}
                         />
                       </div>
                       <div>
-                        <label className="cp-label" htmlFor={`price-${l.key}`}>Unit price</label>
+                        <label className="cp-label" htmlFor={`price-${l.key}`}>
+                          Unit price
+                        </label>
                         <input
                           id={`price-${l.key}`}
                           type="text"
@@ -708,7 +759,9 @@ export function EstimateBuilder({
                         <span className="cp-label">Line</span>
                         <p
                           className={`min-h-[38px] pt-2 text-[15px] font-semibold tabular-nums ${
-                            included ? "" : "text-[var(--cp-faint)] line-through"
+                            included
+                              ? ""
+                              : "text-[var(--cp-faint)] line-through"
                           }`}
                         >
                           {fmtMoney(lineTotal(l))}
@@ -724,7 +777,9 @@ export function EstimateBuilder({
                             onChange={(e) =>
                               patchLine(l.key, {
                                 isOption: e.target.checked,
-                                isMandatory: e.target.checked ? l.isMandatory : false,
+                                isMandatory: e.target.checked
+                                  ? l.isMandatory
+                                  : false,
                               })
                             }
                             disabled={disabled}
@@ -736,7 +791,11 @@ export function EstimateBuilder({
                             <input
                               type="checkbox"
                               checked={l.isMandatory}
-                              onChange={(e) => patchLine(l.key, { isMandatory: e.target.checked })}
+                              onChange={(e) =>
+                                patchLine(l.key, {
+                                  isMandatory: e.target.checked,
+                                })
+                              }
                               disabled={disabled}
                             />
                             Required
@@ -744,26 +803,47 @@ export function EstimateBuilder({
                         )}
                       </div>
                     )}
-                    {/* Custom line (no catalog match) → offer to save it for reuse. */}
-                    {!readOnly?<div className="grid grid-cols-2 gap-3"><label className="cp-label">Line discount<select className="cp-select" value={l.discountMode??"amount"} onChange={e=>patchLine(l.key,{discountMode:e.target.value==="percent"?"percent":"amount"})}><option value="amount">Dollar amount</option><option value="percent">Percent</option></select></label><label className="cp-label">Discount value<input className="cp-input" type="number" min="0" step="0.01" defaultValue={(l.discountValue??l.discountCents)/100} onChange={e=>patchLine(l.key,{discountValue:Math.round(Number(e.target.value)*100)})}/></label></div>:null}
-                    {!readOnly && l.catalogId === null && l.name.trim() && l.unitPriceCents > 0 && (
-                      <div className="pt-0.5">
-                        {savedToCatalog[l.key] ? (
-                          <span className="inline-flex items-center gap-1 text-[12.5px] font-medium text-[var(--cp-good)]">
-                            <Check size={13} strokeWidth={2} /> Saved to your services
-                          </span>
-                        ) : (
-                          <button
-                            type="button"
-                            className="text-[12.5px] font-medium text-[var(--cp-brand-fill)] hover:underline disabled:opacity-45"
-                            onClick={() => handleSaveToCatalog(l)}
-                            disabled={disabled}
+                    {!readOnly ? (
+                      <div className="grid grid-cols-2 gap-3">
+                        <label className="cp-label">
+                          Line discount
+                          <select
+                            className="cp-select"
+                            value={l.discountMode ?? "amount"}
+                            onChange={(e) =>
+                              patchLine(l.key, {
+                                discountMode:
+                                  e.target.value === "percent"
+                                    ? "percent"
+                                    : "amount",
+                              })
+                            }
                           >
-                            Save to my services
-                          </button>
-                        )}
+                            <option value="amount">Dollar amount</option>
+                            <option value="percent">Percent</option>
+                          </select>
+                        </label>
+                        <label className="cp-label">
+                          Discount value
+                          <input
+                            className="cp-input"
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            defaultValue={
+                              (l.discountValue ?? l.discountCents) / 100
+                            }
+                            onChange={(e) =>
+                              patchLine(l.key, {
+                                discountValue: Math.round(
+                                  Number(e.target.value) * 100,
+                                ),
+                              })
+                            }
+                          />
+                        </label>
                       </div>
-                    )}
+                    ) : null}
                   </div>
                 </li>
               );
@@ -839,7 +919,9 @@ export function EstimateBuilder({
                 className="cp-input w-20 tabular-nums"
                 value={depositPercent}
                 onChange={(e) =>
-                  setDepositPercent(Math.max(0, Math.min(100, Number(e.target.value) || 0)))
+                  setDepositPercent(
+                    Math.max(0, Math.min(100, Number(e.target.value) || 0)),
+                  )
                 }
                 disabled={disabled}
                 aria-label="Custom deposit percent"
@@ -850,7 +932,10 @@ export function EstimateBuilder({
         </div>
         {depositPercent > 0 && (
           <p className="mt-2.5 text-[13px] tabular-nums text-[var(--cp-muted)]">
-            Deposit due: <span className="font-semibold text-[var(--cp-ink)]">{fmtMoney(totals.deposit)}</span>
+            Deposit due:{" "}
+            <span className="font-semibold text-[var(--cp-ink)]">
+              {fmtMoney(totals.deposit)}
+            </span>
           </p>
         )}
       </section>
@@ -860,7 +945,9 @@ export function EstimateBuilder({
         <h2 className="text-[15px] font-semibold">Message &amp; terms</h2>
         <div className="mt-3 space-y-3">
           <div>
-            <label className="cp-label" htmlFor="est-message">Message to customer</label>
+            <label className="cp-label" htmlFor="est-message">
+              Message to customer
+            </label>
             <textarea
               id="est-message"
               rows={3}
@@ -871,7 +958,9 @@ export function EstimateBuilder({
             />
           </div>
           <div>
-            <label className="cp-label" htmlFor="est-terms">Terms</label>
+            <label className="cp-label" htmlFor="est-terms">
+              Terms
+            </label>
             <textarea
               id="est-terms"
               rows={4}
@@ -882,7 +971,9 @@ export function EstimateBuilder({
             />
           </div>
           <div>
-            <label className="cp-label" htmlFor="est-notes">Internal notes (private)</label>
+            <label className="cp-label" htmlFor="est-notes">
+              Internal notes (private)
+            </label>
             <textarea
               id="est-notes"
               rows={2}
@@ -946,7 +1037,11 @@ export function EstimateBuilder({
                 <Check size={14} strokeWidth={2} /> Saved
               </span>
             )}
-            {notice && <span className="text-[12.5px] text-[var(--cp-warn)]">{notice}</span>}
+            {notice && (
+              <span className="text-[12.5px] text-[var(--cp-warn)]">
+                {notice}
+              </span>
+            )}
           </div>
         </div>
       )}

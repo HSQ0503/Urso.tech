@@ -32,7 +32,7 @@ import {
   type TechnicianJobItem,
 } from "@urso/types";
 import { api, SessionExpiredError, type ApiResult } from "@/api";
-import { color, font, HIT, radius, space, type } from "@/theme";
+import { color, font, HIT, radius, space, type } from "@/canes-theme";
 
 // Mirrors the web TERMINAL list — these statuses mean the work is off the
 // technician's hands, so check-in and complete disappear rather than fail.

@@ -121,7 +121,7 @@ const stubs = new Map([
   ["@ai-sdk/google", { google: () => null }],
 ]);
 const realModules = new Set([
-  "lib/canes/types.ts", "packages/types/src/index.ts", "packages/types/src/types.ts", "packages/types/src/service-areas.ts", "packages/types/src/crew-types.ts", "packages/types/src/wg-mobile.ts",
+  "lib/canes/types.ts", "packages/types/src/index.ts", "packages/types/src/types.ts", "packages/types/src/service-areas.ts", "packages/types/src/service-categories.ts", "packages/types/src/pricing.ts", "lib/canes/service-lines.ts", "packages/types/src/crew-types.ts", "packages/types/src/wg-mobile.ts",
   "lib/canes/lead-messaging.ts", "lib/canes/automations.ts", "lib/canes/lead-contact.ts", "lib/canes/data.ts", "lib/canes/twilio.ts", "lib/twilio.ts", "lib/canes/parse.ts", "lib/canes/inbound.ts",
   "lib/canes/meta-leads.ts", "lib/canes/meta-form.ts", "app/api/canes/cron/meta-intro/route.ts",
   "app/CanesPressure/actions.ts", "app/api/canes/cron/route.ts",
@@ -383,7 +383,7 @@ try {
   });
   await check("the migration can be reapplied without overwriting customized templates", async () => {
     await actions.saveSettings({ templates: { hold_text: "Custom virtual introduction" } });
-    await db.exec(readFileSync(resolve(root, "supabase/canes", migrationFiles.at(-1)), "utf8"));
+    await db.exec(readFileSync(resolve(root, "supabase/canes", "20261008011539_canes_meta_intro_delay.sql"), "utf8"));
     assert.equal((await data.getSettings()).templates.hold_text, "Custom virtual introduction");
   });
 

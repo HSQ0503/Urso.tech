@@ -1,3 +1,5 @@
+import { InvoiceServiceControls } from "@/app/CanesPressure/components/invoice-service-controls";
+import { listCrews } from "@/lib/canes/estimates";
 import { PaymentCorrections } from "@/app/CanesPressure/components/invoices/payment-corrections";
 import { DocumentRevisionControls } from "@/app/CanesPressure/components/document-revision";
 import Link from "next/link";
@@ -27,8 +29,12 @@ export const metadata = { title: "Invoice" };
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://urso.ws";
 
-export default async function InvoicePage({ params }: { params: Promise<{ id: string }> }) {
-  await requirePagePermission("invoices");
+export default async function InvoicePage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const access = await requirePagePermission("invoices");
   const { id } = await params;
   const invoice = await getInvoiceWithItems(id);
   if (!invoice) notFound();
@@ -43,7 +49,9 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
   const balance = invoiceBalanceCents(invoice);
   // Applied review rewards are inside total_cents — the totals block explains
   // them; the manage/verify panel lives in the rail (RewardManager).
-  const appliedRewardCents = approvedRewardCents(await listInvoiceRewards(invoice.id));
+  const appliedRewardCents = approvedRewardCents(
+    await listInvoiceRewards(invoice.id),
+  );
   const payLink = `${APP_URL}/CanesPressure/i/${invoice.public_token}`;
   const isPublic = invoice.status !== "draft" && invoice.status !== "void";
 
@@ -76,7 +84,8 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
           </span>
         </div>
         <p className="mt-1 text-[13.5px] tabular-nums text-[var(--cp-muted)]">
-          {invoice.customer_name ?? "No customer"} · {fmtMoney(invoice.total_cents)}
+          {invoice.customer_name ?? "No customer"} ·{" "}
+          {fmtMoney(invoice.total_cents)}
         </p>
         {(invoice.sent_at || invoice.viewed_at) && (
           <p className="mt-0.5 text-[12.5px] tabular-nums text-[var(--cp-faint)]">
@@ -88,25 +97,28 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
 
       {/* ── Desktop (md+): unchanged, frozen. ── */}
       <div className="hidden md:block">
-      <Link
-        href="/CanesPressure/invoices"
-        className="inline-flex min-h-11 items-center gap-1.5 text-[13px] font-medium text-[var(--cp-muted)]"
-      >
-        <ArrowLeft size={15} strokeWidth={2} /> All invoices
-      </Link>
+        <Link
+          href="/CanesPressure/invoices"
+          className="inline-flex min-h-11 items-center gap-1.5 text-[13px] font-medium text-[var(--cp-muted)]"
+        >
+          <ArrowLeft size={15} strokeWidth={2} /> All invoices
+        </Link>
 
-      <div className="mt-1 flex flex-wrap items-center gap-2">
-        <h1 className="cp-display text-[24px] leading-tight tabular-nums">{invoice.number}</h1>
-        <span className={`cp-chip ${INVOICE_STATUS_CLASS[invoice.status]}`}>
-          {INVOICE_STATUS_LABEL[invoice.status]}
-        </span>
-      </div>
-      <p className="mt-1 text-[13.5px] tabular-nums text-[var(--cp-muted)]">
-        {invoice.customer_name ?? "No customer"} · {fmtMoney(invoice.total_cents)}
-        {invoice.sent_at && <> · Sent {fmtEt(invoice.sent_at)}</>}
-        {invoice.viewed_at && <> · Viewed {fmtEt(invoice.viewed_at)}</>}
-        {invoice.paid_at && <> · Paid {fmtEt(invoice.paid_at)}</>}
-      </p>
+        <div className="mt-1 flex flex-wrap items-center gap-2">
+          <h1 className="cp-display text-[24px] leading-tight tabular-nums">
+            {invoice.number}
+          </h1>
+          <span className={`cp-chip ${INVOICE_STATUS_CLASS[invoice.status]}`}>
+            {INVOICE_STATUS_LABEL[invoice.status]}
+          </span>
+        </div>
+        <p className="mt-1 text-[13.5px] tabular-nums text-[var(--cp-muted)]">
+          {invoice.customer_name ?? "No customer"} ·{" "}
+          {fmtMoney(invoice.total_cents)}
+          {invoice.sent_at && <> · Sent {fmtEt(invoice.sent_at)}</>}
+          {invoice.viewed_at && <> · Viewed {fmtEt(invoice.viewed_at)}</>}
+          {invoice.paid_at && <> · Paid {fmtEt(invoice.paid_at)}</>}
+        </p>
       </div>
 
       {/* Client journey — shared by both trees; drafts have nothing to track. */}
@@ -119,6 +131,12 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
       <div className="mt-5 grid gap-4 md:grid-cols-[2fr_1fr]">
         {/* Rail first on mobile so the primary action sits above the fold. */}
         <div className="order-1 md:order-2">
+          {access.kind !== "ops" ? (
+            <InvoiceServiceControls
+              invoice={invoice}
+              crews={await listCrews(true)}
+            />
+          ) : null}
           <InvoiceActions
             invoiceId={invoice.id}
             status={invoice.status}
@@ -183,43 +201,59 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
                 </li>
               ))}
               {invoice.items.length === 0 && (
-                <li className="py-2.5 text-[13.5px] text-[var(--cp-muted)]">No line items.</li>
+                <li className="py-2.5 text-[13.5px] text-[var(--cp-muted)]">
+                  No line items.
+                </li>
               )}
             </ul>
 
             <div className="cp-divider mt-2 space-y-1.5 pt-3">
               {invoice.adjustment_cents !== 0 && (
                 <div className="flex items-center justify-between text-[13px] text-[var(--cp-muted)]">
-                  <span>{invoice.adjustment_cents < 0 ? "Discount" : "Adjustment"}</span>
-                  <span className="tabular-nums">{fmtMoney(invoice.adjustment_cents)}</span>
+                  <span>
+                    {invoice.adjustment_cents < 0 ? "Discount" : "Adjustment"}
+                  </span>
+                  <span className="tabular-nums">
+                    {fmtMoney(invoice.adjustment_cents)}
+                  </span>
                 </div>
               )}
               {invoice.tax_cents > 0 && (
                 <div className="flex items-center justify-between text-[13px] text-[var(--cp-muted)]">
                   <span>Tax</span>
-                  <span className="tabular-nums">{fmtMoney(invoice.tax_cents)}</span>
+                  <span className="tabular-nums">
+                    {fmtMoney(invoice.tax_cents)}
+                  </span>
                 </div>
               )}
               {appliedRewardCents > 0 && (
                 <div className="flex items-center justify-between text-[13px] text-[var(--cp-good)]">
                   <span>Review rewards</span>
-                  <span className="tabular-nums">−{fmtMoney(appliedRewardCents)}</span>
+                  <span className="tabular-nums">
+                    −{fmtMoney(appliedRewardCents)}
+                  </span>
                 </div>
               )}
               <div className="flex items-center justify-between">
                 <span className="text-[14px] font-semibold">Total</span>
-                <span className="text-[18px] font-semibold tabular-nums">{fmtMoney(invoice.total_cents)}</span>
+                <span className="text-[18px] font-semibold tabular-nums">
+                  {fmtMoney(invoice.total_cents)}
+                </span>
               </div>
               {invoice.amount_paid_cents > 0 && (
                 <>
                   <div className="flex items-center justify-between text-[13px] text-[var(--cp-muted)]">
                     <span>Paid</span>
-                    <span className="tabular-nums">−{fmtMoney(invoice.amount_paid_cents)}</span>
+                    <span className="tabular-nums">
+                      −{fmtMoney(invoice.amount_paid_cents)}
+                    </span>
                   </div>
                   {balance > 0 && (
                     <div className="flex items-center justify-between text-[13px] font-semibold">
                       <span>Balance</span>
-                      <span className="tabular-nums text-[var(--cp-warn)]">{fmtMoney(balance)}</span>
+                      <span className="tabular-nums text-[var(--cp-warn)]">
+                        {fmtMoney(balance)}
+                      </span>
                     </div>
                   )}
                 </>
@@ -233,20 +267,34 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
               <p className="cp-label">Payments</p>
               <ul className="mt-2 space-y-2">
                 {invoice.payments.map((p) => {
-                  const refunded = p.refunded_cents ?? (p.status === "refunded" ? p.amount_cents : 0);
+                  const refunded =
+                    p.refunded_cents ??
+                    (p.status === "refunded" ? p.amount_cents : 0);
                   return (
-                  <li key={p.id} className="flex items-center justify-between gap-3 text-[13px]">
-                    <span>
-                      <span className="font-medium">{PAYMENT_METHOD_LABEL[p.method]}</span>
-                      <span className="text-[var(--cp-faint)]"> · {fmtEt(p.created_at)}</span>
-                    </span>
-                    <span className="text-right tabular-nums">
-                      <span className="block font-semibold">{fmtMoney(paymentNetCents(p))} net</span>
-                      {refunded > 0 && (
-                        <span className="block text-[11px] text-[var(--cp-warn)]">{fmtMoney(refunded)} refunded</span>
-                      )}
-                    </span>
-                  </li>
+                    <li
+                      key={p.id}
+                      className="flex items-center justify-between gap-3 text-[13px]"
+                    >
+                      <span>
+                        <span className="font-medium">
+                          {PAYMENT_METHOD_LABEL[p.method]}
+                        </span>
+                        <span className="text-[var(--cp-faint)]">
+                          {" "}
+                          · {fmtEt(p.created_at)}
+                        </span>
+                      </span>
+                      <span className="text-right tabular-nums">
+                        <span className="block font-semibold">
+                          {fmtMoney(paymentNetCents(p))} net
+                        </span>
+                        {refunded > 0 && (
+                          <span className="block text-[11px] text-[var(--cp-warn)]">
+                            {fmtMoney(refunded)} refunded
+                          </span>
+                        )}
+                      </span>
+                    </li>
                   );
                 })}
               </ul>

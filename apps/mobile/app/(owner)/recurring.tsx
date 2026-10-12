@@ -29,7 +29,7 @@ import { Avatar, Chevron, Chip, ChromeBar, EmptyState, listRowStyle } from "@/co
 import { Notice } from "@/components/notice";
 import { useRecurringPlans } from "@/queries";
 import { noticeFrom, usePullToRefresh, useRefetchOnFocus } from "@/query";
-import { color, font, radius, space, type } from "@/theme";
+import { color, font, radius, space, type } from "@/canes-theme";
 
 type Filter = PlanStatus | "all";
 const FILTERS: { value: Filter; label: string }[] = [
@@ -74,7 +74,10 @@ export default function RecurringScreen(): React.ReactElement {
 
   const counts = useMemo(() => {
     const out = {} as Record<Filter, number>;
-    for (const f of FILTERS) out[f.value] = plans.filter((p) => f.value === "all" || p.status === f.value).length;
+    for (const f of FILTERS)
+      out[f.value] = plans.filter(
+        (p) => f.value === "all" || p.status === f.value,
+      ).length;
     return out;
   }, [plans]);
 
@@ -82,14 +85,18 @@ export default function RecurringScreen(): React.ReactElement {
     () =>
       plans
         .filter((p) => filter === "all" || p.status === filter)
-        .sort((a, b) => (a.next_due_on ?? "9999").localeCompare(b.next_due_on ?? "9999")),
+        .sort((a, b) =>
+          (a.next_due_on ?? "9999").localeCompare(b.next_due_on ?? "9999"),
+        ),
     [plans, filter],
   );
 
   const emptyCopy: Record<Filter, string> = {
-    active: "No active plans yet. Open an estimate, invoice or work order and tap Make it recurring — or start one here.",
+    active:
+      "No active plans yet. Open an estimate, invoice or work order and tap Make it recurring — or start one here.",
     paused: "Nothing paused.",
-    draft: "No drafts. A plan sits here until the customer signs or you mark it agreed in person.",
+    draft:
+      "No drafts. A plan sits here until the customer signs or you mark it agreed in person.",
     canceled: "No canceled plans.",
     all: "No recurring plans yet. Open an estimate, invoice or work order and tap Make it recurring — or start one here.",
   };
@@ -97,11 +104,20 @@ export default function RecurringScreen(): React.ReactElement {
   return (
     <View style={styles.screen}>
       <ChromeBar
-        title="Recurring"
-        sub={summary && summary.activeCount > 0 ? `${summary.activeCount} active ${summary.activeCount === 1 ? "plan" : "plans"}` : "Repeat customers and contracts"}
+        title="Older maintenance plans"
+        sub={
+          summary && summary.activeCount > 0
+            ? `${summary.activeCount} active ${summary.activeCount === 1 ? "plan" : "plans"}`
+            : "Repeat customers and contracts"
+        }
         onBack={() => router.back()}
         action="New plan"
-        onAction={() => router.push({ pathname: "/(owner)/plan/new", params: { draftKey: String(Date.now()) } })}
+        onAction={() =>
+          router.push({
+            pathname: "/(owner)/plan/new",
+            params: { draftKey: String(Date.now()) },
+          })
+        }
       />
       {plansQuery.isPending ? (
         <View style={styles.centre}>
@@ -111,17 +127,39 @@ export default function RecurringScreen(): React.ReactElement {
         <FlatList
           data={visible}
           keyExtractor={(plan) => plan.id}
-          contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + space.xxl }, visible.length === 0 && styles.listEmpty]}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={color.brand} colors={[color.brand]} />}
+          contentContainerStyle={[
+            styles.list,
+            { paddingBottom: insets.bottom + space.xxl },
+            visible.length === 0 && styles.listEmpty,
+          ]}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={color.brand}
+              colors={[color.brand]}
+            />
+          }
           ListHeaderComponent={
             <View style={styles.headerSlot}>
               <Notice text={notice} />
               {summary ? (
                 <View style={styles.summaryCard}>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.summaryLabel}>Annual recurring revenue</Text>
-                    <Text style={[styles.summaryValue, summary.arrCents === 0 && styles.dim]}>{fmtWhole(summary.arrCents)}</Text>
-                    <Text style={styles.summarySub}>{fmtWhole(summary.mrrCents)} a month across active plans</Text>
+                    <Text style={styles.summaryLabel}>
+                      Annual recurring revenue
+                    </Text>
+                    <Text
+                      style={[
+                        styles.summaryValue,
+                        summary.arrCents === 0 && styles.dim,
+                      ]}
+                    >
+                      {fmtWhole(summary.arrCents)}
+                    </Text>
+                    <Text style={styles.summarySub}>
+                      {fmtWhole(summary.mrrCents)} a month across active plans
+                    </Text>
                   </View>
                   <View style={styles.summaryIcon}>
                     <Feather name="repeat" size={22} color={color.brandDeep} />
@@ -137,10 +175,27 @@ export default function RecurringScreen(): React.ReactElement {
                       accessibilityRole="tab"
                       accessibilityState={{ selected: on }}
                       onPress={() => setFilter(option.value)}
-                      style={({ pressed }) => [styles.filter, on && styles.filterOn, pressed && !on && styles.pressed]}
+                      style={({ pressed }) => [
+                        styles.filter,
+                        on && styles.filterOn,
+                        pressed && !on && styles.pressed,
+                      ]}
                     >
-                      <Text style={[styles.filterText, on && styles.filterTextOn]}>{option.label}</Text>
-                      {counts[option.value] > 0 ? <Text style={[styles.filterCount, on && styles.filterTextOn]}>{counts[option.value]}</Text> : null}
+                      <Text
+                        style={[styles.filterText, on && styles.filterTextOn]}
+                      >
+                        {option.label}
+                      </Text>
+                      {counts[option.value] > 0 ? (
+                        <Text
+                          style={[
+                            styles.filterCount,
+                            on && styles.filterTextOn,
+                          ]}
+                        >
+                          {counts[option.value]}
+                        </Text>
+                      ) : null}
                     </Pressable>
                   );
                 })}
@@ -152,8 +207,17 @@ export default function RecurringScreen(): React.ReactElement {
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={`${item.customer_name ?? "Plan"}, ${PLAN_CADENCE_LABEL[item.cadence]}, ${PLAN_STATUS_LABEL[item.status]}`}
-              onPress={() => router.push({ pathname: "/(owner)/plan/[id]", params: { id: item.id } })}
-              style={({ pressed }) => [...listRowStyle(index === 0, index === visible.length - 1), styles.row, pressed && styles.pressed]}
+              onPress={() =>
+                router.push({
+                  pathname: "/(owner)/plan/[id]",
+                  params: { id: item.id },
+                })
+              }
+              style={({ pressed }) => [
+                ...listRowStyle(index === 0, index === visible.length - 1),
+                styles.row,
+                pressed && styles.pressed,
+              ]}
             >
               <Avatar name={item.customer_name ?? "Plan"} />
               <View style={styles.rowBody}>
@@ -161,18 +225,27 @@ export default function RecurringScreen(): React.ReactElement {
                   <Text style={styles.name} numberOfLines={1}>
                     {item.customer_name ?? item.job_name ?? item.number}
                   </Text>
-                  <Chip label={PLAN_STATUS_LABEL[item.status]} tone={statusTone(item.status)} />
+                  <Chip
+                    label={PLAN_STATUS_LABEL[item.status]}
+                    tone={statusTone(item.status)}
+                  />
                 </View>
                 <Text style={styles.sub} numberOfLines={1}>
-                  {[item.job_name, PLAN_CADENCE_LABEL[item.cadence]].filter(Boolean).join(" · ")}
+                  {[item.job_name, PLAN_CADENCE_LABEL[item.cadence]]
+                    .filter(Boolean)
+                    .join(" · ")}
                 </Text>
                 <Text style={styles.sub} numberOfLines={1}>
                   {nextLine(item)}
                 </Text>
               </View>
               <View style={styles.rowEnd}>
-                <Text style={styles.money}>{fmtMoney(item.price_per_visit_cents)}</Text>
-                <Text style={styles.moneySub}>{fmtWhole(planAnnualCents(item))}/yr</Text>
+                <Text style={styles.money}>
+                  {fmtMoney(item.price_per_visit_cents)}
+                </Text>
+                <Text style={styles.moneySub}>
+                  {fmtWhole(planAnnualCents(item))}/yr
+                </Text>
                 <Chevron />
               </View>
             </Pressable>

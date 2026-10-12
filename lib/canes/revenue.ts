@@ -1,4 +1,4 @@
-import { canesDb } from "@/lib/canes/supabase";
+import { readAll } from "./read-all";import { canesDb } from "@/lib/canes/supabase";
 import { isDemo } from "@/lib/canes/data";
 import { listPlans, mrrCentsOf, recurringCollectedByMonth } from "@/lib/canes/recurring";
 import { rangeBounds } from "@/lib/canes/payouts";
@@ -21,24 +21,26 @@ type LedgerRow = { amount_cents: number; created_at: string };
 
 async function paymentsSince(sinceIso: string): Promise<LedgerRow[]> {
   if (isDemo()) return DEMO_PAYMENTS.filter((p) => p.created_at >= sinceIso);
-  const { data, error } = await canesDb()
-    .from("payments")
-    .select("amount_cents, created_at")
-    .gte("created_at", sinceIso)
-    .limit(5000);
-  if (error) throw new Error(`revenue payments: ${error.message}`);
-  return (data ?? []) as LedgerRow[];
+  return readAll<LedgerRow>((from, to) =>
+    canesDb()
+      .from("payments")
+      .select("amount_cents, created_at")
+      .gte("created_at", sinceIso)
+      .order("id")
+      .range(from, to),
+  );
 }
 
 async function refundsSince(sinceIso: string): Promise<LedgerRow[]> {
   if (isDemo()) return [];
-  const { data, error } = await canesDb()
-    .from("payment_refunds")
-    .select("amount_cents, created_at")
-    .gte("created_at", sinceIso)
-    .limit(5000);
-  if (error) throw new Error(`revenue refunds: ${error.message}`);
-  return (data ?? []) as LedgerRow[];
+  return readAll<LedgerRow>((from, to) =>
+    canesDb()
+      .from("payment_refunds")
+      .select("amount_cents, created_at")
+      .gte("created_at", sinceIso)
+      .order("id")
+      .range(from, to),
+  );
 }
 
 const WINDOWS: PayoutRangeKey[] = ["day", "week", "month", "year"];
@@ -47,16 +49,25 @@ export async function getRevenueSummary(): Promise<RevenueSummary> {
   const bounds = WINDOWS.map((key) => ({ key, ...rangeBounds(key) }));
   // Every window sits inside the calendar year, so one ledger read from Jan 1
   // ET serves all four.
-  const earliest = bounds.reduce((min, b) => (b.startIso < min ? b.startIso : min), bounds[0].startIso);
+  const earliest = bounds.reduce(
+    (min, b) => (b.startIso < min ? b.startIso : min),
+    bounds[0].startIso,
+  );
 
   // Recurring is read off PLANS (0027): MRR is the sum of active plans'
   // per-visit price normalized to a month; the monthly bars are money actually
   // collected on plan visits. The old jobs.recurrence flag no longer counts.
-  const [payments, refunds, plans, months] = await Promise.all([
+  const [payments, refunds, plans, months, services] = await Promise.all([
     paymentsSince(earliest),
     refundsSince(earliest),
     listPlans(),
     recurringCollectedByMonth(),
+    isDemo()
+      ? Promise.resolve({
+          data: { mrr_cents: 0, active_agreements: 0 },
+          error: null,
+        })
+      : canesDb().rpc("canes_service_revenue_snapshot"),
   ]);
 
   const sumIn = (rows: LedgerRow[], startIso: string, endIso: string) => {
@@ -70,18 +81,34 @@ export async function getRevenueSummary(): Promise<RevenueSummary> {
 
   const windows: RevenueWindow[] = bounds.map((b) => ({
     key: b.key,
-    label: b.key === "day" ? "Today" : b.key === "week" ? "This week" : b.key === "month" ? "This month" : "This year",
-    collectedCents: sumIn(payments, b.startIso, b.endIso) - sumIn(refunds, b.startIso, b.endIso),
+    label:
+      b.key === "day"
+        ? "Today"
+        : b.key === "week"
+          ? "This week"
+          : b.key === "month"
+            ? "This month"
+            : "This year",
+    collectedCents:
+      sumIn(payments, b.startIso, b.endIso) -
+      sumIn(refunds, b.startIso, b.endIso),
   }));
 
-  const mrrCents = mrrCentsOf(plans);
+  if (services.error) throw new Error("Recurring revenue could not be loaded.");
+  const mrrCents = mrrCentsOf(plans) + Number(services.data?.mrr_cents ?? 0);
   return {
     windows,
     recurring: {
       mrrCents,
       arrCents: mrrCents * 12,
-      activePlans: plans.filter((p) => p.status === "active").length,
-      months: months.map((m) => ({ key: m.key, label: m.label, recurringCents: m.cents })),
+      activePlans:
+        plans.filter((p) => p.status === "active").length +
+        Number(services.data?.active_agreements ?? 0),
+      months: months.map((m) => ({
+        key: m.key,
+        label: m.label,
+        recurringCents: m.cents,
+      })),
     },
   };
 }

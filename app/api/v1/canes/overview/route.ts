@@ -1,4 +1,10 @@
-import { apiOk, apiRoute, denyUnlessConsole } from "@/lib/api/v1";
+import {
+  apiOk,
+  apiRoute,
+  denyUnlessConsole,
+  consoleAccessFor,
+} from "@/lib/api/v1";
+import { accessAllows } from "@/lib/canes/access";
 import { getOverview } from "@/lib/canes/data";
 
 // GET /api/v1/canes/overview — the Today surface, exactly as the owner console's
@@ -22,5 +28,7 @@ export const GET = apiRoute(async ({ actor }) => {
   if (denied) return denied;
 
   const overview = await getOverview();
+  if (!accessAllows(consoleAccessFor(actor), "schedule"))
+    overview.todayJobs = [];
   return apiOk(overview);
 });

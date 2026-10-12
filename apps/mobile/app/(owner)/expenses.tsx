@@ -42,7 +42,7 @@ import { ChromeBar, SearchStrip, searchInputStyle } from "@/components/ledger";
 import { Notice } from "@/components/notice";
 import { keys, useExpenseLedger, useExpenses } from "@/queries";
 import { noticeFrom, useAction, usePullToRefresh, useRefetchOnFocus } from "@/query";
-import { color, font, HIT, radius, space, type } from "@/theme";
+import { color, font, HIT, radius, space, type } from "@/canes-theme";
 
 const FREQUENCIES: { value: ExpenseFrequency; label: string }[] = [
   { value: "one_time", label: "One-time" },
@@ -536,7 +536,10 @@ const styles = StyleSheet.create({
     borderColor: color.line,
     backgroundColor: color.surface,
   },
-  filterToggleOn: { borderColor: color.brandEdge, backgroundColor: color.brandSoft },
+  filterToggleOn: {
+    borderColor: color.brandEdge,
+    backgroundColor: color.brandSoft,
+  },
 
   periodRow: { flexDirection: "row", flexWrap: "wrap", gap: 7 },
   period: {
@@ -564,7 +567,10 @@ const styles = StyleSheet.create({
     borderColor: color.line,
     backgroundColor: color.surface,
   },
-  segmentOn: { borderColor: color.brandEdgeStrong, backgroundColor: color.brandSoft },
+  segmentOn: {
+    borderColor: color.brandEdgeStrong,
+    backgroundColor: color.brandSoft,
+  },
   segmentLabel: { ...type.ruleSm, color: color.muted },
   segmentLabelOn: { color: color.brandDeep },
   segmentValue: {
@@ -632,14 +638,38 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.lg,
     paddingVertical: 12,
   },
-  divided: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.line },
+  divided: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: color.line,
+  },
   rowBody: { flex: 1, minWidth: 0, gap: 5 },
-  rowTitleLine: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 8 },
+  rowTitleLine: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 8,
+  },
   rowTitle: { ...type.title, color: color.ink, flexShrink: 1 },
-  chip: { borderRadius: radius.sm, backgroundColor: color.brandSoft, paddingHorizontal: 8, paddingVertical: 5 },
+  chip: {
+    borderRadius: radius.sm,
+    backgroundColor: color.brandSoft,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+  },
   chipText: { ...type.ruleSm, color: color.brandDeep },
-  money: { ...type.body, fontFamily: font.bodySemi, color: color.ink, fontVariant: ["tabular-nums"] },
-  iconButton: { width: HIT, height: HIT, alignItems: "center", justifyContent: "center", marginRight: -10 },
+  money: {
+    ...type.body,
+    fontFamily: font.bodySemi,
+    color: color.ink,
+    fontVariant: ["tabular-nums"],
+  },
+  iconButton: {
+    width: HIT,
+    height: HIT,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: -10,
+  },
 
   form: {
     gap: 10,
@@ -673,7 +703,11 @@ const styles = StyleSheet.create({
     backgroundColor: color.surface,
   },
   frequencyOn: { borderColor: color.brand, backgroundColor: color.brandSoft },
-  frequencyText: { ...type.small, fontFamily: font.bodySemi, color: color.muted },
+  frequencyText: {
+    ...type.small,
+    fontFamily: font.bodySemi,
+    color: color.muted,
+  },
   frequencyTextOn: { color: color.brandDeep },
   primary: {
     minHeight: 52,
@@ -683,6 +717,6 @@ const styles = StyleSheet.create({
     backgroundColor: color.brandDown,
   },
   primaryDown: { opacity: 0.85 },
-  primaryText: { ...type.title, color: color.surface },
+  primaryText: { ...type.title, color: "#ffffff" },
   disabled: { opacity: 0.45 },
 });

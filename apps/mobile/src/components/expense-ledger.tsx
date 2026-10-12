@@ -6,7 +6,7 @@ import { expenseActions } from "@/api";
 import { keys, useExpenseLedger } from "@/queries";
 import { noticeFrom, useAction, useRefetchOnFocus } from "@/query";
 import { todayEt } from "@/dates";
-import { color, HIT, radius, space, type } from "@/theme";
+import { color, HIT, radius, space, type } from "@/canes-theme";
 import { Notice } from "./notice";
 
 const inputStyle = {

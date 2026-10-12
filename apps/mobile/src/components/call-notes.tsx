@@ -1,6 +1,6 @@
 import { Keyboard, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import type { CallOutcome } from "@/api";
-import { color, font, HIT, radius, space, type } from "@/theme";
+import { color, font, HIT, radius, space, type } from "@/canes-theme";
 
 const outcomes: { value: CallOutcome; label: string }[] = [
   { value: "closed", label: "Closed" },

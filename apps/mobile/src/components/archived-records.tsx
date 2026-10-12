@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { documentActions } from "@/api";
 import { keys } from "@/queries";
 import { noticeFrom, unwrap, useAction } from "@/query";
-import { color, HIT, space } from "@/theme";
+import { color, HIT, space } from "@/canes-theme";
 import { Notice } from "./notice";
 import type { DocumentKind } from "@urso/types";
 export function ArchivedRecords() {

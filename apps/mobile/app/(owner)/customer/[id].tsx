@@ -46,7 +46,7 @@ import { PhoneInput, toPhoneDisplay } from "@/components/phone-input";
 import { useToast } from "@/components/toast";
 import { keys, useCustomer } from "@/queries";
 import { noticeFrom, useAction, usePullToRefresh, useRefetchOnFocus } from "@/query";
-import { color, font, HIT, radius, space, type } from "@/theme";
+import { color, font, HIT, radius, space, type } from "@/canes-theme";
 
 function Section({ label, children }: { label: string; children: ReactNode }) {
   return (

@@ -1,7 +1,7 @@
 import { Text, View } from "react-native";
 import Svg, { Polyline } from "react-native-svg";
 import { fmtEt, fmtMoney, type EstimateAcceptance } from "@urso/types";
-import { color, space, type } from "@/theme";
+import { color, space, type } from "@/canes-theme";
 
 export function EstimateAcceptanceHistory({
   records,

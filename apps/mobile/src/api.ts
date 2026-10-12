@@ -239,6 +239,12 @@ export type OwnerInsights = {
 };
 
 export const owner = {
+  serviceAgreements: () =>
+    request<import("@urso/types").ServiceAgreementsView>(
+      "/canes/service-agreements",
+    ),
+  money: (period: import("@urso/types").MoneyPeriod) =>
+    request<import("@urso/types").MoneyReport>(`/canes/money?period=${period}`),
   overview: () => request<Overview>("/canes/overview"),
   agenda: () => request<Agenda>("/canes/agenda"),
 
@@ -256,8 +262,12 @@ export const owner = {
   // Recurring plans (0027): the list with its MRR / ARR headline, and one plan
   // with its services and every visit it has minted.
   recurring: () =>
-    request<{ plans: RecurringPlan[]; summary: { activeCount: number; mrrCents: number; arrCents: number } }>("/canes/recurring"),
-  recurringPlan: (id: string) => request<RecurringPlanDetail>(`/canes/recurring/${id}`),
+    request<{
+      plans: RecurringPlan[];
+      summary: { activeCount: number; mrrCents: number; arrCents: number };
+    }>("/canes/recurring"),
+  recurringPlan: (id: string) =>
+    request<RecurringPlanDetail>(`/canes/recurring/${id}`),
   threadMessages: (phone: string) =>
     request<Message[]>(`/canes/threads/${encodeURIComponent(phone)}/messages`),
   threadCalls: (phone: string) =>
@@ -272,17 +282,22 @@ export const owner = {
   customer: (id: string) => request<CustomerDetail>(`/canes/customers/${id}`),
 
   estimates: () => request<Estimate[]>("/canes/estimates"),
-  estimate: (id: string) => request<EstimateWithItems>(`/canes/estimates/${id}`),
+  estimate: (id: string) =>
+    request<EstimateWithItems>(`/canes/estimates/${id}`),
   invoices: () => request<Invoice[]>("/canes/invoices"),
   invoice: (id: string) => request<InvoiceWithItems>(`/canes/invoices/${id}`),
-  invoiceRewards: (id: string) => request<InvoiceReward[]>(`/canes/invoices/${id}/rewards`),
+  invoiceRewards: (id: string) =>
+    request<InvoiceReward[]>(`/canes/invoices/${id}/rewards`),
 
   // The board is the owner's dispatch view; crews come with it so a job can be
   // shown with its assignment without a second round trip.
   // The route takes (from, days) — it used to be sent a `to` it ignored, so
   // every window silently came back as seven days regardless of what the
   // screen asked for. The month grid asks for 42.
-  calendarEvents: (fromIso: string, days: number) => request<CalendarEvent[]>(`/canes/calendar-events?from=${encodeURIComponent(fromIso)}&days=${days}`),
+  calendarEvents: (fromIso: string, days: number) =>
+    request<CalendarEvent[]>(
+      `/canes/calendar-events?from=${encodeURIComponent(fromIso)}&days=${days}`,
+    ),
   scheduleBoard: (fromIso: string, days: number) =>
     request<unknown>(
       `/canes/schedule/board?from=${encodeURIComponent(fromIso)}&days=${encodeURIComponent(String(days))}`,
@@ -559,18 +574,41 @@ export const customerActions = {
 };
 
 export const jobActions = {
-  moveFuture: (id: string, scheduledIso: string, durationMinutes: number, crewId: string | null) => act(`/canes/jobs/${id}/actions`, {action:"moveFuture",scheduledIso,durationMinutes,crewId}),
+  moveFuture: (
+    id: string,
+    scheduledIso: string,
+    durationMinutes: number,
+    crewId: string | null,
+  ) =>
+    act(`/canes/jobs/${id}/actions`, {
+      action: "moveFuture",
+      scheduledIso,
+      durationMinutes,
+      crewId,
+    }),
   // crewId is REQUIRED and explicitly nullable on schedule: the action has no
   // "keep the crew" value here, so an absent key would quietly unassign. `move`
   // is the one that can leave the crew alone by omitting it.
-  schedule: (id: string, scheduledIso: string, durationMinutes: number, crewId: string | null) =>
-    act(`/canes/jobs/${id}/actions`, { action: "schedule", scheduledIso, durationMinutes, crewId }),
+  schedule: (
+    id: string,
+    scheduledIso: string,
+    durationMinutes: number,
+    crewId: string | null,
+  ) =>
+    act(`/canes/jobs/${id}/actions`, {
+      action: "schedule",
+      scheduledIso,
+      durationMinutes,
+      crewId,
+    }),
   move: (
     id: string,
     scheduledIso: string | null,
     opts?: { durationMinutes?: number; crewId?: string | null },
-  ) => act(`/canes/jobs/${id}/actions`, { action: "move", scheduledIso, ...opts }),
-  unschedule: (id: string) => act(`/canes/jobs/${id}/actions`, { action: "unschedule" }),
+  ) =>
+    act(`/canes/jobs/${id}/actions`, { action: "move", scheduledIso, ...opts }),
+  unschedule: (id: string) =>
+    act(`/canes/jobs/${id}/actions`, { action: "unschedule" }),
   assign: (id: string, crewId: string | null) =>
     act(`/canes/jobs/${id}/actions`, { action: "assign", crewId }),
   setStatus: (id: string, status: string, reason?: string) =>
@@ -586,15 +624,24 @@ export const jobActions = {
   start: (id: string) => act(`/canes/jobs/${id}/actions`, { action: "start" }),
   // On success the payload carries invoiceId — completing a job mints its bill.
   complete: (id: string) =>
-    act<{ invoiceId?: string }>(`/canes/jobs/${id}/actions`, { action: "complete" }),
-  reopen: (id: string) => act(`/canes/jobs/${id}/actions`, { action: "reopen" }),
-  delete: (id: string) => act(`/canes/jobs/${id}/actions`, { action: "delete" }),
+    act<{ invoiceId?: string }>(`/canes/jobs/${id}/actions`, {
+      action: "complete",
+    }),
+  reopen: (id: string) =>
+    act(`/canes/jobs/${id}/actions`, { action: "reopen" }),
+  delete: (id: string) =>
+    act(`/canes/jobs/${id}/actions`, { action: "delete" }),
   recordDeposit: (id: string, amountCents: number, method: string) =>
-    act(`/canes/jobs/${id}/actions`, { action: "recordDeposit", amountCents, method }),
+    act(`/canes/jobs/${id}/actions`, {
+      action: "recordDeposit",
+      amountCents,
+      method,
+    }),
   // A job with no estimate behind it — the neighbour who walks up mid-driveway.
   // Posts to the jobs COLLECTION, not a job's actions, because there is no job
   // yet. Returns the new id so the caller can land on its sheet.
   createManual: (input: {
+    items?: import("@urso/types").ServiceLineInput[];
     serviceArea?: ServiceArea | null;
     contactId?: string;
     customerName: string;
@@ -606,11 +653,19 @@ export const jobActions = {
     scheduledAtIso?: string;
     crewId?: string;
     notes?: string;
-  }) => act<{ jobId?: string }>("/canes/jobs", { action: "createManual", ...input }),
+  }) =>
+    act<{ jobId?: string }>("/canes/jobs", {
+      action: "createManual",
+      ...input,
+    }),
 };
 
 export type InvoiceLineInput = {
-  discountMode?: "amount" | "percent"; discountValue?: number; taxable?: boolean;
+  serviceLineId?: string;
+  serviceCategory?: import("@urso/types").ServiceCategory | null;
+  discountMode?: "amount" | "percent";
+  discountValue?: number;
+  taxable?: boolean;
   name: string;
   description?: string | null;
   quantity: number;
@@ -623,6 +678,7 @@ export const invoiceActions = {
   // only mint an invoice as a side effect of completing a job, so any billing
   // that skipped the board meant walking to a desk.
   createManual: (input: {
+    items?: import("@urso/types").ServiceLineInput[];
     customerName: string;
     jobName: string;
     totalCents: number;
@@ -630,11 +686,18 @@ export const invoiceActions = {
     customerPhone?: string;
     customerEmail?: string;
     jobAddress?: string;
-  }) => act<{ invoiceId?: string }>("/canes/invoices", { action: "createManual", ...input }),
+  }) =>
+    act<{ invoiceId?: string }>("/canes/invoices", {
+      action: "createManual",
+      ...input,
+    }),
   // Insert-only against the partial unique index on job_id, so a second call
   // returns the existing bill rather than a duplicate.
   createFromJob: (jobId: string) =>
-    act<{ invoiceId?: string }>("/canes/invoices", { action: "createFromJob", jobId }),
+    act<{ invoiceId?: string }>("/canes/invoices", {
+      action: "createFromJob",
+      jobId,
+    }),
   // Replace-all, but NEVER to empty and never once money or Square has touched
   // the bill — the action owns those refusals. New in O3c: invoice_items were
   // write-once until now.
@@ -658,23 +721,51 @@ export const invoiceActions = {
     }>,
   ) => act(`/canes/invoices/${id}/actions`, { action: "update", ...patch }),
   // No options = text and email whatever the invoice snapshot carries.
-  send: (id: string, opts?: { channels?: { email?: boolean; text?: boolean }; toEmail?: string; toPhone?: string }) =>
-    act(`/canes/invoices/${id}/actions`, { action: "send", ...opts }),
+  send: (
+    id: string,
+    opts?: {
+      channels?: { email?: boolean; text?: boolean };
+      toEmail?: string;
+      toPhone?: string;
+    },
+  ) => act(`/canes/invoices/${id}/actions`, { action: "send", ...opts }),
   // MONEY: the one action here that writes a payments-ledger row.
   recordCashPayment: (id: string, amountCents: number) =>
-    act(`/canes/invoices/${id}/actions`, { action: "recordCashPayment", amountCents }),
-  void: (id: string) => act(`/canes/invoices/${id}/actions`, { action: "void" }),
-  delete: (id: string) => act(`/canes/invoices/${id}/actions`, { action: "delete" }),
+    act(`/canes/invoices/${id}/actions`, {
+      action: "recordCashPayment",
+      amountCents,
+    }),
+  void: (id: string) =>
+    act(`/canes/invoices/${id}/actions`, { action: "void" }),
+  delete: (id: string) =>
+    act(`/canes/invoices/${id}/actions`, { action: "delete" }),
   setRewardOffer: (id: string, kind: string, enabled: boolean) =>
-    act(`/canes/invoices/${id}/actions`, { action: "setRewardOffer", kind, enabled }),
+    act(`/canes/invoices/${id}/actions`, {
+      action: "setRewardOffer",
+      kind,
+      enabled,
+    }),
   // Keyed by REWARD id — the invoice id in the path is navigation context.
   // Approving is the money mutation: the reward enters recomputeInvoiceTotals.
-  setRewardApproval: (id: string, rewardId: string, approve: boolean, attributedMemberId?: string | null) =>
-    act(`/canes/invoices/${id}/actions`, { action: "setRewardApproval", rewardId, approve, attributedMemberId }),
+  setRewardApproval: (
+    id: string,
+    rewardId: string,
+    approve: boolean,
+    attributedMemberId?: string | null,
+  ) =>
+    act(`/canes/invoices/${id}/actions`, {
+      action: "setRewardApproval",
+      rewardId,
+      approve,
+      attributedMemberId,
+    }),
 };
 
 export type EstimateLineInput = {
-  discountMode?: "amount" | "percent"; discountValue?: number;
+  serviceLineId?: string;
+  serviceCategory?: import("@urso/types").ServiceCategory | null;
+  discountMode?: "amount" | "percent";
+  discountValue?: number;
   catalogId?: string | null;
   name: string;
   description?: string | null;
@@ -834,4 +925,14 @@ export const documentActions = {
   decline: (id: string) => act<{notice?: string}>(`/canes/documents/estimate/${id}`,{action:"decline"}),
   refund: (invoiceId: string,paymentId: string,amountCents: number,requestKey: string) => act<{notice?: string}>(`/canes/documents/invoice/${invoiceId}`,{action:"refund",paymentId,amountCents,requestKey}),
   credit: (invoiceId: string,sourceId: string,amountCents: number,requestKey: string) => act<{notice?: string}>(`/canes/documents/invoice/${invoiceId}`,{action:"credit",sourceId,amountCents,requestKey}),
+};
+
+export const moneyActions = {
+  save: (input: import("@urso/types").MoneyMutation) =>
+    act("/canes/money", input),
+};
+
+export const serviceAgreementActions = {
+  save: (input: import("@urso/types").ServiceAgreementAction) =>
+    act<{ notice?: string; url?: string }>("/canes/service-agreements", input),
 };

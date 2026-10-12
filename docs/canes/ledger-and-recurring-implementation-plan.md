@@ -133,47 +133,47 @@ Use plain sans-serif headings, readable sentence-case labels and tabular numbers
 ### M1 Area and service foundation
 
 - [x] Shared area contracts and validation.
-- [ ] Shared service-category contracts and validation.
+- [x] Shared service-category contracts and validation.
 - [x] Additive area migration with nullable document metadata, inheritance and protected mutations, verified in isolated PostgreSQL. Production application remains a release step.
 - [x] Web and native area assignment on estimate/work-order creation and editing.
 - [x] Calendar day area labels/colors on both surfaces and shared scheduling exception notices.
-- [ ] Standard service choices and custom creation; archive obsolete choices without deleting history.
+- [x] Standard service choices and custom creation; archive obsolete choices without deleting history.
 - [x] Area inheritance, explicit overrides, historical preservation and old-client header edits tested.
-- [ ] Category/stable-line revision coverage follows catalog work.
+- [x] Category/stable-line revision coverage follows catalog work.
 
 ### M2 Simpler Canes workspace
 
-- [ ] Scope the Canes theme and reusable native primitives away from Woof Gang/admin.
-- [ ] Replace decorative type/header furniture and simplify high-use lists/forms.
-- [ ] Combined home screen and clear Money entry across web/mobile.
-- [ ] Complete standalone web job/invoice line-item parity.
+- [x] Scope the Canes theme and reusable native primitives away from Woof Gang/admin.
+- [x] Replace decorative type/header furniture and simplify high-use lists/forms.
+- [x] Combined home screen and clear Money entry across web/mobile.
+- [x] Complete standalone web job/invoice line-item parity.
 - [ ] Browser/iPhone usability checks for sheets, keyboard, navigation, chart labels and accessibility.
 
 ### M3 Financial ledger and historical import
 
-- [ ] Shared database-backed cash and profitability reports without truncated client-side sums.
-- [ ] Marketing channels/spend/attribution and service-cost allocations.
-- [ ] Approved timesheets, effective-dated rates, upsell commissions and payout allocation.
-- [ ] Payment-method detail, expense occurrences and CSV export.
-- [ ] Web/mobile Money views use the same contracts and calculations.
+- [x] Shared database-backed cash and profitability reports without truncated client-side sums.
+- [x] Marketing channels/spend/attribution and service-cost allocations.
+- [x] Approved timesheets, effective-dated rates, upsell commissions and payout allocation.
+- [x] Payment-method detail, expense occurrences and CSV export.
+- [x] Web/mobile Money views use the same contracts and calculations.
 - [ ] Stage Sebastian's export, preview conflicts, reconcile totals and apply only approved rows. The actual import requires the export, which is not yet supplied.
 
 ### M4 Service agreements and customer enrollment
 
-- [ ] Stable line identity and source/revision snapshots.
-- [ ] Independent agreement/occurrence/visit membership model alongside legacy plans.
-- [ ] Three/four/six-month offers and eligibility, immutable prices and initial savings.
-- [ ] Terms/card authorization/email capture and pending enrollment state.
-- [ ] Invoice lock/revision/provider reconciliation and verified initial payment activation.
-- [ ] Public invoice UI plus owner web/native status and recovery controls.
+- [x] Stable line identity and source/revision snapshots.
+- [x] Independent agreement/occurrence/visit membership model alongside legacy plans.
+- [x] Three/four/six-month offers and eligibility, immutable prices and initial savings.
+- [x] Terms/card authorization/email capture and pending enrollment state.
+- [x] Invoice lock/revision/provider reconciliation and verified initial payment activation.
+- [x] Public invoice UI plus owner web/native status and recovery controls.
 
 ### M5 Automatic visits and cancellation
 
-- [ ] Due dates, 14-day area/capacity search, explicit missing-setup state, compatible visit grouping.
+- [x] Due dates, 14-day area/capacity search, explicit missing-setup state, compatible visit grouping.
 - [ ] Separate service completion inside a combined work order.
-- [ ] Finalized post-service Square invoice autopay, failure notification and recovery links.
-- [ ] Agreement-scoped cancellation links, fee waiver/audit and independent collection state.
-- [ ] Final-visit termination and obligation fulfillment without duplicate work or charges.
+- [x] Finalized post-service Square invoice autopay, failure notification and recovery links.
+- [x] Agreement-scoped cancellation links, fee waiver/audit and independent collection state.
+- [x] Final-visit termination and obligation fulfillment without duplicate work or charges.
 
 ### M6 Release and operating verification
 
@@ -238,9 +238,19 @@ Release small compatible stages. Do not hide unfinished enrollment behind a butt
 - [Square idempotency](https://developer.squareup.com/docs/build-basics/common-api-patterns/idempotency)
 - [Expo SDK 57](https://docs.expo.dev/versions/v57.0.0/)
 
-## Progress
+## Progress — October 12, 2026
 
-- [x] Product decisions approved and implementation plan recorded.
-- [x] First M1 slice implemented locally: area metadata, web/native selectors and calendars.
-- [ ] Remaining M1 catalog work and M2 through M6 implementation and validation.
-- [ ] Production release and mobile distribution verification.
+Implemented in the 0.1.4 release:
+
+- Six standard services plus custom, archived catalog history, stable line identity, itemized manual jobs/invoices, and category editing on web/native revisions.
+- Scoped dark Canes design with plain sans-serif headings; work-first Home and shared Money reporting across website and Expo. Other workspaces retain their theme.
+- Cash and service profitability, marketing attribution/spend, approved time and rate snapshots, upsell commission/refund adjustments, payout allocation, payment classification, and matching CSV exports.
+- Owner-reviewed CSV staging for customers, completed work, existing-invoice payments, expenses, and worker opening adjustments. Duplicate source IDs and matching live records are checked again when applying. The original Claude export has not been supplied; no historical data has been imported.
+- Independent service agreements with 3/4/6-month pricing, verified Square card references and acceptance evidence, current invoice reconciliation, settlement activation, area/capacity scheduling, compatible visit grouping, and owner-finalized billing.
+- Customer cancellation links, initial-savings repayment plus fee, audited reductions, cancel-after-next termination, fee collection recovery, and permanent fulfillment after the first paid repeat. Existing signed plans remain separate.
+
+Validation completed locally: root build and lint (18 existing warnings, zero errors), mobile typecheck, iOS bundle export, 43 database/provider adapter tests, 49 mobile tests, and 38 messaging integration scenarios. Browser checks cover narrow invoice entry and desktop Money/import layouts. Tests use isolated PostgreSQL and mocked provider responses; no live customer card was charged and no customer messages were sent. A physical iPhone walkthrough and a controlled Square sandbox/live-payment exercise remain operating verification steps, not proven outcomes.
+
+New recurring offers are off on every existing invoice. Owners must explicitly enable an offer after checking its completed service date, categorized scope and price. Missing scheduling setup remains visible as Needs scheduling. The existing Meta introduction flag remains disabled pending its separate consent/recipient test.
+
+Production migration/deployment and signed iOS archive verification are recorded in the release receipt after they complete. The archive is delivered to Han for manual Transporter upload; this task does not submit to Apple.

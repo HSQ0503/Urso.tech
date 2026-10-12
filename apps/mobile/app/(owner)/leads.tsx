@@ -40,7 +40,7 @@ import {
 } from "@urso/types";
 import { useLeads } from "@/queries";
 import { noticeFrom, usePullToRefresh, useRefetchOnFocus } from "@/query";
-import { color, font, radius, space, type } from "@/theme";
+import { color, font, radius, space, type } from "@/canes-theme";
 import {
   Avatar,
   Chevron,

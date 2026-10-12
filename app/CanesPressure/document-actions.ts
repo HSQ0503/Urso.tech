@@ -25,6 +25,8 @@ import { getEstimate, getJobByEstimateId } from "@/lib/canes/estimates";
 import { setJobStatus, voidInvoice } from "@/app/CanesPressure/actions";
 
 type LineRow = {
+  service_line_id?: string;
+  service_category?: import("@urso/types").ServiceCategory | null;
   name: string;
   description: string | null;
   quantity: number;
@@ -80,6 +82,12 @@ async function graph(kind: DocumentKind, id: string): Promise<Result<Graph>> {
       notice: "This document could not be loaded. Refresh and try again.",
     };
   const result = data as Graph;
+  if (result.invoice?.service_autopay_finalized_at)
+    return {
+      ok: false,
+      notice:
+        "This invoice has accepted recurring terms. Additional or changed scope needs fresh customer approval on a separate invoice.",
+    };
   if (result[kind]?.archived_at)
     return {
       ok: false,
@@ -116,6 +124,8 @@ export async function loadDocumentEdit(
   const lines = source.items
     .filter((item) => (item.unit_price_cents ?? 0) >= 0)
     .map((item) => ({
+      serviceLineId: item.service_line_id,
+      serviceCategory: item.service_category,
       name: item.name,
       description: item.description,
       quantity: Number(item.quantity),
@@ -324,6 +334,8 @@ export async function applyDocumentChange(
         terms: input.terms,
       },
       p_lines: priced.lines.map((line) => ({
+        service_line_id: line.serviceLineId,
+        service_category: line.serviceCategory,
         name: line.name.trim(),
         description: line.description ?? null,
         quantity: line.quantity,

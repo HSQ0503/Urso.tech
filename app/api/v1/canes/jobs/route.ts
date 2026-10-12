@@ -51,6 +51,7 @@ type Body = {
   jobAddress?: unknown;
   jobName?: unknown;
   totalCents?: unknown;
+  items?: unknown;
   depositCollectedCents?: unknown;
   depositMethod?: unknown;
   scheduledAtIso?: unknown;
@@ -93,7 +94,13 @@ export const POST = apiRoute(async ({ req }) => {
 
   switch (body.action) {
     case "createManual": {
-      if (body.serviceArea !== undefined && body.serviceArea !== null && !isServiceArea(body.serviceArea)) {
+      if (body.items !== undefined && !Array.isArray(body.items))
+        return apiFail("`items` must be an array.", 422);
+      if (
+        body.serviceArea !== undefined &&
+        body.serviceArea !== null &&
+        !isServiceArea(body.serviceArea)
+      ) {
         return apiFail("Choose a valid service area.", 422);
       }
       // Same unchecked cast as the other deposit paths, plus a negative-cents
@@ -117,23 +124,32 @@ export const POST = apiRoute(async ({ req }) => {
       let depositCollectedCents: number | undefined;
       if (body.depositCollectedCents !== undefined) {
         if (!isCents(body.depositCollectedCents)) {
-          return apiFail("`depositCollectedCents` must be whole cents, 0 or more.", 422);
+          return apiFail(
+            "`depositCollectedCents` must be whole cents, 0 or more.",
+            422,
+          );
         }
         depositCollectedCents = body.depositCollectedCents;
       }
       let durationMinutes: number | undefined;
       if (body.durationMinutes !== undefined) {
-        if (typeof body.durationMinutes !== "number" || !Number.isFinite(body.durationMinutes)) {
+        if (
+          typeof body.durationMinutes !== "number" ||
+          !Number.isFinite(body.durationMinutes)
+        ) {
           return apiFail("`durationMinutes` must be a number.", 422);
         }
         durationMinutes = body.durationMinutes;
       }
 
-      const optional: Partial<Record<(typeof OPTIONAL_STRINGS)[number], string>> = {};
+      const optional: Partial<
+        Record<(typeof OPTIONAL_STRINGS)[number], string>
+      > = {};
       for (const key of OPTIONAL_STRINGS) {
         const value = body[key];
         if (value === undefined) continue;
-        if (typeof value !== "string") return apiFail(`\`${key}\` must be a string.`, 422);
+        if (typeof value !== "string")
+          return apiFail(`\`${key}\` must be a string.`, 422);
         optional[key] = value;
       }
 
@@ -144,7 +160,10 @@ export const POST = apiRoute(async ({ req }) => {
       // there — and unlike a reschedule this is the job's BIRTH, so there is no
       // prior good slot to fall back to. Absent stays absent: an omitted key
       // means an unscheduled job in the tray, which is a normal way to create one.
-      if (optional.scheduledAtIso !== undefined && !isIsoInstant(optional.scheduledAtIso)) {
+      if (
+        optional.scheduledAtIso !== undefined &&
+        !isIsoInstant(optional.scheduledAtIso)
+      ) {
         return apiFail("`scheduledAtIso` must be an ISO instant.", 422);
       }
 
@@ -172,6 +191,9 @@ export const POST = apiRoute(async ({ req }) => {
           customerName: body.customerName,
           jobName: body.jobName,
           totalCents: body.totalCents,
+          items: body.items as
+            | import("@urso/types").ServiceLineInput[]
+            | undefined,
           depositCollectedCents,
           durationMinutes,
         }),

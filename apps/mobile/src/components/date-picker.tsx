@@ -3,7 +3,7 @@ import { Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView,
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { addCalendarDays, dateInput, dateLabel, isCalendarDate, parseDateInput, todayEt } from "@/dates";
-import { color, font, HIT, radius, space, type } from "@/theme";
+import { color, font, HIT, radius, space, type } from "@/canes-theme";
 
 type Props = {
   visible: boolean;

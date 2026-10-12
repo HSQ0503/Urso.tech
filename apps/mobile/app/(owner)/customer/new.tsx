@@ -28,7 +28,7 @@ import { Notice } from "@/components/notice";
 import { PhoneInput } from "@/components/phone-input";
 import { keys } from "@/queries";
 import { useAction } from "@/query";
-import { color, font, HIT, radius, space, type } from "@/theme";
+import { color, font, HIT, radius, space, type } from "@/canes-theme";
 
 const SOURCES: LeadSource[] = ["referral", "door_hanger", "yard_sign", "website", "other"];
 

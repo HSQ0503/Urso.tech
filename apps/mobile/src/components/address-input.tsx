@@ -12,7 +12,7 @@ import {
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { API_BASE } from "@/api";
-import { color, font, HIT, radius, space, type } from "@/theme";
+import { color, font, HIT, radius, space, type } from "@/canes-theme";
 
 // Street-address input with search-as-you-type suggestions — Sebastian's
 // Markate-parity ask, on the SAME endpoint the web now uses: the app calls

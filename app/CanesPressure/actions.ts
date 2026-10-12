@@ -6,12 +6,16 @@ import { recordManualLeadContact } from "@/lib/canes/lead-contact";
 
 import { canesAutomationsEnabled } from "@/lib/canes/automations";
 
+import { publishServiceInvoice } from "@/lib/canes/service-billing";
+import { invoicePublishFingerprint } from "@/lib/canes/invoice-publish-fingerprint";
+import { manualServiceLines } from "@/lib/canes/service-lines";
+
 import { priceServiceLine } from "@urso/types";
 import { validSignature, type SignatureDrawing } from "@/lib/canes/signatures";
 import { archiveDocument } from "@/lib/canes/document-archive";
 import { estimateText } from "@/lib/canes/customer-messages";
 
-import { createHash, randomBytes, randomUUID } from "crypto";
+import { randomBytes, randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getAdminSession } from "@/lib/urso-auth";
@@ -1353,6 +1357,8 @@ export async function updateEstimate(
 export async function saveEstimateItems(
   estimateId: string,
   items: Array<{
+    serviceLineId?: string;
+    serviceCategory?: import("@urso/types").ServiceCategory | null;
     catalogId?: string | null;
     name: string;
     description?: string | null;
@@ -1360,7 +1366,8 @@ export async function saveEstimateItems(
     quantity: number;
     unitPriceCents: number;
     discountCents?: number;
-    discountMode?: "amount" | "percent"; discountValue?: number;
+    discountMode?: "amount" | "percent";
+    discountValue?: number;
     taxable?: boolean;
     isOption?: boolean;
     isMandatory?: boolean;
@@ -1372,45 +1379,80 @@ export async function saveEstimateItems(
   if (denied) return denied;
   const estimate = await getEstimate(estimateId);
   if (!estimate) return { ok: false, notice: "Estimate not found." };
-  if (estimate.status !== "draft") return { ok: false, notice: "Only draft estimates can be edited." };
+  if (estimate.status !== "draft")
+    return { ok: false, notice: "Only draft estimates can be edited." };
 
   for (const item of items) {
     if (item.unitPriceCents >= 0) {
       try {
-        const priced = priceServiceLine({ name: item.name, quantity: item.quantity, unitPriceCents: item.unitPriceCents, discountMode: item.discountMode ?? "amount", discountValue: item.discountValue ?? item.discountCents ?? 0 });
+        const priced = priceServiceLine({
+          name: item.name,
+          quantity: item.quantity,
+          unitPriceCents: item.unitPriceCents,
+          discountMode: item.discountMode ?? "amount",
+          discountValue: item.discountValue ?? item.discountCents ?? 0,
+        });
         item.discountCents = priced.discountCents;
-      } catch { return { ok: false, notice: "Check each line's quantity, price, and discount. A discount cannot exceed its line subtotal." }; }
-    } else if ((item.discountCents ?? 0) !== 0 || (item.discountValue ?? 0) !== 0) return { ok: false, notice: "A credit line cannot have another discount." };
+      } catch {
+        return {
+          ok: false,
+          notice:
+            "Check each line's quantity, price, and discount. A discount cannot exceed its line subtotal.",
+        };
+      }
+    } else if (
+      (item.discountCents ?? 0) !== 0 ||
+      (item.discountValue ?? 0) !== 0
+    )
+      return {
+        ok: false,
+        notice: "A credit line cannot have another discount.",
+      };
   }
   const rows = items.map((it, i) => {
-      const quantity = Number(it.quantity) || 0;
-      const unit = Math.round(it.unitPriceCents);
-      const discount = Math.round(it.discountCents ?? 0);
-      const isOption = it.isOption ?? false;
-      const isMandatory = it.isMandatory ?? false;
-      return {
-        estimate_id: estimateId,
-        catalog_id: it.catalogId ?? null,
-        position: i,
-        name: it.name,
-        description: it.description ?? null,
-        kind: it.kind,
+    const quantity = Number(it.quantity) || 0;
+    const unit = Math.round(it.unitPriceCents);
+    const discount = Math.round(it.discountCents ?? 0);
+    const isOption = it.isOption ?? false;
+    const isMandatory = it.isMandatory ?? false;
+    return {
+      estimate_id: estimateId,
+      catalog_id: it.catalogId ?? null,
+      service_line_id: it.serviceLineId,
+      service_category: it.serviceCategory,
+      position: i,
+      name: it.name,
+      description: it.description ?? null,
+      kind: it.kind,
+      quantity,
+      unit_price_cents: unit,
+      discount_cents: discount,
+      discount_mode: it.discountMode ?? "amount",
+      discount_value: it.discountValue ?? discount,
+      taxable: it.taxable ?? false,
+      line_total_cents: lineTotalCents({
         quantity,
         unit_price_cents: unit,
         discount_cents: discount,
-        discount_mode: it.discountMode ?? "amount",
-        discount_value: it.discountValue ?? discount,
-        taxable: it.taxable ?? false,
-        line_total_cents: lineTotalCents({ quantity, unit_price_cents: unit, discount_cents: discount }),
-        is_option: isOption,
-        is_mandatory: isMandatory,
-        // Options start selected only when mandatory; standard lines are selected.
-        is_selected: isOption ? isMandatory : true,
-        package_group: it.packageGroup ?? null,
-      };
-    });
-  const {data,error}=await canesDb().rpc("replace_canes_estimate_items",{p_id:estimateId,p_revision:estimate.revision??1,p_items:rows});
-  if(error||data!=="saved")return {ok:false,notice:"The estimate changed or could not be saved. Refresh before trying again."};
+      }),
+      is_option: isOption,
+      is_mandatory: isMandatory,
+      // Options start selected only when mandatory; standard lines are selected.
+      is_selected: isOption ? isMandatory : true,
+      package_group: it.packageGroup ?? null,
+    };
+  });
+  const { data, error } = await canesDb().rpc("replace_canes_estimate_items", {
+    p_id: estimateId,
+    p_revision: estimate.revision ?? 1,
+    p_items: rows,
+  });
+  if (error || data !== "saved")
+    return {
+      ok: false,
+      notice:
+        "The estimate changed or could not be saved. Refresh before trying again.",
+    };
   if (estimate.lead_id) await touch(estimate.lead_id);
   refresh();
   return { ok: true };
@@ -3172,14 +3214,30 @@ export async function createInvoiceFromJob(
   return initializeJobInvoice(jobId);
 }
 
-async function initializeJobInvoice(jobId: string): Promise<ActionResult & { invoiceId?: string }> {
+async function initializeJobInvoice(
+  jobId: string,
+): Promise<ActionResult & { invoiceId?: string }> {
   const job = await getJob(jobId);
   if (!job) return { ok: false, notice: "Job not found." };
 
   const settings = await getSettings();
   const db = canesDb();
-  let rewardOffers: Array<{ kind: InvoiceRewardKind; label: string; amount_cents: number }> = [];
-  if (job.customer_phone !== PRACTICE_PHONE) {
+  let rewardOffers: Array<{
+    kind: InvoiceRewardKind;
+    label: string;
+    amount_cents: number;
+  }> = [];
+  const serviceVisit = await db
+    .from("canes_service_occurrences")
+    .select("id")
+    .eq("job_id", jobId)
+    .limit(1);
+  if (serviceVisit.error)
+    return {
+      ok: false,
+      notice: "Recurring visit status could not be verified.",
+    };
+  if (job.customer_phone !== PRACTICE_PHONE && !serviceVisit.data?.length) {
     const config = rewardConfigFrom(settings);
     rewardOffers = (Object.keys(config) as InvoiceRewardKind[])
       .filter((kind) => config[kind].configured)
@@ -3189,34 +3247,50 @@ async function initializeJobInvoice(jobId: string): Promise<ActionResult & { inv
         amount_cents: config[kind].cents,
       }));
   }
-  const { data: rows, error } = await db.rpc("initialize_invoice_from_job_locked", {
-    p_job_id: jobId,
-    p_public_token: genInvoiceToken(),
-    p_message_to_customer: settings.invoice_message,
-    p_terms: settings.invoice_terms,
-    p_reward_offers: rewardOffers,
-  });
+  const { data: rows, error } = await db.rpc(
+    "initialize_invoice_from_job_locked",
+    {
+      p_job_id: jobId,
+      p_public_token: genInvoiceToken(),
+      p_message_to_customer: settings.invoice_message,
+      p_terms: settings.invoice_terms,
+      p_reward_offers: rewardOffers,
+    },
+  );
   if (error) return { ok: false, notice: error.message };
   const result = (rows?.[0] ?? null) as {
-    outcome: "ready" | "existing" | "not_found" | "incomplete_closed" | "financial_busy";
+    outcome:
+      | "ready"
+      | "existing"
+      | "not_found"
+      | "incomplete_closed"
+      | "financial_busy";
     invoice_id: string | null;
     invoice_number: string | null;
   } | null;
   if (!result || !result.invoice_id) {
     return {
       ok: false,
-      notice: result?.outcome === "not_found"
-        ? "Job not found."
-        : result?.outcome === "financial_busy"
-          ? "Square is reconciling a payment or refund right now. Refresh before creating the invoice."
-          : "The invoice could not be initialized. Please retry.",
+      notice:
+        result?.outcome === "not_found"
+          ? "Job not found."
+          : result?.outcome === "financial_busy"
+            ? "Square is reconciling a payment or refund right now. Refresh before creating the invoice."
+            : "The invoice could not be initialized. Please retry.",
     };
   }
   if (result.outcome === "incomplete_closed") {
-    return { ok: false, notice: "This invoice was sent before initialization completed. Void it and re-create the invoice." };
+    return {
+      ok: false,
+      notice:
+        "This invoice was sent before initialization completed. Void it and re-create the invoice.",
+    };
   }
   if (result.outcome === "ready") {
-    await logInvoiceEvent(job.lead_id, `Invoice ${result.invoice_number ?? "created"} created`);
+    await logInvoiceEvent(
+      job.lead_id,
+      `Invoice ${result.invoice_number ?? "created"} created`,
+    );
   }
   refresh();
   return { ok: true, invoiceId: result.invoice_id };
@@ -3245,11 +3319,15 @@ async function initializeJobInvoice(jobId: string): Promise<ActionResult & { inv
 export async function saveInvoiceItems(
   invoiceId: string,
   items: Array<{
+    serviceLineId?: string;
+    serviceCategory?: import("@urso/types").ServiceCategory | null;
     name: string;
     description?: string | null;
     quantity: number;
     unitPriceCents: number;
-    discountMode?: "amount" | "percent"; discountValue?: number; taxable?: boolean;
+    discountMode?: "amount" | "percent";
+    discountValue?: number;
+    taxable?: boolean;
   }>,
 ): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
@@ -3261,26 +3339,63 @@ export async function saveInvoiceItems(
   const normalized = items.map((it) => {
     const quantity = Number(it.quantity) || 0;
     const unit = Math.round(it.unitPriceCents);
-    if (!Number.isFinite(quantity) || quantity <= 0 || !Number.isSafeInteger(unit) || unit < 0) return null;
+    if (
+      !Number.isFinite(quantity) ||
+      quantity <= 0 ||
+      !Number.isSafeInteger(unit) ||
+      unit < 0
+    )
+      return null;
     let priced: ReturnType<typeof priceServiceLine>;
-    try { priced = priceServiceLine({ ...it, name: it.name.trim() || "Service", quantity, unitPriceCents: unit }); } catch { return null; }
+    try {
+      priced = priceServiceLine({
+        ...it,
+        name: it.name.trim() || "Service",
+        quantity,
+        unitPriceCents: unit,
+      });
+    } catch {
+      return null;
+    }
     return {
-      discount_mode: it.discountMode ?? "amount", discount_value: it.discountValue ?? 0,
-      discount_cents: priced.discountCents, line_total_cents: priced.lineTotalCents, taxable: it.taxable ?? false,
+      service_line_id: it.serviceLineId,
+      service_category: it.serviceCategory,
+      discount_mode: it.discountMode ?? "amount",
+      discount_value: it.discountValue ?? 0,
+      discount_cents: priced.discountCents,
+      line_total_cents: priced.lineTotalCents,
+      taxable: it.taxable ?? false,
       name: it.name.trim() || "Service",
       description: it.description?.trim() || null,
       quantity,
       unit_price_cents: unit,
     };
   });
-  if (normalized.some((item) => item === null)) return { ok: false, notice: "Every invoice line needs a positive quantity and valid price." };
+  if (normalized.some((item) => item === null))
+    return {
+      ok: false,
+      notice: "Every invoice line needs a positive quantity and valid price.",
+    };
 
   const billingOperationId = await claimInvoiceBillingOperation(invoiceId);
-  if (!billingOperationId) return { ok: false, notice: "This invoice is being paid or updated right now — refresh and try again." };
+  if (!billingOperationId)
+    return {
+      ok: false,
+      notice:
+        "This invoice is being paid or updated right now — refresh and try again.",
+    };
   try {
     const db = canesDb();
-    const { data, error: readError } = await db.from("invoices").select("*").eq("id", invoiceId).maybeSingle();
-    if (readError) return { ok: false, notice: `Couldn't verify the invoice: ${readError.message}` };
+    const { data, error: readError } = await db
+      .from("invoices")
+      .select("*")
+      .eq("id", invoiceId)
+      .maybeSingle();
+    if (readError)
+      return {
+        ok: false,
+        notice: `Couldn't verify the invoice: ${readError.message}`,
+      };
     const invoice = data as Invoice | null;
     if (!invoice) return { ok: false, notice: "Invoice not found." };
     const { data: rows, error } = await db.rpc("replace_invoice_items_locked", {
@@ -3297,12 +3412,21 @@ export async function saveInvoiceItems(
     if (outcome !== "saved") {
       const notices: Record<string, string> = {
         frozen: "Only draft invoices can have their lines edited.",
-        square_live: "This bill is already on Square — void it and re-bill to change the lines.",
-        has_payments: "Money has already been recorded against this bill — its lines are frozen.",
-        initializing: "This invoice is still being initialized. Refresh and try again.",
-        square_pending: "A prior Square publish may still be live. Reconcile or void it before changing the bill.",
+        square_live:
+          "This bill is already on Square — void it and re-bill to change the lines.",
+        has_payments:
+          "Money has already been recorded against this bill — its lines are frozen.",
+        initializing:
+          "This invoice is still being initialized. Refresh and try again.",
+        square_pending:
+          "A prior Square publish may still be live. Reconcile or void it before changing the bill.",
       };
-      return { ok: false, notice: notices[outcome ?? ""] ?? "This invoice changed while you were editing it — refresh and try again." };
+      return {
+        ok: false,
+        notice:
+          notices[outcome ?? ""] ??
+          "This invoice changed while you were editing it — refresh and try again.",
+      };
     }
     refresh();
     return { ok: true };
@@ -3441,21 +3565,30 @@ async function releaseInvoiceBillingOperation(invoiceId: string, operationId: st
 
 export async function sendInvoice(
   invoiceId: string,
-  opts?: { channels?: { email?: boolean; text?: boolean }; toEmail?: string; toPhone?: string },
+  opts?: {
+    channels?: { email?: boolean; text?: boolean };
+    toEmail?: string;
+    toPhone?: string;
+  },
 ): Promise<ActionResult> {
   if (!canesConfigured()) return DEMO;
   const denied = await denyUnlessPermitted("invoices");
   if (denied) return denied;
+  const serviceInvoice = await getInvoice(invoiceId);
+  if (serviceInvoice?.service_autopay_authorization_id)
+    return publishServiceInvoice(invoiceId);
   const db = canesDb();
   const overrides: Record<string, unknown> = {};
   if (opts?.toPhone !== undefined && opts.toPhone.trim()) {
     const phone = toE164(opts.toPhone);
-    if (!phone) return { ok: false, notice: "That phone number doesn't look valid." };
+    if (!phone)
+      return { ok: false, notice: "That phone number doesn't look valid." };
     overrides.customer_phone = phone;
   }
   if (opts?.toEmail !== undefined && opts.toEmail.trim()) {
     const email = opts.toEmail.trim();
-    if (!EMAIL_RE.test(email)) return { ok: false, notice: "That email address doesn't look valid." };
+    if (!EMAIL_RE.test(email))
+      return { ok: false, notice: "That email address doesn't look valid." };
     overrides.customer_email = email;
   }
   const wantsText = opts?.channels?.text ?? true;
@@ -3463,7 +3596,11 @@ export async function sendInvoice(
 
   const billingOperationId = await claimInvoiceBillingOperation(invoiceId);
   if (!billingOperationId) {
-    return { ok: false, notice: "This invoice is being paid or updated right now — refresh and try again." };
+    return {
+      ok: false,
+      notice:
+        "This invoice is being paid or updated right now — refresh and try again.",
+    };
   }
 
   try {
@@ -3474,7 +3611,11 @@ export async function sendInvoice(
       square_publish_started_at?: string | null;
     };
     const readCurrent = async (): Promise<SendInvoiceRow | null> => {
-      const { data, error } = await db.from("invoices").select("*").eq("id", invoiceId).maybeSingle();
+      const { data, error } = await db
+        .from("invoices")
+        .select("*")
+        .eq("id", invoiceId)
+        .maybeSingle();
       if (error) throw new Error(error.message);
       return data as SendInvoiceRow | null;
     };
@@ -3482,16 +3623,27 @@ export async function sendInvoice(
     try {
       fresh = await readCurrent();
     } catch (error) {
-      return { ok: false, notice: `Couldn't verify the invoice: ${error instanceof Error ? error.message : "unknown error"}` };
+      return {
+        ok: false,
+        notice: `Couldn't verify the invoice: ${error instanceof Error ? error.message : "unknown error"}`,
+      };
     }
     if (!fresh) return { ok: false, notice: "Invoice not found." };
-    if (fresh.credit_link_pending) return { ok: false, notice: "Customer credit is being reconciled. Wait for the old payment link to be retired before sending." };
-    if (fresh.status === "paid") return { ok: false, notice: "This invoice is already paid." };
-    if (fresh.status === "void") return { ok: false, notice: "This invoice was voided." };
+    if (fresh.credit_link_pending)
+      return {
+        ok: false,
+        notice:
+          "Customer credit is being reconciled. Wait for the old payment link to be retired before sending.",
+      };
+    if (fresh.status === "paid")
+      return { ok: false, notice: "This invoice is already paid." };
+    if (fresh.status === "void")
+      return { ok: false, notice: "This invoice was voided." };
     if (fresh.hosted_payment_url && !fresh.square_invoice_id) {
       return {
         ok: false,
-        notice: "This invoice has an unverified Square payment URL. Reconcile or void it before sending again.",
+        notice:
+          "This invoice has an unverified Square payment URL. Reconcile or void it before sending again.",
       };
     }
 
@@ -3500,16 +3652,17 @@ export async function sendInvoice(
     // silently persist a stale destination.
     if (Object.keys(overrides).length > 0) {
       const changesPendingFingerprint = Boolean(
-        fresh.square_publish_attempt_key
-        && (
-          (overrides.customer_phone !== undefined && overrides.customer_phone !== fresh.customer_phone)
-          || (overrides.customer_email !== undefined && overrides.customer_email !== fresh.customer_email)
-        ),
+        fresh.square_publish_attempt_key &&
+        ((overrides.customer_phone !== undefined &&
+          overrides.customer_phone !== fresh.customer_phone) ||
+          (overrides.customer_email !== undefined &&
+            overrides.customer_email !== fresh.customer_email)),
       );
       if (changesPendingFingerprint) {
         return {
           ok: false,
-          notice: "A prior Square publish may still be live. Reconcile or void it before changing the delivery address.",
+          notice:
+            "A prior Square publish may still be live. Reconcile or void it before changing the delivery address.",
         };
       }
       let overrideQuery = db
@@ -3527,13 +3680,18 @@ export async function sendInvoice(
       if (error || !updated?.length) {
         return {
           ok: false,
-          notice: error?.message ?? "The invoice changed while saving its delivery address — refresh and try again.",
+          notice:
+            error?.message ??
+            "The invoice changed while saving its delivery address — refresh and try again.",
         };
       }
       try {
         fresh = await readCurrent();
       } catch (error) {
-        return { ok: false, notice: `Couldn't reload the invoice: ${error instanceof Error ? error.message : "unknown error"}` };
+        return {
+          ok: false,
+          notice: `Couldn't reload the invoice: ${error instanceof Error ? error.message : "unknown error"}`,
+        };
       }
       if (!fresh) return { ok: false, notice: "Invoice not found." };
     }
@@ -3546,9 +3704,10 @@ export async function sendInvoice(
     if (!canText && !canEmail) {
       return {
         ok: false,
-        notice: optedOut && Boolean(fresh.customer_phone)
-          ? "This customer opted out of texts — add an email to send the invoice."
-          : "No destination: add a phone or email (or pick a channel) before sending.",
+        notice:
+          optedOut && Boolean(fresh.customer_phone)
+            ? "This customer opted out of texts — add an email to send the invoice."
+            : "No destination: add a phone or email (or pick a channel) before sending.",
       };
     }
 
@@ -3556,22 +3715,39 @@ export async function sendInvoice(
     try {
       recomputed = await recomputeInvoiceTotals(invoiceId);
     } catch (error) {
-      console.error(`[canes] invoice recompute failed before send for ${invoiceId}:`, error);
+      console.error(
+        `[canes] invoice recompute failed before send for ${invoiceId}:`,
+        error,
+      );
     }
     if (!recomputed) {
-      return { ok: false, notice: "Couldn't verify the invoice total. Nothing was sent — refresh and try again." };
+      return {
+        ok: false,
+        notice:
+          "Couldn't verify the invoice total. Nothing was sent — refresh and try again.",
+      };
     }
     try {
       fresh = await readCurrent();
     } catch (error) {
-      return { ok: false, notice: `Couldn't verify the invoice before sending: ${error instanceof Error ? error.message : "unknown error"}` };
+      return {
+        ok: false,
+        notice: `Couldn't verify the invoice before sending: ${error instanceof Error ? error.message : "unknown error"}`,
+      };
     }
     if (!fresh) return { ok: false, notice: "Invoice not found." };
     if (!fresh.initialization_completed_at) {
-      return { ok: false, notice: "This invoice is still being initialized. Nothing was sent — refresh and try again." };
+      return {
+        ok: false,
+        notice:
+          "This invoice is still being initialized. Nothing was sent — refresh and try again.",
+      };
     }
     if (!(["draft", "sent", "viewed"] as string[]).includes(fresh.status)) {
-      return { ok: false, notice: `Invoice ${fresh.number} changed before sending (now ${fresh.status}).` };
+      return {
+        ok: false,
+        notice: `Invoice ${fresh.number} changed before sending (now ${fresh.status}).`,
+      };
     }
 
     // Square publish is fail-closed. Its idempotency attempt is a stable hash
@@ -3583,41 +3759,26 @@ export async function sendInvoice(
     if (!hostedUrl && fresh.square_invoice_id) {
       return {
         ok: false,
-        notice: "This invoice's previous Square page was retired. Void and reissue the invoice before sending another payment link.",
+        notice:
+          "This invoice's previous Square page was retired. Void and reissue the invoice before sending another payment link.",
       };
     }
-    if (!hostedUrl && fresh.customer_phone !== PRACTICE_PHONE && squareConfigured()) {
+    if (
+      !hostedUrl &&
+      fresh.customer_phone !== PRACTICE_PHONE &&
+      squareConfigured()
+    ) {
       const squareItems = await getInvoiceItems(fresh.id);
-      const squareFingerprint = createHash("sha256")
-        .update(JSON.stringify({
-          invoice: {
-            id: fresh.id,
-            contactId: fresh.contact_id,
-            customerName: fresh.customer_name,
-            customerPhone: fresh.customer_phone,
-            customerEmail: fresh.customer_email,
-            jobName: fresh.job_name,
-            totalCents: fresh.total_cents,
-            paidCents: fresh.amount_paid_cents,
-            adjustmentCents: fresh.adjustment_cents,
-            taxCents: fresh.tax_cents,
-          },
-          items: squareItems.map((item) => ({
-            position: item.position,
-            name: item.name,
-            description: item.description,
-            quantity: item.quantity,
-            unitPriceCents: item.unit_price_cents,
-            lineTotalCents: item.line_total_cents,
-          })),
-        }))
-        .digest("hex")
-        .slice(0, 32);
+      const squareFingerprint = invoicePublishFingerprint(fresh, squareItems);
       let squareAttemptId = fresh.square_publish_attempt_key;
-      if (squareAttemptId && fresh.square_publish_fingerprint !== squareFingerprint) {
+      if (
+        squareAttemptId &&
+        fresh.square_publish_fingerprint !== squareFingerprint
+      ) {
         return {
           ok: false,
-          notice: "A prior Square publish has an unknown outcome and the bill has changed since. Check Square, then void and reissue before sending.",
+          notice:
+            "A prior Square publish has an unknown outcome and the bill has changed since. Check Square, then void and reissue before sending.",
         };
       }
       if (!squareAttemptId) {
@@ -3640,13 +3801,16 @@ export async function sendInvoice(
         if (attemptError || !claimedAttempt?.length) {
           return {
             ok: false,
-            notice: attemptError?.message ?? "The invoice changed before Square publish could begin — refresh and try again.",
+            notice:
+              attemptError?.message ??
+              "The invoice changed before Square publish could begin — refresh and try again.",
           };
         }
         squareAttemptId = squareFingerprint;
       }
       const clearSquareAttempt = async (): Promise<void> => {
-        const { error } = await db.from("invoices")
+        const { error } = await db
+          .from("invoices")
           .update({
             square_publish_attempt_key: null,
             square_publish_fingerprint: null,
@@ -3656,24 +3820,36 @@ export async function sendInvoice(
           .eq("id", invoiceId)
           .eq("billing_operation_id", billingOperationId)
           .eq("square_publish_attempt_key", squareAttemptId);
-        if (error) console.error(`[canes] Square attempt cleanup failed for ${invoiceId}: ${error.message}`);
+        if (error)
+          console.error(
+            `[canes] Square attempt cleanup failed for ${invoiceId}: ${error.message}`,
+          );
       };
       const sq = await createSquareInvoice(fresh, squareItems, squareAttemptId);
       if (sq.error) {
-        const canceled = sq.squareInvoiceId ? await cancelSquareInvoice(sq.squareInvoiceId) : false;
+        const canceled = sq.squareInvoiceId
+          ? await cancelSquareInvoice(sq.squareInvoiceId)
+          : false;
         if (canceled) await clearSquareAttempt();
-        await alertOwner(`Couldn't create the Square invoice for ${fresh.number}: ${sq.error}. Nothing was sent.`);
+        await alertOwner(
+          `Couldn't create the Square invoice for ${fresh.number}: ${sq.error}. Nothing was sent.`,
+        );
         return {
           ok: false,
-          notice: sq.squareInvoiceId && canceled
-            ? `Square couldn't publish a complete payment page: ${sq.error}. Nothing was sent; retry.`
-            : `Square publish failed or timed out: ${sq.error}. Nothing was sent. Retry this unchanged invoice; if it still fails, check Square before editing.`,
+          notice:
+            sq.squareInvoiceId && canceled
+              ? `Square couldn't publish a complete payment page: ${sq.error}. Nothing was sent; retry.`
+              : `Square publish failed or timed out: ${sq.error}. Nothing was sent. Retry this unchanged invoice; if it still fails, check Square before editing.`,
         };
       }
-      const squareComplete = Boolean(sq.squareInvoiceId && sq.squareOrderId && sq.hostedUrl);
+      const squareComplete = Boolean(
+        sq.squareInvoiceId && sq.squareOrderId && sq.hostedUrl,
+      );
       if (sq.squareInvoiceId || sq.squareOrderId || sq.hostedUrl) {
         if (!squareComplete) {
-          const canceled = sq.squareInvoiceId ? await cancelSquareInvoice(sq.squareInvoiceId) : false;
+          const canceled = sq.squareInvoiceId
+            ? await cancelSquareInvoice(sq.squareInvoiceId)
+            : false;
           if (canceled) await clearSquareAttempt();
           return {
             ok: false,
@@ -3722,18 +3898,29 @@ export async function sendInvoice(
       }
     }
 
-    const { data: publishRows, error: publishError } = await db.rpc("publish_invoice_locked", {
-      p_invoice_id: invoiceId,
-      p_expected_status: fresh.status,
-      p_expected_total_cents: fresh.total_cents,
-      p_expected_paid_cents: fresh.amount_paid_cents,
-      p_expected_square_invoice_id: expectedSquareInvoiceId,
-      p_operation_id: billingOperationId,
-      p_queue_text: canText,
-      p_queue_email: canEmail,
-    });
+    const { data: publishRows, error: publishError } = await db.rpc(
+      "publish_invoice_locked",
+      {
+        p_invoice_id: invoiceId,
+        p_expected_status: fresh.status,
+        p_expected_total_cents: fresh.total_cents,
+        p_expected_paid_cents: fresh.amount_paid_cents,
+        p_expected_square_invoice_id: expectedSquareInvoiceId,
+        p_operation_id: billingOperationId,
+        p_queue_text: canText,
+        p_queue_email: canEmail,
+      },
+    );
     const published = (publishRows?.[0] ?? null) as {
-      outcome: "published" | "not_found" | "lease_lost" | "conflict" | "initializing" | "closed" | "no_destination" | "square_pending";
+      outcome:
+        | "published"
+        | "not_found"
+        | "lease_lost"
+        | "conflict"
+        | "initializing"
+        | "closed"
+        | "no_destination"
+        | "square_pending";
       delivery_generation: number;
       sent_at: string | null;
       text_dedupe_key: string | null;
@@ -3741,20 +3928,27 @@ export async function sendInvoice(
     } | null;
     if (publishError || published?.outcome !== "published") {
       const current = await getInvoice(invoiceId);
-      const squareIdToCancel = createdSquareInvoiceId ?? (current?.status === "void" ? current.square_invoice_id : null);
+      const squareIdToCancel =
+        createdSquareInvoiceId ??
+        (current?.status === "void" ? current.square_invoice_id : null);
       if (squareIdToCancel) {
         const canceled = await cancelSquareInvoice(squareIdToCancel);
         if (canceled && createdSquareInvoiceId) {
-          await db.from("invoices")
-            .update({ hosted_payment_url: null, updated_at: new Date().toISOString() })
+          await db
+            .from("invoices")
+            .update({
+              hosted_payment_url: null,
+              updated_at: new Date().toISOString(),
+            })
             .eq("id", invoiceId)
             .eq("square_invoice_id", createdSquareInvoiceId);
         }
       }
       return {
         ok: false,
-        notice: publishError?.message
-          ?? (published?.outcome === "square_pending"
+        notice:
+          publishError?.message ??
+          (published?.outcome === "square_pending"
             ? "A prior Square publish may still be live but has no verified provider ID. Nothing was sent—reconcile or void it first."
             : `Invoice ${fresh.number} changed while sending (now ${current?.status ?? "gone"}) — refresh and check it.`),
       };
@@ -3769,7 +3963,8 @@ export async function sendInvoice(
     };
 
     const retryEnabled = await canesAutomationsEnabled();
-    let emailResult: Awaited<ReturnType<typeof notifyInvoiceSent>> | null = null;
+    let emailResult: Awaited<ReturnType<typeof notifyInvoiceSent>> | null =
+      null;
     let emailQueued = false;
     if (canEmail && published.email_dedupe_key) {
       const { data: claimed } = await db
@@ -3781,13 +3976,18 @@ export async function sendInvoice(
       if (claimed?.length) {
         emailResult = await notifyInvoiceSent(sent, deliveryId, true);
         if (emailResult.ok) {
-          await db.from("tasks")
+          await db
+            .from("tasks")
             .update({ status: "sent", sent_at: new Date().toISOString() })
             .eq("dedupe_key", published.email_dedupe_key)
             .eq("status", "sending");
         } else {
-          await db.from("tasks")
-            .update({ status: retryEnabled ? "pending" : "canceled", scheduled_for: new Date().toISOString() })
+          await db
+            .from("tasks")
+            .update({
+              status: retryEnabled ? "pending" : "canceled",
+              scheduled_for: new Date().toISOString(),
+            })
             .eq("dedupe_key", published.email_dedupe_key)
             .eq("status", "sending");
           emailQueued = retryEnabled;
@@ -3812,18 +4012,24 @@ export async function sendInvoice(
           to: sent.customer_phone as string,
           body: `Here is your invoice from Canes Pressure Washing: ${link}`,
           leadId: fresh.lead_id,
-          automated: true, userInitiated: true,
+          automated: true,
+          userInitiated: true,
         });
         if (res.ok) {
           textSent = true;
-          await db.from("tasks")
+          await db
+            .from("tasks")
             .update({ status: "sent", sent_at: new Date().toISOString() })
             .eq("dedupe_key", published.text_dedupe_key)
             .eq("status", "sending");
         } else {
           textQueued = retryEnabled;
-          await db.from("tasks")
-            .update({ status: retryEnabled ? "pending" : "canceled", scheduled_for: new Date().toISOString() })
+          await db
+            .from("tasks")
+            .update({
+              status: retryEnabled ? "pending" : "canceled",
+              scheduled_for: new Date().toISOString(),
+            })
             .eq("dedupe_key", published.text_dedupe_key)
             .eq("status", "sending");
         }
@@ -3835,18 +4041,33 @@ export async function sendInvoice(
 
     // Advance the job to invoiced (never regress a paid job).
     if (fresh.job_id) {
-      await db.from("jobs").update({ status: "invoiced" }).eq("id", fresh.job_id).eq("status", "completed");
+      await db
+        .from("jobs")
+        .update({ status: "invoiced" })
+        .eq("id", fresh.job_id)
+        .eq("status", "completed");
     }
-    await logInvoiceEvent(fresh.lead_id, `Invoice ${fresh.number} sent (${fmtMoney(sent.total_cents)})`);
+    await logInvoiceEvent(
+      fresh.lead_id,
+      `Invoice ${fresh.number} sent (${fmtMoney(sent.total_cents)})`,
+    );
     if (fresh.lead_id) await touch(fresh.lead_id);
     refresh();
     const emailSent = emailResult?.ok === true;
-    const emailFailure = emailResult && !emailResult.ok
-      ? emailResult.skipped ?? emailResult.error ?? "Email delivery failed."
-      : null;
+    const emailFailure =
+      emailResult && !emailResult.ok
+        ? (emailResult.skipped ?? emailResult.error ?? "Email delivery failed.")
+        : null;
     return {
       ok: true,
-      notice: sendInvoiceNotice({ emailSent, emailQueued, emailFailure, optedOut, textSent, textQueued }),
+      notice: sendInvoiceNotice({
+        emailSent,
+        emailQueued,
+        emailFailure,
+        optedOut,
+        textSent,
+        textQueued,
+      }),
     };
   } finally {
     await releaseInvoiceBillingOperation(invoiceId, billingOperationId);
@@ -4897,6 +5118,7 @@ export async function setPrimaryAddress(contactId: string, addressId: string): P
 // single line item, and — when a slot is given — schedules it and arms the
 // day-before confirmation exactly like scheduleJob.
 export async function createManualJob(input: {
+  items?: import("@urso/types").ServiceLineInput[];
   serviceArea?: ServiceArea | null;
   contactId?: string;
   customerName: string;
@@ -4917,23 +5139,49 @@ export async function createManualJob(input: {
   if (!canesConfigured()) return DEMO;
   const denied = await denyUnlessPermitted("schedule");
   if (denied) return denied;
-  if (input.serviceArea !== undefined && input.serviceArea !== null && !isServiceArea(input.serviceArea)) return { ok: false, notice: "Choose a valid service area." };
+  if (
+    input.serviceArea !== undefined &&
+    input.serviceArea !== null &&
+    !isServiceArea(input.serviceArea)
+  )
+    return { ok: false, notice: "Choose a valid service area." };
   const customerName = input.customerName.trim();
-  if (!customerName) return { ok: false, notice: "A customer name is required." };
+  if (!customerName)
+    return { ok: false, notice: "A customer name is required." };
   const jobName = input.jobName.trim();
   if (!jobName) return { ok: false, notice: "A job name is required." };
-  const total = Math.round(input.totalCents);
-  if (!Number.isFinite(total) || total < 0) return { ok: false, notice: "Enter a valid job total." };
+  let services: ReturnType<typeof manualServiceLines>;
+  try {
+    services = manualServiceLines(
+      input.items,
+      jobName,
+      Math.round(input.totalCents),
+    );
+  } catch (error) {
+    return {
+      ok: false,
+      notice:
+        error instanceof Error ? error.message : "Check the service lines.",
+    };
+  }
+  const total = services.totalCents;
+  if (!Number.isFinite(total) || total < 0)
+    return { ok: false, notice: "Enter a valid job total." };
   if (Math.round(input.depositCollectedCents ?? 0) > total) {
     return { ok: false, notice: "The deposit can't exceed the job total." };
   }
-  const phone = input.customerPhone?.trim() ? toE164(input.customerPhone) : null;
-  if (input.customerPhone?.trim() && !phone) return { ok: false, notice: "That phone number doesn't look valid." };
+  const phone = input.customerPhone?.trim()
+    ? toE164(input.customerPhone)
+    : null;
+  if (input.customerPhone?.trim() && !phone)
+    return { ok: false, notice: "That phone number doesn't look valid." };
   const email = input.customerEmail?.trim() || null;
-  if (email && !EMAIL_RE.test(email)) return { ok: false, notice: "That email address doesn't look valid." };
+  if (email && !EMAIL_RE.test(email))
+    return { ok: false, notice: "That email address doesn't look valid." };
 
   const when = input.scheduledAtIso ? new Date(input.scheduledAtIso) : null;
-  if (when && Number.isNaN(when.getTime())) return { ok: false, notice: "Invalid date." };
+  if (when && Number.isNaN(when.getTime()))
+    return { ok: false, notice: "Invalid date." };
   const duration = Math.max(15, Math.round(input.durationMinutes ?? 120));
 
   const contactId =
@@ -4950,14 +5198,18 @@ export async function createManualJob(input: {
 
   const db = canesDb();
   const crews = input.crewId ? await listCrews() : [];
-  const crew = input.crewId ? crews.find((c) => c.id === input.crewId) ?? null : null;
+  const crew = input.crewId
+    ? (crews.find((c) => c.id === input.crewId) ?? null)
+    : null;
   if (input.crewId && !crew) return { ok: false, notice: "Crew not found." };
   const lead = phone ? await findLeadIdByPhone(phone) : null;
   const startIso = when?.toISOString() ?? null;
-  const { data, error } = await db
-    .from("jobs")
-    .insert({
-      ...(input.serviceArea !== undefined ? { service_area: input.serviceArea, service_area_selected: true } : {}),
+  const { data, error } = await db.rpc("create_canes_manual_job", {
+    p_items: services.rows,
+    p_job: {
+      ...(input.serviceArea !== undefined
+        ? { service_area: input.serviceArea, service_area_selected: true }
+        : {}),
       estimate_id: null,
       lead_id: lead,
       contact_id: contactId,
@@ -4970,33 +5222,28 @@ export async function createManualJob(input: {
       total_cents: total,
       deposit_cents: 0,
       scheduled_at: startIso,
-      ends_at: startIso ? new Date((when as Date).getTime() + duration * 60_000).toISOString() : null,
+      ends_at: startIso
+        ? new Date((when as Date).getTime() + duration * 60_000).toISOString()
+        : null,
       duration_minutes: duration,
       crew_id: crew?.id ?? null,
       assigned_to: crew?.name ?? null,
       creation_notification_crew_id: crew?.id ?? null,
       creation_notification_scheduled_at: startIso,
       notes: input.notes?.trim() || null,
-    })
-    .select("id")
-    .single();
-  if (error) return { ok: false, notice: error.message };
-  const jobId = data.id as string;
-
-  // The single line item is the run-sheet checklist entry + the invoice line.
-  await db.from("job_items").insert({
-    job_id: jobId,
-    position: 0,
-    name: jobName,
-    quantity: 1,
-    line_total_cents: total,
+    },
   });
+  if (error) return { ok: false, notice: error.message };
+  const jobId = data as string;
 
   const createdJob = await getJob(jobId);
-  const futureSlot = Boolean(startIso && new Date(startIso).getTime() >= Date.now());
+  const futureSlot = Boolean(
+    startIso && new Date(startIso).getTime() >= Date.now(),
+  );
   // A back-dated manual job (forgot-to-log) must never trigger the customer
   // confirmation text — the visit already happened.
-  if (startIso && futureSlot && createdJob) await armJobConfirmation(createdJob, startIso);
+  if (startIso && futureSlot && createdJob)
+    await armJobConfirmation(createdJob, startIso);
   if (crew && createdJob && (!startIso || futureSlot)) {
     try {
       await pushJobChanged({
@@ -5014,31 +5261,59 @@ export async function createManualJob(input: {
           crewId: crew.id,
           status: startIso ? "scheduled" : "unscheduled",
           scheduledAt: startIso,
-          endsAt: startIso ? new Date((when as Date).getTime() + duration * 60_000).toISOString() : null,
+          endsAt: startIso
+            ? new Date(
+                (when as Date).getTime() + duration * 60_000,
+              ).toISOString()
+            : null,
         },
       });
     } catch (error) {
-      console.error(`[canes] manual job push persistence failed for ${createdJob.id}:`, error);
+      console.error(
+        `[canes] manual job push persistence failed for ${createdJob.id}:`,
+        error,
+      );
     }
     try {
       await notifyCrewAssignment(createdJob, crew.name, startIso);
     } catch (error) {
-      console.error(`[canes] legacy crew assignment notice failed for ${createdJob.id}:`, error);
+      console.error(
+        `[canes] legacy crew assignment notice failed for ${createdJob.id}:`,
+        error,
+      );
     }
   }
   const depositCollected = Math.round(input.depositCollectedCents ?? 0);
   let depositNotice: string | undefined;
   if (depositCollected > 0) {
     const dep = createdJob
-      ? await insertJobDepositRow(createdJob, depositCollected, input.depositMethod ?? "cash")
+      ? await insertJobDepositRow(
+          createdJob,
+          depositCollected,
+          input.depositMethod ?? "cash",
+        )
       : { ok: false as const };
-    if (!dep.ok) depositNotice = "Job created, but the deposit could NOT be recorded — open the job and record it there.";
+    if (!dep.ok)
+      depositNotice =
+        "Job created, but the deposit could NOT be recorded — open the job and record it there.";
   }
-  await logJobEvent(lead, `Job created manually${startIso ? ` — scheduled ${fmtEt(startIso)}` : ""}`);
+  await logJobEvent(
+    lead,
+    `Job created manually${startIso ? ` — scheduled ${fmtEt(startIso)}` : ""}`,
+  );
   refresh();
-  const notices = [depositNotice, startIso ? lateNightNotice(startIso) : undefined,
-    startIso ? serviceAreaScheduleNotice(createdJob?.service_area, startIso) : undefined].filter(Boolean);
-  return { ok: true, jobId, ...(notices.length ? { notice: notices.join(" ") } : {}) };
+  const notices = [
+    depositNotice,
+    startIso ? lateNightNotice(startIso) : undefined,
+    startIso
+      ? serviceAreaScheduleNotice(createdJob?.service_area, startIso)
+      : undefined,
+  ].filter(Boolean);
+  return {
+    ok: true,
+    jobId,
+    ...(notices.length ? { notice: notices.join(" ") } : {}),
+  };
 }
 
 // A standalone invoice with no job behind it — Sebastian's "make a new
@@ -5047,6 +5322,7 @@ export async function createManualJob(input: {
 // one line item carries the amount, and the invoice behaves exactly like a
 // job-born one from here (send, cash, rewards, ledger).
 export async function createManualInvoice(input: {
+  items?: import("@urso/types").ServiceLineInput[];
   contactId?: string;
   customerName: string;
   customerPhone?: string;
@@ -5061,13 +5337,33 @@ export async function createManualInvoice(input: {
   const customerName = input.customerName.trim();
   if (!customerName) return { ok: false, notice: "A client name is required." };
   const jobName = input.jobName.trim();
-  if (!jobName) return { ok: false, notice: "Describe what this invoice is for." };
-  const total = Math.round(input.totalCents);
-  if (!Number.isFinite(total) || total <= 0) return { ok: false, notice: "Enter a valid amount." };
-  const phone = input.customerPhone?.trim() ? toE164(input.customerPhone) : null;
-  if (input.customerPhone?.trim() && !phone) return { ok: false, notice: "That phone number doesn't look valid." };
+  if (!jobName)
+    return { ok: false, notice: "Describe what this invoice is for." };
+  let services: ReturnType<typeof manualServiceLines>;
+  try {
+    services = manualServiceLines(
+      input.items,
+      jobName,
+      Math.round(input.totalCents),
+    );
+  } catch (error) {
+    return {
+      ok: false,
+      notice:
+        error instanceof Error ? error.message : "Check the service lines.",
+    };
+  }
+  const total = services.totalCents;
+  if (!Number.isFinite(total) || total <= 0)
+    return { ok: false, notice: "Enter a valid amount." };
+  const phone = input.customerPhone?.trim()
+    ? toE164(input.customerPhone)
+    : null;
+  if (input.customerPhone?.trim() && !phone)
+    return { ok: false, notice: "That phone number doesn't look valid." };
   const email = input.customerEmail?.trim() || null;
-  if (email && !EMAIL_RE.test(email)) return { ok: false, notice: "That email address doesn't look valid." };
+  if (email && !EMAIL_RE.test(email))
+    return { ok: false, notice: "That email address doesn't look valid." };
 
   const contactId = await resolveEstimateContact({
     contactId: input.contactId,
@@ -5080,28 +5376,35 @@ export async function createManualInvoice(input: {
   const settings = await getSettings();
   const db = canesDb();
   const config = rewardConfigFrom(settings);
-  const rewardOffers = phone === PRACTICE_PHONE
-    ? []
-    : (Object.keys(config) as InvoiceRewardKind[])
-        .filter((kind) => config[kind].configured)
-        .map((kind) => ({
-          kind,
-          label: config[kind].label,
-          amount_cents: config[kind].cents,
-        }));
-  const { data: rows, error } = await db.rpc("initialize_manual_invoice_locked", {
-    p_contact_id: contactId,
-    p_customer_name: customerName,
-    p_customer_phone: phone,
-    p_customer_email: email,
-    p_job_address: input.jobAddress?.trim() || null,
-    p_job_name: jobName,
-    p_total_cents: total,
-    p_message_to_customer: settings.invoice_message,
-    p_terms: settings.invoice_terms,
-    p_public_token: genInvoiceToken(),
-    p_reward_offers: rewardOffers,
-  });
+  const rewardOffers =
+    phone === PRACTICE_PHONE
+      ? []
+      : (Object.keys(config) as InvoiceRewardKind[])
+          .filter((kind) => config[kind].configured)
+          .map((kind) => ({
+            kind,
+            label: config[kind].label,
+            amount_cents: config[kind].cents,
+          }));
+  const { data: rows, error } = await db.rpc(
+    "initialize_canes_itemized_invoice",
+    {
+      p_items: services.rows,
+      p_document: {
+        contact_id: contactId,
+        customer_name: customerName,
+        customer_phone: phone,
+        customer_email: email,
+        job_address: input.jobAddress?.trim() || null,
+        job_name: jobName,
+        total_cents: total,
+        message_to_customer: settings.invoice_message,
+        terms: settings.invoice_terms,
+        public_token: genInvoiceToken(),
+        reward_offers: rewardOffers,
+      },
+    },
+  );
   if (error) return { ok: false, notice: error.message };
   const initialized = (rows?.[0] ?? null) as {
     outcome: "ready" | "invalid";
@@ -5109,7 +5412,10 @@ export async function createManualInvoice(input: {
     invoice_number: string | null;
   } | null;
   if (!initialized?.invoice_id || initialized.outcome !== "ready") {
-    return { ok: false, notice: "The invoice could not be initialized. Please retry." };
+    return {
+      ok: false,
+      notice: "The invoice could not be initialized. Please retry.",
+    };
   }
   const invoiceId = initialized.invoice_id;
   const number = initialized.invoice_number ?? "Invoice";

@@ -30,7 +30,7 @@ import { Notice } from "@/components/notice";
 import { PhoneInput } from "@/components/phone-input";
 import { keys } from "@/queries";
 import { useAction } from "@/query";
-import { color, font, HIT, radius, space, type } from "@/theme";
+import { color, font, HIT, radius, space, type } from "@/canes-theme";
 
 // The web's new-lead form defaults to referral, and so does this one — it is
 // the commonest way work reaches him that isn't already automated.
@@ -352,7 +352,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   primaryOff: { backgroundColor: color.brandEdgeSoft },
-  primaryText: { ...type.title, color: color.surface },
+  primaryText: { ...type.title, color: "#ffffff" },
   cancel: {
     minHeight: 54,
     alignItems: "center",

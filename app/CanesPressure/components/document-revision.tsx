@@ -5,6 +5,8 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   fmtMoney,
+  STANDARD_SERVICES,
+  type ServiceCategory,
   priceServices,
   type DocumentEdit,
   type DocumentKind,
@@ -164,14 +166,39 @@ export function DocumentRevisionControls({
               className="grid gap-3 rounded-lg border p-3 sm:grid-cols-4"
             >
               <legend>Service {index + 1}</legend>
-              <label className="sm:col-span-4">
-                Service
-                <input
-                  className="cp-input"
-                  value={line.name}
-                  onChange={(e) => lineChange(index, { name: e.target.value })}
-                />
-              </label>
+              <div className="sm:col-span-4">
+                <label>
+                  Service
+                  <input
+                    className="cp-input"
+                    value={line.name}
+                    onChange={(e) =>
+                      lineChange(index, { name: e.target.value })
+                    }
+                  />
+                </label>
+                <label className="cp-label block">
+                  Service category
+                  <select
+                    className="cp-select mt-1"
+                    value={line.serviceCategory ?? ""}
+                    onChange={(e) =>
+                      lineChange(index, {
+                        serviceCategory: (e.target.value ||
+                          null) as ServiceCategory | null,
+                      })
+                    }
+                  >
+                    <option value="">Uncategorized</option>
+                    {STANDARD_SERVICES.map((service) => (
+                      <option key={service.key} value={service.key}>
+                        {service.name}
+                      </option>
+                    ))}
+                    <option value="custom">Custom service</option>
+                  </select>
+                </label>
+              </div>
               <label>
                 Quantity
                 <input

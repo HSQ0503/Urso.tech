@@ -13,7 +13,7 @@ import {
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { PhoneInput } from "@/components/phone-input";
-import { color, font, HIT, radius, space } from "@/theme";
+import { color, font, HIT, radius, space } from "@/canes-theme";
 
 export type DeliveryChoice = "text" | "email" | "both";
 export type DeliveryChannels = { text: boolean; email: boolean };
@@ -108,11 +108,19 @@ export function DeliverySheet({
   const [addedPhone, setAddedPhone] = useState("");
   // Eugene's case: the email was added to the customer AFTER the estimate was
   // created, so the estimate's snapshot is empty. The typed value stands in.
-  const effectiveEmail = email?.trim() || (allowAdding ? addedEmail.trim() : "") || null;
-  const effectivePhone = phone?.trim() || (allowAdding && addedPhone.replace(/\D/g, "").length >= 10 ? addedPhone : "") || null;
+  const effectiveEmail =
+    email?.trim() || (allowAdding ? addedEmail.trim() : "") || null;
+  const effectivePhone =
+    phone?.trim() ||
+    (allowAdding && addedPhone.replace(/\D/g, "").length >= 10
+      ? addedPhone
+      : "") ||
+    null;
   const hasPhone = Boolean(effectivePhone);
   const hasEmail = Boolean(effectiveEmail);
-  const [choice, setChoice] = useState<DeliveryChoice>(() => defaultChoice(phone, email));
+  const [choice, setChoice] = useState<DeliveryChoice>(() =>
+    defaultChoice(phone, email),
+  );
 
   useEffect(() => {
     if (visible) {
@@ -125,126 +133,184 @@ export function DeliverySheet({
   const canSend = hasPhone || hasEmail;
   const channels = deliveryChannels(choice);
   const overrides: DeliveryOverrides = {
-    ...(allowAdding && !email?.trim() && effectiveEmail ? { toEmail: effectiveEmail } : {}),
-    ...(allowAdding && !phone?.trim() && effectivePhone ? { toPhone: effectivePhone } : {}),
+    ...(allowAdding && !email?.trim() && effectiveEmail
+      ? { toEmail: effectiveEmail }
+      : {}),
+    ...(allowAdding && !phone?.trim() && effectivePhone
+      ? { toPhone: effectivePhone }
+      : {}),
   };
-  const summary = choice === "both"
-    ? `Text ${displayPhone(effectivePhone ?? "")} and email ${effectiveEmail}.`
-    : choice === "email"
-      ? `Email ${effectiveEmail}.`
-      : `Text ${displayPhone(effectivePhone ?? "")}.`;
+  const summary =
+    choice === "both"
+      ? `Text ${displayPhone(effectivePhone ?? "")} and email ${effectiveEmail}.`
+      : choice === "email"
+        ? `Email ${effectiveEmail}.`
+        : `Text ${displayPhone(effectivePhone ?? "")}.`;
   const showAddEmail = allowAdding && !email?.trim();
   const showAddPhone = allowAdding && !phone?.trim();
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+    >
       <View style={styles.scrim}>
-        <Pressable style={StyleSheet.absoluteFill} accessibilityLabel="Close delivery options" onPress={onClose} />
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          accessibilityLabel="Close delivery options"
+          onPress={onClose}
+        />
         {/* The add-email/phone rows sit near the bottom; without this the
             keyboard covers the field being typed into (the plan form had the
             same defect on device). */}
-        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined}>
-        <View style={[styles.sheet, { paddingBottom: insets.bottom + space.lg }]}>
-          <View style={styles.handle} />
-          <View style={styles.header}>
-            <View style={styles.headerCopy}>
-              <Text style={styles.eyebrow}>SEND {documentLabel.toUpperCase()}</Text>
-              <Text style={styles.title}>How should it go out?</Text>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+        >
+          <View
+            style={[styles.sheet, { paddingBottom: insets.bottom + space.lg }]}
+          >
+            <View style={styles.handle} />
+            <View style={styles.header}>
+              <View style={styles.headerCopy}>
+                <Text style={styles.eyebrow}>
+                  SEND {documentLabel.toUpperCase()}
+                </Text>
+                <Text style={styles.title}>How should it go out?</Text>
+              </View>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Close"
+                onPress={onClose}
+                style={styles.close}
+              >
+                <Feather name="x" size={25} color={color.muted} />
+              </Pressable>
             </View>
-            <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={onClose} style={styles.close}>
-              <Feather name="x" size={25} color={color.muted} />
+
+            {!canSend && !showAddEmail && !showAddPhone ? (
+              <View style={styles.missing}>
+                <Feather name="alert-circle" size={21} color={color.danger} />
+                <Text style={styles.missingText}>
+                  Add a phone number or email before sending this{" "}
+                  {documentLabel}.
+                </Text>
+              </View>
+            ) : (
+              <View accessibilityRole="radiogroup" style={styles.channels}>
+                <ChannelButton
+                  label="Text"
+                  detail={
+                    hasPhone
+                      ? displayPhone(effectivePhone ?? "")
+                      : showAddPhone
+                        ? "Add a phone number below"
+                        : "No phone on file"
+                  }
+                  icon="message-square"
+                  active={choice === "text"}
+                  disabled={!hasPhone || sending}
+                  onPress={() => setChoice("text")}
+                />
+                <ChannelButton
+                  label="Email"
+                  detail={
+                    hasEmail
+                      ? (effectiveEmail ?? "")
+                      : showAddEmail
+                        ? "Add an email below"
+                        : "No email on file"
+                  }
+                  icon="mail"
+                  active={choice === "email"}
+                  disabled={!hasEmail || sending}
+                  onPress={() => setChoice("email")}
+                />
+                <ChannelButton
+                  label="Both"
+                  detail={
+                    hasPhone && hasEmail
+                      ? "Send through both channels"
+                      : "Phone and email required"
+                  }
+                  icon="send"
+                  active={choice === "both"}
+                  disabled={!hasPhone || !hasEmail || sending}
+                  onPress={() => setChoice("both")}
+                />
+              </View>
+            )}
+
+            {showAddEmail ? (
+              <View style={styles.addRow}>
+                <Feather name="mail" size={19} color={color.muted} />
+                <TextInput
+                  value={addedEmail}
+                  onChangeText={(value) => {
+                    setAddedEmail(value);
+                    if (value.trim() && choice === "text" && !hasPhone)
+                      setChoice("email");
+                  }}
+                  placeholder="Add an email for this customer"
+                  placeholderTextColor={color.faint}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  accessibilityLabel="Customer email"
+                  editable={!sending}
+                  style={styles.addInput}
+                />
+              </View>
+            ) : null}
+            {showAddPhone ? (
+              <View style={styles.addRow}>
+                <Feather name="phone" size={19} color={color.muted} />
+                <PhoneInput
+                  value={addedPhone}
+                  onChange={setAddedPhone}
+                  placeholder="Add a phone number"
+                  editable={!sending}
+                  style={styles.addInput}
+                />
+              </View>
+            ) : null}
+            {showAddEmail || showAddPhone ? (
+              <Text style={styles.addHint}>
+                Saved onto this {documentLabel} so reminders and resends use it
+                too.
+              </Text>
+            ) : null}
+
+            {canSend ? <Text style={styles.summary}>{summary}</Text> : null}
+            <Text style={styles.disclaimer}>
+              {documentLabel === "agreement"
+                ? "Text delivery respects customer opt-outs and quiet hours. The customer signs by typing their name on the page."
+                : "Text delivery respects customer opt-outs and quiet hours. Card payments open on Square’s secure page."}
+            </Text>
+
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Send ${documentLabel}`}
+              accessibilityState={{ disabled: !canSend || sending }}
+              disabled={!canSend || sending}
+              onPress={() => onSend(channels, overrides)}
+              style={({ pressed }) => [
+                styles.send,
+                (!canSend || sending) && styles.sendDisabled,
+                pressed && styles.sendPressed,
+              ]}
+            >
+              {sending ? (
+                <ActivityIndicator color="#ffffff" />
+              ) : (
+                <Feather name="send" size={20} color="#ffffff" />
+              )}
+              <Text style={styles.sendText}>
+                {sending ? "SENDING…" : `SEND ${documentLabel.toUpperCase()}`}
+              </Text>
             </Pressable>
           </View>
-
-          {!canSend && !showAddEmail && !showAddPhone ? (
-            <View style={styles.missing}>
-              <Feather name="alert-circle" size={21} color={color.danger} />
-              <Text style={styles.missingText}>Add a phone number or email before sending this {documentLabel}.</Text>
-            </View>
-          ) : (
-            <View accessibilityRole="radiogroup" style={styles.channels}>
-              <ChannelButton
-                label="Text"
-                detail={hasPhone ? displayPhone(effectivePhone ?? "") : showAddPhone ? "Add a phone number below" : "No phone on file"}
-                icon="message-square"
-                active={choice === "text"}
-                disabled={!hasPhone || sending}
-                onPress={() => setChoice("text")}
-              />
-              <ChannelButton
-                label="Email"
-                detail={hasEmail ? effectiveEmail ?? "" : showAddEmail ? "Add an email below" : "No email on file"}
-                icon="mail"
-                active={choice === "email"}
-                disabled={!hasEmail || sending}
-                onPress={() => setChoice("email")}
-              />
-              <ChannelButton
-                label="Both"
-                detail={hasPhone && hasEmail ? "Send through both channels" : "Phone and email required"}
-                icon="send"
-                active={choice === "both"}
-                disabled={!hasPhone || !hasEmail || sending}
-                onPress={() => setChoice("both")}
-              />
-            </View>
-          )}
-
-          {showAddEmail ? (
-            <View style={styles.addRow}>
-              <Feather name="mail" size={19} color={color.muted} />
-              <TextInput
-                value={addedEmail}
-                onChangeText={(value) => {
-                  setAddedEmail(value);
-                  if (value.trim() && choice === "text" && !hasPhone) setChoice("email");
-                }}
-                placeholder="Add an email for this customer"
-                placeholderTextColor={color.faint}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-                accessibilityLabel="Customer email"
-                editable={!sending}
-                style={styles.addInput}
-              />
-            </View>
-          ) : null}
-          {showAddPhone ? (
-            <View style={styles.addRow}>
-              <Feather name="phone" size={19} color={color.muted} />
-              <PhoneInput
-                value={addedPhone}
-                onChange={setAddedPhone}
-                placeholder="Add a phone number"
-                editable={!sending}
-                style={styles.addInput}
-              />
-            </View>
-          ) : null}
-          {showAddEmail || showAddPhone ? (
-            <Text style={styles.addHint}>Saved onto this {documentLabel} so reminders and resends use it too.</Text>
-          ) : null}
-
-          {canSend ? <Text style={styles.summary}>{summary}</Text> : null}
-          <Text style={styles.disclaimer}>
-            {documentLabel === "agreement"
-              ? "Text delivery respects customer opt-outs and quiet hours. The customer signs by typing their name on the page."
-              : "Text delivery respects customer opt-outs and quiet hours. Card payments open on Square’s secure page."}
-          </Text>
-
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`Send ${documentLabel}`}
-            accessibilityState={{ disabled: !canSend || sending }}
-            disabled={!canSend || sending}
-            onPress={() => onSend(channels, overrides)}
-            style={({ pressed }) => [styles.send, (!canSend || sending) && styles.sendDisabled, pressed && styles.sendPressed]}
-          >
-            {sending ? <ActivityIndicator color={color.surface} /> : <Feather name="send" size={20} color={color.surface} />}
-            <Text style={styles.sendText}>{sending ? "SENDING…" : `SEND ${documentLabel.toUpperCase()}`}</Text>
-          </Pressable>
-        </View>
         </KeyboardAvoidingView>
       </View>
     </Modal>
@@ -253,33 +319,152 @@ export function DeliverySheet({
 
 const styles = StyleSheet.create({
   scrim: { flex: 1, justifyContent: "flex-end", backgroundColor: color.scrim },
-  sheet: { paddingHorizontal: 18, paddingTop: 10, borderTopLeftRadius: 28, borderTopRightRadius: 28, backgroundColor: color.surface },
-  handle: { width: 52, height: 5, alignSelf: "center", borderRadius: 3, backgroundColor: color.lineStrong },
-  header: { minHeight: 104, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 14 },
+  sheet: {
+    paddingHorizontal: 18,
+    paddingTop: 10,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    backgroundColor: color.surface,
+  },
+  handle: {
+    width: 52,
+    height: 5,
+    alignSelf: "center",
+    borderRadius: 3,
+    backgroundColor: color.lineStrong,
+  },
+  header: {
+    minHeight: 104,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 14,
+  },
   headerCopy: { flex: 1 },
-  eyebrow: { fontFamily: font.monoMedium, fontSize: 12, letterSpacing: 1.6, color: color.brandDeep },
-  title: { marginTop: 5, fontFamily: font.bodySemi, fontSize: 25, color: color.ink },
-  close: { width: HIT, height: HIT, alignItems: "center", justifyContent: "center" },
+  eyebrow: {
+    fontFamily: font.monoMedium,
+    fontSize: 12,
+    letterSpacing: 1.6,
+    color: color.brandDeep,
+  },
+  title: {
+    marginTop: 5,
+    fontFamily: font.bodySemi,
+    fontSize: 25,
+    color: color.ink,
+  },
+  close: {
+    width: HIT,
+    height: HIT,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   channels: { gap: 10 },
-  channel: { minHeight: 72, paddingHorizontal: 14, flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 1, borderColor: color.lineStrong, borderRadius: radius.md, backgroundColor: color.hover },
+  channel: {
+    minHeight: 72,
+    paddingHorizontal: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    borderWidth: 1,
+    borderColor: color.lineStrong,
+    borderRadius: radius.md,
+    backgroundColor: color.hover,
+  },
   channelActive: { borderColor: color.brand, backgroundColor: color.brandWash },
   channelDisabled: { opacity: 0.42 },
   channelPressed: { transform: [{ scale: 0.99 }] },
-  channelIcon: { width: 42, height: 42, alignItems: "center", justifyContent: "center", borderRadius: 21, backgroundColor: color.surface },
+  channelIcon: {
+    width: 42,
+    height: 42,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 21,
+    backgroundColor: color.surface,
+  },
   channelIconActive: { backgroundColor: color.brandFill },
   channelCopy: { flex: 1 },
   channelLabel: { fontFamily: font.bodySemi, fontSize: 17, color: color.ink },
   channelLabelActive: { color: color.brandDeep },
-  channelDetail: { marginTop: 3, fontFamily: font.body, fontSize: 13, color: color.muted },
-  missing: { minHeight: 70, padding: 14, flexDirection: "row", alignItems: "center", gap: 10, borderRadius: radius.md, backgroundColor: color.dangerBg },
-  missingText: { flex: 1, fontFamily: font.bodyMedium, fontSize: 14, lineHeight: 20, color: color.danger },
-  addRow: { minHeight: 56, marginTop: 10, paddingHorizontal: 14, flexDirection: "row", alignItems: "center", gap: 10, borderWidth: 1, borderColor: color.lineStrong, borderRadius: radius.md, backgroundColor: color.surface },
-  addInput: { flex: 1, paddingVertical: 0, borderWidth: 0, backgroundColor: "transparent", fontFamily: font.body, fontSize: 16, color: color.ink },
-  addHint: { marginTop: 7, fontFamily: font.body, fontSize: 12, lineHeight: 17, color: color.muted },
-  summary: { marginTop: 15, fontFamily: font.bodyMedium, fontSize: 14, color: color.ink },
-  disclaimer: { marginTop: 7, fontFamily: font.body, fontSize: 12, lineHeight: 17, color: color.faint },
-  send: { minHeight: 58, marginTop: 20, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 9, borderRadius: radius.md, backgroundColor: color.brandFill },
+  channelDetail: {
+    marginTop: 3,
+    fontFamily: font.body,
+    fontSize: 13,
+    color: color.muted,
+  },
+  missing: {
+    minHeight: 70,
+    padding: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderRadius: radius.md,
+    backgroundColor: color.dangerBg,
+  },
+  missingText: {
+    flex: 1,
+    fontFamily: font.bodyMedium,
+    fontSize: 14,
+    lineHeight: 20,
+    color: color.danger,
+  },
+  addRow: {
+    minHeight: 56,
+    marginTop: 10,
+    paddingHorizontal: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderWidth: 1,
+    borderColor: color.lineStrong,
+    borderRadius: radius.md,
+    backgroundColor: color.surface,
+  },
+  addInput: {
+    flex: 1,
+    paddingVertical: 0,
+    borderWidth: 0,
+    backgroundColor: "transparent",
+    fontFamily: font.body,
+    fontSize: 16,
+    color: color.ink,
+  },
+  addHint: {
+    marginTop: 7,
+    fontFamily: font.body,
+    fontSize: 12,
+    lineHeight: 17,
+    color: color.muted,
+  },
+  summary: {
+    marginTop: 15,
+    fontFamily: font.bodyMedium,
+    fontSize: 14,
+    color: color.ink,
+  },
+  disclaimer: {
+    marginTop: 7,
+    fontFamily: font.body,
+    fontSize: 12,
+    lineHeight: 17,
+    color: color.faint,
+  },
+  send: {
+    minHeight: 58,
+    marginTop: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 9,
+    borderRadius: radius.md,
+    backgroundColor: color.brandFill,
+  },
   sendDisabled: { opacity: 0.42 },
   sendPressed: { backgroundColor: color.brandDeep },
-  sendText: { fontFamily: font.bodySemi, fontSize: 16, letterSpacing: 1.1, color: color.surface },
+  sendText: {
+    fontFamily: font.bodySemi,
+    fontSize: 16,
+    letterSpacing: 0,
+    color: "#ffffff",
+  },
 });

@@ -12,7 +12,7 @@ import {
 } from "@/api";
 import { LedgerBlock, SectionRule } from "@/components/ledger";
 import { usePushNotifications, type PushStatus } from "@/push-notifications";
-import { color, font, HIT, radius, space, type } from "@/theme";
+import { color, font, HIT, radius, space, type } from "@/canes-theme";
 
 type EventPreference = {
   key: string;

@@ -1,5 +1,5 @@
 import { StyleSheet, Text, View } from "react-native";
-import { color, radius, space, type } from "@/theme";
+import { color, radius, space, type } from "@/canes-theme";
 
 // The refusal surface. Every mutation's ok:false lands here, VERBATIM — the
 // sentences are written server-side for the reader, and this component's whole

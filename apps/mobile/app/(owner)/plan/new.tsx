@@ -35,7 +35,7 @@ import { useToast } from "@/components/toast";
 import { addCalendarDays, dateLabel, todayEt } from "@/dates";
 import { keys, useCatalog, useCustomers } from "@/queries";
 import { useAction } from "@/query";
-import { color, font, HIT, radius, space, type } from "@/theme";
+import { color, font, HIT, radius, space, type } from "@/canes-theme";
 
 const CADENCES: PlanCadence[] = ["monthly", "quarterly", "semiannual", "yearly"];
 

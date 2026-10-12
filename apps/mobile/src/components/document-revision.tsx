@@ -13,6 +13,8 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import {
   fmtMoney,
+  STANDARD_SERVICES,
+  serviceCategoryLabel,
   priceServices,
   type DocumentChange,
   type DocumentEdit,
@@ -23,12 +25,14 @@ import {
 import { documentActions } from "@/api";
 import { keys } from "@/queries";
 import { noticeFrom, unwrap, useAction } from "@/query";
-import { color, HIT, space, type } from "@/theme";
+import { color, HIT, space, type } from "@/canes-theme";
 import { Notice } from "./notice";
 import { useToast } from "./toast";
 
 type DraftLine = Pick<
   ServiceLineInput,
+  | "serviceLineId"
+  | "serviceCategory"
   | "description"
   | "isOption"
   | "isMandatory"
@@ -203,6 +207,26 @@ export function DocumentRevisionSheet({
                     value={line.name}
                     onChangeText={(name) => changeLine(index, { name })}
                   />
+                  <Text style={{ color: color.muted }}>
+                    Category: {serviceCategoryLabel(line.serviceCategory)}
+                  </Text>
+                  <ScrollView horizontal>
+                    {[
+                      ...STANDARD_SERVICES,
+                      { key: "custom" as const, name: "Custom service" },
+                    ].map((service) => (
+                      <Pressable
+                        key={service.key}
+                        style={button}
+                        accessibilityRole="button"
+                        onPress={() =>
+                          changeLine(index, { serviceCategory: service.key })
+                        }
+                      >
+                        <Text style={{ color: color.ink }}>{service.name}</Text>
+                      </Pressable>
+                    ))}
+                  </ScrollView>
                   <Text style={{ color: color.muted }}>
                     Quantity / unit price ($)
                   </Text>

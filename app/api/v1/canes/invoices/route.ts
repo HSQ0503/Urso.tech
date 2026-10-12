@@ -43,6 +43,7 @@ type PostBody = {
   jobAddress?: unknown;
   jobName?: unknown;
   totalCents?: unknown;
+  items?: unknown;
 };
 
 export const POST = apiRoute(async ({ req }) => {
@@ -60,18 +61,26 @@ export const POST = apiRoute(async ({ req }) => {
     case "createFromJob": {
       // Insert-only against the partial unique index on job_id, so a second
       // call returns the existing invoice id rather than a duplicate bill.
-      if (typeof body.jobId !== "string") return apiFail("`jobId` must be a string.", 422);
+      if (typeof body.jobId !== "string")
+        return apiFail("`jobId` must be a string.", 422);
       return apiResult(await createInvoiceFromJob(body.jobId));
     }
 
     case "createManual": {
+      if (body.items !== undefined && !Array.isArray(body.items))
+        return apiFail("`items` must be an array.", 422);
       // A standalone invoice with no job behind it. Only presence and type are
       // checked; the blank-name, phone-format and amount refusals are the
       // action's, each with its own sentence.
-      if (typeof body.customerName !== "string") return apiFail("`customerName` must be a string.", 422);
-      if (typeof body.jobName !== "string") return apiFail("`jobName` must be a string.", 422);
+      if (typeof body.customerName !== "string")
+        return apiFail("`customerName` must be a string.", 422);
+      if (typeof body.jobName !== "string")
+        return apiFail("`jobName` must be a string.", 422);
       // MONEY.
-      if (typeof body.totalCents !== "number" || !Number.isInteger(body.totalCents)) {
+      if (
+        typeof body.totalCents !== "number" ||
+        !Number.isInteger(body.totalCents)
+      ) {
         return apiFail("`totalCents` must be an integer number of cents.", 422);
       }
       const optional: {
@@ -81,19 +90,23 @@ export const POST = apiRoute(async ({ req }) => {
         jobAddress?: string;
       } = {};
       if (body.contactId !== undefined) {
-        if (typeof body.contactId !== "string") return apiFail("`contactId` must be a string.", 422);
+        if (typeof body.contactId !== "string")
+          return apiFail("`contactId` must be a string.", 422);
         optional.contactId = body.contactId;
       }
       if (body.customerPhone !== undefined) {
-        if (typeof body.customerPhone !== "string") return apiFail("`customerPhone` must be a string.", 422);
+        if (typeof body.customerPhone !== "string")
+          return apiFail("`customerPhone` must be a string.", 422);
         optional.customerPhone = body.customerPhone;
       }
       if (body.customerEmail !== undefined) {
-        if (typeof body.customerEmail !== "string") return apiFail("`customerEmail` must be a string.", 422);
+        if (typeof body.customerEmail !== "string")
+          return apiFail("`customerEmail` must be a string.", 422);
         optional.customerEmail = body.customerEmail;
       }
       if (body.jobAddress !== undefined) {
-        if (typeof body.jobAddress !== "string") return apiFail("`jobAddress` must be a string.", 422);
+        if (typeof body.jobAddress !== "string")
+          return apiFail("`jobAddress` must be a string.", 422);
         optional.jobAddress = body.jobAddress;
       }
       return apiResult(
@@ -102,6 +115,9 @@ export const POST = apiRoute(async ({ req }) => {
           customerName: body.customerName,
           jobName: body.jobName,
           totalCents: body.totalCents,
+          items: body.items as
+            | import("@urso/types").ServiceLineInput[]
+            | undefined,
         }),
       );
     }

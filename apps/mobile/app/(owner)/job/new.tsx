@@ -1,4 +1,5 @@
-import { ServiceAreaPicker } from "@/components/service-area-picker";
+import { ServiceLinesEditor } from "@/components/service-lines-editor";
+import { priceServices, type ServiceLineInput } from "@urso/types";import { ServiceAreaPicker } from "@/components/service-area-picker";
 import type { ServiceArea } from "@urso/types";
 // A job with no estimate behind it.
 //
@@ -43,7 +44,7 @@ import { PhoneInput } from "@/components/phone-input";
 import { isCompleteWhen, SlotPicker } from "@/components/slot-picker";
 import { keys, useCrews, useCustomers } from "@/queries";
 import { noticeFrom, useAction } from "@/query";
-import { color, font, HIT, radius, space, type } from "@/theme";
+import { color, font, HIT, radius, space, type } from "@/canes-theme";
 
 // The web builder's own dollars-to-cents contract (estimate-builder.tsx),
 // copied character for character — the one place this screen touches money as
@@ -131,7 +132,8 @@ export default function NewJobScreen(): React.ReactElement {
   // like editing the customer, which this screen does not do.
   const [nameDraft, setNameDraft] = useState("");
   const [phoneDraft, setPhoneDraft] = useState("");
-  const [selectedCustomer, setSelectedCustomer] = useState<CustomerSummary | null>(null);
+  const [selectedCustomer, setSelectedCustomer] =
+    useState<CustomerSummary | null>(null);
   const [customerOpen, setCustomerOpen] = useState(false);
   const [customerSearch, setCustomerSearch] = useState("");
 
@@ -142,7 +144,7 @@ export default function NewJobScreen(): React.ReactElement {
 
   const [jobName, setJobName] = useState("");
   const [serviceArea, setServiceArea] = useState<ServiceArea | null>(null);
-  const [totalText, setTotalText] = useState("");
+  const [lines, setLines] = useState<ServiceLineInput[]>([]);
   const [address, setAddress] = useState(params.address ?? "");
   // The schedule hands over the day the dispatcher is looking at. A day with no
   // time is an incomplete slot, which means the job lands in the tray — exactly
@@ -158,7 +160,10 @@ export default function NewJobScreen(): React.ReactElement {
   const [saveNotice, setSaveNotice] = useState<string | null>(null);
   // Set once the job exists. Its presence retires the form, so a second tap
   // cannot mint a second job.
-  const [done, setDone] = useState<{ jobId: string | null; notice: string | null } | null>(null);
+  const [done, setDone] = useState<{
+    jobId: string | null;
+    notice: string | null;
+  } | null>(null);
 
   // THIS IS A TABS ROUTE, AND A TABS ROUTE IS NEVER UNMOUNTED. Every piece of
   // state above therefore survives router.back() and is still sitting here the
@@ -185,7 +190,7 @@ export default function NewJobScreen(): React.ReactElement {
       setPhoneDraft("");
       setJobName("");
       setServiceArea(null);
-      setTotalText("");
+      setLines([]);
       setAddress(params.address ?? "");
       const day = (params.day ?? "").trim();
       setSlot(ET_DAY.test(day) ? day : "");
@@ -211,7 +216,8 @@ export default function NewJobScreen(): React.ReactElement {
   ];
 
   const create = useAction(
-    (input: Parameters<typeof jobActions.createManual>[0]) => jobActions.createManual(input),
+    (input: Parameters<typeof jobActions.createManual>[0]) =>
+      jobActions.createManual(input),
     { invalidates },
   );
 
@@ -261,7 +267,13 @@ export default function NewJobScreen(): React.ReactElement {
   // real thing), so a missed tap would file $350 of work as $0. Nothing else is
   // gated here: an empty job name, an empty customer name and a deposit over
   // the total all come back from the action as sentences.
-  const hasTotal = /\d/.test(totalText);
+  let totalCents: number | null = null;
+  try {
+    totalCents = priceServices(lines).totalCents;
+  } catch {
+    /* Incomplete rows stay editable. */
+  }
+  const hasTotal = totalCents !== null;
   const busy = create.isPending;
 
   const openJob = (jobId: string) => {
@@ -288,7 +300,8 @@ export default function NewJobScreen(): React.ReactElement {
       serviceArea,
       ...(trimmedAddress ? { jobAddress: trimmedAddress } : {}),
       jobName,
-      totalCents: inputToCents(totalText),
+      totalCents: totalCents ?? 0,
+      items: lines,
       // An incomplete pick is an absent key, not a bad date: an unscheduled job
       // in the tray is a normal way to create one.
       ...(isCompleteWhen(slot) ? { scheduledAtIso: etLocalToIso(slot) } : {}),
@@ -326,13 +339,18 @@ export default function NewJobScreen(): React.ReactElement {
         disabled={busy}
         onPress={() => router.back()}
         hitSlop={space.sm}
-        style={({ pressed }) => [styles.back, (pressed || busy) && styles.backPressed]}
+        style={({ pressed }) => [
+          styles.back,
+          (pressed || busy) && styles.backPressed,
+        ]}
       >
         <Feather name="chevron-left" size={20} color={color.chromeMuted} />
         <Text style={styles.backText}>Back</Text>
       </Pressable>
       <Text style={styles.chromeName}>New job</Text>
-      <Text style={styles.chromeMeta}>{tied ? tiedName : "No estimate needed"}</Text>
+      <Text style={styles.chromeMeta}>
+        {tied ? tiedName : "No estimate needed"}
+      </Text>
     </View>
   );
 
@@ -342,7 +360,10 @@ export default function NewJobScreen(): React.ReactElement {
       <View style={styles.screen}>
         {header}
         <ScrollView
-          contentContainerStyle={[styles.scrollBody, { paddingBottom: insets.bottom + space.xxl }]}
+          contentContainerStyle={[
+            styles.scrollBody,
+            { paddingBottom: insets.bottom + space.xxl },
+          ]}
         >
           <Section label="Saved">
             <View style={styles.card}>
@@ -353,8 +374,13 @@ export default function NewJobScreen(): React.ReactElement {
                 ) : null}
                 <Pressable
                   accessibilityRole="button"
-                  onPress={() => (jobId !== null ? openJob(jobId) : router.back())}
-                  style={({ pressed }) => [styles.primary, pressed && styles.primaryPressed]}
+                  onPress={() =>
+                    jobId !== null ? openJob(jobId) : router.back()
+                  }
+                  style={({ pressed }) => [
+                    styles.primary,
+                    pressed && styles.primaryPressed,
+                  ]}
                 >
                   <Text style={styles.primaryText}>
                     {jobId !== null ? "Open the job" : "Go back"}
@@ -372,7 +398,10 @@ export default function NewJobScreen(): React.ReactElement {
     <View style={styles.screen}>
       {header}
       <ScrollView
-        contentContainerStyle={[styles.scrollBody, { paddingBottom: insets.bottom + space.xxl }]}
+        contentContainerStyle={[
+          styles.scrollBody,
+          { paddingBottom: insets.bottom + space.xxl },
+        ]}
         // Suggestion taps in AddressInput must land instead of only dismissing
         // the keyboard.
         keyboardShouldPersistTaps="handled"
@@ -391,7 +420,9 @@ export default function NewJobScreen(): React.ReactElement {
                       {tiedName}
                     </Text>
                     {tiedPhone ? (
-                      <Text style={styles.customerPhone}>{fmtPhone(tiedPhone)}</Text>
+                      <Text style={styles.customerPhone}>
+                        {fmtPhone(tiedPhone)}
+                      </Text>
                     ) : null}
                     {selectedCustomer?.archived ? (
                       <Text style={styles.pastClient}>Past client</Text>
@@ -400,12 +431,17 @@ export default function NewJobScreen(): React.ReactElement {
                   <Feather name="check-circle" size={20} color={color.good} />
                 </View>
                 {!routeTied ? (
-                  <View style={[styles.pad, styles.divided, styles.customerActions]}>
+                  <View
+                    style={[styles.pad, styles.divided, styles.customerActions]}
+                  >
                     <Pressable
                       accessibilityRole="button"
                       accessibilityLabel="Choose a different customer"
                       onPress={() => setCustomerOpen(true)}
-                      style={({ pressed }) => [styles.button, pressed && styles.pressed]}
+                      style={({ pressed }) => [
+                        styles.button,
+                        pressed && styles.pressed,
+                      ]}
                     >
                       <Text style={styles.buttonText}>Change customer</Text>
                     </Pressable>
@@ -413,9 +449,14 @@ export default function NewJobScreen(): React.ReactElement {
                       accessibilityRole="button"
                       accessibilityLabel="Enter a new customer"
                       onPress={useNewCustomer}
-                      style={({ pressed }) => [styles.inlineAction, pressed && styles.dim]}
+                      style={({ pressed }) => [
+                        styles.inlineAction,
+                        pressed && styles.dim,
+                      ]}
                     >
-                      <Text style={styles.inlineActionText}>Enter someone new instead</Text>
+                      <Text style={styles.inlineActionText}>
+                        Enter someone new instead
+                      </Text>
                     </Pressable>
                   </View>
                 ) : null}
@@ -426,16 +467,27 @@ export default function NewJobScreen(): React.ReactElement {
                   accessibilityRole="button"
                   accessibilityLabel="Choose an existing or past customer"
                   onPress={() => setCustomerOpen(true)}
-                  style={({ pressed }) => [styles.customerPickerButton, pressed && styles.pressed]}
+                  style={({ pressed }) => [
+                    styles.customerPickerButton,
+                    pressed && styles.pressed,
+                  ]}
                 >
                   <View style={styles.customerPickerIcon}>
                     <Feather name="users" size={20} color={color.brandDeep} />
                   </View>
                   <View style={styles.customerPickerCopy}>
-                    <Text style={styles.customerPickerTitle}>Choose a saved customer</Text>
-                    <Text style={styles.customerPickerHint}>Search current and past clients by name, phone, or address</Text>
+                    <Text style={styles.customerPickerTitle}>
+                      Choose a saved customer
+                    </Text>
+                    <Text style={styles.customerPickerHint}>
+                      Search current and past clients by name, phone, or address
+                    </Text>
                   </View>
-                  <Feather name="chevron-right" size={20} color={color.brandDeep} />
+                  <Feather
+                    name="chevron-right"
+                    size={20}
+                    color={color.brandDeep}
+                  />
                 </Pressable>
                 <View style={styles.orRow}>
                   <View style={styles.orLine} />
@@ -454,7 +506,11 @@ export default function NewJobScreen(): React.ReactElement {
                   style={styles.input}
                 />
                 <Text style={styles.fieldLabel}>Phone</Text>
-                <PhoneInput value={phoneDraft} onChange={setPhoneDraft} style={styles.input} />
+                <PhoneInput
+                  value={phoneDraft}
+                  onChange={setPhoneDraft}
+                  style={styles.input}
+                />
               </View>
             )}
           </View>
@@ -475,22 +531,14 @@ export default function NewJobScreen(): React.ReactElement {
                 style={styles.input}
               />
 
-              <Text style={styles.fieldLabel}>Total ($)</Text>
-              <TextInput
-                value={totalText}
-                onChangeText={setTotalText}
-                placeholder="350.00"
-                placeholderTextColor={color.faint}
-                keyboardType="decimal-pad"
-                accessibilityLabel="Job total in dollars"
-                style={[styles.input, styles.money]}
-              />
-              {!hasTotal ? (
-                <Text style={styles.hint}>Enter 0 if there is nothing to charge.</Text>
-              ) : null}
+              <ServiceLinesEditor lines={lines} onChange={setLines} />
 
               <Text style={styles.fieldLabel}>Address</Text>
-              <AddressInput value={address} onChange={setAddress} style={styles.input} />
+              <AddressInput
+                value={address}
+                onChange={setAddress}
+                style={styles.input}
+              />
             </View>
           </View>
         </Section>
@@ -505,12 +553,17 @@ export default function NewJobScreen(): React.ReactElement {
                 <Pressable
                   accessibilityRole="button"
                   onPress={() => setSlot("")}
-                  style={({ pressed }) => [styles.inlineAction, pressed && styles.dim]}
+                  style={({ pressed }) => [
+                    styles.inlineAction,
+                    pressed && styles.dim,
+                  ]}
                 >
                   <Text style={styles.inlineActionText}>Clear the slot</Text>
                 </Pressable>
               ) : (
-                <Text style={styles.hint}>Skip the picker to leave the job in the tray.</Text>
+                <Text style={styles.hint}>
+                  Skip the picker to leave the job in the tray.
+                </Text>
               )}
             </View>
 
@@ -520,7 +573,10 @@ export default function NewJobScreen(): React.ReactElement {
                 accessibilityRole="button"
                 accessibilityLabel="Choose a crew"
                 onPress={() => setCrewOpen((v) => !v)}
-                style={({ pressed }) => [styles.button, pressed && styles.pressed]}
+                style={({ pressed }) => [
+                  styles.button,
+                  pressed && styles.pressed,
+                ]}
               >
                 <Text style={styles.buttonText}>
                   {crews.find((c) => c.id === crewId)?.name ?? "No crew"}
@@ -544,7 +600,9 @@ export default function NewJobScreen(): React.ReactElement {
                       ]}
                     >
                       <Text style={styles.buttonText}>{crew.name}</Text>
-                      {crewId === crew.id ? <Text style={styles.assignedMark}>Chosen</Text> : null}
+                      {crewId === crew.id ? (
+                        <Text style={styles.assignedMark}>Chosen</Text>
+                      ) : null}
                     </Pressable>
                   ))}
                   <Pressable
@@ -561,7 +619,9 @@ export default function NewJobScreen(): React.ReactElement {
                     ]}
                   >
                     <Text style={styles.buttonText}>No crew</Text>
-                    {crewId === null ? <Text style={styles.assignedMark}>Chosen</Text> : null}
+                    {crewId === null ? (
+                      <Text style={styles.assignedMark}>Chosen</Text>
+                    ) : null}
                   </Pressable>
                 </View>
               ) : null}
@@ -599,13 +659,19 @@ export default function NewJobScreen(): React.ReactElement {
               (busy || !hasTotal) && styles.disabled,
             ]}
           >
-            <Text style={styles.primaryText}>{busy ? "Saving…" : "Save job"}</Text>
+            <Text style={styles.primaryText}>
+              {busy ? "Saving…" : "Save job"}
+            </Text>
           </Pressable>
           <Pressable
             accessibilityRole="button"
             disabled={busy}
             onPress={() => router.back()}
-            style={({ pressed }) => [styles.button, pressed && styles.pressed, busy && styles.disabled]}
+            style={({ pressed }) => [
+              styles.button,
+              pressed && styles.pressed,
+              busy && styles.disabled,
+            ]}
           >
             <Text style={styles.buttonText}>Cancel</Text>
           </Pressable>
@@ -618,13 +684,19 @@ export default function NewJobScreen(): React.ReactElement {
         presentationStyle="fullScreen"
         onRequestClose={() => setCustomerOpen(false)}
       >
-        <View style={[styles.pickerScreen, { paddingTop: insets.top }]} accessibilityViewIsModal>
+        <View
+          style={[styles.pickerScreen, { paddingTop: insets.top }]}
+          accessibilityViewIsModal
+        >
           <View style={styles.pickerHeader}>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Close customer picker"
               onPress={() => setCustomerOpen(false)}
-              style={({ pressed }) => [styles.pickerBack, pressed && styles.dim]}
+              style={({ pressed }) => [
+                styles.pickerBack,
+                pressed && styles.dim,
+              ]}
             >
               <Feather name="chevron-left" size={28} color={color.brand} />
               <Text style={styles.pickerTitle}>Customers</Text>
@@ -633,9 +705,12 @@ export default function NewJobScreen(): React.ReactElement {
               accessibilityRole="button"
               accessibilityLabel="Enter a new customer"
               onPress={useNewCustomer}
-              style={({ pressed }) => [styles.newCustomerButton, pressed && styles.primaryPressed]}
+              style={({ pressed }) => [
+                styles.newCustomerButton,
+                pressed && styles.primaryPressed,
+              ]}
             >
-              <Feather name="plus" size={18} color={color.surface} />
+              <Feather name="plus" size={18} color="#ffffff" />
               <Text style={styles.newCustomerText}>New</Text>
             </Pressable>
           </View>
@@ -681,7 +756,10 @@ export default function NewJobScreen(): React.ReactElement {
                   accessibilityRole="button"
                   accessibilityLabel={`Book this job for ${name}`}
                   onPress={() => chooseCustomer(item)}
-                  style={({ pressed }) => [styles.customerOption, pressed && styles.pressed]}
+                  style={({ pressed }) => [
+                    styles.customerOption,
+                    pressed && styles.pressed,
+                  ]}
                 >
                   <Avatar name={name} />
                   <View style={styles.customerOptionCopy}>
@@ -689,7 +767,9 @@ export default function NewJobScreen(): React.ReactElement {
                       <Text style={styles.customerOptionName} numberOfLines={1}>
                         {name}
                       </Text>
-                      {item.archived ? <Text style={styles.pastBadge}>Past</Text> : null}
+                      {item.archived ? (
+                        <Text style={styles.pastBadge}>Past</Text>
+                      ) : null}
                     </View>
                     <Text style={styles.customerOptionDetail} numberOfLines={1}>
                       {customerDetail(item)}
@@ -752,7 +832,10 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   pad: { padding: space.lg, gap: space.sm },
-  divided: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.line },
+  divided: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: color.line,
+  },
   actions: { gap: space.sm },
 
   customer: {
@@ -764,7 +847,11 @@ const styles = StyleSheet.create({
   },
   customerBody: { flex: 1, gap: 2 },
   customerName: { ...type.title, color: color.ink },
-  customerPhone: { ...type.small, color: color.muted, fontVariant: ["tabular-nums"] },
+  customerPhone: {
+    ...type.small,
+    color: color.muted,
+    fontVariant: ["tabular-nums"],
+  },
   pastClient: { ...type.ruleSm, color: color.brandDeep },
   customerActions: { alignItems: "stretch" },
 
@@ -790,8 +877,17 @@ const styles = StyleSheet.create({
   customerPickerCopy: { flex: 1, minWidth: 0, gap: 2 },
   customerPickerTitle: { ...type.title, color: color.ink },
   customerPickerHint: { ...type.small, color: color.muted },
-  orRow: { flexDirection: "row", alignItems: "center", gap: space.sm, marginVertical: space.xs },
-  orLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: color.lineStrong },
+  orRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+    marginVertical: space.xs,
+  },
+  orLine: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: color.lineStrong,
+  },
   orText: { ...type.ruleSm, color: color.muted },
 
   fieldLabel: { ...type.micro, color: color.faint },
@@ -813,8 +909,16 @@ const styles = StyleSheet.create({
   inputTall: { minHeight: 96, paddingTop: space.md, textAlignVertical: "top" },
   money: { fontVariant: ["tabular-nums"] },
 
-  inlineAction: { minHeight: HIT, justifyContent: "center", alignSelf: "flex-start" },
-  inlineActionText: { ...type.body, fontFamily: font.bodyMedium, color: color.brandDeep },
+  inlineAction: {
+    minHeight: HIT,
+    justifyContent: "center",
+    alignSelf: "flex-start",
+  },
+  inlineActionText: {
+    ...type.body,
+    fontFamily: font.bodyMedium,
+    color: color.brandDeep,
+  },
   dim: { opacity: 0.6 },
 
   primary: {
@@ -876,7 +980,12 @@ const styles = StyleSheet.create({
     backgroundColor: color.chrome,
     paddingHorizontal: space.md,
   },
-  pickerBack: { minHeight: HIT, flexDirection: "row", alignItems: "center", gap: space.xs },
+  pickerBack: {
+    minHeight: HIT,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xs,
+  },
   pickerTitle: { ...type.heading, color: color.chromeInk },
   newCustomerButton: {
     minHeight: HIT,
@@ -888,7 +997,11 @@ const styles = StyleSheet.create({
     backgroundColor: color.brandFill,
     paddingHorizontal: space.md,
   },
-  newCustomerText: { ...type.small, fontFamily: font.bodySemi, color: color.surface },
+  newCustomerText: {
+    ...type.small,
+    fontFamily: font.bodySemi,
+    color: "#ffffff",
+  },
   pickerSearch: {
     minHeight: 58,
     flexDirection: "row",
@@ -922,7 +1035,11 @@ const styles = StyleSheet.create({
     paddingVertical: space.sm,
   },
   customerOptionCopy: { flex: 1, minWidth: 0, gap: 3 },
-  customerOptionTop: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  customerOptionTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+  },
   customerOptionName: { ...type.title, color: color.ink, flexShrink: 1 },
   customerOptionDetail: { ...type.small, color: color.muted },
   pastBadge: {
@@ -933,6 +1050,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 7,
     paddingVertical: 3,
   },
-  pickerLoading: { minHeight: 180, alignItems: "center", justifyContent: "center" },
-  emptyCustomers: { ...type.body, color: color.muted, textAlign: "center", padding: space.xl },
+  pickerLoading: {
+    minHeight: 180,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  emptyCustomers: {
+    ...type.body,
+    color: color.muted,
+    textAlign: "center",
+    padding: space.xl,
+  },
 });

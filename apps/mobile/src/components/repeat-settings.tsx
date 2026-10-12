@@ -16,7 +16,7 @@ import { recurringActions } from "@/api";
 import { keys, useCrews } from "@/queries";
 import { useAction } from "@/query";
 import { todayEt } from "@/dates";
-import { color, HIT, space, type } from "@/theme";
+import { color, HIT, space, type } from "@/canes-theme";
 import { DatePicker } from "./date-picker";
 import { Notice } from "./notice";
 

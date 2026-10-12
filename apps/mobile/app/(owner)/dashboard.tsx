@@ -25,7 +25,7 @@ import { noticeFrom, usePullToRefresh, useRefetchOnFocus } from "@/query";
 import { StatGrid } from "@/components/launcher";
 import { ChromeBar, SectionRule, bodyStyle } from "@/components/ledger";
 import { Notice } from "@/components/notice";
-import { color, font, radius, space, type } from "@/theme";
+import { color, font, radius, space, type } from "@/canes-theme";
 
 // "$12,400" not "$12,400.00" on a chart axis or a headline — the cents are
 // noise at that size. fmtMoney stays the rule everywhere a figure is read

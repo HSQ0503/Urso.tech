@@ -1,35 +1,20 @@
-// Home — the launcher.
-//
-// Sebastian is migrating off Markate, and Markate's home is not a dashboard: it
-// is a bar, an announcement strip, a greeting with a money line, and a
-// two-column grid of icon tiles with a count in the corner of whatever needs
-// him. He opens that screen dozens of times a day and his hands already know
-// where every tile is, so this screen keeps their geometry — same two columns,
-// same five rows, same slot order, same badge corner — and changes only what
-// the slots point at and what colour they are.
-//
-// One Markate tile has no Urso surface behind it: Route Planner is not a thing
-// we do (per Han, 2026-08-04), and its top-right slot goes to Inbox, which on
-// their build is only a header icon. Every other tile now points at its real
-// equivalent — including Work Orders, which is their word for jobs and got a
-// list of its own once GET /canes/jobs existed.
-//
-// The action queue this screen USED to be did not disappear — it is the
-// Dashboard tile, which is exactly where Markate keeps theirs. See
-// app/(owner)/dashboard.tsx.
-//
-// Every time is America/New_York via fmtEt. The device clock is never read.
-
 import { useEffect, useState } from "react";
-import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
+import {
+  ActivityIndicator,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Pressable,
+  Text,
+  View,
+} from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { fmtMoney } from "@urso/types";
+import { fmtEt, fmtMoney } from "@urso/types";
 import { Notice } from "@/components/notice";
 import { PushSetupPrompt } from "@/components/push-settings";
 import {
   LauncherBar,
-  LauncherGreeting,
   SupportRow,
   TileGrid,
   launcherBody,
@@ -38,7 +23,7 @@ import {
 import { useOverview } from "@/queries";
 import { noticeFrom, usePullToRefresh, useRefetchOnFocus } from "@/query";
 import { getAdminProfile } from "@/session";
-import { color, space } from "@/theme";
+import { color, space, type } from "@/canes-theme";
 
 function firstNameOf(full: string | null): string | null {
   const first = (full ?? "").trim().split(/\s+/)[0];
@@ -49,11 +34,15 @@ export default function HomeScreen(): React.ReactElement {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [name, setName] = useState<string | null>(null);
+  const [ownerAccess, setOwnerAccess] = useState(false);
 
   useEffect(() => {
     let live = true;
     void getAdminProfile().then((profile) => {
-      if (live) setName(firstNameOf(profile?.name ?? null));
+      if (live) {
+        setName(firstNameOf(profile?.name ?? null));
+        setOwnerAccess(Boolean(profile));
+      }
     });
     return () => {
       live = false;
@@ -78,16 +67,16 @@ export default function HomeScreen(): React.ReactElement {
   const tiles: LauncherTile[] = [
     // Dashboard is revenue only now (2026-09-13), so it carries no queue count.
     {
-      key: "dashboard",
-      label: "Dashboard",
+      key: "money",
+      label: "Money",
       icon: "activity",
-      onPress: () => router.push("/(owner)/dashboard"),
+      onPress: () => router.push("/(owner)/money"),
     },
     {
       key: "recurring",
       label: "Recurring",
       icon: "repeat",
-      onPress: () => router.push("/(owner)/recurring"),
+      onPress: () => router.push("/(owner)/service-agreements"),
     },
     {
       key: "expenses",
@@ -152,7 +141,8 @@ export default function HomeScreen(): React.ReactElement {
   // Cold start only: a no-data refetch resets status to pending in v5, so
   // without the errorUpdateCount check a refused overview would throw this
   // spinner over the whole launcher on every focus.
-  const showSpinner = overviewQuery.isPending && overviewQuery.errorUpdateCount === 0;
+  const showSpinner =
+    overviewQuery.isPending && overviewQuery.errorUpdateCount === 0;
 
   return (
     <View style={styles.screen}>
@@ -164,7 +154,10 @@ export default function HomeScreen(): React.ReactElement {
         </View>
       ) : (
         <ScrollView
-          contentContainerStyle={[launcherBody, { paddingBottom: insets.bottom + space.xl }]}
+          contentContainerStyle={[
+            launcherBody,
+            { paddingBottom: insets.bottom + space.xl },
+          ]}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -174,16 +167,104 @@ export default function HomeScreen(): React.ReactElement {
             />
           }
         >
-          <LauncherGreeting
-            name={name ?? "there"}
-            money={fmtMoney(overview?.money.collectedThisWeekCents ?? 0)}
-            detail={`collected this week · ${overview?.todayAgenda.length ?? 0} today`}
-          />
+          <View style={{ marginBottom: space.lg }}>
+            <Text style={styles.heading}>{name ? `Hi ${name}` : "Home"}</Text>
+            <Text style={styles.detail}>
+              Today’s work and what needs attention.
+            </Text>
+          </View>
           <PushSetupPrompt />
 
           {notice !== null ? <Notice text={notice} /> : null}
 
-          <TileGrid tiles={tiles} />
+          <View style={styles.section}>
+            <Text style={styles.heading}>Today’s work</Text>
+            {(overview?.todayJobs ?? []).length ? (
+              overview?.todayJobs?.map((job) => (
+                <Pressable
+                  accessibilityRole="button"
+                  key={job.id}
+                  style={styles.workRow}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/(owner)/job/[id]",
+                      params: { id: job.id },
+                    })
+                  }
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.title}>
+                      {job.customer_name ?? "Customer"}
+                    </Text>
+                    <Text style={styles.detail}>
+                      {job.job_name ?? "Service"}
+                    </Text>
+                  </View>
+                  <Text style={styles.detail}>
+                    {job.scheduled_at
+                      ? fmtEt(job.scheduled_at, {
+                          hour: "numeric",
+                          minute: "2-digit",
+                        })
+                      : "Unscheduled"}
+                  </Text>
+                </Pressable>
+              ))
+            ) : (
+              <Text style={styles.detail}>No work scheduled today.</Text>
+            )}
+          </View>
+          <View style={styles.section}>
+            <Text style={styles.heading}>Needs attention</Text>
+            <Pressable
+              accessibilityRole="button"
+              style={styles.workRow}
+              onPress={() => router.push("/(owner)/leads")}
+            >
+              <Text style={styles.title}>New leads</Text>
+              <Text style={styles.title}>
+                {overview?.pipeline.leads.newCount ?? 0}
+              </Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              style={styles.workRow}
+              onPress={() => router.push("/(owner)/jobs")}
+            >
+              <Text style={styles.title}>Work to schedule</Text>
+              <Text style={styles.title}>
+                {overview?.pipeline.jobs.unscheduledCount ?? 0}
+              </Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              style={styles.workRow}
+              onPress={() => router.push("/(owner)/invoices")}
+            >
+              <Text style={styles.title}>Overdue invoices</Text>
+              <Text style={styles.title}>{overdue}</Text>
+            </Pressable>
+          </View>
+
+          {ownerAccess ? (
+            <Pressable
+              accessibilityRole="button"
+              style={styles.section}
+              onPress={() => router.push("/(owner)/money")}
+            >
+              <Text style={styles.detail}>Collected in the last 7 days</Text>
+              <Text style={styles.heading}>
+                {fmtMoney(overview?.money.collectedThisWeekCents ?? 0)}
+              </Text>
+            </Pressable>
+          ) : null}
+
+          <TileGrid
+            tiles={tiles.filter(
+              (tile) =>
+                ownerAccess || !["money", "expenses"].includes(tile.key),
+            )}
+          />
 
           <SupportRow onPress={() => router.push("/(owner)/more")} />
         </ScrollView>
@@ -193,6 +274,26 @@ export default function HomeScreen(): React.ReactElement {
 }
 
 const styles = StyleSheet.create({
+  section: {
+    backgroundColor: color.surface,
+    borderRadius: 10,
+    padding: space.lg,
+    gap: space.sm,
+    marginBottom: space.lg,
+  },
+  heading: { ...type.heading, color: color.ink },
+  title: { ...type.body, color: color.ink },
+  detail: { ...type.small, color: color.muted },
+  workRow: {
+    minHeight: 56,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: space.md,
+    borderTopWidth: 1,
+    borderColor: color.line,
+    paddingVertical: space.sm,
+  },
   screen: { flex: 1, backgroundColor: color.bg },
   centre: { flex: 1, alignItems: "center", justifyContent: "center" },
 });

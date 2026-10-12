@@ -1,4 +1,4 @@
-// The ledger language.
+import * as loginTheme from "@/theme";// The ledger language.
 //
 // The app used to be floating cards on a grey ground — one rounded box per
 // thing, each with its own border, stacked with gaps. It read like default iOS
@@ -37,7 +37,16 @@ import {
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { color, font, HIT, mark, radius, shadow, space, type } from "@/theme";
+import {
+  color,
+  font,
+  HIT,
+  mark,
+  radius,
+  shadow,
+  space,
+  type,
+} from "@/canes-theme";
 
 // StyleSheet.create widens a heterogeneous sheet's entries to
 // ViewStyle | TextStyle | ImageStyle, which an <Image> then refuses. The bleeds
@@ -167,15 +176,43 @@ export function ChromeBar({
 export function ChromeLockup({ sub }: { sub: string }) {
   const insets = useSafeAreaInsets();
   return (
-    <View style={[styles.authChrome, { paddingTop: insets.top + space.xl }]}>
-      <ChromeFurniture tall />
+    <View
+      style={[
+        styles.authChrome,
+        {
+          paddingTop: insets.top + space.xl,
+          backgroundColor: loginTheme.color.chrome,
+        },
+      ]}
+    >
+      <Image source={loginTheme.mark.src} style={loginTheme.mark.bleedTall} />
+      <View
+        style={[
+          loginTheme.mark.railWide,
+          { backgroundColor: loginTheme.color.brand },
+          loginTheme.shadow.railGlow,
+        ]}
+      />
       <View style={styles.lockupRow}>
         <Mark size={30} />
-        <Text style={styles.lockupText}>
-          Urso<Text style={styles.stop}>.</Text>
+        <Text
+          style={[
+            styles.lockupText,
+            loginTheme.type.lockup,
+            { color: loginTheme.color.chromeInk },
+          ]}
+        >
+          Urso<Text style={{ color: loginTheme.color.brand }}>.</Text>
         </Text>
       </View>
-      <Text style={styles.authSub} numberOfLines={1}>
+      <Text
+        style={[
+          styles.authSub,
+          loginTheme.type.rule,
+          { letterSpacing: 1.9, color: loginTheme.color.chromeMuted },
+        ]}
+        numberOfLines={1}
+      >
         {sub}
       </Text>
     </View>
@@ -473,10 +510,13 @@ export function NextStep({
       accessibilityRole="button"
       accessibilityLabel={`${label}. ${hint}`}
       onPress={onPress}
-      style={({ pressed }) => [styles.nextStep, pressed && styles.nextStepPressed]}
+      style={({ pressed }) => [
+        styles.nextStep,
+        pressed && styles.nextStepPressed,
+      ]}
     >
       <View style={styles.nextIcon}>
-        <Feather name={icon} size={18} color={color.surface} />
+        <Feather name={icon} size={18} color="#ffffff" />
       </View>
       <View style={styles.nextBody}>
         <Text style={styles.nextLabel} numberOfLines={1}>
@@ -693,7 +733,12 @@ const styles = StyleSheet.create({
   },
   lockupRow: { flexDirection: "row", alignItems: "center", gap: 11 },
   lockupText: { ...type.lockup, color: color.chromeInk },
-  authSub: { ...type.rule, letterSpacing: 1.9, color: color.chromeMuted, marginTop: 10 },
+  authSub: {
+    ...type.rule,
+    letterSpacing: 1.9,
+    color: color.chromeMuted,
+    marginTop: 10,
+  },
 
   barRow: {
     flexDirection: "row",
@@ -701,7 +746,13 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: space.md,
   },
-  barLeft: { flexDirection: "row", alignItems: "center", gap: 8, flex: 1, minWidth: 0 },
+  barLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flex: 1,
+    minWidth: 0,
+  },
   backBox: {
     width: HIT,
     height: HIT,
@@ -713,10 +764,20 @@ const styles = StyleSheet.create({
   eyebrow: { ...type.rule, color: color.muted, marginBottom: 5 },
   barTitle: { ...type.chromeTitle, color: color.ink },
   chromeSub: { ...type.small, color: color.muted, marginTop: 5 },
-  barRight: { flexDirection: "row", alignItems: "center", gap: 9, paddingBottom: 3 },
+  barRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
+    paddingBottom: 3,
+  },
   statBox: { alignItems: "flex-end" },
   statValue: { ...type.figureLg, color: color.ink },
-  statLabel: { ...type.ruleSm, letterSpacing: 1.5, color: color.faint, marginTop: 4 },
+  statLabel: {
+    ...type.ruleSm,
+    letterSpacing: 1.5,
+    color: color.faint,
+    marginTop: 4,
+  },
   chromeAction: {
     alignItems: "center",
     height: 52,
@@ -731,10 +792,14 @@ const styles = StyleSheet.create({
     fontFamily: font.body,
     fontSize: 32,
     lineHeight: 34,
-    color: color.surface,
+    color: "#ffffff",
     marginTop: -2,
   },
-  chromeActionText: { fontFamily: font.bodySemi, fontSize: 14, color: color.surface },
+  chromeActionText: {
+    fontFamily: font.bodySemi,
+    fontSize: 14,
+    color: "#ffffff",
+  },
 
   moneyHead: {
     backgroundColor: color.surface,
@@ -752,13 +817,31 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: color.line,
   },
-  moneyCell: { flex: 1, paddingTop: 4, paddingHorizontal: 12, paddingBottom: 14 },
-  moneyCellDivided: { borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: color.line },
-  moneyLabel: { ...type.ruleSm, lineHeight: 12, letterSpacing: 1.2, color: color.faint },
+  moneyCell: {
+    flex: 1,
+    paddingTop: 4,
+    paddingHorizontal: 12,
+    paddingBottom: 14,
+  },
+  moneyCellDivided: {
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    borderLeftColor: color.line,
+  },
+  moneyLabel: {
+    ...type.ruleSm,
+    lineHeight: 12,
+    letterSpacing: 1.2,
+    color: color.faint,
+  },
   moneyValue: { ...type.figure, color: color.ink, marginTop: 6 },
   moneyValueDim: { color: color.faint },
 
-  ruleRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 10 },
+  ruleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 10,
+  },
   ruleLabel: { ...type.rule },
   ruleLine: { flex: 1, height: 1, backgroundColor: color.line },
   ruleMeta: { ...type.rule, color: color.faint, letterSpacing: 1 },
@@ -771,11 +854,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  badgeText: { fontFamily: font.monoMedium, fontSize: 11, color: color.surface },
+  badgeText: { fontFamily: font.monoMedium, fontSize: 11, color: "#ffffff" },
 
-  groupRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 7 },
+  groupRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 7,
+  },
   groupDot: { width: 5, height: 5, borderRadius: 2.5 },
-  groupLabel: { ...type.rule, letterSpacing: 1.4 },
+  groupLabel: { ...type.rule, letterSpacing: 0 },
 
   block: {
     backgroundColor: color.surface,
@@ -785,7 +873,10 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   row: { padding: 13 },
-  rowDivided: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.line },
+  rowDivided: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: color.line,
+  },
   rowPressed: { backgroundColor: color.hover },
 
   listRow: {
@@ -822,11 +913,20 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: space.md,
   },
-  actionNeutral: { backgroundColor: color.surface, borderColor: color.lineStrong },
-  actionBrand: { backgroundColor: color.brandSoft, borderColor: color.brandEdgeStrong },
-  actionPrimary: { backgroundColor: color.brandFill, borderColor: color.brandFill },
+  actionNeutral: {
+    backgroundColor: color.surface,
+    borderColor: color.lineStrong,
+  },
+  actionBrand: {
+    backgroundColor: color.brandSoft,
+    borderColor: color.brandEdgeStrong,
+  },
+  actionPrimary: {
+    backgroundColor: color.brandFill,
+    borderColor: color.brandFill,
+  },
   actionText: { fontFamily: font.bodyMedium, fontSize: 14, color: color.ink },
-  actionTextPrimary: { color: color.surface },
+  actionTextPrimary: { color: "#ffffff" },
   actionTextBrand: { color: color.brandDeep },
 
   primary: {
@@ -836,7 +936,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  primaryText: { fontFamily: font.bodySemi, fontSize: 15, color: color.surface },
+  primaryText: { fontFamily: font.bodySemi, fontSize: 15, color: "#ffffff" },
 
   empty: {
     backgroundColor: color.surface,
@@ -859,7 +959,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 13,
   },
-  emptyText: { fontFamily: font.body, fontSize: 14, lineHeight: 20, color: color.muted },
+  emptyText: {
+    fontFamily: font.body,
+    fontSize: 14,
+    lineHeight: 20,
+    color: color.muted,
+  },
 
   nextStep: {
     flexDirection: "row",
@@ -937,7 +1042,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   avatarHot: { backgroundColor: color.brandSoft },
-  avatarText: { fontFamily: font.monoMedium, fontSize: 12.5, color: color.muted },
+  avatarText: {
+    fontFamily: font.monoMedium,
+    fontSize: 12.5,
+    color: color.muted,
+  },
   avatarTextHot: { color: color.brandDeep },
 
   searchStrip: {

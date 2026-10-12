@@ -8,19 +8,42 @@ import { unwrap } from "./query";
 // keys.leads.all() also refreshes every lead detail under it.
 
 export const keys = {
-  financial: () => [["owner", "revenue"], ["owner", "payouts"], ["owner", "insights"], ["owner", "expenses"]] as const,
-  workflow: () => [
-    ["owner", "jobs"], ["owner", "invoices"], ["owner", "estimates"], ["owner", "customers"],
-    ["owner", "schedule"], ["owner", "unscheduled"], ["owner", "recurring"], ["owner", "overview"],
-    ["owner", "agenda"], ["owner", "revenue"], ["owner", "payouts"], ["owner", "insights"],
-  ] as const,
+  financial: () =>
+    [
+      ["owner", "money"],
+      ["owner", "revenue"],
+      ["owner", "payouts"],
+      ["owner", "insights"],
+      ["owner", "expenses"],
+    ] as const,
+  workflow: () =>
+    [
+      ["owner", "money"],
+      ["owner", "service-agreements"],
+      ["owner", "jobs"],
+      ["owner", "invoices"],
+      ["owner", "estimates"],
+      ["owner", "customers"],
+      ["owner", "schedule"],
+      ["owner", "unscheduled"],
+      ["owner", "recurring"],
+      ["owner", "overview"],
+      ["owner", "agenda"],
+      ["owner", "revenue"],
+      ["owner", "payouts"],
+      ["owner", "insights"],
+    ] as const,
+  serviceAgreements: () => ["owner", "service-agreements"] as const,
+  money: (period: import("@urso/types").MoneyPeriod) =>
+    ["owner", "money", period] as const,
   overview: () => ["owner", "overview"] as const,
   agenda: () => ["owner", "agenda"] as const,
   todayReport: () => ["owner", "today-report"] as const,
   revenue: () => ["owner", "revenue"] as const,
   threads: {
     all: () => ["owner", "threads"] as const,
-    messages: (phone: string) => ["owner", "threads", phone, "messages"] as const,
+    messages: (phone: string) =>
+      ["owner", "threads", phone, "messages"] as const,
     calls: (phone: string) => ["owner", "threads", phone, "calls"] as const,
   },
   calls: () => ["owner", "calls"] as const,
@@ -45,7 +68,8 @@ export const keys = {
   invoiceRewards: (id: string) => ["owner", "invoices", id, "rewards"] as const,
   schedule: {
     all: () => ["owner", "schedule"] as const,
-    board: (fromIso: string, days: string) => ["owner", "schedule", fromIso, days] as const,
+    board: (fromIso: string, days: string) =>
+      ["owner", "schedule", fromIso, days] as const,
     unscheduled: () => ["owner", "unscheduled"] as const,
   },
   crews: () => ["owner", "crews"] as const,
@@ -198,3 +222,15 @@ export const useSettings = () =>
 export const useExpenseLedger = () => useQuery({ queryKey: keys.expenseLedger(), queryFn: () => owner.expenseLedger().then(unwrap) });
 
 export const useCalendarEvents = (fromIso: string, days: number) => useQuery({queryKey:[...keys.schedule.all(),"events",fromIso,days],queryFn:()=>owner.calendarEvents(fromIso,days).then(unwrap)});
+
+export const useMoney = (period: import("@urso/types").MoneyPeriod) =>
+  useQuery({
+    queryKey: keys.money(period),
+    queryFn: () => owner.money(period).then(unwrap),
+  });
+
+export const useServiceAgreements = () =>
+  useQuery({
+    queryKey: keys.serviceAgreements(),
+    queryFn: () => owner.serviceAgreements().then(unwrap),
+  });

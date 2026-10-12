@@ -4,7 +4,7 @@ import { SERVICE_AREAS, serviceAreaInfo, type ServiceArea } from "@urso/types";
 import { documentActions } from "@/api";
 import { keys } from "@/queries";
 import { useAction } from "@/query";
-import { color, font, radius } from "@/theme";
+import { color, font, radius } from "@/canes-theme";
 
 export function ServiceAreaPicker({ value, onChange, disabled = false }: {
   value: ServiceArea | null;

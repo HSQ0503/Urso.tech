@@ -426,13 +426,15 @@ test("paused cron runs financial safety checks without any business automation",
     process: { env: { CRON_SECRET: "test" } },
     NextResponse: { json: (value) => value }, canesConfigured: () => true,
     canesAutomationsEnabled: async () => false, hasCronBudget: () => true,
+    reviewServicePayments: async () => { calls.push("service-payments"); },
+    reconcileWorkerCommissions: async () => { calls.push("commissions"); },
     reconcileLegacySquarePaymentHistory: async () => { calls.push("ledger"); },
     retireCreditAdjustedPaymentLinks: async () => { calls.push("payment-links"); },
     processCanesPushReceipts: async () => { calls.push("receipts"); },
   });
   const result = await cron({ headers: new Headers({ authorization: "Bearer test" }) });
   assert.equal(result.automations, "paused");
-  assert.deepEqual(calls, ["ledger", "payment-links", "receipts"]);
+  assert.deepEqual(calls, ["service-payments", "commissions", "ledger", "payment-links", "receipts"]);
 });
 
 test("photo uploads require permission and MMS-compatible content before storage", async () => {

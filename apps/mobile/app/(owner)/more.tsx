@@ -19,7 +19,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import { signOutWithPushCleanup } from "@/push-notifications";
 import { getAdminProfile, type AdminProfile } from "@/session";
-import { color, radius, space, type } from "@/theme";
+import { color, radius, space, type } from "@/canes-theme";
 import {
   Chevron,
   ChromeBar,
@@ -95,6 +95,12 @@ export default function MoreScreen(): React.ReactElement {
 
   const destinations: Destination[] = [
     {
+      key: "money",
+      label: "Money",
+      icon: "bar-chart-2",
+      go: () => router.push("/(owner)/money"),
+    },
+    {
       key: "leads",
       label: "Leads",
       icon: "user-plus",
@@ -160,7 +166,10 @@ export default function MoreScreen(): React.ReactElement {
         </View>
       ) : (
         <ScrollView
-          contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + space.xxl }]}
+          contentContainerStyle={[
+            styles.body,
+            { paddingBottom: insets.bottom + space.xxl },
+          ]}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -172,7 +181,7 @@ export default function MoreScreen(): React.ReactElement {
         >
           <View>
             <ArchivedRecords />
-        <SectionRule label="Everything else" />
+            <SectionRule label="Everything else" />
             <LedgerBlock>
               {destinations.map((destination, index) => (
                 <DestinationRow
@@ -200,7 +209,8 @@ export default function MoreScreen(): React.ReactElement {
                     {profile?.name ?? "This device"}
                   </Text>
                   <Text style={styles.email} numberOfLines={1}>
-                    {profile?.email ?? "No owner account is stored on this phone."}
+                    {profile?.email ??
+                      "No owner account is stored on this phone."}
                   </Text>
                 </View>
               </View>
@@ -214,7 +224,9 @@ export default function MoreScreen(): React.ReactElement {
               >
                 <View style={styles.rowInner}>
                   <Feather name="log-out" size={18} color={color.danger} />
-                  <Text style={[styles.rowLabel, styles.dangerInk]}>Sign out</Text>
+                  <Text style={[styles.rowLabel, styles.dangerInk]}>
+                    Sign out
+                  </Text>
                   <Chevron />
                 </View>
               </Row>

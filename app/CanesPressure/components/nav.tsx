@@ -4,7 +4,6 @@ import { useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ThemeToggle } from "@/components/dashboard/theme-toggle";
 import {
   LayoutDashboard,
   MessageSquare,
@@ -32,30 +31,99 @@ type NavItem = {
 
 // Funnel order: people first (leads → customers), then the work, then money.
 const LINKS: NavItem[] = [
-  { href: "/CanesPressure/dashboard", label: "Dashboard", icon: BarChart3, exact: false },
-  { href: "/CanesPressure/archives", label: "Archive", icon: FileText, exact: false },
-  { href: "/CanesPressure/jobs", label: "Work orders", icon: ClipboardList, exact: false },
-  { href: "/CanesPressure/recurring", label: "Recurring", icon: Repeat, exact: false },
+  { href: "/CanesPressure/money", label: "Money", icon: Wallet, exact: false },
+  {
+    href: "/CanesPressure/dashboard",
+    label: "Dashboard",
+    icon: BarChart3,
+    exact: false,
+  },
+  {
+    href: "/CanesPressure/archives",
+    label: "Archive",
+    icon: FileText,
+    exact: false,
+  },
+  {
+    href: "/CanesPressure/jobs",
+    label: "Work orders",
+    icon: ClipboardList,
+    exact: false,
+  },
+  {
+    href: "/CanesPressure/recurring",
+    label: "Recurring",
+    icon: Repeat,
+    exact: false,
+  },
   { href: "/CanesPressure", label: "Home", icon: LayoutDashboard, exact: true },
-  { href: "/CanesPressure/inbox", label: "Inbox", icon: MessageSquare, exact: false },
+  {
+    href: "/CanesPressure/inbox",
+    label: "Inbox",
+    icon: MessageSquare,
+    exact: false,
+  },
   { href: "/CanesPressure/leads", label: "Leads", icon: Filter, exact: false },
-  { href: "/CanesPressure/customers", label: "Customers", icon: Users, exact: false },
-  { href: "/CanesPressure/estimates", label: "Estimates", icon: FileText, exact: false },
-  { href: "/CanesPressure/schedule", label: "Schedule", icon: CalendarDays, exact: false },
-  { href: "/CanesPressure/invoices", label: "Invoices", icon: Receipt, exact: false },
-  { href: "/CanesPressure/expenses", label: "Expenses", icon: Wallet, exact: false },
-  { href: "/CanesPressure/insights", label: "Insights", icon: BarChart3, exact: false },
-  { href: "/CanesPressure/settings", label: "Settings", icon: Settings, exact: false },
+  {
+    href: "/CanesPressure/customers",
+    label: "Customers",
+    icon: Users,
+    exact: false,
+  },
+  {
+    href: "/CanesPressure/estimates",
+    label: "Estimates",
+    icon: FileText,
+    exact: false,
+  },
+  {
+    href: "/CanesPressure/schedule",
+    label: "Schedule",
+    icon: CalendarDays,
+    exact: false,
+  },
+  {
+    href: "/CanesPressure/invoices",
+    label: "Invoices",
+    icon: Receipt,
+    exact: false,
+  },
+  {
+    href: "/CanesPressure/expenses",
+    label: "Expenses",
+    icon: Wallet,
+    exact: false,
+  },
+  {
+    href: "/CanesPressure/insights",
+    label: "Insights",
+    icon: BarChart3,
+    exact: false,
+  },
+  {
+    href: "/CanesPressure/settings",
+    label: "Settings",
+    icon: Settings,
+    exact: false,
+  },
 ];
 
 // 0015: an ops-manager session sees only the surfaces its permissions allow.
 // `allowed` lists visible labels; undefined = owner, everything shows. Purely
 // cosmetic — the real enforcement is the server-side page + action guards.
-export function CanesNav({ mobile = false, allowed }: { mobile?: boolean; allowed?: string[] }) {
+export function CanesNav({
+  mobile = false,
+  allowed,
+}: {
+  mobile?: boolean;
+  allowed?: string[];
+}) {
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
 
-  const links = allowed ? LINKS.filter((l) => allowed.includes(l.label)) : LINKS;
+  const links = allowed
+    ? LINKS.filter((l) => allowed.includes(l.label))
+    : LINKS;
 
   // Mobile: Sebastian's daily loop gets a tab; everything else lives in More
   // (Jobber's pattern) — five targets beat nine microscopic ones.
@@ -68,9 +136,23 @@ export function CanesNav({ mobile = false, allowed }: { mobile?: boolean; allowe
   // daily loop, then the work, then the money — instead of a flat wall, and the
   // grouping fills the sidebar's dead space. Settings pins to the bottom.
   const NAV_GROUPS: { label?: string; items: NavItem[] }[] = [
-    { items: links.filter((l) => ["Home", "Dashboard", "Inbox", "Leads", "Customers"].includes(l.label)) },
-    { label: "Work", items: links.filter((l) => ["Estimates", "Schedule", "Work orders", "Recurring"].includes(l.label)) },
-    { label: "Money", items: links.filter((l) => ["Invoices", "Expenses", "Insights", "Archive"].includes(l.label)) },
+    {
+      items: links.filter((l) =>
+        ["Home", "Dashboard", "Inbox", "Leads", "Customers"].includes(l.label),
+      ),
+    },
+    {
+      label: "Work",
+      items: links.filter((l) =>
+        ["Estimates", "Schedule", "Work orders", "Recurring"].includes(l.label),
+      ),
+    },
+    {
+      label: "Money",
+      items: links.filter((l) =>
+        ["Money", "Invoices", "Expenses", "Archive"].includes(l.label),
+      ),
+    },
   ].filter((g) => g.items.length > 0);
   const SETTINGS_LINK = links.find((l) => l.label === "Settings") ?? null;
 
@@ -83,7 +165,12 @@ export function CanesNav({ mobile = false, allowed }: { mobile?: boolean; allowe
       <>
         <div className="flex items-stretch justify-around px-1 py-1 pb-[max(6px,env(safe-area-inset-bottom))]">
           {MOBILE_TABS.map(({ href, label, icon: Icon, exact }) => (
-            <Link key={href} href={href} className="cp-tab" data-active={isActive(href, exact)}>
+            <Link
+              key={href}
+              href={href}
+              className="cp-tab"
+              data-active={isActive(href, exact)}
+            >
               <Icon size={20} strokeWidth={2} className="shrink-0" />
               <span className="max-w-full truncate">{label}</span>
             </Link>
@@ -113,7 +200,10 @@ export function CanesNav({ mobile = false, allowed }: { mobile?: boolean; allowe
                 className="cp-sheet-backdrop"
                 onClick={() => setMoreOpen(false)}
               />
-              <div className="cp-sheet" style={{ width: "auto", borderInline: 0, borderBottom: 0 }}>
+              <div
+                className="cp-sheet"
+                style={{ width: "auto", borderInline: 0, borderBottom: 0 }}
+              >
                 <div className="cp-grabber" />
                 <div className="flex items-center justify-between px-4 pb-2 pt-1.5">
                   <span className="cp-mono">More</span>
@@ -129,9 +219,6 @@ export function CanesNav({ mobile = false, allowed }: { mobile?: boolean; allowe
                 <div className="px-3 pb-3">
                   {/* Mobile home for the dashboard-style theme switch — the
                       desktop sidebar carries it below the account block. */}
-                  <div className="mb-3">
-                    <ThemeToggle />
-                  </div>
                   <div className="cp-list">
                     {MOBILE_MORE.map(({ href, label, icon: Icon, exact }) => {
                       const active = isActive(href, exact);
@@ -141,11 +228,23 @@ export function CanesNav({ mobile = false, allowed }: { mobile?: boolean; allowe
                           href={href}
                           onClick={() => setMoreOpen(false)}
                           className="cp-list-row"
-                          style={active ? { color: "var(--cp-brand-deep)" } : undefined}
+                          style={
+                            active
+                              ? { color: "var(--cp-brand-deep)" }
+                              : undefined
+                          }
                         >
-                          <Icon size={20} strokeWidth={2} className="shrink-0" />
+                          <Icon
+                            size={20}
+                            strokeWidth={2}
+                            className="shrink-0"
+                          />
                           <span className="cp-list-title flex-1">{label}</span>
-                          <ChevronRight size={18} strokeWidth={2} className="cp-list-chev" />
+                          <ChevronRight
+                            size={18}
+                            strokeWidth={2}
+                            className="cp-list-chev"
+                          />
                         </Link>
                       );
                     })}
@@ -166,7 +265,12 @@ export function CanesNav({ mobile = false, allowed }: { mobile?: boolean; allowe
         <div key={gi} className="flex flex-col gap-0.5">
           {group.label && <span className="cp-nav-section">{group.label}</span>}
           {group.items.map(({ href, label, icon: Icon, exact }) => (
-            <Link key={href} href={href} className="cp-nav-link" data-active={isActive(href, exact)}>
+            <Link
+              key={href}
+              href={href}
+              className="cp-nav-link"
+              data-active={isActive(href, exact)}
+            >
               <Icon size={16} strokeWidth={2} />
               {label}
             </Link>

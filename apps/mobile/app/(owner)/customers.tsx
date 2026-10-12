@@ -25,7 +25,7 @@ import { Feather } from "@expo/vector-icons";
 import { fmtEt, fmtMoney, fmtPhone, type CustomerSummary } from "@urso/types";
 import { useCustomers } from "@/queries";
 import { noticeFrom, usePullToRefresh, useRefetchOnFocus } from "@/query";
-import { color, font, space, type } from "@/theme";
+import { color, font, space, type } from "@/canes-theme";
 import {
   Avatar,
   Chevron,

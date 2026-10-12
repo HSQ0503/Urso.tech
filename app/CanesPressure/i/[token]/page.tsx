@@ -41,7 +41,8 @@ export default async function PublicInvoicePage({
   const { token } = await params;
   const invoice = await getInvoiceByToken(token);
   // Unknown token, or a draft/void invoice, is a 404 — those are not public.
-  if (!invoice || invoice.status === "draft" || invoice.status === "void") notFound();
+  if (!invoice || invoice.status === "draft" || invoice.status === "void")
+    notFound();
 
   const [items, payments, rewards, rewardConfig] = await Promise.all([
     getInvoiceItems(invoice.id),
@@ -70,28 +71,58 @@ export default async function PublicInvoicePage({
     social_follow: rewardConfig.social_follow.urls,
   };
   const rewardOffers: PublicRewardOffer[] = rewards
-    .filter((r) => r.status === "approved" || (!isPaid && (r.status === "offered" || r.status === "claimed")))
+    .filter(
+      (r) =>
+        r.status === "approved" ||
+        (!isPaid &&
+          (r.status === "offered" || r.status === "claimed") &&
+          !invoice.service_autopay_authorization_id),
+    )
     .filter((r) => r.status !== "offered" || rewardLinks[r.kind].length > 0)
-    .map(({ id, kind, label, amount_cents, status }) => ({ id, kind, label, amount_cents, status }));
+    .map(({ id, kind, label, amount_cents, status }) => ({
+      id,
+      kind,
+      label,
+      amount_cents,
+      status,
+    }));
 
   return (
     <Shell>
+      {invoice.service_offers_enabled && !isPaid ? (
+        <a
+          className="cp-card mb-5 block p-4"
+          href={`/CanesPressure/enroll/${token}`}
+        >
+          <strong>Save with recurring services</strong>
+          <p className="mt-1 text-sm">
+            Choose a schedule for eligible services and review your savings,
+            payment authorization and cancellation terms.
+          </p>
+        </a>
+      ) : null}
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
         <h1 className="cp-display text-[24px] leading-tight">Your invoice</h1>
         <span className="cp-mono tabular-nums">{invoice.number}</span>
       </div>
       {(invoice.job_name || invoice.job_address) && (
         <div className="mt-1.5 space-y-0.5">
-          {invoice.job_name && <p className="text-[15px] font-semibold">{invoice.job_name}</p>}
+          {invoice.job_name && (
+            <p className="text-[15px] font-semibold">{invoice.job_name}</p>
+          )}
           {invoice.job_address && (
-            <p className="text-[13.5px] text-[var(--cp-muted)]">{invoice.job_address}</p>
+            <p className="text-[13.5px] text-[var(--cp-muted)]">
+              {invoice.job_address}
+            </p>
           )}
         </div>
       )}
 
       {invoice.message_to_customer && !isPaid && (
         <div className="cp-card mt-5 p-4">
-          <p className="text-[14px] leading-relaxed">{invoice.message_to_customer}</p>
+          <p className="text-[14px] leading-relaxed">
+            {invoice.message_to_customer}
+          </p>
         </div>
       )}
 
@@ -121,7 +152,18 @@ export default async function PublicInvoicePage({
                   )}
                 </div>
                 <p className="shrink-0 text-[14px] tabular-nums font-semibold">
-                  {(item.discount_cents??0)>0?<><span className="block text-xs font-normal line-through text-[var(--cp-muted)]">{fmtMoney(item.line_total_cents+(item.discount_cents??0))}</span><span className="block text-xs font-normal">Discount −{fmtMoney(item.discount_cents)}</span></>:null}
+                  {(item.discount_cents ?? 0) > 0 ? (
+                    <>
+                      <span className="block text-xs font-normal line-through text-[var(--cp-muted)]">
+                        {fmtMoney(
+                          item.line_total_cents + (item.discount_cents ?? 0),
+                        )}
+                      </span>
+                      <span className="block text-xs font-normal">
+                        Discount −{fmtMoney(item.discount_cents)}
+                      </span>
+                    </>
+                  ) : null}
                   {fmtMoney(item.line_total_cents)}
                 </p>
               </li>
@@ -140,35 +182,49 @@ export default async function PublicInvoicePage({
         <div className="space-y-2 p-5">
           {invoice.adjustment_cents !== 0 && (
             <div className="flex items-center justify-between text-[13.5px] text-[var(--cp-muted)]">
-              <span>{invoice.adjustment_cents < 0 ? "Discount" : "Adjustment"}</span>
-              <span className="tabular-nums">{fmtMoney(invoice.adjustment_cents)}</span>
+              <span>
+                {invoice.adjustment_cents < 0 ? "Discount" : "Adjustment"}
+              </span>
+              <span className="tabular-nums">
+                {fmtMoney(invoice.adjustment_cents)}
+              </span>
             </div>
           )}
           {invoice.tax_cents > 0 && (
             <div className="flex items-center justify-between text-[13.5px] text-[var(--cp-muted)]">
               <span>Tax</span>
-              <span className="tabular-nums">{fmtMoney(invoice.tax_cents)}</span>
+              <span className="tabular-nums">
+                {fmtMoney(invoice.tax_cents)}
+              </span>
             </div>
           )}
           {appliedRewardCents > 0 && (
             <div className="flex items-center justify-between text-[13.5px] text-[var(--cp-good)]">
               <span>Review rewards</span>
-              <span className="tabular-nums">−{fmtMoney(appliedRewardCents)}</span>
+              <span className="tabular-nums">
+                −{fmtMoney(appliedRewardCents)}
+              </span>
             </div>
           )}
           <div className="flex items-center justify-between">
             <span className="text-[15px] font-semibold">Total</span>
-            <span className="cp-display text-[22px] tabular-nums">{fmtMoney(invoice.total_cents)}</span>
+            <span className="cp-display text-[22px] tabular-nums">
+              {fmtMoney(invoice.total_cents)}
+            </span>
           </div>
           {invoice.amount_paid_cents > 0 && !isPaid && (
             <>
               <div className="flex items-center justify-between text-[13.5px] text-[var(--cp-muted)]">
                 <span>Paid</span>
-                <span className="tabular-nums">−{fmtMoney(invoice.amount_paid_cents)}</span>
+                <span className="tabular-nums">
+                  −{fmtMoney(invoice.amount_paid_cents)}
+                </span>
               </div>
               <div className="cp-divider flex items-center justify-between pt-2">
                 <span className="text-[14px] font-semibold">Balance due</span>
-                <span className="tabular-nums text-[15px] font-semibold">{fmtMoney(balance)}</span>
+                <span className="tabular-nums text-[15px] font-semibold">
+                  {fmtMoney(balance)}
+                </span>
               </div>
             </>
           )}
@@ -184,9 +240,15 @@ export default async function PublicInvoicePage({
         {isPaid ? (
           <div className="cp-card">
             <div className="flex items-start gap-2.5 p-5">
-              <ShieldCheck size={20} strokeWidth={2} className="mt-0.5 shrink-0 text-[var(--cp-good)]" />
+              <ShieldCheck
+                size={20}
+                strokeWidth={2}
+                className="mt-0.5 shrink-0 text-[var(--cp-good)]"
+              />
               <div>
-                <p className="text-[15px] font-semibold text-[var(--cp-good)]">Paid in full. Thank you!</p>
+                <p className="text-[15px] font-semibold text-[var(--cp-good)]">
+                  Paid in full. Thank you!
+                </p>
                 <p className="mt-0.5 text-[13.5px] leading-relaxed text-[var(--cp-muted)]">
                   {payments[0]?.method === "cash"
                     ? "We recorded your cash payment."
@@ -201,15 +263,17 @@ export default async function PublicInvoicePage({
             href={invoice.hosted_payment_url}
             className="cp-btn cp-btn-primary cp-btn-block sm:min-h-9 sm:rounded-[5px] sm:text-[13px]"
           >
-            <CreditCard size={16} strokeWidth={2} /> Pay {fmtMoney(balance)} securely
+            <CreditCard size={16} strokeWidth={2} /> Pay {fmtMoney(balance)}{" "}
+            securely
           </a>
         ) : (
           <div className="cp-card">
             <div className="p-5">
               <p className="text-[14px] font-semibold">Ready to pay?</p>
               <p className="mt-1 text-[13.5px] leading-relaxed text-[var(--cp-muted)]">
-                Online card payment for this invoice is being set up. Reply to our text or give us a
-                call and we&rsquo;ll take care of it. We take cash, check, or card.
+                Online card payment for this invoice is being set up. Reply to
+                our text or give us a call and we&rsquo;ll take care of it. We
+                take cash, check, or card.
               </p>
             </div>
           </div>
@@ -228,7 +292,9 @@ export default async function PublicInvoicePage({
             />
           </summary>
           <div className="cp-divider px-4 py-3.5">
-            <p className="text-[12.5px] leading-relaxed text-[var(--cp-muted)]">{invoice.terms}</p>
+            <p className="text-[12.5px] leading-relaxed text-[var(--cp-muted)]">
+              {invoice.terms}
+            </p>
           </div>
         </details>
       )}

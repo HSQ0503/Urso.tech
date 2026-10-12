@@ -34,11 +34,13 @@ import { AddressInput } from "@/components/address-input";
 import { Notice } from "@/components/notice";
 import { keys, useCatalog, useCustomers, useEstimate, useSettings } from "@/queries";
 import { noticeFrom, useAction } from "@/query";
-import { color, font, HIT, radius, space, type } from "@/theme";
+import { color, font, HIT, radius, space, type } from "@/canes-theme";
 
 type ItemCategory = "service" | "material" | "product";
 
 type DraftLine = {
+  serviceLineId?: string;
+  serviceCategory?: import("@urso/types").ServiceCategory | null;
   key: string;
   catalogId: string | null;
   category: ItemCategory;
@@ -46,7 +48,8 @@ type DraftLine = {
   description: string | null;
   quantityText: string;
   priceText: string;
-  discountText?: string; discountMode?: "amount" | "percent";
+  discountText?: string;
+  discountMode?: "amount" | "percent";
   taxable: boolean;
   discountCents: number;
   isOption: boolean;
@@ -95,6 +98,8 @@ function categoryFor(item: EstimateItem): ItemCategory {
 function fromEstimateItem(item: EstimateItem): DraftLine {
   return {
     key: item.id,
+    serviceLineId: item.service_line_id,
+    serviceCategory: item.service_category,
     catalogId: item.catalog_id,
     category: categoryFor(item),
     name: item.name,
@@ -102,7 +107,9 @@ function fromEstimateItem(item: EstimateItem): DraftLine {
     quantityText: String(item.quantity),
     priceText: centsToDollars(item.unit_price_cents),
     discountMode: item.discount_mode ?? "amount",
-    discountText: centsToDollars(item.discount_value ?? item.discount_cents ?? 0),
+    discountText: centsToDollars(
+      item.discount_value ?? item.discount_cents ?? 0,
+    ),
     taxable: item.taxable,
     discountCents: item.discount_cents,
     isOption: item.is_option,
@@ -111,11 +118,16 @@ function fromEstimateItem(item: EstimateItem): DraftLine {
   };
 }
 
-function fromCatalog(item: CatalogItem, category: ItemCategory, estimateType: EstimateType): DraftLine {
+function fromCatalog(
+  item: CatalogItem,
+  category: ItemCategory,
+  estimateType: EstimateType,
+): DraftLine {
   return {
     key: `${Date.now()}-${Math.random()}`,
     catalogId: item.id,
     category,
+    serviceCategory: item.service_category,
     name: item.name,
     description: item.description,
     quantityText: "1",
@@ -128,11 +140,15 @@ function fromCatalog(item: CatalogItem, category: ItemCategory, estimateType: Es
   };
 }
 
-function customLine(category: ItemCategory, estimateType: EstimateType): DraftLine {
+function customLine(
+  category: ItemCategory,
+  estimateType: EstimateType,
+): DraftLine {
   return {
     key: `${Date.now()}-${Math.random()}`,
     catalogId: null,
     category,
+    serviceCategory: category === "service" ? "custom" : null,
     name: category === "material" ? "Material" : "",
     description: null,
     quantityText: "1",
@@ -241,7 +257,13 @@ export default function EstimateEditorScreen(): React.ReactElement {
   return <EstimateEditor key={`${editId ?? `new-${requestedType}`}:${params.draftKey ?? ""}`} editId={editId} requestedType={requestedType} />;
 }
 
-function EstimateEditor({ editId, requestedType }: { editId: string | null; requestedType: EstimateType }): React.ReactElement {
+function EstimateEditor({
+  editId,
+  requestedType,
+}: {
+  editId: string | null;
+  requestedType: EstimateType;
+}): React.ReactElement {
   const insets = useSafeAreaInsets();
 
   const estimateQuery = useEstimate(editId);
@@ -296,37 +318,66 @@ function EstimateEditor({ editId, requestedType }: { editId: string | null; requ
   }, [depositPresets, estimate, seeded]);
 
   const create = useAction(
-    (input: Parameters<typeof estimateActions.create>[0]) => estimateActions.create(input),
+    (input: Parameters<typeof estimateActions.create>[0]) =>
+      estimateActions.create(input),
     { invalidates: [keys.estimates(), keys.customers.all()] },
   );
   const update = useAction(
-    ({ id, patch }: { id: string; patch: Parameters<typeof estimateActions.update>[1] }) => estimateActions.update(id, patch),
-    { invalidates: [keys.estimates(), ...(editId ? [keys.estimateOne(editId)] : []), keys.customers.all()] },
+    ({
+      id,
+      patch,
+    }: {
+      id: string;
+      patch: Parameters<typeof estimateActions.update>[1];
+    }) => estimateActions.update(id, patch),
+    {
+      invalidates: [
+        keys.estimates(),
+        ...(editId ? [keys.estimateOne(editId)] : []),
+        keys.customers.all(),
+      ],
+    },
   );
   const saveItems = useAction(
-    ({ id, items }: { id: string; items: EstimateLineInput[] }) => estimateActions.saveItems(id, items),
-    { invalidates: [keys.estimates(), ...(editId ? [keys.estimateOne(editId)] : [])] },
+    ({ id, items }: { id: string; items: EstimateLineInput[] }) =>
+      estimateActions.saveItems(id, items),
+    {
+      invalidates: [
+        keys.estimates(),
+        ...(editId ? [keys.estimateOne(editId)] : []),
+      ],
+    },
   );
 
   const customerSections = useMemo<CustomerSection[]>(() => {
     const term = customerSearch.trim().toLowerCase();
     const grouped = new Map<string, CustomerSummary[]>();
     for (const item of customersQuery.data ?? []) {
-      const haystack = `${item.name ?? ""} ${item.phone ?? ""} ${item.primary_address ?? ""}`.toLowerCase();
+      const haystack =
+        `${item.name ?? ""} ${item.phone ?? ""} ${item.primary_address ?? ""}`.toLowerCase();
       if (term && !haystack.includes(term)) continue;
       const letter = (item.name?.trim().charAt(0) || "#").toUpperCase();
       grouped.set(letter, [...(grouped.get(letter) ?? []), item]);
     }
     return [...grouped.entries()]
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([title, data]) => ({ title, data: data.sort((a, b) => (a.name ?? "").localeCompare(b.name ?? "")) }));
+      .map(([title, data]) => ({
+        title,
+        data: data.sort((a, b) => (a.name ?? "").localeCompare(b.name ?? "")),
+      }));
   }, [customerSearch, customersQuery.data]);
 
   const catalogMatches = useMemo(() => {
     const term = catalogSearch.trim().toLowerCase();
-    const expectedKind: CatalogKind = pickerCategory === "service" ? "service" : "product";
-    return (catalogQuery.data ?? []).filter((item) =>
-      item.active && item.kind === expectedKind && (!term || item.name.toLowerCase().includes(term)),
+    const expectedKind: CatalogKind =
+      pickerCategory === "service" ? "service" : "product";
+    return (catalogQuery.data ?? []).filter(
+      (item) =>
+        item.active &&
+        (item.kind === "product" ||
+          (item.service_category && item.service_category !== "custom")) &&
+        item.kind === expectedKind &&
+        (!term || item.name.toLowerCase().includes(term)),
     );
   }, [catalogQuery.data, catalogSearch, pickerCategory]);
 
@@ -355,12 +406,17 @@ function EstimateEditor({ editId, requestedType }: { editId: string | null; requ
   };
 
   const addCatalog = (item: CatalogItem) => {
-    setLines((current) => [...current, fromCatalog(item, pickerCategory, estimateType)]);
+    setLines((current) => [
+      ...current,
+      fromCatalog(item, pickerCategory, estimateType),
+    ]);
     setCatalogOpen(false);
   };
 
   const patchLine = (key: string, patch: Partial<DraftLine>) => {
-    setLines((current) => current.map((line) => line.key === key ? { ...line, ...patch } : line));
+    setLines((current) =>
+      current.map((line) => (line.key === key ? { ...line, ...patch } : line)),
+    );
   };
 
   const onSave = async () => {
@@ -384,9 +440,14 @@ function EstimateEditor({ editId, requestedType }: { editId: string | null; requ
         setNotice(result.notice);
         return;
       }
-      targetId = typeof result.data.estimateId === "string" ? result.data.estimateId : null;
+      targetId =
+        typeof result.data.estimateId === "string"
+          ? result.data.estimateId
+          : null;
       if (targetId === null) {
-        setNotice("The estimate was created, but this phone didn’t receive its ID.");
+        setNotice(
+          "The estimate was created, but this phone didn’t receive its ID.",
+        );
         return;
       }
       setCreatedId(targetId);
@@ -416,17 +477,25 @@ function EstimateEditor({ editId, requestedType }: { editId: string | null; requ
       .filter((line) => line.name.trim().length > 0)
       .map((line) => ({
         catalogId: line.catalogId,
+        serviceLineId: line.serviceLineId,
+        serviceCategory: line.serviceCategory,
         name: line.name.trim(),
         description: line.description,
         kind: line.category === "service" ? "service" : "product",
         quantity: quantity(line.quantityText),
         unitPriceCents: dollarsToCents(line.priceText),
         discountCents: lineDiscount(line),
-        discountMode: line.discountMode ?? "amount", discountValue: dollarsToCents(line.discountText ?? centsToDollars(line.discountCents)),
+        discountMode: line.discountMode ?? "amount",
+        discountValue: dollarsToCents(
+          line.discountText ?? centsToDollars(line.discountCents),
+        ),
         taxable: line.taxable,
         isOption: estimateType === "standard" ? false : line.isOption,
         isMandatory: line.isMandatory,
-        packageGroup: estimateType === "packages" ? line.packageGroup ?? "Package 1" : null,
+        packageGroup:
+          estimateType === "packages"
+            ? (line.packageGroup ?? "Package 1")
+            : null,
       }));
     const saved = await saveItems.mutateAsync({ id: targetId, items: payload });
     if (!saved.ok) {
@@ -434,23 +503,40 @@ function EstimateEditor({ editId, requestedType }: { editId: string | null; requ
       return;
     }
 
-    router.replace({ pathname: "/(owner)/estimate/[id]", params: { id: targetId } });
+    router.replace({
+      pathname: "/(owner)/estimate/[id]",
+      params: { id: targetId },
+    });
   };
 
   if (editId !== null && estimateQuery.isPending) {
-    return <View style={styles.loading}><ActivityIndicator size="large" color={color.brand} /></View>;
+    return (
+      <View style={styles.loading}>
+        <ActivityIndicator size="large" color={color.brand} />
+      </View>
+    );
   }
 
   const loadNotice = noticeFrom(estimateQuery.error);
   const catalogNotice = noticeFrom(catalogQuery.error);
 
   return (
-    <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+    <KeyboardAvoidingView
+      style={styles.screen}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    >
       <View style={{ height: insets.top, backgroundColor: color.chrome }} />
       <View style={styles.header}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => router.back()} style={styles.headerBack}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Back"
+          onPress={() => router.back()}
+          style={styles.headerBack}
+        >
           <Feather name="chevron-left" size={31} color={color.brand} />
-          <Text style={styles.headerTitle}>{editId ? "EDIT" : "NEW"} {TYPE_LABEL[estimateType]} ESTIMATE</Text>
+          <Text style={styles.headerTitle}>
+            {editId ? "EDIT" : "NEW"} {TYPE_LABEL[estimateType]} ESTIMATE
+          </Text>
         </Pressable>
         <Pressable
           accessibilityRole="button"
@@ -460,23 +546,46 @@ function EstimateEditor({ editId, requestedType }: { editId: string | null; requ
           onPress={() => void onSave()}
           style={styles.saveButton}
         >
-          {busy ? <ActivityIndicator color={color.brand} /> : <Feather name="check" size={31} color={ready ? color.brand : color.faint} />}
+          {busy ? (
+            <ActivityIndicator color={color.brand} />
+          ) : (
+            <Feather
+              name="check"
+              size={31}
+              color={ready ? color.brand : color.faint}
+            />
+          )}
         </Pressable>
       </View>
 
       <ScrollView
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
-        contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + 36 }]}
+        contentContainerStyle={[
+          styles.body,
+          { paddingBottom: insets.bottom + 36 },
+        ]}
       >
         {loadNotice !== null ? <Notice text={loadNotice} /> : null}
         {notice !== null ? <Notice text={notice} /> : null}
 
         <View style={styles.customerBlock}>
-          <Pressable accessibilityRole="button" accessibilityLabel="Select customer" onPress={() => setCustomerOpen(true)} style={styles.selectCustomer}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Select customer"
+            onPress={() => setCustomerOpen(true)}
+            style={styles.selectCustomer}
+          >
             <Feather name="user" size={27} color={color.faint} />
-            <Text style={[styles.selectCustomerText, customerName && styles.selectedCustomerText]} numberOfLines={1}>
-              {customerName || "Select Customer"}<Text style={styles.required}>*</Text>
+            <Text
+              style={[
+                styles.selectCustomerText,
+                customerName && styles.selectedCustomerText,
+              ]}
+              numberOfLines={1}
+            >
+              {customerName || "Select Customer"}
+              <Text style={styles.required}>*</Text>
             </Text>
             <Feather name="chevron-right" size={30} color={color.brand} />
           </Pressable>
@@ -493,30 +602,57 @@ function EstimateEditor({ editId, requestedType }: { editId: string | null; requ
           </View>
         </View>
 
-        <ServiceAreaPicker value={serviceArea} onChange={setServiceArea} disabled={create.isPending || update.isPending} />
+        <ServiceAreaPicker
+          value={serviceArea}
+          onChange={setServiceArea}
+          disabled={create.isPending || update.isPending}
+        />
         <View style={styles.detailsBlock}>
           <View style={styles.detailField}>
             <Text style={styles.detailLabel}>Estimate Date</Text>
-            <Text style={styles.detailValue}>{fmtEt(estimate?.created_at ?? new Date().toISOString(), { month: "short", day: "numeric", year: "numeric" })}</Text>
+            <Text style={styles.detailValue}>
+              {fmtEt(estimate?.created_at ?? new Date().toISOString(), {
+                month: "short",
+                day: "numeric",
+                year: "numeric",
+              })}
+            </Text>
           </View>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Change expiry date"
-            onPress={() => { Keyboard.dismiss(); setExpiryOpen(true); }}
+            onPress={() => {
+              Keyboard.dismiss();
+              setExpiryOpen(true);
+            }}
             style={styles.detailField}
           >
             <Text style={styles.detailLabel}>Expiry Date</Text>
-            <Text style={styles.detailValue}>{fmtEt(expiresAtIso, { month: "short", day: "numeric", year: "numeric" })}</Text>
-            <Text style={styles.detailLabel}>Choose date · end of day (ET)</Text>
+            <Text style={styles.detailValue}>
+              {fmtEt(expiresAtIso, {
+                month: "short",
+                day: "numeric",
+                year: "numeric",
+              })}
+            </Text>
+            <Text style={styles.detailLabel}>
+              Choose date · end of day (ET)
+            </Text>
           </Pressable>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Quantity type"
-            onPress={() => setQuantityType((current) => current === "Qty" ? "Sq Ft" : "Qty")}
+            onPress={() =>
+              setQuantityType((current) =>
+                current === "Qty" ? "Sq Ft" : "Qty",
+              )
+            }
             style={styles.quantityRow}
           >
             <View>
-              <Text style={styles.detailLabel}>Quantity Type<Text style={styles.required}>*</Text></Text>
+              <Text style={styles.detailLabel}>
+                Quantity Type<Text style={styles.required}>*</Text>
+              </Text>
               <Text style={styles.detailValue}>{quantityType}</Text>
             </View>
             <Feather name="chevron-right" size={30} color={color.brand} />
@@ -542,11 +678,26 @@ function EstimateEditor({ editId, requestedType }: { editId: string | null; requ
                     key={preset}
                     accessibilityRole="radio"
                     accessibilityState={{ checked: selected }}
-                    accessibilityLabel={preset === 0 ? "No deposit" : `${preset} percent deposit`}
-                    onPress={() => { setCustomDeposit(false); setDepositPercent(preset); }}
-                    style={[styles.depositChip, selected && styles.depositChipOn]}
+                    accessibilityLabel={
+                      preset === 0 ? "No deposit" : `${preset} percent deposit`
+                    }
+                    onPress={() => {
+                      setCustomDeposit(false);
+                      setDepositPercent(preset);
+                    }}
+                    style={[
+                      styles.depositChip,
+                      selected && styles.depositChipOn,
+                    ]}
                   >
-                    <Text style={[styles.depositChipText, selected && styles.depositChipTextOn]}>{preset === 0 ? "None" : `${preset}%`}</Text>
+                    <Text
+                      style={[
+                        styles.depositChipText,
+                        selected && styles.depositChipTextOn,
+                      ]}
+                    >
+                      {preset === 0 ? "None" : `${preset}%`}
+                    </Text>
                   </Pressable>
                 );
               })}
@@ -554,10 +705,25 @@ function EstimateEditor({ editId, requestedType }: { editId: string | null; requ
                 accessibilityRole="radio"
                 accessibilityState={{ checked: customDeposit }}
                 accessibilityLabel="Custom deposit percent"
-                onPress={() => { setCustomDeposit(true); setDepositText(depositPercent > 0 ? String(depositPercent) : ""); }}
-                style={[styles.depositChip, customDeposit && styles.depositChipOn]}
+                onPress={() => {
+                  setCustomDeposit(true);
+                  setDepositText(
+                    depositPercent > 0 ? String(depositPercent) : "",
+                  );
+                }}
+                style={[
+                  styles.depositChip,
+                  customDeposit && styles.depositChipOn,
+                ]}
               >
-                <Text style={[styles.depositChipText, customDeposit && styles.depositChipTextOn]}>Custom</Text>
+                <Text
+                  style={[
+                    styles.depositChipText,
+                    customDeposit && styles.depositChipTextOn,
+                  ]}
+                >
+                  Custom
+                </Text>
               </Pressable>
               {customDeposit ? (
                 <View style={styles.depositCustom}>
@@ -587,17 +753,50 @@ function EstimateEditor({ editId, requestedType }: { editId: string | null; requ
         </View>
 
         <CategoryBar label="Service" onAdd={() => openCatalog("service")} />
-        {lines.filter((line) => line.category === "service").map((line) => (
-          <LineEditor key={line.key} line={line} onChange={(patch) => patchLine(line.key, patch)} onRemove={() => setLines((current) => current.filter((item) => item.key !== line.key))} />
-        ))}
+        {lines
+          .filter((line) => line.category === "service")
+          .map((line) => (
+            <LineEditor
+              key={line.key}
+              line={line}
+              onChange={(patch) => patchLine(line.key, patch)}
+              onRemove={() =>
+                setLines((current) =>
+                  current.filter((item) => item.key !== line.key),
+                )
+              }
+            />
+          ))}
         <CategoryBar label="Material" onAdd={() => openCatalog("material")} />
-        {lines.filter((line) => line.category === "material").map((line) => (
-          <LineEditor key={line.key} line={line} onChange={(patch) => patchLine(line.key, patch)} onRemove={() => setLines((current) => current.filter((item) => item.key !== line.key))} />
-        ))}
+        {lines
+          .filter((line) => line.category === "material")
+          .map((line) => (
+            <LineEditor
+              key={line.key}
+              line={line}
+              onChange={(patch) => patchLine(line.key, patch)}
+              onRemove={() =>
+                setLines((current) =>
+                  current.filter((item) => item.key !== line.key),
+                )
+              }
+            />
+          ))}
         <CategoryBar label="Product" onAdd={() => openCatalog("product")} />
-        {lines.filter((line) => line.category === "product").map((line) => (
-          <LineEditor key={line.key} line={line} onChange={(patch) => patchLine(line.key, patch)} onRemove={() => setLines((current) => current.filter((item) => item.key !== line.key))} />
-        ))}
+        {lines
+          .filter((line) => line.category === "product")
+          .map((line) => (
+            <LineEditor
+              key={line.key}
+              line={line}
+              onChange={(patch) => patchLine(line.key, patch)}
+              onRemove={() =>
+                setLines((current) =>
+                  current.filter((item) => item.key !== line.key),
+                )
+              }
+            />
+          ))}
 
         <View style={styles.totalBar}>
           <Text style={styles.totalLabel}>Estimate Total</Text>
@@ -605,37 +804,81 @@ function EstimateEditor({ editId, requestedType }: { editId: string | null; requ
         </View>
       </ScrollView>
 
-      <Modal visible={customerOpen} animationType="slide" presentationStyle="fullScreen" onRequestClose={() => setCustomerOpen(false)}>
+      <Modal
+        visible={customerOpen}
+        animationType="slide"
+        presentationStyle="fullScreen"
+        onRequestClose={() => setCustomerOpen(false)}
+      >
         <View style={styles.pickerScreen} accessibilityViewIsModal>
           <View style={{ height: insets.top, backgroundColor: color.chrome }} />
           <View style={styles.pickerHeader}>
-            <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => setCustomerOpen(false)} style={styles.headerBack}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Back"
+              onPress={() => setCustomerOpen(false)}
+              style={styles.headerBack}
+            >
               <Feather name="chevron-left" size={31} color={color.brand} />
               <Text style={styles.headerTitle}>MY CUSTOMERS</Text>
             </Pressable>
-            <Pressable accessibilityRole="button" accessibilityLabel="New customer" onPress={() => { setCustomerOpen(false); router.push("/(owner)/customer/new"); }} style={styles.addCustomer}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="New customer"
+              onPress={() => {
+                setCustomerOpen(false);
+                router.push("/(owner)/customer/new");
+              }}
+              style={styles.addCustomer}
+            >
               <Text style={styles.addCustomerText}>+</Text>
             </Pressable>
           </View>
           <View style={styles.customerSearchWrap}>
             <Feather name="search" size={25} color={color.faint} />
-            <TextInput value={customerSearch} onChangeText={setCustomerSearch} placeholder="Search Customer" placeholderTextColor={color.faint} style={styles.customerSearch} />
+            <TextInput
+              value={customerSearch}
+              onChangeText={setCustomerSearch}
+              placeholder="Search Customer"
+              placeholderTextColor={color.faint}
+              style={styles.customerSearch}
+            />
           </View>
           <SectionList
             sections={customerSections}
             keyExtractor={(item) => item.id}
             stickySectionHeadersEnabled
-            renderSectionHeader={({ section }) => <View style={styles.letterHeader}><Text style={styles.letter}>{section.title}</Text></View>}
+            renderSectionHeader={({ section }) => (
+              <View style={styles.letterHeader}>
+                <Text style={styles.letter}>{section.title}</Text>
+              </View>
+            )}
             renderItem={({ item }) => (
-              <Pressable accessibilityRole="button" accessibilityLabel={`Select ${item.name ?? "customer"}`} onPress={() => chooseCustomer(item)} style={({ pressed }) => [styles.customerRow, pressed && styles.categoryPressed]}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Select ${item.name ?? "customer"}`}
+                onPress={() => chooseCustomer(item)}
+                style={({ pressed }) => [
+                  styles.customerRow,
+                  pressed && styles.categoryPressed,
+                ]}
+              >
                 <View style={styles.customerRowCopy}>
-                  <Text style={styles.customerRowName}>{item.name ?? item.phone ?? "Customer"}</Text>
+                  <Text style={styles.customerRowName}>
+                    {item.name ?? item.phone ?? "Customer"}
+                  </Text>
                   <Text style={styles.customerRowCity}>{cityOf(item)}</Text>
                 </View>
-                <View style={styles.repeatBadge}><Text style={styles.repeatText}>R</Text></View>
+                <View style={styles.repeatBadge}>
+                  <Text style={styles.repeatText}>R</Text>
+                </View>
               </Pressable>
             )}
-            ListEmptyComponent={<Text style={styles.emptyPicker}>No customers match that search.</Text>}
+            ListEmptyComponent={
+              <Text style={styles.emptyPicker}>
+                No customers match that search.
+              </Text>
+            }
           />
         </View>
       </Modal>
@@ -649,31 +892,88 @@ function EstimateEditor({ editId, requestedType }: { editId: string | null; requ
         onClose={() => setExpiryOpen(false)}
       />
 
-      <Modal visible={catalogOpen} transparent animationType="slide" onRequestClose={() => setCatalogOpen(false)}>
+      <Modal
+        visible={catalogOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setCatalogOpen(false)}
+      >
         <View style={styles.sheetScrim}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={() => setCatalogOpen(false)} accessibilityLabel="Close" />
-          <View style={[styles.catalogSheet, { paddingBottom: insets.bottom + space.lg }]}>
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => setCatalogOpen(false)}
+            accessibilityLabel="Close"
+          />
+          <View
+            style={[
+              styles.catalogSheet,
+              { paddingBottom: insets.bottom + space.lg },
+            ]}
+          >
             <View style={styles.sheetHandle} />
             <View style={styles.catalogTitleRow}>
               <Text style={styles.catalogTitle}>Add {pickerCategory}</Text>
-              <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={() => setCatalogOpen(false)}><Feather name="x" size={27} color={color.muted} /></Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Close"
+                onPress={() => setCatalogOpen(false)}
+              >
+                <Feather name="x" size={27} color={color.muted} />
+              </Pressable>
             </View>
             <View style={styles.catalogSearchWrap}>
               <Feather name="search" size={21} color={color.faint} />
-              <TextInput value={catalogSearch} onChangeText={setCatalogSearch} placeholder={`Search ${pickerCategory}s`} placeholderTextColor={color.faint} style={styles.catalogSearch} />
+              <TextInput
+                value={catalogSearch}
+                onChangeText={setCatalogSearch}
+                placeholder={`Search ${pickerCategory}s`}
+                placeholderTextColor={color.faint}
+                style={styles.catalogSearch}
+              />
             </View>
             {catalogNotice !== null ? <Notice text={catalogNotice} /> : null}
-            <ScrollView style={styles.catalogList} keyboardShouldPersistTaps="handled">
+            <ScrollView
+              style={styles.catalogList}
+              keyboardShouldPersistTaps="handled"
+            >
               {catalogMatches.map((item) => (
-                <Pressable key={item.id} accessibilityRole="button" accessibilityLabel={`Add ${item.name}`} onPress={() => addCatalog(item)} style={styles.catalogRow}>
-                  <View style={styles.catalogRowCopy}><Text style={styles.catalogName}>{item.name}</Text>{item.description ? <Text numberOfLines={1} style={styles.catalogDescription}>{item.description}</Text> : null}</View>
-                  <Text style={styles.catalogPrice}>{fmtMoney(item.default_price_cents)}</Text>
+                <Pressable
+                  key={item.id}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Add ${item.name}`}
+                  onPress={() => addCatalog(item)}
+                  style={styles.catalogRow}
+                >
+                  <View style={styles.catalogRowCopy}>
+                    <Text style={styles.catalogName}>{item.name}</Text>
+                    {item.description ? (
+                      <Text numberOfLines={1} style={styles.catalogDescription}>
+                        {item.description}
+                      </Text>
+                    ) : null}
+                  </View>
+                  <Text style={styles.catalogPrice}>
+                    {fmtMoney(item.default_price_cents)}
+                  </Text>
                   <Text style={styles.catalogPlus}>+</Text>
                 </Pressable>
               ))}
-              <Pressable accessibilityRole="button" accessibilityLabel="Add custom item" onPress={() => { setLines((current) => [...current, customLine(pickerCategory, estimateType)]); setCatalogOpen(false); }} style={styles.customRow}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Add custom item"
+                onPress={() => {
+                  setLines((current) => [
+                    ...current,
+                    customLine(pickerCategory, estimateType),
+                  ]);
+                  setCatalogOpen(false);
+                }}
+                style={styles.customRow}
+              >
                 <Feather name="plus-circle" size={20} color={color.brand} />
-                <Text style={styles.customText}>Custom {pickerCategory}</Text>
+                <Text style={styles.customText}>
+                  Add custom {pickerCategory}
+                </Text>
               </Pressable>
             </ScrollView>
           </View>
@@ -685,86 +985,404 @@ function EstimateEditor({ editId, requestedType }: { editId: string | null; requ
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: color.surface },
-  loading: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: color.surface },
-  header: { minHeight: 92, paddingHorizontal: 18, flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: color.surface },
-  headerBack: { minHeight: HIT, flex: 1, flexDirection: "row", alignItems: "center", marginLeft: -8 },
-  headerTitle: { flexShrink: 1, fontFamily: font.bodyMedium, fontSize: 17, letterSpacing: 1.2, color: color.ink },
-  saveButton: { width: HIT, height: HIT, alignItems: "center", justifyContent: "center" },
+  loading: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: color.surface,
+  },
+  header: {
+    minHeight: 92,
+    paddingHorizontal: 18,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: color.surface,
+  },
+  headerBack: {
+    minHeight: HIT,
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    marginLeft: -8,
+  },
+  headerTitle: {
+    flexShrink: 1,
+    fontFamily: font.bodyMedium,
+    fontSize: 17,
+    letterSpacing: 1.2,
+    color: color.ink,
+  },
+  saveButton: {
+    width: HIT,
+    height: HIT,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   body: { flexGrow: 1 },
-  customerBlock: { paddingHorizontal: 18, paddingTop: 40, paddingBottom: 30, borderBottomWidth: 12, borderBottomColor: color.hover },
-  selectCustomer: { minHeight: 74, flexDirection: "row", alignItems: "center", gap: 16 },
-  selectCustomerText: { flex: 1, fontFamily: font.body, fontSize: 21, color: color.muted },
+  customerBlock: {
+    paddingHorizontal: 18,
+    paddingTop: 40,
+    paddingBottom: 30,
+    borderBottomWidth: 12,
+    borderBottomColor: color.hover,
+  },
+  selectCustomer: {
+    minHeight: 74,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 16,
+  },
+  selectCustomerText: {
+    flex: 1,
+    fontFamily: font.body,
+    fontSize: 21,
+    color: color.muted,
+  },
   selectedCustomerText: { color: color.ink },
   required: { color: color.danger },
-  locationRow: { minHeight: 66, flexDirection: "row", alignItems: "center", gap: 15, borderBottomWidth: 1, borderBottomColor: color.lineStrong },
+  locationRow: {
+    minHeight: 66,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: color.lineStrong,
+  },
   locationInputWrap: { flex: 1 },
-  locationInput: { paddingHorizontal: 0, borderWidth: 0, backgroundColor: "transparent", fontFamily: font.body, fontSize: 19, color: color.ink },
-  detailsBlock: { paddingHorizontal: 18, paddingVertical: 22, gap: 18, borderBottomWidth: 12, borderBottomColor: color.hover },
-  detailField: { minHeight: 68, justifyContent: "center", gap: 7, borderBottomWidth: 1, borderBottomColor: color.lineStrong },
-  detailLabel: { fontFamily: font.bodyMedium, fontSize: 14, color: color.muted },
+  locationInput: {
+    paddingHorizontal: 0,
+    borderWidth: 0,
+    backgroundColor: "transparent",
+    fontFamily: font.body,
+    fontSize: 19,
+    color: color.ink,
+  },
+  detailsBlock: {
+    paddingHorizontal: 18,
+    paddingVertical: 22,
+    gap: 18,
+    borderBottomWidth: 12,
+    borderBottomColor: color.hover,
+  },
+  detailField: {
+    minHeight: 68,
+    justifyContent: "center",
+    gap: 7,
+    borderBottomWidth: 1,
+    borderBottomColor: color.lineStrong,
+  },
+  detailLabel: {
+    fontFamily: font.bodyMedium,
+    fontSize: 14,
+    color: color.muted,
+  },
   detailValue: { fontFamily: font.body, fontSize: 20, color: color.ink },
-  quantityRow: { minHeight: 78, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  jobNameInput: { fontFamily: font.body, fontSize: 19, color: color.ink, paddingVertical: 0 },
+  quantityRow: {
+    minHeight: 78,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  jobNameInput: {
+    fontFamily: font.body,
+    fontSize: 19,
+    color: color.ink,
+    paddingVertical: 0,
+  },
   depositField: { paddingTop: 4, gap: 10 },
-  depositChips: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8 },
-  depositChip: { minHeight: 40, paddingHorizontal: 14, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: color.lineStrong, borderRadius: radius.sm },
-  depositChipOn: { backgroundColor: color.brandWash, borderColor: color.brandEdge },
-  depositChipText: { fontFamily: font.bodyMedium, fontSize: 15, color: color.muted },
+  depositChips: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: 8,
+  },
+  depositChip: {
+    minHeight: 40,
+    paddingHorizontal: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: color.lineStrong,
+    borderRadius: radius.sm,
+  },
+  depositChipOn: {
+    backgroundColor: color.brandWash,
+    borderColor: color.brandEdge,
+  },
+  depositChipText: {
+    fontFamily: font.bodyMedium,
+    fontSize: 15,
+    color: color.muted,
+  },
   depositChipTextOn: { color: color.brandDeep },
-  depositCustom: { minHeight: 40, paddingHorizontal: 10, flexDirection: "row", alignItems: "center", gap: 4, borderWidth: 1, borderColor: color.brandEdge, borderRadius: radius.sm },
-  depositInput: { minWidth: 36, fontFamily: font.body, fontSize: 16, color: color.ink, paddingVertical: 0, textAlign: "right" },
-  depositUnit: { fontFamily: font.bodyMedium, fontSize: 15, color: color.muted },
-  depositHint: { fontFamily: font.body, fontSize: 13, lineHeight: 18, color: color.muted },
-  categoryBar: { minHeight: 78, paddingHorizontal: 18, flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: color.hover, borderBottomWidth: 10, borderBottomColor: color.surface },
+  depositCustom: {
+    minHeight: 40,
+    paddingHorizontal: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    borderWidth: 1,
+    borderColor: color.brandEdge,
+    borderRadius: radius.sm,
+  },
+  depositInput: {
+    minWidth: 36,
+    fontFamily: font.body,
+    fontSize: 16,
+    color: color.ink,
+    paddingVertical: 0,
+    textAlign: "right",
+  },
+  depositUnit: {
+    fontFamily: font.bodyMedium,
+    fontSize: 15,
+    color: color.muted,
+  },
+  depositHint: {
+    fontFamily: font.body,
+    fontSize: 13,
+    lineHeight: 18,
+    color: color.muted,
+  },
+  categoryBar: {
+    minHeight: 78,
+    paddingHorizontal: 18,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: color.hover,
+    borderBottomWidth: 10,
+    borderBottomColor: color.surface,
+  },
   categoryPressed: { backgroundColor: color.brandWash },
   categoryLabel: { fontFamily: font.bodySemi, fontSize: 23, color: color.ink },
-  categoryPlus: { fontFamily: font.body, fontSize: 37, lineHeight: 39, color: color.brand },
-  lineEditor: { padding: 18, gap: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: color.lineStrong },
-  lineEditorTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  categoryPlus: {
+    fontFamily: font.body,
+    fontSize: 37,
+    lineHeight: 39,
+    color: color.brand,
+  },
+  lineEditor: {
+    padding: 18,
+    gap: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: color.lineStrong,
+  },
+  lineEditorTop: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
   lineKind: { ...type.rule, color: color.brandDeep },
-  lineNameInput: { minHeight: 42, fontFamily: font.bodySemi, fontSize: 19, color: color.ink, borderBottomWidth: 1, borderBottomColor: color.line },
+  lineNameInput: {
+    minHeight: 42,
+    fontFamily: font.bodySemi,
+    fontSize: 19,
+    color: color.ink,
+    borderBottomWidth: 1,
+    borderBottomColor: color.line,
+  },
   lineFields: { flexDirection: "row", alignItems: "flex-end", gap: 10 },
   lineFieldSmall: { width: 58, gap: 4 },
   lineFieldPrice: { width: 88, gap: 4 },
   fieldLabel: { ...type.ruleSm, color: color.muted },
-  lineInput: { minHeight: 38, paddingHorizontal: 8, borderWidth: 1, borderColor: color.lineStrong, borderRadius: 7, fontFamily: font.body, fontSize: 15, color: color.ink },
-  taxToggle: { minHeight: 38, paddingHorizontal: 10, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: color.lineStrong, borderRadius: 7 },
-  taxToggleOn: { backgroundColor: color.brandWash, borderColor: color.brandEdge },
+  lineInput: {
+    minHeight: 38,
+    paddingHorizontal: 8,
+    borderWidth: 1,
+    borderColor: color.lineStrong,
+    borderRadius: 7,
+    fontFamily: font.body,
+    fontSize: 15,
+    color: color.ink,
+  },
+  taxToggle: {
+    minHeight: 38,
+    paddingHorizontal: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: color.lineStrong,
+    borderRadius: 7,
+  },
+  taxToggleOn: {
+    backgroundColor: color.brandWash,
+    borderColor: color.brandEdge,
+  },
   taxText: { fontFamily: font.bodyMedium, fontSize: 13, color: color.muted },
   taxTextOn: { color: color.brandDeep },
-  lineTotal: { marginLeft: "auto", paddingBottom: 8, fontFamily: font.bodySemi, fontSize: 15, color: color.ink },
-  totalBar: { minHeight: 82, paddingHorizontal: 18, flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: color.brandWash },
+  lineTotal: {
+    marginLeft: "auto",
+    paddingBottom: 8,
+    fontFamily: font.bodySemi,
+    fontSize: 15,
+    color: color.ink,
+  },
+  totalBar: {
+    minHeight: 82,
+    paddingHorizontal: 18,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: color.brandWash,
+  },
   totalLabel: { fontFamily: font.bodySemi, fontSize: 19, color: color.ink },
-  totalValue: { fontFamily: font.display, fontSize: 26, color: color.ink, fontVariant: ["tabular-nums"] },
+  totalValue: {
+    fontFamily: font.display,
+    fontSize: 26,
+    color: color.ink,
+    fontVariant: ["tabular-nums"],
+  },
   pickerScreen: { flex: 1, backgroundColor: color.surface },
-  pickerHeader: { minHeight: 92, paddingHorizontal: 18, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  addCustomer: { width: 54, height: 54, borderRadius: 27, alignItems: "center", justifyContent: "center", backgroundColor: color.brandFill },
-  addCustomerText: { fontFamily: font.body, fontSize: 37, lineHeight: 39, color: color.surface, marginTop: -3 },
-  customerSearchWrap: { height: 62, marginHorizontal: 18, marginBottom: 20, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", gap: 12, borderRadius: radius.md, backgroundColor: color.bg },
-  customerSearch: { flex: 1, fontFamily: font.body, fontSize: 18, color: color.ink },
-  letterHeader: { height: 37, justifyContent: "center", paddingHorizontal: 18, backgroundColor: color.hover },
+  pickerHeader: {
+    minHeight: 92,
+    paddingHorizontal: 18,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  addCustomer: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: color.brandFill,
+  },
+  addCustomerText: {
+    fontFamily: font.body,
+    fontSize: 37,
+    lineHeight: 39,
+    color: "#ffffff",
+    marginTop: -3,
+  },
+  customerSearchWrap: {
+    height: 62,
+    marginHorizontal: 18,
+    marginBottom: 20,
+    paddingHorizontal: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    borderRadius: radius.md,
+    backgroundColor: color.bg,
+  },
+  customerSearch: {
+    flex: 1,
+    fontFamily: font.body,
+    fontSize: 18,
+    color: color.ink,
+  },
+  letterHeader: {
+    height: 37,
+    justifyContent: "center",
+    paddingHorizontal: 18,
+    backgroundColor: color.hover,
+  },
   letter: { fontFamily: font.bodySemi, fontSize: 18, color: color.muted },
-  customerRow: { minHeight: 92, paddingHorizontal: 18, flexDirection: "row", alignItems: "center", borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: color.lineStrong },
+  customerRow: {
+    minHeight: 92,
+    paddingHorizontal: 18,
+    flexDirection: "row",
+    alignItems: "center",
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: color.lineStrong,
+  },
   customerRowCopy: { flex: 1, gap: 7 },
   customerRowName: { fontFamily: font.body, fontSize: 20, color: color.ink },
   customerRowCity: { fontFamily: font.body, fontSize: 15, color: color.muted },
-  repeatBadge: { width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: color.brandSoft },
-  repeatText: { fontFamily: font.bodySemi, fontSize: 12, color: color.brandDeep },
-  emptyPicker: { ...type.body, textAlign: "center", color: color.muted, padding: 30 },
-  sheetScrim: { flex: 1, justifyContent: "flex-end", backgroundColor: color.scrim },
-  catalogSheet: { height: "80%", backgroundColor: color.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 18, paddingTop: 10 },
-  sheetHandle: { alignSelf: "center", width: 52, height: 5, borderRadius: 3, backgroundColor: color.lineStrong, marginBottom: 18 },
-  catalogTitleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 14 },
-  catalogTitle: { fontFamily: font.display, fontSize: 27, color: color.ink, textTransform: "capitalize" },
-  catalogSearchWrap: { minHeight: 52, paddingHorizontal: 13, flexDirection: "row", alignItems: "center", gap: 10, borderRadius: radius.md, backgroundColor: color.bg },
-  catalogSearch: { flex: 1, fontFamily: font.body, fontSize: 16, color: color.ink },
+  repeatBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: color.brandSoft,
+  },
+  repeatText: {
+    fontFamily: font.bodySemi,
+    fontSize: 12,
+    color: color.brandDeep,
+  },
+  emptyPicker: {
+    ...type.body,
+    textAlign: "center",
+    color: color.muted,
+    padding: 30,
+  },
+  sheetScrim: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: color.scrim,
+  },
+  catalogSheet: {
+    height: "80%",
+    backgroundColor: color.surface,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 18,
+    paddingTop: 10,
+  },
+  sheetHandle: {
+    alignSelf: "center",
+    width: 52,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: color.lineStrong,
+    marginBottom: 18,
+  },
+  catalogTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 14,
+  },
+  catalogTitle: {
+    fontFamily: font.display,
+    fontSize: 27,
+    color: color.ink,
+    textTransform: "capitalize",
+  },
+  catalogSearchWrap: {
+    minHeight: 52,
+    paddingHorizontal: 13,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderRadius: radius.md,
+    backgroundColor: color.bg,
+  },
+  catalogSearch: {
+    flex: 1,
+    fontFamily: font.body,
+    fontSize: 16,
+    color: color.ink,
+  },
   catalogList: { marginTop: 10 },
-  catalogRow: { minHeight: 66, flexDirection: "row", alignItems: "center", gap: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: color.line },
+  catalogRow: {
+    minHeight: 66,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: color.line,
+  },
   catalogRowCopy: { flex: 1, gap: 3 },
   catalogName: { fontFamily: font.bodySemi, fontSize: 16, color: color.ink },
   catalogDescription: { ...type.small, color: color.muted },
   catalogPrice: { fontFamily: font.bodyMedium, fontSize: 14, color: color.ink },
   catalogPlus: { fontFamily: font.body, fontSize: 27, color: color.brand },
-  customRow: { minHeight: 60, flexDirection: "row", alignItems: "center", gap: 10 },
-  customText: { fontFamily: font.bodySemi, fontSize: 16, color: color.brandDeep, textTransform: "capitalize" },
+  customRow: {
+    minHeight: 60,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  customText: {
+    fontFamily: font.bodySemi,
+    fontSize: 16,
+    color: color.brandDeep,
+    textTransform: "capitalize",
+  },
 });

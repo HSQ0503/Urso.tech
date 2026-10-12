@@ -12,12 +12,15 @@ import { getTechnicianActor } from "@/lib/canes/crew-auth";
 import { signOutTechnician } from "@/app/CanesPressure/crew/auth-actions";
 import { adminPinKey, crewPinKey, pinGate } from "@/lib/canes/pin";
 import { PinWatchdog } from "../components/pin-watchdog";
-import { ThemeToggle } from "@/components/dashboard/theme-toggle";
 
 // The gated application shell: dark Urso chrome sidebar on desktop, five
 // bottom tabs + a More sheet on mobile.
 
-export default async function CanesAppLayout({ children }: { children: React.ReactNode }) {
+export default async function CanesAppLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const [admin, technician, requestHeaders] = await Promise.all([
     getAdminSession(),
     getTechnicianActor(),
@@ -27,7 +30,8 @@ export default async function CanesAppLayout({ children }: { children: React.Rea
   // Embedded pages keep the web content and authorization shell, but the app
   // owns navigation: rendering the site's mobile tabs here would put a second
   // tab bar directly above the native one.
-  const embedded = requestHeaders.get("user-agent")?.includes("UrsoMobileWebView/") ?? false;
+  const embedded =
+    requestHeaders.get("user-agent")?.includes("UrsoMobileWebView/") ?? false;
   const demo = isDemo();
   // 0015: an ops-manager crew account (DJ) works from the owner console, with
   // the nav filtered to its permission flags. The server-side page + action
@@ -51,7 +55,9 @@ export default async function CanesAppLayout({ children }: { children: React.Rea
   // The watchdog below handles the tab that sits open past its window.
   let pinRelockMs: number | null = null;
   if ((admin || ops) && !demo) {
-    const gate = await pinGate(admin ? adminPinKey(admin.email) : crewPinKey(ops!.accountId));
+    const gate = await pinGate(
+      admin ? adminPinKey(admin.email) : crewPinKey(ops!.accountId),
+    );
     if (gate.status !== "ok") redirect("/CanesPressure/pin?to=/CanesPressure");
     pinRelockMs = gate.relockInMs;
   }
@@ -76,94 +82,113 @@ export default async function CanesAppLayout({ children }: { children: React.Rea
     // inside this scope. The wrapper paints the field full-width so the >1440px
     // gutters follow the theme too.
     <div className="theme-scope min-h-screen bg-[var(--cp-bg)] text-[var(--cp-ink)]">
-    <div className="mx-auto flex min-h-screen w-full max-w-[1440px]">
-      {/* Sidebar (desktop) — the dashboard's theme-aware sidebar material */}
-      {!embedded && <aside className="cp-sidebar-rail sticky top-0 hidden h-screen w-60 shrink-0 flex-col gap-1 overflow-y-auto px-3 py-5 text-[var(--cp-chrome-ink)] md:flex">
-        {/* Wordmark, not an icon-in-a-box — real trade software leads with the name */}
-        <Link href="/CanesPressure" className="mb-6 block px-2.5 pt-1">
-          <span className="cp-display block text-[19px] leading-tight">
-            Canes<span className="text-[var(--cp-brand)]">.</span>
-          </span>
-          <span className="cp-mono mt-1 block" style={{ color: "var(--cp-chrome-faint)" }}>
-            Pressure Washing
-          </span>
-        </Link>
-        <CanesNav allowed={allowedNav} />
-        <div className="mt-auto px-2">
-          {demo && (
-            <div className="rounded-md border border-[var(--cp-chrome-line)] bg-[var(--cp-chrome-raise)] px-3 py-2.5 text-[12px] leading-snug text-[var(--cp-chrome-muted)]">
-              <span className="font-semibold text-[var(--cp-brand)]">Demo data.</span> Connect the
-              Canes Supabase secret key to go live.
-            </div>
-          )}
-          {admin && (
-            <div className="mt-3 flex items-center justify-between gap-2 px-1">
-              <span className="cp-mono min-w-0 truncate" style={{ color: "var(--cp-chrome-faint)" }} title={admin.email}>
-                {admin.email}
+      <div className="mx-auto flex min-h-screen w-full max-w-[1440px]">
+        {/* Sidebar (desktop) — the dashboard's theme-aware sidebar material */}
+        {!embedded && (
+          <aside className="cp-sidebar-rail sticky top-0 hidden h-screen w-60 shrink-0 flex-col gap-1 overflow-y-auto px-3 py-5 text-[var(--cp-chrome-ink)] md:flex">
+            {/* Wordmark, not an icon-in-a-box — real trade software leads with the name */}
+            <Link href="/CanesPressure" className="mb-6 block px-2.5 pt-1">
+              <span className="cp-display block text-[19px] leading-tight">
+                Canes<span className="text-[var(--cp-brand)]">.</span>
               </span>
-              <form action={signOutAdmin}>
-                <button
-                  type="submit"
-                  className="cp-mono shrink-0 transition-colors hover:text-[var(--cp-chrome-ink)]"
-                  style={{ color: "var(--cp-chrome-muted)" }}
-                >
-                  Sign out
-                </button>
-              </form>
-            </div>
-          )}
-          {ops && (
-            <div className="mt-3 flex items-center justify-between gap-2 px-1">
-              <span className="cp-mono min-w-0 truncate" style={{ color: "var(--cp-chrome-faint)" }} title={ops.email}>
-                {ops.name} · Ops
+              <span
+                className="cp-mono mt-1 block"
+                style={{ color: "var(--cp-chrome-faint)" }}
+              >
+                Pressure Washing
               </span>
-              <form action={signOutTechnician}>
-                <button
-                  type="submit"
-                  className="cp-mono shrink-0 transition-colors hover:text-[var(--cp-chrome-ink)]"
-                  style={{ color: "var(--cp-chrome-muted)" }}
-                >
-                  Sign out
-                </button>
-              </form>
+            </Link>
+            <CanesNav allowed={allowedNav} />
+            <div className="mt-auto px-2">
+              {demo && (
+                <div className="rounded-md border border-[var(--cp-chrome-line)] bg-[var(--cp-chrome-raise)] px-3 py-2.5 text-[12px] leading-snug text-[var(--cp-chrome-muted)]">
+                  <span className="font-semibold text-[var(--cp-brand)]">
+                    Demo data.
+                  </span>{" "}
+                  Connect the Canes Supabase secret key to go live.
+                </div>
+              )}
+              {admin && (
+                <div className="mt-3 flex items-center justify-between gap-2 px-1">
+                  <span
+                    className="cp-mono min-w-0 truncate"
+                    style={{ color: "var(--cp-chrome-faint)" }}
+                    title={admin.email}
+                  >
+                    {admin.email}
+                  </span>
+                  <form action={signOutAdmin}>
+                    <button
+                      type="submit"
+                      className="cp-mono shrink-0 transition-colors hover:text-[var(--cp-chrome-ink)]"
+                      style={{ color: "var(--cp-chrome-muted)" }}
+                    >
+                      Sign out
+                    </button>
+                  </form>
+                </div>
+              )}
+              {ops && (
+                <div className="mt-3 flex items-center justify-between gap-2 px-1">
+                  <span
+                    className="cp-mono min-w-0 truncate"
+                    style={{ color: "var(--cp-chrome-faint)" }}
+                    title={ops.email}
+                  >
+                    {ops.name} · Ops
+                  </span>
+                  <form action={signOutTechnician}>
+                    <button
+                      type="submit"
+                      className="cp-mono shrink-0 transition-colors hover:text-[var(--cp-chrome-ink)]"
+                      style={{ color: "var(--cp-chrome-muted)" }}
+                    >
+                      Sign out
+                    </button>
+                  </form>
+                </div>
+              )}
+              <p
+                className="cp-mono mt-3 px-1"
+                style={{ color: "var(--cp-chrome-faint)" }}
+              >
+                Powered by Urso
+              </p>
             </div>
+          </aside>
+        )}
+
+        {/* Main — mobile content clears the notch (top) and the tab bar (bottom) */}
+        <div className="flex min-h-screen min-w-0 flex-1 flex-col">
+          <main
+            className={
+              embedded
+                ? "min-w-0 flex-1 px-4 pb-8 pt-5 md:px-8 md:pb-10 md:pt-6"
+                : "min-w-0 flex-1 px-4 pb-24 pt-[max(1.25rem,env(safe-area-inset-top))] md:px-8 md:pb-10 md:pt-6"
+            }
+          >
+            {children}
+          </main>
+          {/* Bottom tabs (mobile) — translucent iOS tab bar */}
+          {!embedded && (
+            <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-[var(--cp-line)] bg-[var(--cp-surface)]/80 px-1 backdrop-blur-xl md:hidden">
+              <CanesNav mobile allowed={allowedNav} />
+            </nav>
           )}
-          <div className="mt-3">
-            <ThemeToggle />
-          </div>
-          <p className="cp-mono mt-3 px-1" style={{ color: "var(--cp-chrome-faint)" }}>
-            Powered by Urso
-          </p>
         </div>
-      </aside>}
 
-      {/* Main — mobile content clears the notch (top) and the tab bar (bottom) */}
-      <div className="flex min-h-screen min-w-0 flex-1 flex-col">
-        <main
-          className={
-            embedded
-              ? "min-w-0 flex-1 px-4 pb-8 pt-5 md:px-8 md:pb-10 md:pt-6"
-              : "min-w-0 flex-1 px-4 pb-24 pt-[max(1.25rem,env(safe-area-inset-top))] md:px-8 md:pb-10 md:pt-6"
-          }
-        >
-          {children}
-        </main>
-        {/* Bottom tabs (mobile) — translucent iOS tab bar */}
-        {!embedded && <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-[var(--cp-line)] bg-[var(--cp-surface)]/80 px-1 backdrop-blur-xl md:hidden">
-          <CanesNav mobile allowed={allowedNav} />
-        </nav>}
+        {/* First-login onboarding tour — self-contained; never blocks the page */}
+        {!embedded && (
+          <Suspense fallback={null}>
+            <CanesTour />
+          </Suspense>
+        )}
+
+        {/* Re-lock a tab the moment its PIN unlock window lapses */}
+        {pinRelockMs !== null && (
+          <PinWatchdog relockInMs={pinRelockMs} lockBase="/CanesPressure/pin" />
+        )}
       </div>
-
-      {/* First-login onboarding tour — self-contained; never blocks the page */}
-      {!embedded && <Suspense fallback={null}>
-        <CanesTour />
-      </Suspense>}
-
-      {/* Re-lock a tab the moment its PIN unlock window lapses */}
-      {pinRelockMs !== null && (
-        <PinWatchdog relockInMs={pinRelockMs} lockBase="/CanesPressure/pin" />
-      )}
-    </div>
     </div>
   );
 }

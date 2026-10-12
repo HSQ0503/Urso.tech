@@ -411,11 +411,27 @@ async function readOverviewEstimates(): Promise<OverviewEstimate[]> {
   return (data ?? []) as OverviewEstimate[];
 }
 
-type OverviewJob = Pick<Job, "status" | "total_cents" | "scheduled_at">;
+type OverviewJob = Pick<
+  Job,
+  | "id"
+  | "status"
+  | "total_cents"
+  | "scheduled_at"
+  | "customer_name"
+  | "job_name"
+  | "service_area"
+>;
 
 async function readOverviewJobs(): Promise<OverviewJob[]> {
   if (isDemo()) return DEMO_JOBS;
-  const { data } = await canesDb().from("jobs").select("status, total_cents, scheduled_at").limit(500);
+  const { data } = await canesDb()
+    .from("jobs")
+    .select(
+      "id, status, total_cents, scheduled_at, customer_name, job_name, service_area",
+    )
+    .is("archived_at", null)
+    .order("created_at", { ascending: false })
+    .limit(500);
   return (data ?? []) as OverviewJob[];
 }
 
@@ -469,7 +485,15 @@ async function readRecentEvents(limit: number): Promise<LeadEvent[]> {
 export async function getOverview(): Promise<Overview> {
   const now = Date.now();
   const weekAgoIso = new Date(now - 7 * 86_400_000).toISOString();
-  const [all, estimates, jobs, invoices, weekPayments, weekRefunds, recentEvents] = await Promise.all([
+  const [
+    all,
+    estimates,
+    jobs,
+    invoices,
+    weekPayments,
+    weekRefunds,
+    recentEvents,
+  ] = await Promise.all([
     listLeads(),
     readOverviewEstimates(),
     readOverviewJobs(),
@@ -481,18 +505,31 @@ export async function getOverview(): Promise<Overview> {
   const in24h = now + 24 * 3_600_000;
   const startOfWeek = now - 7 * 86_400_000;
   const next7Days = now + 7 * 86_400_000;
-  const todayKey = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", dateStyle: "short" });
-  const isToday = (iso: string) => todayKey.format(new Date(iso)) === todayKey.format(new Date());
+  const todayKey = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    dateStyle: "short",
+  });
+  const isToday = (iso: string) =>
+    todayKey.format(new Date(iso)) === todayKey.format(new Date());
   const leadById = new Map(all.map((l) => [l.id, l]));
 
-  const awaiting = estimates.filter((e) => e.status === "sent" || e.status === "viewed");
+  const awaiting = estimates.filter(
+    (e) => e.status === "sent" || e.status === "viewed",
+  );
   // "Recent" declines = the last 14 days — long enough to chase a save call.
   const declinedRecent = estimates.filter(
-    (e) => e.status === "declined" && e.declined_at && new Date(e.declined_at).getTime() > now - 14 * 86_400_000,
+    (e) =>
+      e.status === "declined" &&
+      e.declined_at &&
+      new Date(e.declined_at).getTime() > now - 14 * 86_400_000,
   );
   const unscheduled = jobs.filter((j) => j.status === "unscheduled");
-  const activeJobs = jobs.filter((j) => ["scheduled", "confirmed", "in_progress"].includes(j.status));
-  const outstanding = invoices.filter((i) => i.status === "sent" || i.status === "viewed");
+  const activeJobs = jobs.filter((j) =>
+    ["scheduled", "confirmed", "in_progress"].includes(j.status),
+  );
+  const outstanding = invoices.filter(
+    (i) => i.status === "sent" || i.status === "viewed",
+  );
   // No due date on invoices — "overdue" = still open past the final (day-7) reminder.
   const overdue = outstanding.filter(
     (i) => i.sent_at && new Date(i.sent_at).getTime() < now - 7 * 86_400_000,
@@ -504,13 +541,33 @@ export async function getOverview(): Promise<Overview> {
   });
 
   return {
+    todayJobs: jobs
+      .filter(
+        (job) =>
+          job.scheduled_at &&
+          isToday(job.scheduled_at) &&
+          job.status !== "canceled",
+      )
+      .sort((a, b) =>
+        (a.scheduled_at ?? "").localeCompare(b.scheduled_at ?? ""),
+      ),
     counts: {
       open: all.filter((l) => !["won", "lost"].includes(l.status)).length,
-      hot: all.filter((l) => l.type === "hot" && !["won", "lost"].includes(l.status)).length,
-      cold: all.filter((l) => l.type === "cold" && !["won", "lost"].includes(l.status)).length,
-      wonThisWeek: all.filter((l) => l.status === "won" && new Date(l.last_activity_at).getTime() > startOfWeek).length,
+      hot: all.filter(
+        (l) => l.type === "hot" && !["won", "lost"].includes(l.status),
+      ).length,
+      cold: all.filter(
+        (l) => l.type === "cold" && !["won", "lost"].includes(l.status),
+      ).length,
+      wonThisWeek: all.filter(
+        (l) =>
+          l.status === "won" &&
+          new Date(l.last_activity_at).getTime() > startOfWeek,
+      ).length,
     },
-    coldNeedingCall: all.filter((l) => l.type === "cold" && l.status === "new" && !l.opted_out),
+    coldNeedingCall: all.filter(
+      (l) => l.type === "cold" && l.status === "new" && !l.opted_out,
+    ),
     unconfirmedToday: all.filter(
       (l) =>
         l.status === "appointment_set" &&
@@ -525,8 +582,15 @@ export async function getOverview(): Promise<Overview> {
         (!l.snoozed_until || new Date(l.snoozed_until).getTime() < now),
     ),
     todayAgenda: all
-      .filter((l) => l.appointment_at && isToday(l.appointment_at) && ["appointment_set", "confirmed"].includes(l.status))
-      .sort((a, b) => (a.appointment_at as string).localeCompare(b.appointment_at as string)),
+      .filter(
+        (l) =>
+          l.appointment_at &&
+          isToday(l.appointment_at) &&
+          ["appointment_set", "confirmed"].includes(l.status),
+      )
+      .sort((a, b) =>
+        (a.appointment_at as string).localeCompare(b.appointment_at as string),
+      ),
     pastDueVisits: all
       .filter(
         (l) =>
@@ -534,11 +598,15 @@ export async function getOverview(): Promise<Overview> {
           new Date(l.appointment_at).getTime() < now &&
           ["appointment_set", "confirmed"].includes(l.status),
       )
-      .sort((a, b) => (b.appointment_at as string).localeCompare(a.appointment_at as string)),
+      .sort((a, b) =>
+        (b.appointment_at as string).localeCompare(a.appointment_at as string),
+      ),
     pipeline: {
       leads: {
         newCount: all.filter((l) => l.status === "new" && !l.opted_out).length,
-        hotCount: all.filter((l) => l.type === "hot" && !["won", "lost"].includes(l.status)).length,
+        hotCount: all.filter(
+          (l) => l.type === "hot" && !["won", "lost"].includes(l.status),
+        ).length,
       },
       quotes: {
         awaitingCount: awaiting.length,
@@ -547,11 +615,17 @@ export async function getOverview(): Promise<Overview> {
       },
       jobs: {
         unscheduledCount: unscheduled.length,
-        unscheduledCents: unscheduled.reduce((sum, j) => sum + j.total_cents, 0),
+        unscheduledCents: unscheduled.reduce(
+          (sum, j) => sum + j.total_cents,
+          0,
+        ),
         activeCount: activeJobs.length,
       },
       invoices: {
-        outstandingCents: outstanding.reduce((sum, i) => sum + Math.max(0, i.total_cents - i.amount_paid_cents), 0),
+        outstandingCents: outstanding.reduce(
+          (sum, i) => sum + Math.max(0, i.total_cents - i.amount_paid_cents),
+          0,
+        ),
         outstandingCount: outstanding.length,
         overdueCount: overdue.length,
       },
@@ -561,9 +635,17 @@ export async function getOverview(): Promise<Overview> {
         weekPayments.reduce((sum, payment) => sum + payment.amount_cents, 0) -
         weekRefunds.reduce((sum, refund) => sum + refund.amount_cents, 0),
       wonThisWeekCents: estimates
-        .filter((e) => e.status === "approved" && e.approved_at && new Date(e.approved_at).getTime() > startOfWeek)
+        .filter(
+          (e) =>
+            e.status === "approved" &&
+            e.approved_at &&
+            new Date(e.approved_at).getTime() > startOfWeek,
+        )
         .reduce((sum, e) => sum + e.total_cents, 0),
-      bookedNext7DaysCents: bookedNext7.reduce((sum, j) => sum + j.total_cents, 0),
+      bookedNext7DaysCents: bookedNext7.reduce(
+        (sum, j) => sum + j.total_cents,
+        0,
+      ),
     },
     recentActivity: recentEvents.map((e) => ({
       at: e.created_at,

@@ -128,51 +128,40 @@ export async function getPlanDetail(id: string): Promise<RecurringPlanDetail | n
 // Collected money that belongs to plans, by ET month, for the Dashboard's
 // recurring chart — every payment whose job (directly, or through its invoice)
 // carries a plan_id. Last twelve months, oldest first.
-export async function recurringCollectedByMonth(): Promise<{ key: string; label: string; cents: number }[]> {
-  const monthKey = new Intl.DateTimeFormat("en-CA", { timeZone: ET, year: "numeric", month: "2-digit" });
-  const monthLabel = new Intl.DateTimeFormat("en-US", { timeZone: ET, month: "short", year: "2-digit" });
+export async function recurringCollectedByMonth(): Promise<
+  { key: string; label: string; cents: number }[]
+> {
+  const monthKey = new Intl.DateTimeFormat("en-CA", {
+    timeZone: ET,
+    year: "numeric",
+    month: "2-digit",
+  });
+  const monthLabel = new Intl.DateTimeFormat("en-US", {
+    timeZone: ET,
+    month: "short",
+    year: "2-digit",
+  });
   const months: { key: string; label: string; cents: number }[] = [];
   for (let i = 11; i >= 0; i--) {
     const anchor = new Date();
     anchor.setUTCDate(15);
     anchor.setUTCMonth(anchor.getUTCMonth() - i);
-    months.push({ key: monthKey.format(anchor), label: monthLabel.format(anchor), cents: 0 });
+    months.push({
+      key: monthKey.format(anchor),
+      label: monthLabel.format(anchor),
+      cents: 0,
+    });
   }
   if (isDemo()) return months;
   const byKey = new Map(months.map((m) => [m.key, m]));
-  const db = canesDb();
-  const since = new Date();
-  since.setUTCMonth(since.getUTCMonth() - 12);
-  const [{ data: planJobs }, { data: payments }, { data: refunds }] = await Promise.all([
-    db.from("jobs").select("id").not("plan_id", "is", null).limit(5000),
-    db.from("payments").select("amount_cents, created_at, job_id, invoice_id").gte("created_at", since.toISOString()).limit(5000),
-    db
-      .from("payment_refunds")
-      .select("amount_cents, created_at, payment:payments!payment_refunds_payment_id_fkey(job_id, invoice_id)")
-      .gte("created_at", since.toISOString())
-      .limit(5000),
-  ]);
-  const planJobIds = new Set((planJobs ?? []).map((j) => j.id as string));
-  if (planJobIds.size === 0) return months;
-  const { data: invoiceLinks } = await db.from("invoices").select("id, job_id").not("job_id", "is", null).limit(5000);
-  const invoiceJob = new Map((invoiceLinks ?? []).map((i) => [i.id as string, i.job_id as string]));
-  const jobOf = (p: { job_id: string | null; invoice_id: string | null }) =>
-    p.job_id ?? (p.invoice_id ? invoiceJob.get(p.invoice_id) ?? null : null);
-  for (const p of (payments ?? []) as { amount_cents: number; created_at: string; job_id: string | null; invoice_id: string | null }[]) {
-    const jobId = jobOf(p);
-    if (!jobId || !planJobIds.has(jobId)) continue;
-    const m = byKey.get(monthKey.format(new Date(p.created_at)));
-    if (m) m.cents += p.amount_cents;
-  }
-  for (const r of (refunds ?? []) as unknown as {
-    amount_cents: number;
+  const { data, error } = await canesDb().rpc("canes_service_revenue_snapshot");
+  if (error) throw new Error("Recurring collections could not be loaded.");
+  for (const movement of (data?.movements ?? []) as {
     created_at: string;
-    payment: { job_id: string | null; invoice_id: string | null } | null;
+    amount_cents: number;
   }[]) {
-    const jobId = r.payment ? jobOf(r.payment) : null;
-    if (!jobId || !planJobIds.has(jobId)) continue;
-    const m = byKey.get(monthKey.format(new Date(r.created_at)));
-    if (m) m.cents -= r.amount_cents;
+    const month = byKey.get(monthKey.format(new Date(movement.created_at)));
+    if (month) month.cents += movement.amount_cents;
   }
   return months;
 }

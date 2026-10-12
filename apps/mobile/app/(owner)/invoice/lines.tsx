@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
-import { color } from "@/theme";
+import { color } from "@/canes-theme";
 
 export default function LegacyInvoiceLinesRedirect(): React.ReactElement {
   const { id } = useLocalSearchParams<{ id?: string }>();

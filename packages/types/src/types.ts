@@ -1,4 +1,5 @@
-// Canes Pressure Washing — shared types for the Phase 1 lead/phone funnel.
+import type { ServiceCategory } from "./service-categories";
+export * from "./service-categories";// Canes Pressure Washing — shared types for the Phase 1 lead/phone funnel.
 // Mirrors supabase/canes/0001_init.sql exactly.
 
 import type { ServiceArea } from "./service-areas";
@@ -395,35 +396,86 @@ export type CustomerDetail = {
 };
 
 export type CatalogItem = {
-  id: string; created_at: string; name: string; description: string | null; kind: CatalogKind;
-  default_price_cents: number; unit: string; taxable: boolean; active: boolean; position: number;
+  service_category?: ServiceCategory | null;
+  id: string;
+  created_at: string;
+  name: string;
+  description: string | null;
+  kind: CatalogKind;
+  default_price_cents: number;
+  unit: string;
+  taxable: boolean;
+  active: boolean;
+  position: number;
 };
 
 export type Estimate = {
+  marketing_channel_id?: string | null;
   service_area?: ServiceArea | null;
   archived_at?: string | null;
   revision?: number;
-  signature_data?: { strokes: number[][][]; width: number; height: number } | null;
-  id: string; created_at: string; updated_at: string;
-  lead_id: string | null; contact_id: string | null; address_id: string | null;
-  number: string; estimate_type: EstimateType; status: EstimateStatus;
-  customer_name: string | null; customer_phone: string | null; customer_email: string | null;
-  job_address: string | null; job_name: string | null;
-  subtotal_cents: number; discount_cents: number; adjustment_cents: number;
-  tax_cents: number; tax_rate_bps: number; total_cents: number; deposit_percent: number; deposit_cents: number;
-  message_to_customer: string | null; terms: string | null; internal_notes: string | null;
-  expires_at: string | null; public_token: string;
-  sent_at: string | null; viewed_at: string | null; approved_at: string | null;
-  declined_at: string | null; decline_reason: string | null; signature_name: string | null;
+  signature_data?: {
+    strokes: number[][][];
+    width: number;
+    height: number;
+  } | null;
+  id: string;
+  created_at: string;
+  updated_at: string;
+  lead_id: string | null;
+  contact_id: string | null;
+  address_id: string | null;
+  number: string;
+  estimate_type: EstimateType;
+  status: EstimateStatus;
+  customer_name: string | null;
+  customer_phone: string | null;
+  customer_email: string | null;
+  job_address: string | null;
+  job_name: string | null;
+  subtotal_cents: number;
+  discount_cents: number;
+  adjustment_cents: number;
+  tax_cents: number;
+  tax_rate_bps: number;
+  total_cents: number;
+  deposit_percent: number;
+  deposit_cents: number;
+  message_to_customer: string | null;
+  terms: string | null;
+  internal_notes: string | null;
+  expires_at: string | null;
+  public_token: string;
+  sent_at: string | null;
+  viewed_at: string | null;
+  approved_at: string | null;
+  declined_at: string | null;
+  decline_reason: string | null;
+  signature_name: string | null;
   employee: string | null;
 };
 
 export type EstimateItem = {
-  discount_mode?: "amount" | "percent"; discount_value?: number;
-  id: string; estimate_id: string; catalog_id: string | null; position: number;
-  name: string; description: string | null; kind: CatalogKind; quantity: number;
-  unit_price_cents: number; discount_cents: number; taxable: boolean; line_total_cents: number;
-  is_option: boolean; is_mandatory: boolean; is_selected: boolean; package_group: string | null;
+  service_line_id?: string;
+  service_category?: ServiceCategory | null;
+  discount_mode?: "amount" | "percent";
+  discount_value?: number;
+  id: string;
+  estimate_id: string;
+  catalog_id: string | null;
+  position: number;
+  name: string;
+  description: string | null;
+  kind: CatalogKind;
+  quantity: number;
+  unit_price_cents: number;
+  discount_cents: number;
+  taxable: boolean;
+  line_total_cents: number;
+  is_option: boolean;
+  is_mandatory: boolean;
+  is_selected: boolean;
+  package_group: string | null;
 };
 
 export type JobStatus =
@@ -457,6 +509,8 @@ export const RECURRENCE_PER_MONTH: Record<JobRecurrence, number> = {
 };
 
 export type Job = {
+  service_completed_on?: string | null;
+  marketing_channel_id?: string | null;
   service_area?: ServiceArea | null;
   subtotal_cents?: number;
   adjustment_cents?: number;
@@ -466,10 +520,19 @@ export type Job = {
   scheduling_conflict?: boolean;
   archived_at?: string | null;
   revision?: number;
-  id: string; created_at: string; estimate_id: string | null; lead_id: string | null;
-  contact_id: string | null; status: JobStatus; customer_name: string | null;
-  job_address: string | null; total_cents: number; deposit_cents: number;
-  scheduled_at: string | null; assigned_to: string | null; notes: string | null;
+  id: string;
+  created_at: string;
+  estimate_id: string | null;
+  lead_id: string | null;
+  contact_id: string | null;
+  status: JobStatus;
+  customer_name: string | null;
+  job_address: string | null;
+  total_cents: number;
+  deposit_cents: number;
+  scheduled_at: string | null;
+  assigned_to: string | null;
+  notes: string | null;
   // ── scheduler additions (0004_scheduler.sql) ──
   duration_minutes: number;
   ends_at: string | null;
@@ -573,7 +636,12 @@ export type RecurringPlan = {
 };
 
 export type RecurringPlanItem = {
-  discount_mode?: "amount" | "percent"; discount_value?: number; discount_cents?: number; taxable?: boolean;
+  service_line_id?: string;
+  service_category?: ServiceCategory | null;
+  discount_mode?: "amount" | "percent";
+  discount_value?: number;
+  discount_cents?: number;
+  taxable?: boolean;
   id: string;
   plan_id: string;
   position: number;
@@ -612,21 +680,43 @@ export type Crew = {
 };
 
 export type JobItem = {
-  unit_price_cents?: number; discount_mode?: "amount" | "percent"; discount_value?: number; discount_cents?: number; taxable?: boolean;
-  id: string; job_id: string; estimate_item_id: string | null;
-  position: number; name: string; description: string | null;
-  quantity: number; line_total_cents: number; done: boolean;
-  required?: boolean; technician_note?: string | null; blocked?: boolean;
-  completed_at?: string | null; checklist_only?: boolean;
+  service_line_id?: string;
+  service_category?: ServiceCategory | null;
+  unit_price_cents?: number;
+  discount_mode?: "amount" | "percent";
+  discount_value?: number;
+  discount_cents?: number;
+  taxable?: boolean;
+  id: string;
+  job_id: string;
+  estimate_item_id: string | null;
+  position: number;
+  name: string;
+  description: string | null;
+  quantity: number;
+  line_total_cents: number;
+  done: boolean;
+  required?: boolean;
+  technician_note?: string | null;
+  blocked?: boolean;
+  completed_at?: string | null;
+  checklist_only?: boolean;
 };
 
 // Per-job cost (materials, gas, dump fee, sub) — 0007_ops_feedback.sql. Money in
 // integer cents; category is free text seeded from settings.expense_categories.
 // Crew is snapshotted so per-crew margin survives a later crew reassignment.
 export type JobExpense = {
-  id: string; created_at: string; job_id: string;
-  amount_cents: number; category: string; note: string | null;
-  crew_id: string | null; created_by: string | null;
+  service_line_id?: string | null;
+  paid_on?: string | null;
+  id: string;
+  created_at: string;
+  job_id: string;
+  amount_cents: number;
+  category: string;
+  note: string | null;
+  crew_id: string | null;
+  created_by: string | null;
 };
 
 // Projected cost on an estimate (0014) — the quote-time cost model. Approval
@@ -645,18 +735,24 @@ export type ExpenseFrequency = "one_time" | "monthly" | "yearly";
 // recurring row (monthly/yearly) counts every period it is active between
 // incurred_on and ends_on; a one_time row counts once, on incurred_on.
 export type BusinessExpense = {
+  marketing_channel_id?: string | null;
   rule_id?: string | null;
   occurrence_on?: string | null;
   legacy_template?: boolean;
   employee_id?: string | null;
   payment_method?: string | null;
   skipped?: boolean;
-  id: string; created_at: string; name: string;
-  amount_cents: number; category: string;
-  recurring: boolean; frequency: ExpenseFrequency;
-  incurred_on: string;    // "YYYY-MM-DD" (ET); recurring start
+  id: string;
+  created_at: string;
+  name: string;
+  amount_cents: number;
+  category: string;
+  recurring: boolean;
+  frequency: ExpenseFrequency;
+  incurred_on: string; // "YYYY-MM-DD" (ET); recurring start
   ends_on: string | null; // recurring end, null = ongoing
-  active: boolean; note: string | null;
+  active: boolean;
+  note: string | null;
 };
 
 export type TeamRole = "owner" | "partner" | "ops_manager" | "worker";
@@ -790,42 +886,96 @@ export type PaymentSource = "manual" | "square_webhook";
 export type PaymentKind = "deposit" | "balance";
 
 export type Invoice = {
+  service_visit?: boolean;
+  service_offers_enabled?: boolean;
+  service_offer_crew_id?: string | null;
+  service_offer_durations?: Record<string, number>;
+  service_autopay_authorization_id?: string | null;
+  service_autopay_kind?: "enrollment" | "visit" | "cancellation" | null;
+  service_autopay_finalized_at?: string | null;
+  service_payment_issue?: string | null;
+  service_date?: string | null;
+  marketing_channel_id?: string | null;
   service_area?: ServiceArea | null;
   credit_link_pending?: boolean;
   archived_at?: string | null;
   revision?: number;
-  id: string; created_at: string; updated_at: string;
-  job_id: string | null; estimate_id: string | null; lead_id: string | null; contact_id: string | null;
-  number: string; status: InvoiceStatus;
-  customer_name: string | null; customer_phone: string | null; customer_email: string | null;
-  job_address: string | null; job_name: string | null;
-  subtotal_cents: number; adjustment_cents: number; tax_cents: number; tax_rate_bps: number;
-  total_cents: number; amount_paid_cents: number; settlement_generation: number;
-  message_to_customer: string | null; terms: string | null; internal_notes: string | null;
+  id: string;
+  created_at: string;
+  updated_at: string;
+  job_id: string | null;
+  estimate_id: string | null;
+  lead_id: string | null;
+  contact_id: string | null;
+  number: string;
+  status: InvoiceStatus;
+  customer_name: string | null;
+  customer_phone: string | null;
+  customer_email: string | null;
+  job_address: string | null;
+  job_name: string | null;
+  subtotal_cents: number;
+  adjustment_cents: number;
+  tax_cents: number;
+  tax_rate_bps: number;
+  total_cents: number;
+  amount_paid_cents: number;
+  settlement_generation: number;
+  message_to_customer: string | null;
+  terms: string | null;
+  internal_notes: string | null;
   public_token: string;
-  square_invoice_id: string | null; square_order_id: string | null; hosted_payment_url: string | null;
-  sent_at: string | null; viewed_at: string | null; paid_at: string | null; voided_at: string | null;
+  square_invoice_id: string | null;
+  square_order_id: string | null;
+  hosted_payment_url: string | null;
+  sent_at: string | null;
+  viewed_at: string | null;
+  paid_at: string | null;
+  voided_at: string | null;
   employee: string | null;
 };
 
 export type InvoiceItem = {
-  discount_mode?: "amount" | "percent"; discount_value?: number; discount_cents?: number; taxable?: boolean;
-  id: string; invoice_id: string; job_item_id: string | null; position: number;
-  name: string; description: string | null; quantity: number;
-  unit_price_cents: number; line_total_cents: number;
+  service_net_snapshot_cents?: number | null;
+  service_line_id?: string;
+  service_category?: ServiceCategory | null;
+  discount_mode?: "amount" | "percent";
+  discount_value?: number;
+  discount_cents?: number;
+  taxable?: boolean;
+  id: string;
+  invoice_id: string;
+  job_item_id: string | null;
+  position: number;
+  name: string;
+  description: string | null;
+  quantity: number;
+  unit_price_cents: number;
+  line_total_cents: number;
 };
 
 export type Payment = {
-  id: string; created_at: string; invoice_id: string | null; job_id: string | null;
-  amount_cents: number; currency: string; method: PaymentMethod; source: PaymentSource;
-  status: "completed" | "refunded"; square_payment_id: string | null;
-  external_event_id: string | null; recorded_by: string | null; note: string | null;
+  method_detail?: string | null;
+  id: string;
+  created_at: string;
+  invoice_id: string | null;
+  job_id: string | null;
+  amount_cents: number;
+  currency: string;
+  method: PaymentMethod;
+  source: PaymentSource;
+  status: "completed" | "refunded";
+  square_payment_id: string | null;
+  external_event_id: string | null;
+  recorded_by: string | null;
+  note: string | null;
   // Optional so pre-0018 fixtures and API payloads remain source-compatible.
   // A partially refunded payment stays completed; a fully refunded one is
   // stamped refunded. Consumers must use paymentNetCents for collected money.
   refunded_cents?: number;
   // ── 0013 deposits; optional so fixtures compile ──
-  kind?: PaymentKind; square_order_id?: string | null;
+  kind?: PaymentKind;
+  square_order_id?: string | null;
 };
 
 // Money from a payment that the business still owns. The status fallback keeps
@@ -967,6 +1117,15 @@ export type RevenueSummary = {
 };
 
 export type Overview = {
+  todayJobs?: Pick<
+    Job,
+    | "id"
+    | "status"
+    | "scheduled_at"
+    | "customer_name"
+    | "job_name"
+    | "service_area"
+  >[];
   counts: { open: number; hot: number; cold: number; wonThisWeek: number };
   coldNeedingCall: Lead[]; // status new, type cold — the "call now" queue
   unconfirmedToday: Lead[]; // appointment inside 24h, not confirmed
@@ -975,9 +1134,21 @@ export type Overview = {
   pastDueVisits: Lead[]; // appointment came and went with no disposition — the black hole
   pipeline: {
     leads: { newCount: number; hotCount: number };
-    quotes: { awaitingCount: number; awaitingCents: number; declinedRecentCount: number };
-    jobs: { unscheduledCount: number; unscheduledCents: number; activeCount: number };
-    invoices: { outstandingCents: number; outstandingCount: number; overdueCount: number };
+    quotes: {
+      awaitingCount: number;
+      awaitingCents: number;
+      declinedRecentCount: number;
+    };
+    jobs: {
+      unscheduledCount: number;
+      unscheduledCents: number;
+      activeCount: number;
+    };
+    invoices: {
+      outstandingCents: number;
+      outstandingCount: number;
+      overdueCount: number;
+    };
   };
   money: {
     collectedThisWeekCents: number; // completed payments, rolling 7 days
@@ -994,8 +1165,16 @@ export type Overview = {
 };
 
 export type ExpenseRule = {
-  id: string; name: string; category: string; amount_cents: number; frequency: "monthly" | "yearly";
-  starts_on: string; ends_on: string | null; next_due_on: string; active: boolean;
+  marketing_channel_id?: string | null;
+  id: string;
+  name: string;
+  category: string;
+  amount_cents: number;
+  frequency: "monthly" | "yearly";
+  starts_on: string;
+  ends_on: string | null;
+  next_due_on: string;
+  active: boolean;
 };
 export type EmployeePaymentSummary = { id: string; name: string; monthCents: number; allTimeCents: number };
 export type ExpenseLedger = { entries: BusinessExpense[]; rules: ExpenseRule[]; employees: EmployeePaymentSummary[] };

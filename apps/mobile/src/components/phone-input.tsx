@@ -1,5 +1,5 @@
 import { StyleSheet, TextInput, type StyleProp, type TextStyle } from "react-native";
-import { color, font, HIT, radius, space } from "@/theme";
+import { color, font, HIT, radius, space } from "@/canes-theme";
 
 // Phone input that formats as you type — "5615375674" renders "(561) 537-5674"
 // (Sebastian's Markate-parity ask, same contract as the web PhoneInput).

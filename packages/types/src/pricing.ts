@@ -1,4 +1,4 @@
-export type DiscountMode = "amount" | "percent";
+import { isServiceCategory, type ServiceCategory } from "./service-categories";export type DiscountMode = "amount" | "percent";
 export type DocumentKind = "estimate" | "job" | "invoice";
 export type DocumentEdit = {
   kind: DocumentKind;
@@ -28,6 +28,8 @@ export type DocumentChange = {
 };
 
 export type ServiceLineInput = {
+  serviceLineId?: string;
+  serviceCategory?: ServiceCategory | null;
   name: string;
   description?: string | null;
   quantity: number;
@@ -46,6 +48,12 @@ export type ServiceLineInput = {
 const MAX_CENTS = 2_147_483_647;
 
 export function priceServiceLine(line: ServiceLineInput) {
+  if (
+    line.serviceCategory != null &&
+    !isServiceCategory(line.serviceCategory)
+  ) {
+    throw new Error("Choose a valid service category.");
+  }
   const quantity = Number(line.quantity);
   const value = line.discountValue ?? 0;
   const mode = line.discountMode ?? "amount";

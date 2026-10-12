@@ -64,7 +64,7 @@ import { chooseMessagePhoto, type MessagePhoto } from "@/message-photo";
 import { PhoneInput, toPhoneDisplay } from "@/components/phone-input";
 import { keys, useEstimates, useLead, useLeadCalls, useLeadEvents } from "@/queries";
 import { noticeFrom, useAction, usePullToRefresh, useRefetchOnFocus } from "@/query";
-import { color, font, HIT, radius, space, type } from "@/theme";
+import { color, font, HIT, radius, space, type } from "@/canes-theme";
 
 // Funnel order comes from the label map's own key order — one source of truth,
 // no second copy of the status union to drift.
