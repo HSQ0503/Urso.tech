@@ -1,12 +1,19 @@
+import localFont from "next/font/local";
 import type { Metadata, Viewport } from "next";
-import { IBM_Plex_Sans, IBM_Plex_Mono, Fraunces } from "next/font/google";
+import { IBM_Plex_Mono, Fraunces } from "next/font/google";
 import "./globals.css";
 import { WipeTransition } from "@/components/wipe-transition";
 
-const ibmPlexSans = IBM_Plex_Sans({
+// Keep font assets local: some Google CSS URLs cannot be parsed by Turbopack.
+const ibmPlexSans = localFont({
   variable: "--font-ibm-plex-sans",
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
+  display: "swap",
+  src: [
+    { path: "./fonts/ibm-plex-sans/400.woff2", weight: "400", style: "normal" },
+    { path: "./fonts/ibm-plex-sans/500.woff2", weight: "500", style: "normal" },
+    { path: "./fonts/ibm-plex-sans/600.woff2", weight: "600", style: "normal" },
+    { path: "./fonts/ibm-plex-sans/700.woff2", weight: "700", style: "normal" },
+  ],
 });
 
 const ibmPlexMono = IBM_Plex_Mono({

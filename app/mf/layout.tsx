@@ -1,5 +1,6 @@
+import localFont from "next/font/local";
 import type { Metadata } from "next";
-import { Archivo, IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
+import { Archivo, IBM_Plex_Mono } from "next/font/google";
 import { MfDemoShell } from "@/components/mf/mf-demo";
 import { MfDemoSessionProvider } from "@/components/mf/mf-demo-session";
 import { MfLanguageProvider } from "@/components/mf/mf-language";
@@ -22,10 +23,16 @@ const archivo = Archivo({
   weight: ["500", "600", "700"],
 });
 
-const plexSans = IBM_Plex_Sans({
+// Keep font assets local: some Google CSS URLs cannot be parsed by Turbopack.
+const plexSans = localFont({
   variable: "--font-mf-body",
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
+  display: "swap",
+  src: [
+    { path: "../fonts/ibm-plex-sans/400.woff2", weight: "400", style: "normal" },
+    { path: "../fonts/ibm-plex-sans/500.woff2", weight: "500", style: "normal" },
+    { path: "../fonts/ibm-plex-sans/600.woff2", weight: "600", style: "normal" },
+    { path: "../fonts/ibm-plex-sans/700.woff2", weight: "700", style: "normal" },
+  ],
 });
 
 const plexMono = IBM_Plex_Mono({
